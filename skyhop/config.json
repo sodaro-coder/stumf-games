@@ -1,0 +1,8 @@
+{
+  "kit": "platformer2d", "id": "skyhop", "title": "Skyhop", "maxPlayers": 8, "seed": 5,
+  "palette": {"sky": "#7cc8ff", "sky2": "#d9f1ff", "hills": "#9fd38a", "ground": "#6b4a2b", "brick": "#a35a3a", "coin": "#ffd23f", "enemy": "#7a3bd1",
+              "player": "#ff4f4f", "ghost": "#2b6cff", "text": "#ffffff", "accent": "#ff3d7f"},
+  "text": {"level": "Level {n}", "clear": "Clear! {t} s"},
+  "game": {"levelLength": 120, "gapChance": 0.06, "enemyChance": 0.04, "enemySpeed": 60,
+           "physics": {"run": 230, "accel": 12, "airAccel": 6, "jump": 560, "gravity": 1500, "maxFall": 900, "coyote": 0.1, "buffer": 0.12}}
+}

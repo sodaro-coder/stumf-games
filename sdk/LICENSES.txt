@@ -1,0 +1,5 @@
+Third-party code bundled in this folder (all MIT licensed, free to use and redistribute):
+- three.js r159 (three.module.min.js) — Copyright © 2010-2023 three.js authors — https://github.com/mrdoob/three.js
+- Trystero 0.26 (p2p.min.js: nostr + torrent strategies) — Copyright (c) 2021 Dan Motzenbecker — https://github.com/dmotz/trystero
+- @noble/secp256k1 (inside p2p.min.js) — Copyright (c) 2019 Paul Miller — https://github.com/paulmillr/noble-secp256k1
+Everything else (engine.js, net.js, the games) was written for STUMF's BrowserDev.
