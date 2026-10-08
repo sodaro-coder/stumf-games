@@ -7,7 +7,7 @@
  "maxPlayers": 10,
  "seed": 7,
  "backend": {
-  "url": "",
-  "anonKey": ""
+  "url": "https://pgpuvmsgstqpwtojqxun.supabase.co",
+  "anonKey": "sb_publishable_YRxCMKuj-wqJsNx1vK5XYA_IHleHeEf"
  }
 }

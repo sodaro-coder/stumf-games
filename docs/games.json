@@ -28,5 +28,10 @@
   "title": "Turbo Loop",
   "tagline": "Arcade racer with drift and boost.",
   "kit": "racer3d"
+ },
+ {
+  "slug": "docs",
+  "title": "Docs",
+  "tagline": ""
  }
 ]
