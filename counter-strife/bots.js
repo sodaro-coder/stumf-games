@@ -10,7 +10,10 @@ export const botNames = (seed = 0) => NAMES.slice(seed % NAMES.length).concat(NA
 const angDiff = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
 
 export class Bots {
-  constructor(match) { this.m = match; this.brain = new Map(); this.plan = null; this.thinkT = 0; }
+  constructor(match) {
+    this.m = match; this.brain = new Map(); this.plan = null; this.thinkT = 0;
+    match.onDamaged = (v, by) => { if (!v.bot) return; const b = this.B(v); b.hitBy = { id: by.id, x: by.x, z: by.z, t: 2 }; if (!b.target) { const want = Math.atan2(-(by.x - v.x), -(by.z - v.z)); v.yaw += angDiff(v.yaw, want) * 0.5; } };
+  }
   B(p) { let b = this.brain.get(p.id); if (!b) this.brain.set(p.id, (b = { path: null, pi: 0, goal: null, target: null, react: 0, seen: 0, spray: 0, cd: 0, stuck: 0, lx: 0, lz: 0, hold: null, bought: -1, wait: 0, aiming: false, blind: 0, burst: 0, strafe: 1, strafeT: 0, heard: null, lastPath: 0 })); return b; }
   lvl() { return BOT_LEVELS[this.m.botLevel] || BOT_LEVELS.normal; }
 
@@ -73,13 +76,17 @@ export class Bots {
       if (b.blind <= 0) for (const q of m.players.values()) {
         if (!q.alive || q.team === p.team) continue;
         const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
-        const fov = Math.abs(angDiff(p.yaw, Math.atan2(-dx, -dz))) < 1.15 || d < 4 || (b.heard && Math.hypot(b.heard.x - q.x, b.heard.z - q.z) < 6);
-        if (fov && d < 90 && d < bd && this.visible(p, q)) { best = q; bd = d; }
+        const off = Math.abs(angDiff(p.yaw, Math.atan2(-dx, -dz)));
+        const fov = off < 1.15 || d < 4 || (b.heard && Math.hypot(b.heard.x - q.x, b.heard.z - q.z) < 6) || (b.hitBy && b.hitBy.id === q.id);
+        if (fov && d < 90 && d < bd && this.visible(p, q)) { best = q; bd = d; b.bestOff = off; }
       }
-      if (best && (!b.target || b.target !== best.id)) { b.target = best.id; b.react = L.react * (0.7 + Math.random() * 0.6) + (b.seen > 0 ? 0 : 0.1); b.spray = 0; }
+      if (best && (!b.target || b.target !== best.id)) {   // reacting takes longer for someone at the edge of your view
+        b.target = best.id; b.react = L.react * (0.7 + Math.random() * 0.6) + (b.seen > 0 ? 0 : 0.1) + Math.max(0, (b.bestOff || 0) - 0.4) * 0.35; b.spray = 0; b.settle = 0;
+      }
       if (!best && b.target) { const q = m.players.get(b.target); b.lastSeen = q ? { x: q.x, z: q.z, t: 3 } : null; b.target = null; }
       if (best) b.seen = 0.5; else b.seen -= 0.1;
     }
+    if (b.hitBy && (b.hitBy.t -= dt) <= 0) b.hitBy = null;
     const tgt = b.target ? m.players.get(b.target) : null;
     // ---- combat ----
     if (tgt && tgt.alive) {
@@ -91,7 +98,7 @@ export class Bots {
       const turn = L.turn * dt;
       const ey = angDiff(p.yaw, wantYaw); p.yaw += Math.max(-turn, Math.min(turn, ey));
       p.pitch += Math.max(-turn, Math.min(turn, wantPitch - p.pitch));
-      b.react -= dt;
+      b.react -= dt; b.settle = (b.settle || 0) + dt;
       // strafe peek / stop to shoot
       b.strafeT -= dt; if (b.strafeT <= 0) { b.strafeT = 0.3 + Math.random() * 0.6; b.strafe = -b.strafe; }
       const precise = w.cat === 'rifle' || w.cat === 'sniper' || w.cat === 'pistol';
@@ -126,7 +133,8 @@ export class Bots {
     it.ammo--; b.cd = 60 / w.rpm; b.spray++;
     const scoped = !!w.zoom;
     const rc = recoilAt(w, b.spray - 1), comp = L.spray;
-    const sp = spreadOf(w, p, scoped, b.spray) + L.aimErr * (0.4 + Math.random());
+    const settle = 1 + 1.6 * Math.exp(-(b.settle || 0) / 0.45), moving = Math.min(1, speedOf(p) / 2.5);
+    const sp = spreadOf(w, p, scoped, b.spray) + L.aimErr * (0.4 + Math.random()) * settle * (1 + moving * 0.8);
     const players = [...m.players.values()];
     const hitsAll = [];
     for (let k = 0; k < (w.pellets || 1); k++) {
@@ -134,6 +142,7 @@ export class Bots {
       const d = { x: -Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: -Math.cos(yaw) * Math.cos(pitch) };
       const tr = traceShot(m.W, players, p.id, eye, d, w);
       hitsAll.push(...tr.hits);
+      if (k === 0) this.heard(eye.x, eye.z, p);
       if (k === 0) m.send('fire', { id: p.id, wid: w.id, o: [eye.x, eye.y, eye.z], e: tr.end ? [tr.end.x, tr.end.y, tr.end.z] : null }), m.onLocal('fire', { id: p.id, wid: w.id, o: [eye.x, eye.y, eye.z], e: tr.end ? [tr.end.x, tr.end.y, tr.end.z] : null });
     }
     if (hitsAll.length) m.shot(p, w.id, hitsAll, eye);
@@ -147,7 +156,15 @@ export class Bots {
     if (!m.M.bomb) { const e = [...m.players.values()].find((q) => q.alive && q.team !== p.team); if (e) this.walkTo(p, b, [e.x, e.z], dt); return; }
     if (p.team === 'T') {
       if (bomb && bomb.state === 'dropped') { const nearest = [...m.players.values()].filter((q) => q.alive && q.team === 'T').sort((a, c) => Math.hypot(a.x - bomb.x, a.z - bomb.z) - Math.hypot(c.x - bomb.x, c.z - bomb.z))[0]; if (nearest === p) return this.walkTo(p, b, [bomb.x, bomb.z], dt); }
-      if (bomb && bomb.state === 'planted') { if (!b.hold || b.holdFor !== 'post') { b.hold = W.randomIn([bomb.x - 6, bomb.z - 6, bomb.x + 6, bomb.z + 6]); b.holdFor = 'post'; } return this.walkTo(p, b, b.hold, dt); }
+      if (bomb && bomb.state === 'planted') {   // post-plant: hold near the bomb, watching where the CTs come from
+        if (!b.hold || b.holdFor !== 'post') { b.hold = W.randomIn([bomb.x - 7, bomb.z - 7, bomb.x + 7, bomb.z + 7]); b.holdFor = 'post'; }
+        if (Math.hypot(p.x - b.hold[0], p.z - b.hold[1]) < 1.2) {
+          const cs = W.B.spawns.CT[0], toCT = Math.atan2(-(cs[0] - p.x), -(cs[1] - p.z)), toBomb = Math.atan2(-(bomb.x - p.x), -(bomb.z - p.z));
+          const look = Math.sin(performance.now() / 1700 + p.x) > 0 ? toCT : toBomb;
+          p.yaw += angDiff(p.yaw, look + Math.sin(performance.now() / 900 + p.z) * 0.5) * Math.min(1, dt * 3); moveStep(W, p, { f: 0, s: 0, crouch: false }, dt, 6); return;
+        }
+        return this.walkTo(p, b, b.hold, dt);
+      }
       if ((b.wait -= dt) > (p.inv[5] && !plan.rush ? -4 : 0)) return;  // the bomb carrier lets the team go first
       const site = W.B.sites[plan.site];
       if (p.inv[5]) {

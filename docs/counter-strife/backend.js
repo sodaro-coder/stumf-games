@@ -2,6 +2,7 @@
 // Without an account it lives in this browser. With the free Supabase account set up (config.backend), coins and
 // items live on the server and every coin-changing action runs server-side (crates roll there, daily earning caps
 // apply), so a player can't just edit their way to a knife. The public key in the config is meant to be public.
+import { DEFAULT_ATT, gunLevel, attOK } from './guns.js';
 import { CRATE_BY_ID, CRATES, rollCrate, itemInfo, newItem, ITEM_BY_ID, PASS, DEFAULT_EMOTES, EMOTE_BY_ID } from './skins.js';
 
 const LS = 'cs:profile:v1', TOK = 'cs:session:v1';
@@ -27,7 +28,7 @@ function makeQuests(key, weekly) {
   return out;
 }
 
-const fresh = () => ({ name: '', coins: 500, xp: 0, inventory: [], equipped: { T: {}, CT: {} }, stats: { matches: 0, wins: 0, k: 0, d: 0, hs: 0, mvp: 0 }, quests: null, qday: 0, qweek: 0, lastDaily: 0, settings: {}, pass: [] });
+const fresh = () => ({ guns: {}, name: '', coins: 500, xp: 0, inventory: [], equipped: { T: {}, CT: {} }, stats: { matches: 0, wins: 0, k: 0, d: 0, hs: 0, mvp: 0 }, quests: null, qday: 0, qweek: 0, lastDaily: 0, settings: {}, pass: [] });
 
 export class Profile {
   constructor(cfg) {
@@ -72,7 +73,7 @@ export class Profile {
       const p = await this.rpc('cs_profile', { p_name: this.d.name || 'Player' });
       this.d.coins = p.coins; this.d.xp = p.xp; this.d.equipped = p.equipped || this.d.equipped; this.d.stats = Object.assign(this.d.stats, p.stats || {});
       if (p.name) this.d.name = p.name;
-      this.d.pass = Array.isArray(p.pass) ? p.pass : [];
+      this.d.pass = Array.isArray(p.pass) ? p.pass : []; if (p.guns && typeof p.guns === 'object') this.d.guns = p.guns;
       this.tag = p.tag || null; this.admin = !!p.admin; this.dep = p.dep || null;
       this.d.inventory = (p.items || []).map((i) => ({ uid: i.uid, def: i.def, float: i.float, st: i.st, seed: i.seed, kills: i.kills || 0, t: Date.parse(i.created) || 0, listed: i.listed || null }));
       this.online = true; this.changed(); return true;
@@ -137,7 +138,25 @@ export class Profile {
       const s = { def: it.def, float: it.float, seed: it.seed, st: it.st, uid: it.uid, kills: it.kills };
       if (d.kind === 'agent') out.agent = d.weapon; else if (d.kind === 'knife') out.knife = s; else if (d.kind === 'skin') out.skins[d.weapon] = s;
     }
+    out.att = {}; for (const [wid, g] of Object.entries(this.d.guns || {})) if (g && g.att && wid !== '_day') { const a = {}; for (const [slot, id] of Object.entries(g.att)) if (attOK(wid, slot, id, g.xp | 0) && id !== DEFAULT_ATT[slot]) a[slot] = id; if (Object.keys(a).length) out.att[wid] = a; }
     return out;
+  }
+  // ---- gun levels and attachments (XP from damage, kills and round wins; attachments unlock by level) ----
+  gun(wid) { const g = (this.d.guns || {})[wid] || {}; return { xp: g.xp | 0, att: { ...DEFAULT_ATT, ...(g.att || {}) } }; }
+  async gunXp(gains) {
+    const clean = {}; for (const [k, v] of Object.entries(gains || {})) if (/^[a-z0-9]{2,12}$/.test(k) && v > 0) clean[k] = Math.min(3000, Math.round(v));
+    if (!Object.keys(clean).length) return [];
+    const before = Object.fromEntries(Object.keys(clean).map((k) => [k, gunLevel(this.gun(k).xp)]));
+    if (this.signedIn) { try { this.d.guns = await this.rpc('cs_gun_xp', { p_gains: clean }); } catch (e) { this.err = String(e.message || e); return []; } }
+    else { this.d.guns = this.d.guns || {}; for (const [k, v] of Object.entries(clean)) { const g = this.d.guns[k] = this.d.guns[k] || {}; g.xp = (g.xp | 0) + v; } }
+    this.changed();
+    return Object.keys(clean).map((k) => ({ wid: k, xp: clean[k], from: before[k], to: gunLevel(this.gun(k).xp) }));
+  }
+  async gunEquip(wid, slot, id) {
+    if (!attOK(wid, slot, id, this.gun(wid).xp)) throw new Error('Level that gun up first');
+    if (this.signedIn) this.d.guns = await this.rpc('cs_gun_equip', { p_wid: wid, p_slot: slot, p_att: id });
+    else { this.d.guns = this.d.guns || {}; const g = this.d.guns[wid] = this.d.guns[wid] || {}; g.att = { ...(g.att || {}), [slot]: id }; }
+    this.changed();
   }
   // ---- the free battle pass (a reward per level; claimed once) ----
   passTier(t) { return PASS.tiers[t - 1]; }

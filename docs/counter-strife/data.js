@@ -103,11 +103,12 @@ export const ECON = {
 };
 
 // match modes. bomb: false = straight combat (round timer running out with both alive is a draw)
+// short matches: first to 4 round wins, 7 rounds at most (sides switch after round 3)
 export const MODES = {
-  '1v1': { name: '1v1 Duel', size: 1, bomb: false, winTo: 9, half: 8, freeze: 5, round: 75, buyTime: 15, start: 800 },
-  '2v2': { name: '2v2 Wingmen', size: 2, bomb: true, winTo: 9, half: 8, freeze: 10, round: 90, buyTime: 20, bombSite: 'A' },
-  '3v3': { name: '3v3 Trios', size: 3, bomb: true, winTo: 13, half: 12, freeze: 12, round: 105, buyTime: 20 },
-  '5v5': { name: '5v5 Competitive', size: 5, bomb: true, winTo: 16, half: 15, freeze: 15, round: 115, buyTime: 20 },
+  '1v1': { name: '1v1 Duel', size: 1, bomb: false, winTo: 4, half: 3, max: 7, freeze: 5, round: 75, buyTime: 15, start: 800 },
+  '2v2': { name: '2v2 Wingmen', size: 2, bomb: true, winTo: 4, half: 3, max: 7, freeze: 10, round: 90, buyTime: 20, bombSite: 'A' },
+  '3v3': { name: '3v3 Trios', size: 3, bomb: true, winTo: 4, half: 3, max: 7, freeze: 12, round: 105, buyTime: 20 },
+  '5v5': { name: '5v5 Competitive', size: 5, bomb: true, winTo: 4, half: 3, max: 7, freeze: 15, round: 115, buyTime: 20 },
 };
 export const BOMB = { timer: 40, plant: 3.2, defuse: 10, defuseKit: 5, radius: 500 * U, dmg: 500 };
 
@@ -120,8 +121,8 @@ export const PHYS = {
 
 // bot difficulty, picked by the host
 export const BOT_LEVELS = {
-  easy: { name: 'Easy', react: 0.75, aimErr: 0.09, turn: 3.5, head: 0.03, spray: 0.4, burst: 4 },
-  normal: { name: 'Normal', react: 0.45, aimErr: 0.05, turn: 6, head: 0.08, spray: 0.65, burst: 6 },
+  easy: { name: 'Easy', react: 0.85, aimErr: 0.11, turn: 3, head: 0.02, spray: 0.35, burst: 4 },
+  normal: { name: 'Normal', react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5 },
   hard: { name: 'Hard', react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },
   expert: { name: 'Expert', react: 0.17, aimErr: 0.015, turn: 14, head: 0.3, spray: 0.95, burst: 10 },
 };

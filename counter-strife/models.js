@@ -157,11 +157,12 @@ function headParts(L, ct) {
 }
 // the gun in a player's hands: the real model (same as first person, without arms), or simple boxes on Low
 const TP_GRIP = { pistol: [-0.05, -0.02, -0.4], smg: [0.0, -0.06, -0.24], heavy: [0.0, -0.06, -0.24], rifle: [0.0, -0.06, -0.24], sniper: [0.0, -0.06, -0.24], knife: [0.03, -0.18, -0.28], zeus: [-0.05, -0.02, -0.4], c4: [-0.02, -0.12, -0.3], grenade: [0.03, -0.05, -0.3] };
-export function setTpGun(r, wid) {
-  if (r.tpKey === wid) return; r.tpKey = wid;
+export function setTpGun(r, wid, att = null) {
+  const key = wid + '|' + (att ? (att.optic || '') + (att.muzzle || '') : '');
+  if (r.tpKey === key) return; r.tpKey = key;
   for (const c of [...r.tpGun.children]) r.tpGun.remove(c);
   const w = W_BY_ID[wid], cat = w ? w.cat : wid === 'c4' ? 'c4' : wid === 'knife' || !wid ? 'knife' : 'grenade';
-  const m = cat === 'c4' ? makeBomb() : cat === 'knife' ? makeKnife(null, null, undefined, undefined, false) : cat === 'grenade' ? makeGrenade(wid, undefined, undefined, false) : makeGun(wid, null, undefined, undefined, false);
+  const m = cat === 'c4' ? makeBomb() : cat === 'knife' ? makeKnife(null, null, undefined, undefined, false) : cat === 'grenade' ? makeGrenade(wid, undefined, undefined, false) : makeGun(wid, null, undefined, undefined, false, att);
   if (cat === 'c4') m.scale.setScalar(0.8);
   const grip = m.userData.grip || new THREE.Vector3(), t = TP_GRIP[cat] || TP_GRIP.rifle;
   m.position.set(t[0] - grip.x * m.scale.x, t[1] - grip.y * m.scale.y, t[2] - grip.z * m.scale.z);
@@ -231,7 +232,9 @@ function gm(key) {
   if (gmat.has(k)) return gmat.get(k);
   const D = { metal: ['#3b3e44', 70, '#6a6e76'], dark: ['#1f2125', 18, '#2a2a2a'], steel: ['#9aa0aa', 90, '#d8dce4'], blade: ['#c8ccd2', 110, '#ffffff'], wood: ['#a8703e', 20, '#3a2a1a'],
     green: ['#4c5a3a', 20, '#333'], tan: ['#a8946a', 15, '#333'], olive: ['#5a6040', 18, '#333'], yellow: ['#e2c840', 30, '#444'], grip: ['#26221f', 6, '#111'], lens: ['#1a3040', 120, '#9ad0ff'], brass: ['#b89040', 80, '#ffe0a0'] }[key] || ['#888', 20, '#333'];
+  if (key === 'glass') { const g = new THREE.MeshBasicMaterial({ color: '#a8d8ff', transparent: true, opacity: 0.14, depthWrite: false }); gmat.set(k, g); return g; }
   const o = { color: D[0], vertexColors: false };
+  if (key === 'optic') { o.color = '#1d1f23'; o.side = THREE.DoubleSide; }
   if (key === 'wood') { const t = new THREE.CanvasTexture(surface('darkwood', 128, false).map); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; o.map = t; o.color = '#e0b080'; }
   const m = HQ ? new THREE.MeshPhongMaterial({ ...o, shininess: D[1], specular: D[2] }) : new THREE.MeshLambertMaterial(o);
   gmat.set(k, m); return m;
@@ -301,10 +304,7 @@ function rifle(G, o) {
   const bv = o.bv ?? (hv + 0.006), bEnd = h1 + (o.blen || 0.12);
   G('metal', tube(o.br || 0.0105, h1 - 0.02, bEnd, bv));
   if (o.fsight !== false) G('metal', ext([[h1 + 0.02, bv], [h1 + 0.05, bv], [h1 + 0.045, bv + 0.05], [h1 + 0.03, bv + 0.05]], 0.012, 0.002));
-  if (o.muzzle === 'ak') G('metal', tube(0.016, bEnd, bEnd + 0.045, bv));
-  else if (o.muzzle === 'bird') G('dark', tube(0.015, bEnd, bEnd + 0.06, bv, 0, 6));
-  else if (o.muzzle === 'brake') { G('metal', tube(0.02, bEnd, bEnd + 0.08, bv, 0, 8)); G('dark', blk(bEnd + 0.015, bEnd + 0.06, bv - 0.006, bv + 0.006, 0.05)); }
-  else if (o.muzzle === 'sil') G('dark', tube(0.023, bEnd, bEnd + 0.2, bv, 0, 14));
+  muzzle(G, (G.att && G.att.muzzle && G.att.muzzle !== 'standard' && !o.noMuzzleAtt) ? G.att.muzzle : o.muzzle, bEnd, bv);
   // stock
   const so = o.stock;
   if (so === 'ak') G(F, ext([[r0, rt - 0.008], [r0, rb + 0.004], [r0 - 0.27, rb - 0.075], [r0 - 0.3, rb - 0.078], [r0 - 0.305, rt - 0.03], ['q', r0 - 0.15, rt - 0.018, r0, rt - 0.008]], w * 0.9));
@@ -320,9 +320,38 @@ function rifle(G, o) {
     G('dark', blk(s0 + 0.03, s0 + 0.05, rt, sv - 0.012, 0.025)); G('dark', blk(s1 - 0.05, s1 - 0.03, rt, sv - 0.012, 0.025)); G('dark', tube(0.012, s0 + 0.1, s0 + 0.13, sv + 0.022, 0, 8));
     G('lens', tube(0.024, s1 + 0.066, s1 + 0.071, sv, 0, 14));
   } else if (o.rear !== false) G('metal', blk(r0 + 0.03, r0 + 0.05, rt, rt + 0.03, 0.03));
+  const mount = o.scope ? null : o.handle ? [(r0 + r1) / 2 - 0.02, rt + 0.06] : [r0 + (r1 - r0) * 0.42, rt + (o.rail ? 0.011 : 0)];
   if (o.handle) { G(F, ext([[r0 + 0.02, rt], [r0 + 0.04, rt + 0.06], [r1 + 0.12, rt + 0.06], [r1 + 0.14, rt], [r1 + 0.1, rt], [r1 + 0.09, rt + 0.04], [r0 + 0.07, rt + 0.04], [r0 + 0.06, rt]], 0.028)); }
   if (o.bipod) { G('dark', tube(0.006, h1 - 0.02, h1 + 0.15, bv - 0.03, 0.02, 6)); G('dark', tube(0.006, h1 - 0.02, h1 + 0.15, bv - 0.03, -0.02, 6)); }
-  return { grip: [-0.03, rb - 0.055], fore: [(h0 + h1) / 2 - 0.02, rb - 0.006] };
+  return { grip: [-0.03, rb - 0.055], fore: [(h0 + h1) / 2 - 0.02, rb - 0.006], mount };
+}
+// muzzle devices (looks only; the suppressor only makes the gun quieter)
+function muzzle(G, kind, bEnd, bv) {
+  switch (kind) {
+    case 'ak': G('metal', tube(0.016, bEnd, bEnd + 0.045, bv)); break;
+    case 'bird': G('dark', tube(0.015, bEnd, bEnd + 0.06, bv, 0, 6)); break;
+    case 'brake': G('metal', tube(0.02, bEnd, bEnd + 0.08, bv, 0, 8)); G('dark', blk(bEnd + 0.015, bEnd + 0.06, bv - 0.006, bv + 0.006, 0.05)); break;
+    case 'sil': case 'suppressor': G('dark', tube(0.024, bEnd, bEnd + 0.2, bv, 0, 14)); G('metal', tube(0.025, bEnd + 0.19, bEnd + 0.2, bv, 0, 14)); break;
+    case 'comp': G('dark', tube(0.017, bEnd, bEnd + 0.055, bv, 0, 8)); for (let k = 0; k < 3; k++) G('metal', blk(bEnd + 0.01 + k * 0.014, bEnd + 0.018 + k * 0.014, bv + 0.012, bv + 0.019, 0.012)); break;
+    case 'flashhider': G('dark', tube(0.014, bEnd, bEnd + 0.07, bv, 0, 5)); break;
+    case 'shroud': G('dark', tube(0.021, bEnd - 0.1, bEnd + 0.07, bv, 0, 10)); break;
+    default: break;
+  }
+}
+// optics on the top rail: mount = [u, v] of the rail top. Returns the sight line point [u, v] (for aiming down sights)
+function optic(G, kind, mount) {
+  const [u, v] = mount;
+  G('dark', blk(u - 0.035, u + 0.035, v, v + 0.012, 0.032));
+  if (kind === 'reddot') { G('optic', CYL(0.019, 0.019, 0.044, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.036, -u)); G('dark', blk(u - 0.02, u + 0.02, v + 0.012, v + 0.02, 0.026)); G('glass', CYL(0.017, 0.017, 0.002, 14).rotateX(-Math.PI / 2).translate(0, v + 0.036, -(u + 0.018))); return [u, v + 0.036]; }
+  if (kind === 'holo') {
+    G('optic', blk(u - 0.035, u + 0.035, v + 0.012, v + 0.062, 0.006, 0.026)); G('optic', blk(u - 0.035, u + 0.035, v + 0.012, v + 0.062, 0.006, -0.026));
+    G('optic', blk(u - 0.035, u + 0.035, v + 0.056, v + 0.064, 0.058)); G('glass', blk(u + 0.02, u + 0.022, v + 0.014, v + 0.056, 0.046)); return [u, v + 0.036];
+  }
+  if (kind === 'acog') {
+    G('optic', CYL(0.021, 0.021, 0.09, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.042, -u)); G('optic', CYL(0.026, 0.021, 0.03, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.042, -(u + 0.06)));
+    G('dark', blk(u - 0.015, u + 0.015, v + 0.012, v + 0.03, 0.03)); G('dark', blk(u - 0.01, u + 0.02, v + 0.06, v + 0.072, 0.012)); G('glass', CYL(0.024, 0.024, 0.002, 14).rotateX(-Math.PI / 2).translate(0, v + 0.042, -(u + 0.074))); return [u, v + 0.042];
+  }
+  return null;
 }
 function pistol(G, o) {
   const [s0, s1] = o.slide, sb = 0, st = o.sh || 0.034, w = o.w || 0.03, F = o.frame || 'dark';
@@ -333,8 +362,9 @@ function pistol(G, o) {
   G('metal', tube(0.0075, s1 - 0.01, s1 + (o.bl || 0.006), st / 2 - 0.002));
   G('dark', blk(s1 - 0.012, s1 - 0.004, st, st + 0.008, 0.006)); G('dark', blk(s0 + 0.004, s0 + 0.014, st, st + 0.008, 0.016));
   if (o.sil) G('dark', tube(0.017, s1 + 0.005, s1 + 0.16, st / 2 - 0.002, 0, 12));
+  else if (G.att && G.att.muzzle && G.att.muzzle !== 'standard') muzzle(G, G.att.muzzle, s1 + (o.bl || 0.006), st / 2 - 0.002);
   if (o.mag) G('dark', ext([[s0 + 0.075, sb - 0.016], [s0 + 0.095, sb - 0.016], [s0 + 0.105, sb - (o.mag + 0.02)], [s0 + 0.08, sb - (o.mag + 0.02)]], w * 0.8));
-  return { grip: [s0 + 0.03, sb - 0.06], fore: null };
+  return { grip: [s0 + 0.03, sb - 0.06], fore: null, mount: [s0 + 0.045, st] };
 }
 R('ak47', (G) => rifle(G, { recv: [-0.12, 0.25, -0.03, 0.03], w: 0.05, top: 'ak', furn: 'wood', hgType: 'ak', hg: [0.25, 0.43], blen: 0.17, muzzle: 'ak', mag: 'curve', stock: 'ak', gripMat: 'wood' }));
 R('galil', (G) => rifle(G, { recv: [-0.12, 0.25, -0.03, 0.03], w: 0.05, top: 'ak', hgType: 'ak', hg: [0.25, 0.42], blen: 0.16, muzzle: 'bird', mag: 'curve', stock: 'skel' }));
@@ -353,13 +383,13 @@ R('nova', (G) => { const r = rifle(G, { recv: [-0.1, 0.2, -0.03, 0.028], hgType:
 R('xm1014', (G) => { const r = rifle(G, { recv: [-0.11, 0.22, -0.03, 0.03], rail: true, hgType: 'none', hg: [0.22, 0.22], blen: 0.38, br: 0.013, muzzle: 'none', mag: 'none', stock: 'm4' }); G('dark', tube(0.014, 0.22, 0.56, -0.014)); G('dark', blk(0.22, 0.4, -0.035, 0.01, 0.05)); r.fore = [0.32, -0.04]; return r; });
 R('sawedoff', (G) => { const r = rifle(G, { recv: [-0.06, 0.12, -0.03, 0.03], furn: 'wood', gripMat: 'wood', hgType: 'none', hg: [0.12, 0.12], blen: 0.22, br: 0.014, bv: 0.008, muzzle: 'none', mag: 'none', stock: 'none', rear: false }); G('metal', tube(0.014, 0.1, 0.34, -0.018)); G('wood', tube(0.024, 0.13, 0.26, -0.016, 0, 10)); r.fore = [0.2, -0.035]; return r; });
 R('mag7', (G) => { const r = rifle(G, { recv: [-0.1, 0.2, -0.04, 0.03], w: 0.055, hgType: 'slab', hg: [0.2, 0.3], blen: 0.1, br: 0.014, muzzle: 'none', mag: 'box', mag0: -0.02, stock: 'fold' }); r.fore = [0.25, -0.05]; return r; });
-R('mac10', (G) => { pistol(G, { slide: [-0.1, 0.1], sh: 0.06, w: 0.045, bl: 0.03, mag: 0.14 }); return { grip: [-0.06, -0.06], fore: null }; });
+R('mac10', (G) => { pistol(G, { slide: [-0.1, 0.1], sh: 0.06, w: 0.045, bl: 0.03, mag: 0.14 }); return { grip: [-0.06, -0.06], fore: null, mount: [-0.03, 0.06] }; });
 R('mp9', (G) => { const r = rifle(G, { recv: [-0.06, 0.16, -0.025, 0.03], w: 0.042, rail: true, hgType: 'none', hg: [0.16, 0.16], blen: 0.04, muzzle: 'none', mag: 'straight', mag0: -0.045, stock: 'fold' }); r.fore = [0.13, -0.03]; return r; });
 R('mp7', (G) => { const r = rifle(G, { recv: [-0.08, 0.18, -0.028, 0.03], w: 0.045, rail: true, hgType: 'slab', hg: [0.18, 0.24], blen: 0.05, muzzle: 'none', mag: 'straight', mag0: -0.045, stock: 'fold' }); r.fore = [0.2, -0.03]; return r; });
 R('mp5', (G) => rifle(G, { recv: [-0.1, 0.2, -0.028, 0.03], w: 0.045, hgType: 'round', hgR: 0.025, hg: [0.2, 0.32], blen: 0.02, muzzle: 'sil', mag: 'curve', mag0: 0.08, stock: 'm4' }));
 R('ump', (G) => rifle(G, { recv: [-0.1, 0.22, -0.035, 0.035], w: 0.05, rail: true, hgType: 'slab', hg: [0.22, 0.32], blen: 0.05, muzzle: 'none', mag: 'straight', mag0: 0.08, stock: 'skel' }));
 R('bizon', (G) => { const r = rifle(G, { recv: [-0.1, 0.2, -0.028, 0.03], w: 0.045, top: 'ak', hgType: 'none', hg: [0.2, 0.2], blen: 0.12, muzzle: 'bird', mag: 'none', stock: 'skel' }); G('dark', tube(0.034, 0.05, 0.36, -0.06, 0, 12)); r.fore = [0.28, -0.1]; return r; });
-R('p90', (G) => { G('body', ext([[-0.2, -0.06], [0.18, -0.03], [0.2, 0.02], [0.12, 0.05], [-0.18, 0.05], [-0.22, 0.0]], 0.06, 0.008, [[[-0.08, -0.04], [0.0, -0.035], [0.0, -0.01], [-0.08, -0.01]]])); G('dark', blk(-0.16, 0.12, 0.05, 0.065, 0.04)); G('dark', tube(0.009, 0.18, 0.24, 0.0)); return { grip: [-0.05, -0.04], fore: [0.1, -0.03] }; });
+R('p90', (G) => { G('body', ext([[-0.2, -0.06], [0.18, -0.03], [0.2, 0.02], [0.12, 0.05], [-0.18, 0.05], [-0.22, 0.0]], 0.06, 0.008, [[[-0.08, -0.04], [0.0, -0.035], [0.0, -0.01], [-0.08, -0.01]]])); G('dark', blk(-0.16, 0.12, 0.05, 0.065, 0.04)); G('dark', tube(0.009, 0.18, 0.24, 0.0)); if (G.att && G.att.muzzle && G.att.muzzle !== 'standard') muzzle(G, G.att.muzzle, 0.24, 0.0); return { grip: [-0.05, -0.04], fore: [0.1, -0.03], mount: [-0.02, 0.065] }; });
 R('glock', (G) => pistol(G, { slide: [-0.08, 0.1] }));
 R('usp', (G) => pistol(G, { slide: [-0.08, 0.1], sil: true }));
 R('p2000', (G) => pistol(G, { slide: [-0.08, 0.1] }));
@@ -367,9 +397,9 @@ R('p250', (G) => pistol(G, { slide: [-0.08, 0.095] }));
 R('fiveseven', (G) => pistol(G, { slide: [-0.08, 0.11], sh: 0.036 }));
 R('cz75', (G) => pistol(G, { slide: [-0.08, 0.1], mag: 0.03 }));
 R('dualies', (G) => pistol(G, { slide: [-0.085, 0.1], frame: 'steel' }));
-R('tec9', (G) => { pistol(G, { slide: [-0.09, 0.14], sh: 0.04, w: 0.035, bl: 0.05 }); G('dark', ext([[0.07, -0.01], [0.1, -0.01], [0.105, -0.18], [0.075, -0.18]], 0.03)); return { grip: [-0.06, -0.06], fore: null }; });
+R('tec9', (G) => { pistol(G, { slide: [-0.09, 0.14], sh: 0.04, w: 0.035, bl: 0.05 }); G('dark', ext([[0.07, -0.01], [0.1, -0.01], [0.105, -0.18], [0.075, -0.18]], 0.03)); return { grip: [-0.06, -0.06], fore: null, mount: [-0.04, 0.04] }; });
 R('deagle', (G) => pistol(G, { slide: [-0.1, 0.13], sh: 0.045, w: 0.036, frame: 'steel' }));
-R('r8', (G) => { pistol(G, { slide: [-0.08, -0.01], sh: 0.04 }); G('steel', tube(0.024, -0.01, 0.04, 0.02, 0, 10)); G('steel', tube(0.009, 0.04, 0.2, 0.03)); G('steel', blk(0.04, 0.2, 0.034, 0.046, 0.012)); return { grip: [-0.05, -0.06], fore: null }; });
+R('r8', (G) => { pistol(G, { slide: [-0.08, -0.01], sh: 0.04 }); G('steel', tube(0.024, -0.01, 0.04, 0.02, 0, 10)); G('steel', tube(0.009, 0.04, 0.2, 0.03)); G('steel', blk(0.04, 0.2, 0.034, 0.046, 0.012)); return { grip: [-0.05, -0.06], fore: null, mount: [-0.05, 0.04] }; });
 R('zeus', (G) => { G('body', ext([[-0.06, -0.02], [0.1, -0.02], [0.12, 0.02], [-0.05, 0.03]], 0.035, 0.006)); G('dark', ext([[-0.05, -0.02], [-0.02, -0.02], [-0.03, -0.1], [-0.07, -0.1]], 0.03)); G('metal', blk(0.1, 0.13, -0.01, 0.015, 0.025)); return { grip: [-0.045, -0.06], fore: null }; });
 const DEFAULT_BODY = { ak47: 'metal', galil: 'dark', awp: 'green', aug: 'olive', famas: 'dark', deagle: 'steel', dualies: 'steel', fiveseven: 'dark', zeus: 'yellow', sawedoff: 'metal', p90: 'dark', r8: 'steel', ssg08: 'dark', mag7: 'dark' };
 
@@ -385,12 +415,16 @@ function vmArm(parts, hand, dir, sleeve, glove, len = 0.55, two = false) {
   void two;
 }
 const geoCache = new Map();
-export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = true) {
+export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = true, att = null) {
   const w = W_BY_ID[id] || { cat: 'pistol' }, recipe = RECIPE[id] || RECIPE[w.cat === 'pistol' ? 'p250' : w.cat === 'smg' ? 'mp7' : w.cat === 'sniper' ? 'ssg08' : w.cat === 'heavy' ? 'nova' : 'm4a4'];
-  let cg = geoCache.get(id);
+  const opt = att && att.optic && att.optic !== 'iron' && !w.zoom ? att.optic : null, mz = att && att.muzzle && att.muzzle !== 'standard' && !w.silenced ? att.muzzle : null;
+  const ckey = `${id}|${opt || ''}|${mz || ''}`;
+  let cg = geoCache.get(ckey);
   if (!cg) {
-    const buckets = {}, G = (k, g) => { (buckets[k] = buckets[k] || []).push([g, null]); };
+    const buckets = {}, G = (k, g) => { if (g) (buckets[k] = buckets[k] || []).push([g, null]); };
+    G.att = { muzzle: mz };
     const hold = recipe(G);
+    if (opt && hold.mount) hold.sight = optic(G, opt, hold.mount);
     const geos = {};
     let box = null;
     for (const [k, list] of Object.entries(buckets)) { geos[k] = merge(list); geos[k].computeBoundingBox(); if (k === 'body') box = geos[k].boundingBox; }
@@ -401,7 +435,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     if (geos.wood) { const p = geos.wood.attributes.position, uv = geos.wood.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, -p.getZ(i) * 3, p.getY(i) * 3 + p.getX(i) * 3); }
     let len = 0; for (const g of Object.values(geos)) { g.computeBoundingBox(); len = Math.max(len, -g.boundingBox.min.z); }
     cg = { geos, hold, len };
-    geoCache.set(id, cg);
+    geoCache.set(ckey, cg);
   }
   const g = new THREE.Group();
   for (const [k, geo] of Object.entries(cg.geos)) g.add(new THREE.Mesh(geo, k === 'body' ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(k)));
@@ -414,7 +448,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     g.add(new THREE.Mesh(merge(parts), armMat()));
   }
   g.add(muzzleFlash(cg.len + (w.silenced ? 0.04 : 0.02), w.cat === 'pistol' ? 0.6 : 1));
-  g.userData = { flash: g.children[g.children.length - 1], len: cg.len, grip, fore };
+  g.userData = { flash: g.children[g.children.length - 1], len: cg.len, grip, fore, sight: cg.hold.sight ? new THREE.Vector3(0, cg.hold.sight[1], -cg.hold.sight[0]) : null, optic: opt };
   return g;
 }
 let armMatC = null;

@@ -688,7 +688,7 @@ begin
     update cs_profiles set coins = greatest(coins, 10000000) where id = me;
     insert into cs_log (actor, action, detail) values (me, 'admin_seed', '{}'::jsonb);
   end if;
-  return (select json_build_object('name', p.name, 'tag', p.tag, 'dep', p.dep_code, 'admin', cs_is_admin(), 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
+  return (select json_build_object('name', p.name, 'tag', p.tag, 'dep', p.dep_code, 'admin', cs_is_admin(), 'guns', coalesce(p.guns, '{}'::jsonb) - '_day', 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
     'items', coalesce((select json_agg(json_build_object('uid', i.uid, 'def', i.def, 'float', i.float, 'st', i.st, 'seed', i.seed, 'kills', i.kills,
       'created', i.created, 'listed', (select l.price from cs_listings l where l.uid = i.uid)) order by i.created desc) from cs_items i where i.owner = me), '[]'::json))
     from cs_profiles p where p.id = me);
@@ -928,3 +928,51 @@ end $$;
 revoke all on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) from public, anon;
 grant execute on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) to authenticated;
 revoke all on function cs_value(text, real, boolean) from public, anon;
+
+-- ===== gun levels and attachments ================================================================================
+-- XP per gun (damage, kills, round wins with it): capped per match report and per day; attachments unlock by level.
+-- Attachments are looks only (optics allow aiming down sights; the Level 10 suppressor only makes the gun quieter).
+alter table cs_profiles add column if not exists guns jsonb not null default '{}'::jsonb;
+create or replace function cs_gun_level(p_xp int) returns int language sql immutable as $$
+  select coalesce((select max(l) from generate_series(1, 10) l where 150 * l * (l - 1) <= coalesce(p_xp, 0)), 1)
+$$;
+create or replace function cs_att_slot(p_att text) returns text language sql immutable as $$
+  select case when p_att in ('iron', 'reddot', 'holo', 'acog') then 'optic' when p_att in ('standard', 'comp', 'flashhider', 'brake', 'shroud', 'suppressor') then 'muzzle'
+    when p_att in ('duplex', 'mildot', 'dotret', 'circle', 'chevret', 'hotdog') then 'reticle' else null end
+$$;
+create or replace function cs_att_lvl(p_att text) returns int language sql immutable as $$
+  select case p_att when 'reddot' then 2 when 'holo' then 4 when 'acog' then 6 when 'comp' then 3 when 'flashhider' then 5 when 'brake' then 7 when 'shroud' then 9
+    when 'suppressor' then 10 when 'mildot' then 2 when 'dotret' then 4 when 'circle' then 6 when 'chevret' then 8 when 'hotdog' then 9 else 1 end
+$$;
+create or replace function cs_gun_xp(p_gains jsonb) returns jsonb language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); g jsonb; k text; v int; tot int := 0; dd text := to_char(now() at time zone 'utc', 'YYYY-MM-DD'); used int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  if jsonb_typeof(p_gains) <> 'object' then raise exception 'bad report'; end if;
+  select guns into g from cs_profiles where id = me for update;
+  if g is null then raise exception 'no profile yet'; end if;
+  used := case when g->'_day'->>'d' = dd then coalesce((g->'_day'->>'xp')::int, 0) else 0 end;
+  for k, v in select key, greatest(0, least(3000, case when jsonb_typeof(value) = 'number' then floor((value #>> '{}')::numeric)::int else 0 end)) from jsonb_each(p_gains) limit 40 loop
+    if k !~ '^[a-z0-9]{2,12}$' or k = '_day' then continue; end if;
+    v := least(v, 6000 - tot, 60000 - used - tot);
+    if v <= 0 then continue; end if;
+    tot := tot + v;
+    g := jsonb_set(g, array[k], coalesce(g->k, '{}'::jsonb) || jsonb_build_object('xp', coalesce((g->k->>'xp')::int, 0) + v));
+  end loop;
+  g := g || jsonb_build_object('_day', jsonb_build_object('d', dd, 'xp', used + tot));
+  update cs_profiles set guns = g where id = me;
+  return g - '_day';
+end $$;
+create or replace function cs_gun_equip(p_wid text, p_slot text, p_att text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); g jsonb;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  if p_wid !~ '^[a-z0-9]{2,12}$' or cs_att_slot(p_att) is distinct from p_slot then raise exception 'That attachment doesn''t go there'; end if;
+  select guns into g from cs_profiles where id = me for update;
+  if cs_gun_level((g->p_wid->>'xp')::int) < cs_att_lvl(p_att) then raise exception 'Reach level % with this gun first', cs_att_lvl(p_att); end if;
+  g := jsonb_set(g, array[p_wid], coalesce(g->p_wid, '{}'::jsonb) || jsonb_build_object('att', coalesce(g->p_wid->'att', '{}'::jsonb) || jsonb_build_object(p_slot, p_att)));
+  update cs_profiles set guns = g where id = me;
+  return g - '_day';
+end $$;
+revoke all on function cs_gun_xp(jsonb), cs_gun_equip(text, text, text) from public, anon;
+grant execute on function cs_gun_xp(jsonb), cs_gun_equip(text, text, text) to authenticated;

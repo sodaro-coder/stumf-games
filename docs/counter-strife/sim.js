@@ -1,5 +1,6 @@
 // The rules. Movement and shot tracing are shared by everyone (players predict locally, bots run on the host); the
 // Match runs only on the host (or alone in solo play): rounds, economy, the bomb, damage, grenades, drops, buying.
+import { recoilPattern } from './guns.js';
 import { PHYS, ECON, BOMB, MODES, W_BY_ID, G_BY_ID, GEAR_BY_ID, MAX_GRENADES, slotOf, forTeam, itemPrice, damageFor, U } from './data.js';
 
 // ---- movement (classic ground accel/friction, air strafing, jumping, crouching, stepping up ledges) ---------------
@@ -92,11 +93,10 @@ export function spreadOf(w, p, scoped, sprayIdx) {
   s += Math.min(sprayIdx, 12) * (w.kick || 0.01) * 0.12;
   return s;
 }
-// the recoil pattern: climbs first, then drifts side to side (same shape every spray, so it can be learned)
+// the recoil pattern: each gun's own spray shape (guns.js), the same every spray so it can be learned
 export function recoilAt(w, i) {
-  const up = Math.min(i, 9) * (w.kick || 0.01);
-  const side = i > 8 ? Math.sin((i - 8) * 0.55) * (w.sway || 0.006) * 6 : Math.sin(i * 0.9) * (w.sway || 0.006) * 0.6;
-  return { up, side };
+  const r = recoilPattern(w, i), k = (w.kick || 0.01) * 0.78;   // a touch lighter than the classic numbers
+  return { up: r.y * k, side: -r.x * k * 0.8 };
 }
 
 // ---- grenade physics (the same function on every machine, so everyone sees the same bounce) ----------------------
@@ -249,7 +249,7 @@ export class Match {
     this.event('roundEnd', { winner, reason, text: texts[reason] || (winner ? winner + ' win' : 'Draw'), mvp: mvp ? mvp.name : '', score: this.score, history: this.history });
     for (const p of this.players.values()) this.sendInv(p);
     const W2 = this.M.winTo, total = this.round;
-    if (this.score.T >= W2 || this.score.CT >= W2 || total >= this.M.half * 2) {
+    if (this.score.T >= W2 || this.score.CT >= W2 || total >= (this.M.max || this.M.half * 2)) {
       this.phase = 'over'; this.timer = 12;
       const w = this.score.T > this.score.CT ? 'T' : this.score.CT > this.score.T ? 'CT' : null;
       this.over = { winner: w };
@@ -261,7 +261,7 @@ export class Match {
     if (this.phase !== 'live' && this.phase !== 'planted') return;
     const alive = (t) => [...this.players.values()].some((p) => p.team === t && p.alive);
     if (!alive('CT') && alive('T')) return this.endRound('T', 'elim');
-    if (!alive('T') && alive('CT') && !(this.bomb && this.bomb.state === 'planted')) return this.endRound('CT', 'elim');
+    if (!alive('T') && alive('CT') && !(this.bomb && (this.bomb.state === 'planted' || this.bomb.state === 'exploded'))) return this.endRound('CT', 'elim');
     if (!alive('T') && !alive('CT')) return this.endRound(this.bomb && this.bomb.state === 'planted' ? 'T' : 'CT', 'elim');
   }
   tick(dt) {
@@ -278,9 +278,9 @@ export class Match {
       }
       if (b.state === 'planted' && b.timer <= 0) {
         b.state = 'exploded'; this.send('bomb', b); this.onLocal('bomb', b);
+        this.endRound('T', 'bomb');   // first: the blast killing the planter must not hand CT an elimination win
         for (const p of this.players.values()) if (p.alive) { const dist = Math.hypot(p.x - b.x, p.y - b.y, p.z - b.z); if (dist < BOMB.radius) { const dmg = BOMB.dmg * Math.exp(-((dist / (BOMB.radius / 3)) ** 2)); this.damage(p, null, Math.round(dmg * (p.armor ? 0.5 : 1)), 'bomb', 'chest', false); } }
         this.event('explode', { x: b.x, y: b.y, z: b.z, r: BOMB.radius });
-        this.endRound('T', 'bomb');
       }
     } else if (this.phase === 'end' && this.timer <= 0) this.newRound();
     else if (this.phase === 'over' && this.timer <= 0) { this.phase = 'done'; this.event('done', {}); }
@@ -369,6 +369,7 @@ export class Match {
     if (by && by.team === v.team && by !== v && weapon !== 'he' && weapon !== 'molotov' && weapon !== 'incendiary') return;  // no friendly fire from bullets
     const dealt = Math.min(v.hp, amount);
     v.hp -= amount;
+    if (this.onDamaged && by && by !== v) this.onDamaged(v, by);   // bots turn on whoever shot them
     if (by && by !== v) by.dmgDealt.set(v.id, (by.dmgDealt.get(v.id) || 0) + dealt);
     const info = { id: v.id, hp: Math.max(0, Math.round(v.hp)), armor: Math.round(v.armor), from: by ? [by.x, by.z] : null, by: by ? by.id : null, dmg: Math.round(dealt), group };
     if (v.local) this.onLocal('hurt', info); else if (!v.bot) this.send('hurt', info, v.id);
