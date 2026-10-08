@@ -553,16 +553,16 @@ export class Menu {
         .map(([n, v]) => `<div class="cs-card"><div class="cs-mut cs-small">${n}</div><b style="font-size:20px">${v}</b></div>`).join('')}</div></div>
       <div class="cs-card" style="margin-top:12px" id="pfAcct"></div>`;
     $('#pfN', B).textContent = P.d.name || 'Player'; $('#pfName', B).value = P.d.name || '';
-    $('#pfSave', B).onclick = async () => { try { await P.setName($('#pfName', B).value.trim().slice(0, 20)); } catch (e) { this.h.toast(e.message); } this.render(); };
+    $('#pfSave', B).onclick = async () => { try { const n = await P.setName($('#pfName', B).value); this.h.toast('Name saved: ' + n + (P.tag ? '#' + P.tag : '')); } catch (e) { this.h.toast(e.message); } this.render(); };
     const A = $('#pfAcct', B);
     if (!P.cloud) { A.innerHTML = '<b>Local profile</b><div class="cs-mut cs-small">Your coins and items are saved in this browser. (The game owner can switch on free accounts to sync across devices and trade.)</div>'; return; }
     if (P.signedIn) { A.innerHTML = `<b>Signed in</b> <span class="cs-mut cs-small">${P.online ? 'synced' : esc(P.err || 'offline')}</span><div class="cs-row" style="margin-top:8px"><button class="cs-btn alt sm" id="aSync">Sync now</button><button class="cs-btn alt sm" id="aOut">Sign out</button></div>`;
       $('#aSync', A).onclick = async () => { await P.sync(); this.render(); }; $('#aOut', A).onclick = () => { P.signOut(); this.render(); }; return; }
     A.innerHTML = `<b>Account</b><div class="cs-mut cs-small">Sync coins and items across devices, trade on the market.</div>
-      <div class="cs-row" style="margin-top:8px"><input id="aE" type="email" placeholder="email" autocomplete="email"><input id="aP" type="password" placeholder="password (8+)" autocomplete="current-password"></div>
+      <div class="cs-row" style="margin-top:8px"><input id="aN" maxlength="20" placeholder="player name" value="${esc(P.d.name || '')}"><input id="aE" type="email" placeholder="email" autocomplete="email"><input id="aP" type="password" placeholder="password (8+)" autocomplete="current-password"></div>
       <div class="cs-row" style="margin-top:8px"><button class="cs-btn sm" id="aIn">Sign in</button><button class="cs-btn alt sm" id="aUp">Create account</button></div><div class="cs-small cs-mut" id="aMsg" style="margin-top:6px"></div>`;
     const go = async (up) => { const e = $('#aE', A).value.trim(), p = $('#aP', A).value; const msg = $('#aMsg', A);
-      try { if (up) { const r = await P.signUp(e, p, P.d.name); msg.textContent = r.access_token ? 'Account created.' : 'Check your email to confirm, then sign in.'; if (r.access_token) await P.sync(); } else await P.signIn(e, p); this.render(); } catch (err) { msg.textContent = err.message; } };
+      try { if (up) { const nm = ($('#aN', A).value || '').replace(/[<>#]/g, '').trim().slice(0, 20); if (nm.length >= 2) { P.d.name = nm; P.changed(); } const r = await P.signUp(e, p, P.d.name); msg.textContent = r.access_token ? 'Account created.' : 'STUMF just emailed you a confirmation link. Open it and you\'re signed in.'; if (r.access_token) await P.sync(); } else await P.signIn(e, p); this.render(); } catch (err) { msg.textContent = err.message; } };
     $('#aIn', A).onclick = () => go(false); $('#aUp', A).onclick = () => go(true);
   }
   // ---- SETTINGS ----

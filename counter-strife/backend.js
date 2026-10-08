@@ -34,6 +34,14 @@ export class Profile {
     this.cfg = cfg; this.cloud = !!(cfg.backend && cfg.backend.url && cfg.backend.anonKey);
     this.d = Object.assign(fresh(), lsGet(LS, {}));
     this.sess = lsGet(TOK, null); this.listeners = new Set(); this.online = false;
+    // back from the confirmation email: the link carries the new session in the address (#access_token=...)
+    try {
+      const h = new URLSearchParams(location.hash.slice(1));
+      if (this.cloud && h.get('access_token') && h.get('refresh_token')) {
+        this.sess = { access_token: h.get('access_token'), refresh_token: h.get('refresh_token'), expires_in: +h.get('expires_in') || 3600 }; lsSet(TOK, this.sess);
+        this.justConfirmed = h.get('type') === 'signup'; history.replaceState(null, '', location.pathname + location.search);
+      }
+    } catch (e) { /* no address bar (tests) */ }
     this.ensureQuests();
   }
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
@@ -53,7 +61,7 @@ export class Profile {
     return j;
   }
   async refresh() { try { const j = await this.req('/auth/v1/token?grant_type=refresh_token', { refresh_token: this.sess.refresh_token }, 'POST', false); this.sess = j; lsSet(TOK, j); return true; } catch (e) { this.sess = null; lsSet(TOK, null); return false; } }
-  async signUp(email, password, name) { const j = await this.req('/auth/v1/signup', { email, password, data: { name } }, 'POST', false); if (j.access_token) { this.sess = j; lsSet(TOK, j); } return j; }
+  async signUp(email, password, name) { const j = await this.req('/auth/v1/signup?redirect_to=' + encodeURIComponent(location.href.split('#')[0]), { email, password, data: { name } }, 'POST', false); if (j.access_token) { this.sess = j; lsSet(TOK, j); } return j; }
   async signIn(email, password) { const j = await this.req('/auth/v1/token?grant_type=password', { email, password }, 'POST', false); this.sess = j; lsSet(TOK, j); await this.sync(); return j; }
   signOut() { this.sess = null; lsSet(TOK, null); this.online = false; this.changed(); }
   get signedIn() { return this.cloud && !!this.sess; }
@@ -93,7 +101,17 @@ export class Profile {
   async unlistItem(uid) { await this.rpc('cs_unlist', { p_uid: uid }); await this.sync(); }
   async buyListing(id) { await this.rpc('cs_buy', { p_listing: id }); await this.sync(); }
   // ---- friends, trades, gifts (accounts only; every check runs on the server) ----
-  async setName(n) { if (this.signedIn) await this.rpc('cs_set_name', { p_name: n }); this.d.name = n; this.changed(); }
+  async setName(n) {
+    n = String(n || '').replace(/[<>#]/g, '').trim().slice(0, 20);
+    if (n.length < 2) throw new Error('Names need 2+ characters');
+    if (this.signedIn) {
+      try { await this.rpc('cs_set_name', { p_name: n }); } catch (e) {
+        if (/function|schema cache|404/i.test(String(e.message))) throw new Error('The game database needs its update before names can change (STUMF does it when its Supabase access token is in Settings).');
+        throw e;
+      }
+    }
+    this.d.name = n; this.changed(); return n;
+  }
   friends() { return this.rpc('cs_friends_list'); }
   addFriend(handle) { return this.rpc('cs_friend_request', { p_handle: handle }); }
   acceptFriend(id) { return this.rpc('cs_friend_accept', { p_id: id }); }

@@ -675,11 +675,20 @@ on conflict (def) do update set crate = excluded.crate, tier = excluded.tier, ki
 insert into cs_pass (tier, def) values (1,'pass1:glock:Participation Trophy'),(2,'pass2:usp:Grass Toucher'),(3,'pass3:e_dance'),(4,'pass4:ak47:Mom''s Basement'),(5,'pass5:a_t_banana'),(6,'pass6:e_dab'),(7,'pass7:m4a4:Gamer Fuel'),(8,'pass8:awp:Sweaty Palms'),(9,'pass9:e_cry'),(10,'pass10:a_ct_mime'),(11,'pass11:deagle:No Life'),(12,'pass12:e_flex'),(13,'pass13:mp9:Touch Grass Pro'),(14,'pass14:mac10:Hall of Shame'),(15,'pass15:a_t_speedo'),(16,'pass16:p90:Certified Clown'),(17,'pass17:galil:Rainbow Road Rage'),(18,'pass18:e_tpose'),(19,'pass19:famas:Participation Trophy'),(20,'pass20:a_ct_tighty'),(21,'pass21:e_floss'),(22,'pass22:nova:Grass Toucher'),(23,'pass23:ump:Mom''s Basement'),(24,'pass24:e_chicken'),(25,'pass25:k_hotdog:Ballpark Special'),(26,'pass26:ssg08:Gamer Fuel'),(27,'pass27:e_worm'),(28,'pass28:p250:Sweaty Palms'),(29,'pass29:m4a1s:No Life'),(30,'pass30:a_t_grandma'),(31,'pass31:sg553:Touch Grass Pro'),(32,'pass32:aug:Hall of Shame'),(33,'pass33:e_fart'),(34,'pass34:tec9:Certified Clown'),(35,'pass35:a_ct_pigeon'),(36,'pass36:e_twerk'),(37,'pass37:fiveseven:Rainbow Road Rage'),(38,'pass38:glock:Participation Trophy'),(39,'pass39:usp:Grass Toucher'),(40,'pass40:a_t_hotdog'),(41,'pass41:ak47:Mom''s Basement'),(42,'pass42:m4a4:Gamer Fuel'),(43,'pass43:awp:Sweaty Palms'),(44,'pass44:deagle:No Life'),(45,'pass45:a_ct_poo'),(46,'pass46:mp9:Touch Grass Pro'),(47,'pass47:mac10:Hall of Shame'),(48,'pass48:p90:Certified Clown'),(49,'pass49:galil:Rainbow Road Rage'),(50,'pass50:k_dildo:Gold Plated') on conflict (tier) do update set def = excluded.def;
 
 create or replace function cs_profile(p_name text) returns json language plpgsql security definer set search_path = public as $$
-declare me uuid := auth.uid();
+declare me uuid := auth.uid(); nm text;
 begin
   if me is null then raise exception 'sign in first'; end if;
-  insert into cs_profiles (id, name, tag, dep_code) values (me, left(coalesce(nullif(p_name, ''), 'Player'), 20), 1000 + floor(random() * 9000), upper(substr(md5(random()::text || me::text), 1, 8))) on conflict (id) do nothing;
-  return (select json_build_object('name', p.name, 'tag', p.tag, 'dep', p.dep_code, 'admin', exists (select 1 from cs_admins a where a.id = me), 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
+  -- the name: what the game sent, else the name given at sign-up, else Player
+  select coalesce(nullif(trim(p_name), ''), nullif(trim(u.raw_user_meta_data->>'name'), ''), 'Player') into nm from auth.users u where u.id = me;
+  nm := left(regexp_replace(coalesce(nm, 'Player'), '[<>#]', '', 'g'), 20); if length(nm) < 2 then nm := 'Player'; end if;
+  insert into cs_profiles (id, name, tag, dep_code) values (me, nm, 1000 + floor(random() * 9000), upper(substr(md5(random()::text || me::text), 1, 8))) on conflict (id) do nothing;
+  update cs_profiles set name = nm where id = me and coalesce(name, '') in ('', 'Player') and nm <> 'Player';
+  -- the owner's account: admin, and its starting 10,000,000 coins (once)
+  if cs_is_admin() and not exists (select 1 from cs_log where action = 'admin_seed') then
+    update cs_profiles set coins = greatest(coins, 10000000) where id = me;
+    insert into cs_log (actor, action, detail) values (me, 'admin_seed', '{}'::jsonb);
+  end if;
+  return (select json_build_object('name', p.name, 'tag', p.tag, 'dep', p.dep_code, 'admin', cs_is_admin(), 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
     'items', coalesce((select json_agg(json_build_object('uid', i.uid, 'def', i.def, 'float', i.float, 'st', i.st, 'seed', i.seed, 'kills', i.kills,
       'created', i.created, 'listed', (select l.price from cs_listings l where l.uid = i.uid)) order by i.created desc) from cs_items i where i.owner = me), '[]'::json))
     from cs_profiles p where p.id = me);
@@ -797,9 +806,11 @@ alter table cs_admins enable row level security; alter table cs_friends enable r
 drop policy if exists cs_fr on cs_friends; create policy cs_fr on cs_friends for select using (auth.uid() in (a, b));
 drop policy if exists cs_tr on cs_trades; create policy cs_tr on cs_trades for select using (auth.uid() in (from_id, to_id));
 
+-- exactly one admin, ever: the owner's address, and only once that address has been confirmed by email
 create or replace function cs_is_admin() returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from cs_admins where id = auth.uid())
+  select exists (select 1 from auth.users u where u.id = auth.uid() and lower(u.email) = 'aaronsodaro@gmail.com' and u.email_confirmed_at is not null)
 $$;
+delete from cs_admins where id not in (select id from auth.users where lower(email) = 'aaronsodaro@gmail.com');
 create or replace function cs_find(p_handle text) returns uuid language plpgsql stable security definer set search_path = public as $$
 declare nm text := split_part(p_handle, '#', 1); tg int; r uuid;
 begin
@@ -892,7 +903,7 @@ create or replace function cs_trades_list() returns json language sql stable sec
     'give_coins', t.give_coins, 'want_coins', t.want_coins, 'mine', t.from_id = auth.uid()) order by t.created desc), '[]'::json)
   from cs_trades t join cs_profiles pf on pf.id = t.from_id join cs_profiles pt on pt.id = t.to_id where t.state = 'open' and auth.uid() in (t.from_id, t.to_id)
 $$;
--- admin (only ids in cs_admins, which only the project owner can fill from the SQL editor)
+-- admin (only the owner's confirmed address: see cs_is_admin)
 create or replace function cs_admin_find(p_q text) returns json language plpgsql stable security definer set search_path = public as $$
 begin
   if not cs_is_admin() then raise exception 'admin only'; end if;

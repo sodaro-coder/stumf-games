@@ -144,6 +144,7 @@ export default function start({ cfg, E, N, smoke }) {
   if (profile.signedIn) profile.sync();
   const audio = makeAudio(() => S.vol);
   const toast = (t) => { const d = document.createElement('div'); d.className = 'cs'; d.textContent = t; d.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:400;background:#151b24;border:1px solid #2c3442;padding:10px 16px;border-radius:8px;font-weight:700'; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); };
+  if (profile.justConfirmed) setTimeout(() => toast('Email confirmed. You\'re signed in.'), 900);
   // map tiles: a real 3D shot of the map (rendered once, cached), the flat plan meanwhile or without WebGL
   const mapShots = new Map();
   let shotR = null;
