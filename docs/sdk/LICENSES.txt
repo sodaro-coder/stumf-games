@@ -3,3 +3,5 @@ Third-party code bundled in this folder (all MIT licensed, free to use and redis
 - Trystero 0.26 (p2p.min.js: nostr + torrent strategies) — Copyright (c) 2021 Dan Motzenbecker — https://github.com/dmotz/trystero
 - @noble/secp256k1 (inside p2p.min.js) — Copyright (c) 2019 Paul Miller — https://github.com/paulmillr/noble-secp256k1
 Everything else (engine.js, net.js, the games) was written for STUMF's BrowserDev.
+
+qrcode.js — QR Code Generator for JavaScript, Copyright (c) 2009 Kazuhiko Arase, MIT license (https://github.com/kazuhikoarase/qrcode-generator)

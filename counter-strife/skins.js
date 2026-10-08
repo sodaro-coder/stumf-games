@@ -1,14 +1,15 @@
 // Cosmetics: weapon finishes, knives, agents (player models) and the crates they drop from. Every finish is painted
 // procedurally from a recipe (no image files): a pattern, a palette, a seed, then wear scratches by the float.
-// Odds match the classic case odds and are shown on every crate. Crates open with coins earned in-game only.
+// Rarity: Common, Uncommon, Rare, Epic, Legendary, Funny (rarest). Odds are shown on every crate. Crates open with coins earned in-game only.
 import { WEAPONS } from './data.js';
 
-export const RARITY = [  // index = tier
-  { key: 'milspec', name: 'Mil-Spec', color: '#4b69ff', odds: 79.92, value: 30 },
-  { key: 'restricted', name: 'Restricted', color: '#8847ff', odds: 15.98, value: 120 },
-  { key: 'classified', name: 'Classified', color: '#d32ce6', odds: 3.2, value: 500 },
-  { key: 'covert', name: 'Covert', color: '#eb4b4b', odds: 0.64, value: 2000 },
-  { key: 'gold', name: '★ Rare Special', color: '#e4ae39', odds: 0.26, value: 8000 },
+export const RARITY = [  // index = tier; Funny is the rarest
+  { key: 'common', name: 'Common', color: '#b0c3d9', odds: 70, value: 20 },
+  { key: 'uncommon', name: 'Uncommon', color: '#5ec65e', odds: 20, value: 60 },
+  { key: 'rare', name: 'Rare', color: '#4b69ff', odds: 6.5, value: 200 },
+  { key: 'epic', name: 'Epic', color: '#9b47ff', odds: 2.5, value: 700 },
+  { key: 'legendary', name: 'Legendary', color: '#e4ae39', odds: 0.8, value: 2500 },
+  { key: 'funny', name: 'Funny', color: '#ff4fd8', odds: 0.2, value: 6000 },
 ];
 export const WEARS = [  // float ranges
   { key: 'FN', name: 'Factory New', max: 0.07, mult: 1.5 }, { key: 'MW', name: 'Minimal Wear', max: 0.15, mult: 1.15 },
@@ -24,32 +25,35 @@ export const KNIVES = [
   { id: 'k_dildo', name: '★ Dildo Saber', model: 'dildo', joke: true }, { id: 'k_plunger', name: '★ Toilet Plunger', model: 'plunger', joke: true },
   { id: 'k_chicken', name: '★ Rubber Chicken', model: 'chicken', joke: true }, { id: 'k_baguette', name: '★ Le Baguette', model: 'baguette', joke: true },
   { id: 'k_fish', name: '★ Salmon Slapper', model: 'fish', joke: true }, { id: 'k_banana', name: '★ Banana Blade', model: 'banana', joke: true },
+  { id: 'k_flip', name: '★ Flipper', model: 'default' }, { id: 'k_gut', name: '★ Gut Puncher', model: 'karambit' }, { id: 'k_hunts', name: '★ Huntsperson', model: 'bayonet' },
 ];
+
+export const KNIFE_BY_ID = Object.fromEntries(KNIVES.map((k) => [k.id, k]));
 
 // ---- agents (player models). look = the body recipe models.js builds ----
 export const AGENTS = [
   { id: 'a_t_default', name: 'Desert Rebel', team: 'T', tier: -1, look: { body: '#7a6a4a', legs: '#4e4636', head: '#c89a74', hat: 'balaclava', hatColor: '#2c2a26' } },
   { id: 'a_ct_default', name: 'Task Force Gary', team: 'CT', tier: -1, look: { body: '#3c4e66', legs: '#2c3442', head: '#e0b896', hat: 'helmet', hatColor: '#2a3646' } },
-  { id: 'a_t_ops', name: 'Sand Ops Specialist', team: 'T', tier: 1, look: { body: '#8a5a3a', legs: '#3a3026', head: '#b48264', hat: 'shemagh', hatColor: '#d8c6a0' } },
-  { id: 'a_ct_swat', name: 'SWAT Sergeant Kevin', team: 'CT', tier: 1, look: { body: '#1e242c', legs: '#16191e', head: '#d8a888', hat: 'helmet', hatColor: '#111', visor: true } },
-  { id: 'a_t_speedo', name: 'Speedo Steve', team: 'T', tier: 2, look: { body: '#e8b48e', legs: '#e8b48e', head: '#e8b48e', speedo: '#2246d8', hat: 'none', belly: true } },
-  { id: 'a_ct_tighty', name: 'Tighty Whitey Tim', team: 'CT', tier: 2, look: { body: '#f0c8a8', legs: '#f0c8a8', head: '#f0c8a8', speedo: '#ffffff', hat: 'cap', hatColor: '#c22' } },
-  { id: 'a_t_hotdog', name: 'Hot Dog Suit Guy', team: 'T', tier: 3, look: { body: '#c8462e', legs: '#e8b060', head: '#c8462e', hat: 'bun', hatColor: '#e8b060', mustard: true } },
-  { id: 'a_ct_poo', name: 'Mr. Poo', team: 'CT', tier: 3, look: { body: '#6b4423', legs: '#5a381c', head: '#6b4423', hat: 'swirl', hatColor: '#6b4423', eyes: true } },
-  { id: 'a_t_grandma', name: 'Grandma in Curlers', team: 'T', tier: 2, look: { body: '#e48ab4', legs: '#d8d0c0', head: '#e8c4a8', hat: 'curlers', hatColor: '#7ac8ff' } },
-  { id: 'a_ct_pigeon', name: 'Agent Pigeon', team: 'CT', tier: 3, look: { body: '#8a8f9a', legs: '#e08a5a', head: '#6a7080', hat: 'beak', hatColor: '#e0a040', eyes: true } },
-  { id: 'a_t_banana', name: 'Banana Bandit', team: 'T', tier: 1, look: { body: '#f2d33c', legs: '#d8b42a', head: '#f2d33c', hat: 'stem', hatColor: '#5a3a1a', eyes: true } },
-  { id: 'a_ct_mime', name: 'Mime Negotiator', team: 'CT', tier: 1, look: { body: '#f4f4f4', legs: '#111', head: '#ffffff', hat: 'beret', hatColor: '#111', stripes: true } },
+  { id: 'a_t_ops', name: 'Sand Ops Specialist', team: 'T', tier: 2, look: { body: '#8a5a3a', legs: '#3a3026', head: '#b48264', hat: 'shemagh', hatColor: '#d8c6a0' } },
+  { id: 'a_ct_swat', name: 'SWAT Sergeant Kevin', team: 'CT', tier: 2, look: { body: '#1e242c', legs: '#16191e', head: '#d8a888', hat: 'helmet', hatColor: '#111', visor: true } },
+  { id: 'a_t_speedo', name: 'Speedo Steve', team: 'T', tier: 3, look: { body: '#e8b48e', legs: '#e8b48e', head: '#e8b48e', speedo: '#2246d8', hat: 'none', belly: true } },
+  { id: 'a_ct_tighty', name: 'Tighty Whitey Tim', team: 'CT', tier: 3, look: { body: '#f0c8a8', legs: '#f0c8a8', head: '#f0c8a8', speedo: '#ffffff', hat: 'cap', hatColor: '#c22' } },
+  { id: 'a_t_hotdog', name: 'Hot Dog Suit Guy', team: 'T', tier: 4, look: { body: '#c8462e', legs: '#e8b060', head: '#c8462e', hat: 'bun', hatColor: '#e8b060', mustard: true } },
+  { id: 'a_ct_poo', name: 'Mr. Poo', team: 'CT', tier: 5, look: { body: '#6b4423', legs: '#5a381c', head: '#6b4423', hat: 'swirl', hatColor: '#6b4423', eyes: true } },
+  { id: 'a_t_grandma', name: 'Grandma in Curlers', team: 'T', tier: 3, look: { body: '#e48ab4', legs: '#d8d0c0', head: '#e8c4a8', hat: 'curlers', hatColor: '#7ac8ff' } },
+  { id: 'a_ct_pigeon', name: 'Agent Pigeon', team: 'CT', tier: 4, look: { body: '#8a8f9a', legs: '#e08a5a', head: '#6a7080', hat: 'beak', hatColor: '#e0a040', eyes: true } },
+  { id: 'a_t_banana', name: 'Banana Bandit', team: 'T', tier: 2, look: { body: '#f2d33c', legs: '#d8b42a', head: '#f2d33c', hat: 'stem', hatColor: '#5a3a1a', eyes: true } },
+  { id: 'a_ct_mime', name: 'Mime Negotiator', team: 'CT', tier: 2, look: { body: '#f4f4f4', legs: '#111', head: '#ffffff', hat: 'beret', hatColor: '#111', stripes: true } },
 ];
 
 // ---- emotes (everyone in the match sees them; your camera pulls back to third person while it plays) ----
 export const EMOTES = [
-  { id: 'e_wave', name: 'Hey Bestie', anim: 'wave', tier: 0 }, { id: 'e_dance', name: 'Dad Dance', anim: 'dance', tier: 1 },
-  { id: 'e_dab', name: 'Dab (2016 called)', anim: 'dab', tier: 1 }, { id: 'e_tpose', name: 'T-Pose Dominance', anim: 'tpose', tier: 2 },
-  { id: 'e_floss', name: 'Floss', anim: 'floss', tier: 2 }, { id: 'e_chicken', name: 'Chicken Dance', anim: 'chicken', tier: 2 },
-  { id: 'e_fart', name: 'Crop Duster', anim: 'fart', tier: 3 }, { id: 'e_worm', name: 'The Worm', anim: 'worm', tier: 3 },
-  { id: 'e_salute', name: 'Respectful Salute', anim: 'salute', tier: 0 }, { id: 'e_flex', name: 'Gym Bro Flex', anim: 'flex', tier: 1 },
-  { id: 'e_cry', name: 'Ugly Cry', anim: 'cry', tier: 1 }, { id: 'e_twerk', name: 'Twerk Attack', anim: 'twerk', tier: 3 },
+  { id: 'e_wave', name: 'Hey Bestie', anim: 'wave', tier: 0 }, { id: 'e_salute', name: 'Respectful Salute', anim: 'salute', tier: 0 },
+  { id: 'e_dance', name: 'Dad Dance', anim: 'dance', tier: 1 }, { id: 'e_dab', name: 'Dab (2016 called)', anim: 'dab', tier: 1 },
+  { id: 'e_cry', name: 'Ugly Cry', anim: 'cry', tier: 1 }, { id: 'e_flex', name: 'Gym Bro Flex', anim: 'flex', tier: 2 },
+  { id: 'e_tpose', name: 'T-Pose Dominance', anim: 'tpose', tier: 2 }, { id: 'e_floss', name: 'Floss', anim: 'floss', tier: 2 },
+  { id: 'e_chicken', name: 'Chicken Dance', anim: 'chicken', tier: 3 }, { id: 'e_worm', name: 'The Worm', anim: 'worm', tier: 4 },
+  { id: 'e_fart', name: 'Crop Duster', anim: 'fart', tier: 5 }, { id: 'e_twerk', name: 'Twerk Attack', anim: 'twerk', tier: 5 },
 ];
 export const EMOTE_BY_ID = Object.fromEntries(EMOTES.map((e) => [e.id, e]));
 export const DEFAULT_EMOTES = ['e_wave', 'e_salute'];
@@ -91,19 +95,83 @@ const KNIFE_FINISHES = [F('Vanilla', { t: 'solid', c: ['#a8adb6', '#6a6e76'] }),
 
 const pick = (list, n, seed) => { const a = list.slice(); let s = seed; const out = []; while (out.length < n && a.length) { s = (s * 9301 + 49297) % 233280; out.push(a.splice(Math.floor(s / 233280 * a.length), 1)[0]); } return out; };
 const GUNS = WEAPONS.filter((w) => w.cat !== 'knife' && w.cat !== 'zeus').map((w) => w.id);
-
+const STAR_GUNS = ['ak47', 'm4a4', 'awp', 'deagle', 'm4a1s', 'usp', 'glock', 'p90', 'ssg08', 'mac10'];
+// The first three cases (their item ids must never change: players own them). Old tiers map onto the new ladder.
+const OLD_TIER = { milspec: 0, restricted: 1, classified: 2, covert: 3 };
 function makeCrate(id, name, desc, theme, seed, knives, price) {
   const items = [];
-  RARITY.slice(0, 4).forEach((r, tier) => {
-    const fins = theme[r.key] || [];
-    const guns = pick(GUNS, fins.length, seed + tier * 31);
-    fins.forEach((f, k) => items.push({ id: `${id}:${guns[k]}:${f.name}`, kind: 'skin', weapon: guns[k], finish: f.name, paint: f.paint, tier }));
+  ['milspec', 'restricted', 'classified', 'covert'].forEach((key, k) => {
+    const fins = theme[key] || [];
+    const guns = pick(GUNS, fins.length, seed + k * 31);
+    fins.forEach((f, j) => items.push({ id: `${id}:${guns[j]}:${f.name}`, kind: 'skin', weapon: guns[j], finish: f.name, paint: f.paint, tier: OLD_TIER[key] }));
   });
-  for (const k of knives) for (const f of KNIFE_FINISHES) items.push({ id: `${id}:${k}:${f.name}`, kind: 'knife', weapon: k, finish: f.name, paint: f.paint, tier: 4 });
+  for (const k of knives) for (const f of KNIFE_FINISHES) items.push({ id: `${id}:${k}:${f.name}`, kind: 'knife', weapon: k, finish: f.name, paint: f.paint, tier: KNIFE_BY_ID[k].joke ? 5 : 4 });
   return { id, name, desc, price, items };
 }
+// The other cases: a theme = palette + 15 finish names (5 Common, 4 Uncommon, 3 Rare, 2 Epic, 1 Legendary gun),
+// two classic knives (Legendary) and a joke knife (Funny). Ids are crate:weapon:finish, fixed forever once shipped.
+const PAT = [['camo', 'solid', 'checker', 'stripes', 'dots'], ['tiger', 'hex', 'circuit', 'marble', 'damascus'], ['geo', 'galaxy', 'flames', 'scales', 'web'], ['fade', 'wave'], ['wave']];
+function themedCrate(n, id, name, desc, pal, names, knives, joke, price = 250) {
+  const items = [], counts = [5, 4, 3, 2, 1];
+  let k = 0;
+  counts.forEach((c, tier) => {
+    const pool = tier >= 3 ? STAR_GUNS : GUNS, guns = pick(pool, c, 101 + n * 17 + tier * 7);
+    for (let j = 0; j < c; j++, k++) {
+      const t = PAT[tier][(j + n) % PAT[tier].length], c0 = pal[(j + tier) % pal.length], c1 = pal[(j + tier + 1) % pal.length], c2 = pal[(j + tier + 2) % pal.length];
+      items.push({ id: `${id}:${guns[j]}:${names[k]}`, kind: 'skin', weapon: guns[j], finish: names[k], paint: { t, c: tier >= 3 ? [c0, c1, c2] : [c0, c1, c2] }, tier });
+    }
+  });
+  const kf = [F('Vanilla', { t: 'solid', c: ['#a8adb6', '#6a6e76'] }), F(names[15] || 'Case Hardened', { t: 'fade', c: [pal[0], pal[1], pal[2]] }), F(names[16] || 'Night Shift', { t: 'web', c: [pal[3] || pal[0], '#111111'] })];
+  for (const kn of knives) for (const f of kf) items.push({ id: `${id}:${kn}:${f.name}`, kind: 'knife', weapon: kn, finish: f.name, paint: f.paint, tier: 4 });
+  for (const f of kf.slice(1)) items.push({ id: `${id}:${joke}:${f.name}`, kind: 'knife', weapon: joke, finish: f.name, paint: f.paint, tier: 5 });
+  return { id, name, desc, price, items };
+}
+const THEMES = [
+  ['dust2', 'Abbottabad Case', 'Sand, sun and a guy hiding in a closet.', ['#d8b878', '#8a6a3a', '#2a2018', '#f2e2b8'],
+    ['Dune Buggy', 'Goat Herder', 'Courtyard', 'Compound Wall', 'Dialysis Beige', 'VHS Tape', 'Cave Painting', 'Long A', 'Mid Doors', 'Hide & Seek', 'Last Known Address', 'Satellite Dish', 'Navy Night', 'Hiding Spot', 'Most Wanted', 'Desert Heat', 'Closet Dark'], ['k_bayonet', 'k_flip'], 'k_chicken'],
+  ['neon', 'Neon Nightmare Case', 'Too bright to look at directly.', ['#ff2a6a', '#2affd2', '#7a2aff', '#0a0a1a'],
+    ['Glowstick', 'Rave Leftovers', 'Club Bathroom', 'Laser Tag', 'Arcade Carpet', 'Synthwave', 'Pixel Burn', 'VHS Glitch', 'Night Drive', 'Cyber Shrimp', 'Overclocked', 'Retina Damage', 'Neon Genesis', 'Afterparty', 'Blacklight Poster', 'Electric Fade', 'Static'], ['k_karambit', 'k_butterfly'], 'k_dildo'],
+  ['farm', 'Barnyard Case', 'Smells like the farm.', ['#8a5a2a', '#e8c040', '#4a8a3a', '#c8462e'],
+    ['Hay Bale', 'Pig Pen', 'Muddy Boots', 'Red Barn', 'Corn Field', 'Tractor Pull', 'Moo Point', 'Chicken Coop', 'Scarecrow', 'Hen Party', 'County Fair', 'Prize Pumpkin', 'Cow Tipper', 'Golden Egg', 'Farmers Only', 'Butter Churn', 'Manure Glaze'], ['k_gut', 'k_hunts'], 'k_chicken'],
+  ['ocean', 'Deep Sea Case', 'Wet, salty, possibly haunted.', ['#0a3a6a', '#2ad2ff', '#e8f4ff', '#0a1a2a'],
+    ['Tide Pool', 'Kelp Forest', 'Shipwreck', 'Barnacle', 'Sea Foam', 'Riptide', 'Anglerfish', 'Coral Bleach', 'Jellyfish', 'Kraken Ink', 'Abyssal', 'Moby Dick', 'Davy Jones', 'Mermaid Scales', 'Poseidon', 'Low Tide', 'Ink Cloud'], ['k_bayonet', 'k_karambit'], 'k_fish'],
+  ['gamer', 'Gamer Moment Case', 'Sponsored by energy drinks.', ['#2aff6a', '#1a1a1a', '#ff2ad2', '#2a6aff'],
+    ['RGB Keyboard', 'Cheeto Dust', 'Rage Quit', 'Mountain Dew', 'Lag Spike', 'Ping 999', 'Ranked Anxiety', 'Smurf Account', 'Tryhard', 'Sweatband', 'Clutch or Kick', 'Headset Hair', 'Diamond Hands', 'Uninstalled', 'Main Character', 'Gamer Fuel', 'Touch Grass'], ['k_flip', 'k_butterfly'], 'k_banana'],
+  ['space', 'Orbital Case', 'One small step for man, one giant drop rate.', ['#0a0a2a', '#8a5aff', '#ffffff', '#ff7a1a'],
+    ['Moon Dust', 'Space Junk', 'Launch Pad', 'Zero G', 'Freeze Dried', 'Nebula', 'Asteroid Belt', 'Red Planet', 'Black Hole', 'Supernova', 'Event Horizon', 'Alien Probe', 'Big Bang', 'Light Year', 'Cosmic Brain', 'Star Fade', 'Dark Matter'], ['k_karambit', 'k_gut'], 'k_dildo'],
+  ['jungle', 'Jungle Rot Case', 'Humid. Very humid.', ['#2a5a1a', '#8ac83a', '#5a3a1a', '#e8d040'],
+    ['Leaf Litter', 'Swamp Gas', 'Monkey Business', 'Vine Swing', 'Mosquito Bite', 'Python', 'Rainforest', 'Poison Dart', 'Temple Run', 'Jaguar', 'Lost Idol', 'Golden Temple', 'Apex Predator', 'Canopy', 'El Dorado', 'Jungle Fade', 'Shade'], ['k_hunts', 'k_bayonet'], 'k_banana'],
+  ['winter', 'Frostbite Case', 'Lick the flagpole. We dare you.', ['#e8f4ff', '#8ac8ff', '#2a4a7a', '#ffffff'],
+    ['Snowplow', 'Slush', 'Ice Fishing', 'Sleet', 'Igloo', 'Frost Bite', 'Avalanche', 'Polar Vortex', 'Yeti', 'Blizzard', 'Black Ice', 'Northern Lights', 'Absolute Zero', 'Frozen Over', 'Ice Queen', 'Glacier', 'Polar Night'], ['k_flip', 'k_karambit'], 'k_fish'],
+  ['candy', 'Sugar Rush Case', 'Dentists hate this case.', ['#ff8ad2', '#8ad2ff', '#fff28a', '#ff4a4a'],
+    ['Bubblegum', 'Cotton Candy', 'Gummy Bear', 'Rock Candy', 'Sprinkles', 'Jawbreaker', 'Sour Patch', 'Candy Cane', 'Jelly Bean', 'Sugar Crash', 'Rotten Tooth', 'Gingerbread', 'Diabetes', 'Lollipop', 'Willy\'s Factory', 'Candy Fade', 'Licorice'], ['k_butterfly', 'k_gut'], 'k_hotdog'],
+  ['military', 'Surplus Store Case', 'Bought it at a garage sale.', ['#4a5a32', '#6a5434', '#2a2a22', '#c8b07a'],
+    ['Olive Drab', 'MRE', 'Boot Camp', 'Sandbag', 'Field Jacket', 'Ammo Crate', 'Dog Tags', 'Night Vision', 'Kevlar', 'Drill Sergeant', 'Desert Storm', 'Purple Heart', 'Five Star', 'Classified Intel', 'Medal of Honor', 'Gunmetal', 'Blackout'], ['k_bayonet', 'k_hunts'], 'k_plunger'],
+  ['gas', 'Gas Station Case', 'Found behind the hot dog roller.', ['#e8402a', '#f2d33c', '#2a6aff', '#f4f4f0'],
+    ['Slushie Brain', 'Scratch Ticket', 'Beef Jerky', 'Pump 4', 'Air Freshener', 'Roller Grill', 'Lottery Loser', 'Truck Stop', 'Energy Shot', 'Lot Lizard', 'Midnight Burrito', 'Gas Leak', 'Premium Unleaded', 'Bathroom Key', 'Ultimate Shift', 'Fuel Fade', 'Oil Slick'], ['k_flip', 'k_gut'], 'k_hotdog'],
+  ['retro', 'Retro Rewind Case', 'Be kind, rewind.', ['#ff7a1a', '#ffd23a', '#2a8aff', '#3a1a4a'],
+    ['Shag Carpet', 'Lava Lamp', 'Cassette', 'Floppy Disk', 'Wood Panel', 'Disco Ball', 'Mixtape', 'Mullet', 'Dial-Up', 'Roller Rink', 'Boombox', 'Tamagotchi', 'Y2K Panic', 'Blockbuster', 'Totally Radical', 'Sunset Fade', 'Rewind'], ['k_karambit', 'k_bayonet'], 'k_baguette'],
+  ['spooky', 'Spooky Scary Case', 'Skeletons sold separately.', ['#ff7a1a', '#1a1a1a', '#8a2aff', '#e8f0d0'],
+    ['Pumpkin Spice', 'Cobweb', 'Graveyard Shift', 'Candy Corn', 'Bat Cave', 'Ectoplasm', 'Haunted Doll', 'Witch Brew', 'Full Moon', 'Possessed', 'Poltergeist', 'Bone Daddy', 'Grim Reaper', 'Sleep Paralysis', 'The Final Boss', 'Ghost Fade', 'Midnight'], ['k_gut', 'k_butterfly'], 'k_banana'],
+  ['royal', 'Royal Tea Case', 'Pinkies up, peasants.', ['#8a1a3a', '#e4ae39', '#1a1a4a', '#f4f0e0'],
+    ['Crumpet', 'Corgi', 'Tea Stain', 'Velvet Rope', 'Fancy Napkin', 'Crown Jewels', 'Monocle', 'Ballroom', 'Royal Flush', 'Throne Room', 'Off With Their Heads', 'Gold Leaf', 'Divine Right', 'Peasant Tax', 'King Of Kings', 'Royal Fade', 'Tower Dark'], ['k_butterfly', 'k_flip'], 'k_baguette'],
+  ['toxic', 'Toxic Waste Case', 'Do not lick. Do not inhale. Do not.', ['#8aff2a', '#1a1a1a', '#f2d33c', '#4a2a6a'],
+    ['Sludge', 'Barrel Drum', 'Hazard Tape', 'Sewer Rat', 'Ooze', 'Mutagen', 'Chem Spill', 'Radioactive', 'Glow Worm', 'Acid Rain', 'Biohazard', 'Swamp Thing', 'Meltdown', 'Patient Zero', 'Toxic Avenger', 'Slime Fade', 'Fume'], ['k_hunts', 'k_karambit'], 'k_plunger'],
+  ['office', 'Corporate Synergy Case', 'Per my last email.', ['#5a6a7a', '#e8e8e8', '#2a6aff', '#c8402a'],
+    ['Cubicle', 'Stapler', 'Casual Friday', 'Fax Machine', 'TPS Report', 'Coffee Stain', 'Team Building', 'Reply All', 'Micromanager', 'Synergy', 'Quarterly Loss', 'Golden Parachute', 'Hostile Takeover', 'Unpaid Overtime', 'CEO Bonus', 'Spreadsheet Fade', 'Burnout'], ['k_flip', 'k_bayonet'], 'k_chicken'],
+  ['fastfood', 'Drive-Thru Case', 'Would you like fries with that?', ['#e8402a', '#f2d33c', '#8a5a2a', '#ffffff'],
+    ['Ketchup Packet', 'Soggy Fries', 'Grease Trap', 'Kids Meal', 'Napkin Dispenser', 'Secret Sauce', 'Milkshake Machine', 'Drive-Thru', 'Value Menu', 'Triple Stack', 'Heart Attack', 'Golden Arches-ish', 'Supersized', 'Ice Cream Machine Broke', 'Employee Of The Month', 'Grease Fade', 'Fryer Oil'], ['k_gut', 'k_flip'], 'k_hotdog'],
+  ['beach', 'Spring Break Case', 'Sunscreen not included.', ['#2ad2ff', '#f2d8a0', '#ff8a6a', '#ffffff'],
+    ['Sandcastle', 'Sunburn', 'Flip Flop', 'Beach Towel', 'Seagull Theft', 'Tiki Bar', 'Coconut', 'Surf\'s Up', 'Jet Ski', 'Lifeguard', 'Tan Lines', 'Boardwalk', 'Shark Week', 'Paradise', 'Spring Breaker', 'Sunset Fade', 'Riptide'], ['k_butterfly', 'k_hunts'], 'k_fish'],
+  ['metal', 'Heavy Metal Case', 'Turn it up to eleven.', ['#1a1a1a', '#c8c8c8', '#c8321e', '#5a5a5a'],
+    ['Mosh Pit', 'Leather Jacket', 'Spiked Collar', 'Power Chord', 'Roadie', 'Headbanger', 'Guitar Solo', 'Amp Feedback', 'Pyro', 'Black Sabbath-ish', 'Iron Maiden-ish', 'Encore', 'Face Melter', 'Wall Of Death', 'Rock God', 'Chrome', 'Blackened'], ['k_karambit', 'k_hunts'], 'k_dildo'],
+  ['dino', 'Jurassic Junk Case', 'Life, uh, finds a way.', ['#4a6a2a', '#c8a050', '#8a2a1a', '#2a2a1a'],
+    ['Fossil', 'Amber', 'Tar Pit', 'Egg Shell', 'Ferns', 'Raptor Claw', 'Meteor Strike', 'Volcano', 'Pterodactyl', 'T-Rex Arms', 'Extinction Event', 'Bone Dry', 'Apex Fossil', 'Jurassic Spark', 'Dino Nuggets', 'Amber Fade', 'Tar'], ['k_gut', 'k_bayonet'], 'k_chicken'],
+  ['clown', 'Clown College Case', 'Honk honk.', ['#ff4a4a', '#f2d33c', '#2a8aff', '#ffffff'],
+    ['Big Shoes', 'Balloon Animal', 'Seltzer', 'Juggler', 'Rubber Nose', 'Face Paint', 'Pie In The Face', 'Unicycle', 'Circus Peanut', 'Clown Car', 'Creepy Smile', 'Big Top', 'Honk Honk', 'Ringmaster', 'Certified Clown', 'Confetti Fade', 'Greasepaint'], ['k_butterfly', 'k_karambit'], 'k_dildo'],
+];
 // joke finishes that come with their own sounds (everything else sounds like the base gun)
-const FINGER_GUN = { id: 'toilet:deagle:Finger Gun', kind: 'skin', weapon: 'deagle', finish: 'Finger Gun', paint: { t: 'text', c: ['#f2c8a0', '#c8462e'], s: 'PEW' }, tier: 2 };
+const FINGER_GUN = { id: 'toilet:deagle:Finger Gun', kind: 'skin', weapon: 'deagle', finish: 'Finger Gun', paint: { t: 'text', c: ['#f2c8a0', '#c8462e'], s: 'PEW' }, tier: 5 };
 export const SKIN_SOUNDS = {  // by finish name (guns) or knife model: which sound plays on fire / hit / miss
   'Finger Gun': { fire: 'pewpew' }, 'BRRRT': { fire: 'fart' }, 'Fart Cloud': { fire: 'fart' }, 'Golden Shower': { fire: 'squirt' }, 'Hot Dog Water': { fire: 'squirt' },
   'Thicc Boi': { fire: 'boing' }, 'Poop Emoji Party': { fire: 'fart' }, 'Dong Doppler': { fire: 'boing' },
@@ -120,6 +188,7 @@ export const CRATES = [
   makeCrate('sand', 'Sandstorm Case', 'Serious finishes for serious sweats.', SERIOUS, 7, ['k_bayonet', 'k_karambit', 'k_butterfly'], 250),
   (() => { const c = makeCrate('toilet', 'Toilet Humor Case', 'Crude finishes and the dumbest knives ever made. Some skins have their own sounds.', CRUDE, 13, ['k_hotdog', 'k_dildo', 'k_plunger', 'k_chicken'], 250); c.items.push(FINGER_GUN); return c; })(),
   makeCrate('nuke', 'Nuclear Family Case', 'Glowing, radioactive, family friendly.', NUKE, 21, ['k_baguette', 'k_fish', 'k_banana'], 300),
+  ...THEMES.map((t, n) => themedCrate(n, ...t, 250 + (n % 4) * 25)),
   { id: 'agents', name: 'Fashion Disaster Case', desc: 'Player models nobody asked for.', price: 350,
     items: AGENTS.filter((a) => a.tier >= 0).map((a) => ({ id: 'agents:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })) },
 ];
@@ -138,11 +207,11 @@ export const PASS = (() => {
   const emotes = EMOTES.filter((x) => !DEFAULT_EMOTES.includes(x.id));
   for (let t = 1; t <= PASS_TIERS; t++) {
     let it;
-    if (t === PASS_TIERS) it = { id: 'pass:k_dildo:Gold Plated', kind: 'knife', weapon: 'k_dildo', finish: 'Gold Plated', paint: { t: 'fade', c: ['#fff3a0', '#e8b020', '#8a5a10'] }, tier: 4 };
-    else if (t === 25) it = { id: 'pass:k_hotdog:Ballpark Special', kind: 'knife', weapon: 'k_hotdog', finish: 'Ballpark Special', paint: { t: 'hotdogs', c: ['#f2d8a0', '#c8462e'] }, tier: 4 };
-    else if (t % 5 === 0 && a < PASS_AGENTS.length) { const id = PASS_AGENTS[a++]; it = { id: 'pass:' + id, kind: 'agent', weapon: id, finish: (AGENTS.find((x) => x.id === id) || {}).name, tier: Math.min(3, 1 + Math.floor(t / 15)) }; }
+    if (t === PASS_TIERS) it = { id: 'pass:k_dildo:Gold Plated', kind: 'knife', weapon: 'k_dildo', finish: 'Gold Plated', paint: { t: 'fade', c: ['#fff3a0', '#e8b020', '#8a5a10'] }, tier: 5 };
+    else if (t === 25) it = { id: 'pass:k_hotdog:Ballpark Special', kind: 'knife', weapon: 'k_hotdog', finish: 'Ballpark Special', paint: { t: 'hotdogs', c: ['#f2d8a0', '#c8462e'] }, tier: 5 };
+    else if (t % 5 === 0 && a < PASS_AGENTS.length) { const id = PASS_AGENTS[a++]; it = { id: 'pass:' + id, kind: 'agent', weapon: id, finish: (AGENTS.find((x) => x.id === id) || {}).name, tier: (AGENTS.find((x) => x.id === id) || {}).tier || 2 }; }
     else if (t % 3 === 0 && e < emotes.length) { const em = emotes[e++]; it = { id: 'pass:' + em.id, kind: 'emote', weapon: em.id, finish: em.name, tier: em.tier }; }
-    else { const fin = PASS_FINISHES[f++ % PASS_FINISHES.length], gun = PASS_GUNS[g++ % PASS_GUNS.length]; it = { id: `pass:${gun}:${fin.name}`, kind: 'skin', weapon: gun, finish: fin.name, paint: fin.paint, tier: Math.min(3, Math.floor(t / 12)) }; }
+    else { const fin = PASS_FINISHES[f++ % PASS_FINISHES.length], gun = PASS_GUNS[g++ % PASS_GUNS.length]; it = { id: `pass:${gun}:${fin.name}`, kind: 'skin', weapon: gun, finish: fin.name, paint: fin.paint, tier: Math.min(4, Math.floor(t / 10)) }; }
     it.id = `pass${t}:` + it.id.slice(5);  // unique per tier
     items.push(it); tiers.push({ tier: t, def: it.id });
   }
@@ -151,12 +220,11 @@ export const PASS = (() => {
 for (const em of EMOTES) if (!PASS.items.find((i) => i.weapon === em.id)) PASS.items.push({ id: 'pass:' + em.id, kind: 'emote', weapon: em.id, finish: em.name, tier: em.tier });
 export const CRATE_BY_ID = Object.fromEntries(CRATES.map((c) => [c.id, c]));
 export const ITEM_BY_ID = Object.fromEntries([...CRATES, PASS].flatMap((c) => c.items.map((i) => [i.id, i])));
-export const KNIFE_BY_ID = Object.fromEntries(KNIVES.map((k) => [k.id, k]));
 export const AGENT_BY_ID = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
 
 // the odds a crate actually uses (tiers that exist in it, renormalised): shown before opening
 export function crateOdds(crate) {
-  const tiers = [...new Set(crate.items.map((i) => i.tier))].sort();
+  const tiers = [...new Set(crate.items.map((i) => i.tier))].sort((a, b) => a - b);
   const tot = tiers.reduce((s, t) => s + RARITY[t].odds, 0);
   return tiers.map((t) => ({ tier: t, name: RARITY[t].name, color: RARITY[t].color, pct: RARITY[t].odds / tot * 100 }));
 }

@@ -5,6 +5,9 @@
 import { WEAPONS, W_BY_ID, G_BY_ID, GEAR_BY_ID, BUY_MENU, MODES, BOT_LEVELS, RADIO, itemName, itemPrice, forTeam } from './data.js';
 import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_ID, ITEM_BY_ID, PASS, PASS_TIERS, EMOTE_BY_ID } from './skins.js';
 import { MAPS } from './maps.js';
+import { thumb, stage } from './thumbs.js';
+import { VOICE_PACKS } from './voices.js';
+import { topUp as sdkTopUp } from '../sdk/topup.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -48,6 +51,8 @@ const CSS = `
 .cs-reel .mark{position:absolute;left:50%;top:0;bottom:0;width:2px;background:#ffd45a;box-shadow:0 0 10px #ffd45a}
 /* HUD */
 .cs-hud{position:fixed;inset:0;z-index:20;pointer-events:none;font:700 16px "Segoe UI",system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px #000}
+.cs-hud .stat,.cs-hud .ammo{background:linear-gradient(90deg,rgba(0,0,0,.55),rgba(0,0,0,.15));border-radius:2px;font-weight:700;letter-spacing:.02em}
+.cs-hud .slot img{height:18px;vertical-align:middle;margin-right:6px;filter:drop-shadow(0 1px 1px #000)}
 .cs-hud .bl{position:absolute;left:14px;bottom:12px;display:flex;gap:16px;align-items:flex-end}
 .cs-hud .stat{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.35);padding:4px 12px 4px 8px;border-radius:4px;font-size:28px;min-width:110px}
 .cs-hud .stat small{font-size:12px;opacity:.8}.cs-hud .stat .ic{font-size:20px;opacity:.9}
@@ -100,7 +105,59 @@ const CSS = `
  .cs-hud canvas.radar{width:120px;height:120px}.cs-buy .cats{grid-template-columns:repeat(2,1fr)}.cs-hud .stat{font-size:20px;min-width:80px}.cs-hud .ammo{font-size:22px}}
 `;
 
-export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS; document.head.appendChild(s); }
+// the CS-style menu skin: slate panels, thin borders, uppercase condensed labels, rarity-glow item tiles
+const MENU_CSS = `
+.cs{font-family:"Segoe UI","Roboto","Helvetica Neue",Arial,sans-serif;letter-spacing:.01em}
+.cs-menu{display:block;background:#14171c}
+.cs-stage{position:absolute;inset:0;width:100%;height:100%;display:block}
+.cs-vig{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(12,14,18,.92) 0,rgba(12,14,18,.55) 38%,rgba(12,14,18,0) 62%),linear-gradient(0deg,rgba(12,14,18,.85),rgba(12,14,18,0) 30%)}
+.cs-topnav{position:absolute;left:0;right:0;top:0;height:60px;display:flex;align-items:stretch;background:linear-gradient(180deg,rgba(20,23,28,.97),rgba(20,23,28,.88));border-bottom:1px solid #2e343d;z-index:3}
+.cs-brand{display:flex;align-items:center;padding:0 22px;font:900 24px "Segoe UI",system-ui;letter-spacing:.12em;border-right:1px solid #2e343d}.cs-brand i{color:#f2a33a;font-style:normal}
+.cs-nav{display:flex}.cs-nav button{border:0;background:transparent;color:#8d97a5;padding:0 18px;font:700 12px "Segoe UI",system-ui;letter-spacing:.16em;text-transform:uppercase;display:flex;align-items:center;gap:8px;border-bottom:3px solid transparent}
+.cs-nav button:hover{color:#e6eaf0;background:rgba(255,255,255,.03)}.cs-nav button.on{color:#fff;border-bottom-color:#f2a33a;background:rgba(242,163,58,.06)}
+.cs-nav svg{width:18px;height:18px;fill:currentColor}
+.cs-acct{margin-left:auto;display:flex;align-items:center;gap:10px;padding:0 14px}
+.cs-rank{display:flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;border:1px solid #2e343d;border-radius:3px;background:#1b1f25}
+.cs-rank b{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 30% 30%,#7ab8ff,#2a5aa8);font:800 13px system-ui;color:#fff}
+.cs-rank .xp{width:84px;height:4px;background:#0d1015;border-radius:2px;overflow:hidden}.cs-rank .xp i{display:block;height:100%;background:#7ab8ff}
+.cs-coinbox{font:700 15px system-ui;color:#ffd45a;padding:6px 12px;border:1px solid #2e343d;border-radius:3px;background:#1b1f25}
+.cs-ibtn{width:36px;height:36px;border:1px solid #2e343d;border-radius:3px;background:#1b1f25;color:#c8d0da}
+.cs-page{position:absolute;top:60px;left:0;right:0;bottom:0;overflow:auto;padding:22px 26px;z-index:2}
+.cs-page.solid{background:rgba(16,19,23,.96)}
+.cs-home{display:grid;grid-template-columns:minmax(300px,420px) 1fr 320px;gap:22px;height:100%;pointer-events:none}.cs-home>*{pointer-events:auto}
+.cs-hero h1{font:900 54px/1 "Segoe UI",system-ui;letter-spacing:.06em;margin:28px 0 6px}.cs-hero h1 i{color:#f2a33a;font-style:normal}
+.cs-hero .sub{color:#9aa4b2;font-size:15px;margin-bottom:26px}
+.cs-go{display:inline-flex;align-items:center;gap:12px;padding:16px 34px;border:0;border-radius:3px;background:linear-gradient(180deg,#76b13a,#4f8a22);color:#fff !important;font:900 20px "Segoe UI",system-ui;letter-spacing:.14em;box-shadow:0 6px 24px rgba(80,140,40,.35);cursor:pointer}
+.cs-go:hover{filter:brightness(1.08)}.cs-go:disabled{filter:grayscale(1);opacity:.6}
+.cs-panel2{background:rgba(22,26,32,.92);border:1px solid #2e343d;border-radius:3px;margin-bottom:12px}
+.cs-panel2 h3{margin:0;padding:10px 14px;font:800 11px system-ui;letter-spacing:.18em;text-transform:uppercase;color:#8d97a5;border-bottom:1px solid #2e343d;background:rgba(255,255,255,.02)}
+.cs-panel2 .bd{padding:12px 14px}
+.cs-sec{font:800 11px system-ui;letter-spacing:.2em;text-transform:uppercase;color:#8d97a5;margin:18px 0 10px}
+.cs-tabs{display:flex;gap:2px;border-bottom:1px solid #2e343d;margin-bottom:16px}.cs-tabs button{border:0;background:transparent;color:#8d97a5;padding:12px 18px;font:800 12px system-ui;letter-spacing:.14em;text-transform:uppercase;border-bottom:3px solid transparent}
+.cs-tabs button.on{color:#fff;border-bottom-color:#f2a33a}
+.cs-maps{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.cs-map{position:relative;border:1px solid #2e343d;border-radius:3px;overflow:hidden;cursor:pointer;background:#0f1216}
+.cs-map canvas{display:block;width:100%;height:130px}.cs-map .nm{position:absolute;left:0;right:0;bottom:0;padding:22px 12px 9px;background:linear-gradient(0deg,rgba(0,0,0,.9),transparent);font:800 14px system-ui;letter-spacing:.06em}
+.cs-map .nm small{display:block;font:600 11px system-ui;color:#9aa4b2;letter-spacing:.02em}.cs-map.on{outline:2px solid #f2a33a}.cs-map .ck{position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:2px;border:2px solid #fff8;background:#0008}.cs-map.on .ck{background:#f2a33a;border-color:#f2a33a}
+.cs-seg{display:inline-flex;border:1px solid #2e343d;border-radius:3px;overflow:hidden}.cs-seg button{border:0;background:#1b1f25;color:#9aa4b2;padding:8px 14px;font:700 12px system-ui;letter-spacing:.08em}.cs-seg button.on{background:#f2a33a;color:#1a1206}
+.cs-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:10px}
+.cs-tile{position:relative;background:#1d2128;border:1px solid #2a3038;border-radius:2px;cursor:pointer;overflow:hidden;transition:transform .08s}
+.cs-tile:hover{transform:translateY(-2px);border-color:#4a5462}
+.cs-tile .img{height:96px;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 60%,var(--rc,#4b69ff)33 0,transparent 70%),linear-gradient(180deg,#2a3039,#1d2128)}
+.cs-tile canvas{width:100%;height:96px;display:block}
+.cs-tile .tx{padding:7px 9px 9px;border-top:1px solid #2a3038}.cs-tile .w{font:600 11px system-ui;color:#9aa4b2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-tile .n{font:700 13px system-ui;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cs-tile .rb{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--rc)}
+.cs-tile .st{position:absolute;top:6px;left:7px;font:800 10px system-ui;color:#cf6a32;letter-spacing:.06em}.cs-tile .eq{position:absolute;top:6px;right:7px;font:800 10px system-ui;color:#f2a33a}
+.cs-tile .pr{font:700 12px system-ui;color:#ffd45a;margin-top:2px}
+.cs-case{position:relative;background:linear-gradient(180deg,#232831,#1a1e24);border:1px solid #2e343d;border-radius:2px;cursor:pointer;padding:12px;text-align:center}
+.cs-case:hover{border-color:#f2a33a}.cs-case canvas{width:100%;height:110px;display:block}.cs-case b{display:block;font:800 13px system-ui;margin-top:6px;letter-spacing:.04em}.cs-case span{font:700 12px system-ui;color:#ffd45a}
+.cs-modal{background:rgba(6,8,10,.82);backdrop-filter:blur(3px)}
+.cs-modal>.cs-card{background:#1a1e24;border:1px solid #2e343d;border-radius:3px}
+.cs-btn{border-radius:2px;letter-spacing:.08em;text-transform:uppercase;font-size:12px}
+.cs-card{border-radius:3px;background:rgba(26,30,36,.94);border-color:#2e343d}
+@media (max-width:900px){.cs-home{grid-template-columns:1fr}.cs-home .cs-side2{display:none}.cs-nav button span{display:none}.cs-brand{font-size:18px;padding:0 12px}}
+`;
+export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS + MENU_CSS; document.head.appendChild(s); }
 
 // ---- item pictures: the finish painted inside the weapon's silhouette ----
 const SIL = {  // rough side-on outlines per category, in a 100x40 box
@@ -111,6 +168,22 @@ const SIL = {  // rough side-on outlines per category, in a 100x40 box
   heavy: [[2, 14], [30, 12], [96, 12], [96, 18], [60, 18], [56, 30], [46, 30], [46, 20], [30, 22], [2, 26]],
   knife: [[6, 22], [40, 18], [92, 16], [70, 26], [40, 26], [36, 30], [6, 30]],
 };
+// white weapon silhouettes for the kill feed and weapon slots (like the classic HUD icons)
+const iconCache = new Map();
+export function weaponIcon(wid) {
+  if (iconCache.has(wid)) return iconCache.get(wid);
+  const w = W_BY_ID[wid], c = document.createElement('canvas'); c.width = 96; c.height = 36; const g = c.getContext('2d');
+  g.fillStyle = '#fff';
+  if (G_BY_ID[wid]) { g.beginPath(); g.ellipse(48, 21, 9, 12, 0, 0, 7); g.fill(); g.fillRect(45, 4, 6, 6); }
+  else if (wid === 'c4') { g.fillRect(28, 10, 40, 18); }
+  else if (wid === 'bomb') { g.beginPath(); g.arc(48, 20, 13, 0, 7); g.fill(); }
+  else {
+    const sil = !w || w.cat === 'knife' ? SIL.knife : SIL[w.cat === 'smg' ? 'smg' : w.cat === 'sniper' ? 'sniper' : w.cat === 'heavy' ? 'heavy' : w.cat === 'rifle' ? 'rifle' : 'pistol'];
+    const sc = w && w.cat === 'pistol' ? 0.62 : 1, ox = (96 - 96 * sc) / 2;
+    g.beginPath(); sil.forEach(([x, y], k) => (k ? g.lineTo : g.moveTo).call(g, ox + x / 100 * 96 * sc, 2 + y / 40 * 32 * sc + (1 - sc) * 14)); g.closePath(); g.fill();
+  }
+  const url = c.toDataURL(); iconCache.set(wid, url); return url;
+}
 export function drawItem(canvas, item) {
   const info = itemInfo(item); const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
   g.clearRect(0, 0, W, H);
@@ -143,72 +216,125 @@ export function drawItem(canvas, item) {
   g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 1.5; g.beginPath(); sil.forEach(([x, y], k) => (k ? g.lineTo : g.moveTo).call(g, x / 100 * W, y / 40 * H)); g.closePath(); g.stroke();
   return canvas;
 }
-const itemCard = (item, extra = '') => {
+const itemCard = (item, extra = '', eqTag = '') => {
   const info = itemInfo(item); if (!info) return '';
-  return `<div class="cs-card cs-item click" data-uid="${esc(item.uid)}"><canvas width="200" height="80" data-draw="${esc(item.uid)}"></canvas>
-    ${item.st ? '<span class="cs-tag" style="color:#cf6a32">ST™</span>' : ''}${item.listed ? '<span class="cs-tag" style="top:28px;color:#7ed957">listed</span>' : ''}
-    <div class="n">${esc(info.wpn)} | ${esc(info.finish)}</div><div class="w">${info.wear ? esc(info.wear.name) : 'Agent'} · ${info.value} coins${extra}</div>
-    <div class="cs-rar" style="background:${info.rarity.color}"></div></div>`;
+  return `<div class="cs-tile" data-uid="${esc(item.uid)}" style="--rc:${info.rarity.color}"><div class="img"><canvas width="320" height="160" data-draw="${esc(item.uid)}"></canvas></div>
+    ${item.st ? '<span class="st">STATTRAK™</span>' : ''}${eqTag ? `<span class="eq">${esc(eqTag)}</span>` : item.listed ? '<span class="eq" style="color:#7ed957">LISTED</span>' : ''}
+    <div class="tx"><div class="w">${esc(info.wpn)}${info.wear ? ' · ' + esc(info.wear.key) : ''}</div><div class="n">${esc(info.finish)}</div>${extra ? `<div class="pr">${extra}</div>` : ''}</div><div class="rb"></div></div>`;
 };
-const paintAll = (root, items) => root.querySelectorAll('canvas[data-draw]').forEach((c) => { const it = items.find((x) => x.uid === c.dataset.draw); if (it) drawItem(c, it); });
+// draw every item picture in a container: the 3D render when available, the flat drawing meanwhile / otherwise
+function paintAll(root, items) {
+  root.querySelectorAll('canvas[data-draw]').forEach((c) => {
+    const it = items.find((x) => x.uid === c.dataset.draw); if (!it) return;
+    const ok = thumb(it, (url) => { const im = new Image(); im.onload = () => { const g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height); const k = Math.min(c.width / im.width, c.height / im.height); g.drawImage(im, (c.width - im.width * k) / 2, (c.height - im.height * k) / 2, im.width * k, im.height * k); }; im.src = url; });
+    if (!ok) drawItem(c, it);
+  });
+}
+const ICON = {  // nav icons (simple inline SVG paths)
+  home: 'M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z', play: 'M7 4l13 8-13 8z', pass: 'M5 3h14v18l-7-4-7 4z', inv: 'M4 7h16v13H4zM8 7V4h8v3', crates: 'M3 8l9-5 9 5v8l-9 5-9-5zM12 13v8M3 8l9 5 9-5',
+  market: 'M4 9l2-5h12l2 5zM5 9h14v11H5zM9 14h6', quests: 'M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z', friends: 'M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1 21c0-4 3-7 7-7s7 3 7 7zM17 11a3 3 0 1 0 0-6M16 14c4 0 7 3 7 7h-6', admin: 'M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6z', profile: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22c1-5 5-8 9-8s8 3 9 8z', settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 2h4l1 3 3 1 3-1 2 3-2 3 1 2-1 2 2 3-2 3-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-3 2-3-1-2 1-2-2-3 2-3 3 1 3-1z',
+};
+const svg = (k) => `<svg viewBox="0 0 24 24"><path d="${ICON[k]}"/></svg>`;
+// a case drawn from its pull set's colours (a box with a stripe and the case's name)
+function drawCase(c, crate) {
+  const g = c.getContext('2d'), W = c.width, H = c.height, cols = [...new Set(crate.items.filter((i) => i.paint).map((i) => i.paint.c[0]))].slice(0, 3);
+  const a = cols[0] || '#5a6a7a', b = cols[1] || '#2a3038';
+  g.clearRect(0, 0, W, H);
+  const x = W * 0.16, y = H * 0.18, w = W * 0.68, h = H * 0.66;
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(W / 2, y + h + 6, w * 0.48, 7, 0, 0, 7); g.fill();
+  const gr = g.createLinearGradient(0, y, 0, y + h); gr.addColorStop(0, a); gr.addColorStop(1, b); g.fillStyle = gr; g.fillRect(x, y, w, h);
+  g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(x, y, w, 4); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(x, y + h * 0.42, w, h * 0.16);
+  g.fillStyle = cols[2] || '#f2a33a'; g.fillRect(x + w * 0.42, y + h * 0.36, w * 0.16, h * 0.28);
+  g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 2; g.strokeRect(x, y, w, h);
+}
 
 // ======================================================================================================================
 // main menu
 // ======================================================================================================================
 export class Menu {
-  constructor(cfg, profile, h) { this.cfg = cfg; this.P = profile; this.h = h; this.tab = 'play'; this.sel = { mode: '5v5', map: 'dust', bot: 'normal' }; this.lobbies = []; }
+  constructor(cfg, profile, h) { this.cfg = cfg; this.P = profile; this.h = h; this.tab = 'home'; this.sel = { mode: '5v5', map: 'dust', bot: 'normal', host: 'bots' }; this.lobbies = []; }
   show() {
     injectCss();
     this.root = document.createElement('div'); this.root.className = 'cs cs-menu';
-    this.root.innerHTML = `<nav class="cs-side">${[['play', '▶', 'PLAY'], ['pass', '🎖', 'PASS'], ['inv', '🎒', 'INVENTORY'], ['crates', '📦', 'CRATES'], ['market', '🏪', 'MARKET'], ['quests', '★', 'QUESTS'], ['profile', '👤', 'PROFILE'], ['settings', '⚙', 'SETTINGS']]
-      .map(([k, i, n]) => `<button data-tab="${k}"><b>${i}</b>${n}</button>`).join('')}</nav>
-      <div class="cs-main"><div class="cs-top"><div class="cs-logo">${esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`)}</div><span class="cs-mut cs-small">Global Offensive Smell</span><div class="sp"></div>
-      <span class="cs-chip cs-lvl" id="mLvl"></span><span class="cs-chip cs-coin" id="mCoins"></span><span class="cs-chip" id="mAcct"></span><button class="cs-chip" id="mFull" title="Fullscreen (also lets Ctrl-crouch work safely)">⛶</button></div><div class="cs-body" id="mBody"></div></div>`;
+    const title = esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`);
+    this.root.innerHTML = `<canvas class="cs-stage"></canvas><div class="cs-vig"></div>
+      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${[['home', 'Home'], ['play', 'Play'], ['inv', 'Inventory'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])]
+        .map(([k, n]) => `<button data-tab="${k}">${svg(k)}<span>${n}</span></button>`).join('')}</nav>
+        <div class="cs-acct"><button class="cs-coinbox" id="mTop" style="cursor:pointer;color:#7ed957">＋ TOP UP</button><span class="cs-coinbox" id="mCoins"></span><div class="cs-rank"><b id="mLvlN">1</b><div><div style="font:700 11px system-ui;color:#c8d0da" id="mName"></div><div class="xp"><i id="mXp"></i></div></div></div>
+        <button class="cs-ibtn" id="mFull" title="Fullscreen (also makes Ctrl-crouch safe)">⛶</button></div></div>
+      <div class="cs-page" id="mBody"></div>`;
     document.body.appendChild(this.root);
-    this.root.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { this.tab = b.dataset.tab; this.render(); }));
+    this.root.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { this.tab = b.dataset.tab; this.h.sound('tick'); this.render(); }));
     this.off = this.P.on(() => this.top());
     $('#mFull', this.root).onclick = () => { const d = document.documentElement; if (document.fullscreenElement) document.exitFullscreen(); else if (d.requestFullscreen) d.requestFullscreen().then(() => navigator.keyboard && navigator.keyboard.lock && navigator.keyboard.lock().catch(() => {})).catch(() => {}); };
+    this.adminShown = this.P.admin;
+    this.stage = stage($('.cs-stage', this.root), this.stageLook());
+    $('#mTop', this.root).onclick = () => this.topUp();
     this.render();
     this.P.daily().then((n) => n && this.h.toast(`Daily bonus: +${n} coins`));
   }
-  hide() { if (this.root) this.root.remove(); this.root = null; if (this.off) this.off(); if (this.lb) { this.lb.close(); this.lb = null; } }
+  // top-up (shared SDK): Cash App in person, or SOL to STUMF with the account's deposit code (credited automatically)
+  topUp() { sdkTopUp(this.cfg, { who: this.P.tag ? `${this.P.d.name || 'Player'}#${this.P.tag}` : this.P.d.name, code: this.P.signedIn ? this.P.dep : null, game: 'kysgo', coins: 'coins' }); }
+  stageLook() {  // the equipped T agent (else the default) holding the equipped AK skin's gun
+    const lo = this.P.loadoutFor('T'), a = AGENT_BY_ID[lo.agent] || AGENT_BY_ID.a_t_default;
+    return { look: a.look, team: a.team, wid: 'ak47' };
+  }
+  hide() { if (this.stage) this.stage.stop(); this.stage = null; if (this.root) this.root.remove(); this.root = null; if (this.off) this.off(); if (this.lb) { this.lb.close(); this.lb = null; } }
   top() {
     if (!this.root) return;
-    const P = this.P, lv = P.level, need = (lv) ** 2 * 100, prev = (lv - 1) ** 2 * 100;
-    $('#mLvl', this.root).textContent = `LVL ${lv} · ${Math.round((P.d.xp - prev) / (need - prev) * 100)}%`;
+    const P = this.P, lv = P.level, need = lv ** 2 * 100, prev = (lv - 1) ** 2 * 100;
+    $('#mLvlN', this.root).textContent = lv; $('#mXp', this.root).style.width = Math.round((P.d.xp - prev) / (need - prev) * 100) + '%';
+    $('#mName', this.root).textContent = (P.d.name || 'Player') + (P.tag ? '#' + P.tag : '') + (P.signedIn ? (P.online ? ' ☁' : ' (offline)') : '');
     $('#mCoins', this.root).textContent = `🪙 ${P.d.coins.toLocaleString()}`;
-    $('#mAcct', this.root).textContent = P.signedIn ? (P.online ? '☁ ' + (P.d.name || 'online') : '☁ offline') : (P.cloud ? 'Sign in' : 'Local profile');
   }
   render() {
     if (!this.root) return;
     this.top();
     this.root.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === this.tab));
     const B = $('#mBody', this.root);
-    if (this.tab !== 'play' && this.lb) { this.lb.close(); this.lb = null; }
+    B.classList.toggle('solid', this.tab !== 'home');
+    if (this.P.admin !== this.adminShown) { this.adminShown = this.P.admin; this.hide(); this.show(); return; }
+    if (this.tab !== 'play' && this.tab !== 'home' && this.lb) { this.lb.close(); this.lb = null; }
     this['tab_' + this.tab](B);
   }
-  // ---- PLAY ----
+  // ---- HOME: the stage, a big GO, and the side panels ----
+  tab_home(B) {
+    const P = this.P; P.ensureQuests();
+    const q = P.d.quests.filter((x) => !x.weekly), featured = CRATES[(Math.floor(Date.now() / 86400000)) % (CRATES.length - 1)];
+    const passReady = (Array.from({ length: P.level }, (_, i) => i + 1)).filter((t) => t <= 50 && !(P.d.pass || []).includes(t)).length;
+    B.innerHTML = `<div class="cs-home"><div class="cs-hero"><h1>${esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`)}</h1><div class="sub">${esc(this.cfg.tagline || '')}</div>
+        <button class="cs-go" id="hGo">▶ PLAY</button>
+        <div class="cs-panel2" style="margin-top:26px;max-width:380px"><h3>Quick match</h3><div class="bd"><div class="cs-small cs-mut" id="hSel"></div></div></div></div><div></div>
+      <div class="cs-side2"><div class="cs-panel2"><h3>Featured case</h3><div class="bd" style="text-align:center;cursor:pointer" id="hCase"><canvas width="240" height="120" style="width:100%"></canvas><b>${esc(featured.name)}</b><div class="cs-small cs-mut">${esc(featured.desc)}</div></div></div>
+        <div class="cs-panel2"><h3>Daily quests</h3><div class="bd">${q.map((x) => `<div style="margin-bottom:9px"><div class="cs-row cs-small"><span>${esc(x.text)}</span><span style="flex:1"></span><span class="cs-coin">${x.claimed ? '✓' : '🪙 ' + x.coins}</span></div><div class="cs-bar" style="height:4px;margin-top:4px"><i style="width:${Math.round(x.prog / x.goal * 100)}%"></i></div></div>`).join('')}</div></div>
+        <div class="cs-panel2"><h3>Free battle pass</h3><div class="bd cs-small">Level ${P.level} · ${passReady ? `<b style="color:#f2a33a">${passReady} reward${passReady > 1 ? 's' : ''} to claim</b>` : 'keep playing for the next reward'}</div></div></div></div>`;
+    $('#hSel', B).textContent = `${MODES[this.sel.mode].name} · ${MAPS[this.sel.map].name} · bots ${BOT_LEVELS[this.sel.bot].name}`;
+    $('#hGo', B).onclick = () => { this.tab = 'play'; this.render(); };
+    drawCase($('#hCase canvas', B), featured); $('#hCase', B).onclick = () => this.contents(featured.id);
+  }
+  // ---- PLAY: mode tabs, map tiles, bots, then GO ----
   tab_play(B) {
     const s = this.sel;
-    B.innerHTML = `<div class="cs-h">Mode</div><div class="cs-grid">${Object.entries(MODES).map(([k, m]) => `<div class="cs-card click ${s.mode === k ? 'sel' : ''}" data-mode="${k}"><b style="font-size:18px">${k}</b><div class="cs-mut cs-small">${esc(m.name)} · ${m.bomb ? 'bomb defusal' : 'combat only, no kill = draw'} · first to ${m.winTo}</div></div>`).join('')}</div>
-      <div class="cs-h">Map</div><div class="cs-grid">${Object.values(MAPS).map((m) => `<div class="cs-card click ${s.map === m.id ? 'sel' : ''}" data-map="${m.id}"><canvas width="170" height="110" data-mapprev="${m.id}" style="width:100%;border-radius:6px;background:#0b0e13"></canvas><b>${esc(m.name)}</b><div class="cs-mut cs-small">parody of ${esc(m.parody)}</div></div>`).join('')}</div>
-      <div class="cs-h">Bots fill empty slots</div><div class="cs-row">${Object.entries(BOT_LEVELS).map(([k, b]) => `<button class="cs-btn ${s.bot === k ? '' : 'alt'} sm" data-bot="${k}">${b.name}</button>`).join('')}</div>
-      <div class="cs-row" style="margin-top:18px"><button class="cs-btn" id="pSolo">PLAY WITH BOTS</button><button class="cs-btn alt" id="pHost">HOST PUBLIC LOBBY</button><button class="cs-btn alt" id="pPriv">HOST PRIVATE</button>
-        <input id="pCode" maxlength="5" placeholder="Invite code" style="width:120px;text-transform:uppercase"><button class="cs-btn alt" id="pJoin">JOIN</button></div>
-      <div class="cs-h">Open lobbies</div><div id="pList" class="cs-mut">Looking for lobbies…</div>
-      <div class="cs-mut cs-small" style="margin-top:14px">Multiplayer is peer-to-peer and free: the host's browser runs the match and bots fill the empty slots. Share the invite link or code.</div>`;
+    B.innerHTML = `<div class="cs-tabs">${Object.entries(MODES).map(([k, m]) => `<button data-mode="${k}" class="${s.mode === k ? 'on' : ''}">${esc(m.name)}</button>`).join('')}</div>
+      <div class="cs-small cs-mut" style="margin:-6px 0 14px">${MODES[s.mode].bomb ? 'Bomb defusal' : 'Combat only: no kill when time runs out = draw'} · first to ${MODES[s.mode].winTo} · bots fill empty slots</div>
+      <div class="cs-maps">${Object.values(MAPS).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:1fr 340px;gap:22px;margin-top:20px">
+        <div><div class="cs-sec">Bot difficulty</div><div class="cs-seg">${Object.entries(BOT_LEVELS).map(([k, b]) => `<button data-bot="${k}" class="${s.bot === k ? 'on' : ''}">${b.name}</button>`).join('')}</div>
+          <div class="cs-sec">Lobby</div><div class="cs-seg">${[['bots', 'Offline with bots'], ['pub', 'Host public'], ['priv', 'Host private']].map(([k, n]) => `<button data-host="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+          <div style="margin-top:22px"><button class="cs-go" id="pGo">GO</button></div></div>
+        <div><div class="cs-panel2"><h3>Join a friend</h3><div class="bd"><div class="cs-row"><input id="pCode" maxlength="5" placeholder="INVITE CODE" style="flex:1;text-transform:uppercase"><button class="cs-btn" id="pJoin">Join</button></div></div></div>
+          <div class="cs-panel2"><h3>Open lobbies</h3><div class="bd" id="pList"><span class="cs-mut cs-small">Looking for lobbies…</span></div></div></div></div>`;
     B.querySelectorAll('[data-mode]').forEach((e) => (e.onclick = () => { s.mode = e.dataset.mode; this.render(); }));
     B.querySelectorAll('[data-map]').forEach((e) => (e.onclick = () => { s.map = e.dataset.map; this.render(); }));
     B.querySelectorAll('[data-bot]').forEach((e) => (e.onclick = () => { s.bot = e.dataset.bot; this.render(); }));
+    B.querySelectorAll('[data-host]').forEach((e) => (e.onclick = () => { s.host = e.dataset.host; this.render(); }));
     B.querySelectorAll('canvas[data-mapprev]').forEach((c) => this.h.mapPreview(c, c.dataset.mapprev));
-    $('#pSolo', B).onclick = () => this.h.play({ ...s, host: true, solo: true });
-    $('#pHost', B).onclick = () => this.h.play({ ...s, host: true, pub: true });
-    $('#pPriv', B).onclick = () => this.h.play({ ...s, host: true, pub: false });
+    $('#pGo', B).onclick = () => this.h.play({ mode: s.mode, map: s.map, bot: s.bot, host: true, solo: s.host === 'bots', pub: s.host === 'pub' });
     const code = $('#pCode', B); const hash = location.hash.slice(1).toUpperCase(); if (/^[A-Z0-9]{5}$/.test(hash)) code.value = hash;
     $('#pJoin', B).onclick = () => { const c = code.value.trim().toUpperCase(); if (c.length === 5) this.h.play({ code: c, host: false }); };
     if (!this.lb) this.lb = this.h.lobbies((list) => { this.lobbies = list; const el = $('#pList', this.root); if (!el) return;
-      el.innerHTML = list.length ? '' : 'No open lobbies right now: host one!';
-      for (const l of list) { const r = document.createElement('div'); r.className = 'cs-card'; r.style.marginBottom = '6px'; r.innerHTML = '<div class="cs-row"><b class="n"></b><span class="cs-mut m"></span><span style="flex:1"></span><button class="cs-btn sm">JOIN</button></div>';
+      el.innerHTML = list.length ? '' : '<span class="cs-mut cs-small">No open lobbies right now: host one!</span>';
+      for (const l of list) { const r = document.createElement('div'); r.className = 'cs-row'; r.style.marginBottom = '8px'; r.innerHTML = '<div style="flex:1;min-width:0"><b class="n" style="display:block;font-size:13px"></b><span class="cs-mut cs-small m"></span></div><button class="cs-btn sm">Join</button>';
         $('.n', r).textContent = String(l.name || 'Lobby').slice(0, 30); $('.m', r).textContent = `${String(l.mode || '').slice(0, 4)} · ${(MAPS[l.map] || {}).short || ''} · ${l.players | 0}/${l.max | 0}`;
         $('button', r).onclick = () => this.h.play({ code: l.code, host: false }); el.appendChild(r); } });
   }
@@ -221,7 +347,7 @@ export class Menu {
     B.innerHTML = `<div class="cs-row">${Object.entries(kinds).map(([k, n]) => `<button class="cs-btn sm ${f === k ? '' : 'alt'}" data-f="${k}">${n}</button>`).join('')}<span style="flex:1"></span>
       <label class="cs-small cs-mut">CT pistol <select id="iPist"><option value="usp">USP-Shh</option><option value="p2000">P2Grand</option></select></label>
       <label class="cs-small cs-mut">CT rifle <select id="iRif"><option value="m4a4">M4A4 Freedom Stick</option><option value="m4a1s">M4A1-Shh</option></select></label></div>
-      <div class="cs-h">${shown.length} items</div><div class="cs-grid">${shown.map((i) => itemCard(i, eq(i.uid) ? ` · <b style="color:var(--o)">${eq(i.uid)}</b>` : '')).join('') || '<div class="cs-mut">Nothing yet. Open crates with coins you earn by playing.</div>'}</div>`;
+      <div class="cs-sec">${shown.length} items</div><div class="cs-tiles">${shown.slice().sort((a, b) => ((ITEM_BY_ID[b.def] || {}).tier - (ITEM_BY_ID[a.def] || {}).tier) || (b.t - a.t)).map((i) => itemCard(i, '', eq(i.uid))).join('') || '<div class="cs-mut">Nothing yet. Open cases with coins you earn by playing.</div>'}</div>`;
     paintAll(B, items);
     B.querySelectorAll('[data-f]').forEach((e) => (e.onclick = () => { this.invFilter = e.dataset.f; this.render(); }));
     const ps = $('#iPist', B), rs = $('#iRif', B); ps.value = P.d.settings.ctPistol || 'usp'; rs.value = P.d.settings.ctRifle || 'm4a4';
@@ -284,18 +410,22 @@ export class Menu {
   }
   // ---- CRATES ----
   tab_crates(B) {
-    B.innerHTML = `<div class="cs-mut">Crates open with coins you earn by playing: wins, rounds, kills, quests, daily bonus, level-ups. No real money, ever.</div>
-      <div class="cs-grid" style="margin-top:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">${CRATES.map((c) => `<div class="cs-card"><b style="font-size:17px">📦 ${esc(c.name)}</b><div class="cs-mut cs-small">${esc(c.desc)}</div>
-        <div class="cs-small" style="margin:8px 0">${crateOdds(c).map((o) => `<div class="cs-row"><i style="width:10px;height:10px;border-radius:2px;background:${o.color};display:inline-block"></i>${esc(o.name)}<span style="flex:1"></span>${o.pct.toFixed(2)}%</div>`).join('')}</div>
-        <div class="cs-row"><button class="cs-btn" data-open="${c.id}">OPEN · 🪙 ${c.price}</button><button class="cs-btn alt sm" data-see="${c.id}">Contents</button></div></div>`).join('')}</div>`;
-    B.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => this.openCrate(b.dataset.open)));
-    B.querySelectorAll('[data-see]').forEach((b) => (b.onclick = () => this.contents(b.dataset.see)));
+    const list = CRATES.filter((c) => !c.hidden);
+    B.innerHTML = `<div class="cs-row"><div class="cs-sec" style="margin:0">${list.length} cases</div><span style="flex:1"></span><span class="cs-mut cs-small">Opened with coins you earn by playing · odds shown on every case · no real money, ever</span></div>
+      <div class="cs-tiles" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr));margin-top:12px">${list.map((c) => `<div class="cs-case" data-see="${c.id}"><canvas width="300" height="150"></canvas><b>${esc(c.name)}</b><span>🪙 ${c.price}</span></div>`).join('')}</div>`;
+    B.querySelectorAll('[data-see]').forEach((e) => { drawCase($('canvas', e), CRATES.find((c) => c.id === e.dataset.see)); e.onclick = () => this.contents(e.dataset.see); });
   }
   contents(id) {
     const c = CRATES.find((x) => x.id === id), m = document.createElement('div'); m.className = 'cs cs-modal';
-    const fake = c.items.map((d, k) => ({ uid: 'c' + k, def: d.id, float: 0.1, seed: 7, st: false }));
-    m.innerHTML = `<div class="cs-card" style="width:min(900px,96vw)"><div class="cs-row"><b>${esc(c.name)}</b><span style="flex:1"></span><button class="cs-btn alt sm" data-x>✕</button></div><div class="cs-grid" style="margin-top:10px">${fake.map((i) => itemCard(i)).join('')}</div></div>`;
-    document.body.appendChild(m); paintAll(m, fake); $('[data-x]', m).onclick = () => m.remove(); m.onclick = (e) => { if (e.target === m) m.remove(); };
+    const fake = c.items.slice().sort((a, b) => b.tier - a.tier).map((d, k) => ({ uid: 'c' + k, def: d.id, float: 0.06, seed: 7, st: false }));
+    m.innerHTML = `<div class="cs-card" style="width:min(1040px,96vw);padding:0"><div class="cs-row" style="padding:14px 18px;border-bottom:1px solid #2e343d"><b style="font-size:18px;letter-spacing:.04em">${esc(c.name)}</b><span class="cs-mut cs-small">${esc(c.desc)}</span><span style="flex:1"></span><button class="cs-btn alt sm" data-x>✕</button></div>
+      <div style="display:grid;grid-template-columns:240px 1fr;gap:18px;padding:18px"><div><canvas width="300" height="150" style="width:100%"></canvas>
+        <div style="margin:10px 0">${crateOdds(c).map((o) => `<div class="cs-row cs-small" style="margin:3px 0"><i style="width:10px;height:10px;border-radius:2px;background:${o.color};display:inline-block"></i>${esc(o.name)}<span style="flex:1"></span>${o.pct < 1 ? o.pct.toFixed(2) : o.pct.toFixed(1)}%</div>`).join('')}</div>
+        <button class="cs-go" style="width:100%;justify-content:center;font-size:16px;padding:12px" data-open>UNLOCK · 🪙 ${c.price}</button><div class="cs-small cs-mut" style="margin-top:8px">You have 🪙 ${this.P.d.coins.toLocaleString()}</div></div>
+      <div style="max-height:62vh;overflow:auto"><div class="cs-tiles">${fake.map((i) => itemCard(i)).join('')}</div></div></div></div>`;
+    document.body.appendChild(m); paintAll(m, fake); drawCase($('canvas', m), c);
+    $('[data-x]', m).onclick = () => m.remove(); m.onclick = (e) => { if (e.target === m) m.remove(); };
+    $('[data-open]', m).onclick = () => { m.remove(); this.openCrate(id); };
   }
   async openCrate(id) {
     const c = CRATES.find((x) => x.id === id);
@@ -304,7 +434,7 @@ export class Menu {
     const N = 48, WIN = 40, filler = [];
     for (let k = 0; k < N; k++) { const pool = c.items.filter((i) => i.tier === (Math.random() < 0.8 ? Math.min(...c.items.map((x) => x.tier)) : c.items[Math.floor(Math.random() * c.items.length)].tier)); const d = pool[Math.floor(Math.random() * pool.length)] || c.items[0]; filler.push({ uid: 'f' + k, def: d.id, float: Math.random(), seed: k, st: false }); }
     filler[WIN] = item;
-    m.innerHTML = `<div class="cs-card" style="width:min(760px,96vw)"><b>${esc(c.name)}</b><div class="cs-reel" style="margin-top:10px"><div class="strip">${filler.map((it) => { const inf = itemInfo(it); return `<div class="cell" style="border-color:${inf.rarity.color}"><canvas width="130" height="80" data-draw="${esc(it.uid)}"></canvas><div>${esc(inf.wpn)}</div><div class="cs-mut">${esc(inf.finish)}</div></div>`; }).join('')}</div><div class="mark"></div></div>
+    m.innerHTML = `<div class="cs-card" style="width:min(760px,96vw)"><b>${esc(c.name)}</b><div class="cs-reel" style="margin-top:10px"><div class="strip">${filler.map((it) => { const inf = itemInfo(it); return `<div class="cell" style="border-color:${inf.rarity.color};background:radial-gradient(ellipse at 50% 45%,${inf.rarity.color}40,transparent 70%),#1d2128"><canvas width="260" height="160" data-draw="${esc(it.uid)}"></canvas><div>${esc(inf.wpn)}</div><div class="cs-mut">${esc(inf.finish)}</div></div>`; }).join('')}</div><div class="mark"></div></div>
       <div id="won" style="margin-top:12px;min-height:60px"></div></div>`;
     document.body.appendChild(m); paintAll(m, filler);
     const strip = $('.strip', m), reel = $('.cs-reel', m), cell = 138, target = WIN * cell - reel.clientWidth / 2 + 65 + (Math.random() - 0.5) * 100;
@@ -315,7 +445,7 @@ export class Menu {
       strip.style.transform = `translateX(${-x}px)`;
       const ci = Math.floor((x + reel.clientWidth / 2) / cell); if (ci !== lastCell) { lastCell = ci; this.h.sound('tick'); }
       if (k < 1) requestAnimationFrame(anim);
-      else { const inf = itemInfo(item); this.h.sound(inf.rarity.key === 'gold' || inf.rarity.key === 'covert' ? 'rare' : 'reveal');
+      else { const inf = itemInfo(item); this.h.sound(inf.rarity.key === 'funny' || inf.rarity.key === 'legendary' || inf.rarity.key === 'epic' ? 'rare' : 'reveal');
         $('#won', m).innerHTML = `<div class="cs-row"><b style="font-size:20px;color:${inf.rarity.color}">${esc(inf.label)}</b></div><div class="cs-mut cs-small">${esc(inf.rarity.name)}${inf.wear ? ' · ' + esc(inf.wear.name) + ' · float ' + item.float.toFixed(4) : ''}</div>
           <div class="cs-row" style="margin-top:10px"><button class="cs-btn" data-again>OPEN ANOTHER · 🪙 ${c.price}</button><button class="cs-btn alt" data-x>DONE</button></div>`;
         $('[data-x]', m).onclick = () => { m.remove(); this.render(); }; $('[data-again]', m).onclick = () => { m.remove(); this.openCrate(id); }; }
@@ -341,6 +471,69 @@ export class Menu {
       this.render();
     }));
   }
+  // ---- FRIENDS: add by Name#1234, accept, trade items and coins, send coins ----
+  async tab_friends(B) {
+    const P = this.P;
+    if (!P.signedIn) { B.innerHTML = `<div class="cs-panel2"><h3>Friends</h3><div class="bd">Friends, trading and sending coins need an account. <button class="cs-btn sm" id="fGo">Sign in</button></div></div>`; $('#fGo', B).onclick = () => { this.tab = 'profile'; this.render(); }; return; }
+    B.innerHTML = '<div class="cs-mut">Loading friends…</div>';
+    let list = [], trades = [];
+    try { [list, trades] = await Promise.all([P.friends(), P.trades()]); } catch (e) { B.innerHTML = `<div class="cs-mut">${esc(e.message)}</div>`; return; }
+    const tile = (it) => itemCard({ ...it, uid: 'x' + it.uid });
+    B.innerHTML = `<div style="display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:20px">
+      <div><div class="cs-panel2"><h3>Add a friend</h3><div class="bd"><div class="cs-row"><input id="fAdd" placeholder="Name#1234" style="flex:1"><button class="cs-btn" id="fAddGo">Add</button></div>
+        <div class="cs-small cs-mut" style="margin-top:6px">You are <b style="color:#fff">${esc(P.d.name || 'Player')}#${esc(P.tag || '')}</b></div></div></div>
+        <div class="cs-panel2"><h3>Friends (${list.filter((f) => f.state === 'accepted').length})</h3><div class="bd" id="fList">${list.map((f) => `<div class="cs-row" style="margin-bottom:8px"><div style="flex:1;min-width:0"><b>${esc(f.name)}</b><span class="cs-mut">#${esc(f.tag)}</span><div class="cs-small cs-mut">${f.state === 'accepted' ? 'friend' : f.incoming ? 'wants to be friends' : 'request sent'}</div></div>
+          ${f.state === 'accepted' ? `<button class="cs-btn sm" data-trade="${esc(f.id)}">Trade</button><button class="cs-btn alt sm" data-gift="${esc(f.id)}">Send coins</button>` : f.incoming ? `<button class="cs-btn sm" data-acc="${esc(f.id)}">Accept</button>` : ''}<button class="cs-btn alt sm" data-rm="${esc(f.id)}">✕</button></div>`).join('') || '<span class="cs-mut cs-small">No friends yet.</span>'}</div></div></div>
+      <div><div class="cs-panel2"><h3>Open trades</h3><div class="bd">${trades.map((t) => `<div style="border-bottom:1px solid #2e343d;padding-bottom:10px;margin-bottom:10px"><div class="cs-row"><b>${t.mine ? 'You → ' + esc(t.to_name) : esc(t.from_name) + ' → you'}</b><span style="flex:1"></span>
+          ${t.mine ? `<button class="cs-btn alt sm" data-tr="${t.id}" data-ok="0">Cancel</button>` : `<button class="cs-btn sm" data-tr="${t.id}" data-ok="1">Accept</button><button class="cs-btn alt sm" data-tr="${t.id}" data-ok="0">Decline</button>`}</div>
+          <div class="cs-small cs-mut" style="margin:6px 0">${t.mine ? 'You give' : 'They give'}: ${t.give_coins ? '🪙 ' + t.give_coins : ''}</div><div class="cs-tiles">${t.give.map(tile).join('')}</div>
+          <div class="cs-small cs-mut" style="margin:6px 0">${t.mine ? 'You get' : 'You give'}: ${t.want_coins ? '🪙 ' + t.want_coins : ''}</div><div class="cs-tiles">${t.want.map(tile).join('')}</div></div>`).join('') || '<span class="cs-mut cs-small">No open trades.</span>'}</div></div></div></div>`;
+    paintAll(B, trades.flatMap((t) => [...t.give, ...t.want]).map((it) => ({ ...it, uid: 'x' + it.uid })));
+    const act = async (fn, ok) => { try { const r = await fn(); this.h.toast(typeof r === 'string' ? r : ok); } catch (e) { this.h.toast(e.message); } this.render(); };
+    $('#fAddGo', B).onclick = () => act(() => P.addFriend($('#fAdd', B).value.trim()), 'Request sent');
+    B.querySelectorAll('[data-acc]').forEach((b) => (b.onclick = () => act(() => P.acceptFriend(b.dataset.acc), 'Friends!')));
+    B.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { if (confirm('Remove this friend?')) act(() => P.removeFriend(b.dataset.rm), 'Removed'); }));
+    B.querySelectorAll('[data-gift]').forEach((b) => (b.onclick = () => { const n = +prompt('How many coins to send?', '100'); if (n > 0) act(() => P.giftCoins(b.dataset.gift, n), 'Sent'); }));
+    B.querySelectorAll('[data-tr]').forEach((b) => (b.onclick = () => act(() => P.respondTrade(+b.dataset.tr, b.dataset.ok === '1'), 'Done')));
+    B.querySelectorAll('[data-trade]').forEach((b) => (b.onclick = () => this.tradeWindow(list.find((f) => f.id === b.dataset.trade))));
+  }
+  async tradeWindow(friend) {
+    const P = this.P; let theirs = [];
+    try { theirs = await P.friendItems(friend.id); } catch (e) { this.h.toast(e.message); return; }
+    const mine = P.d.inventory.filter((i) => !i.listed && ITEM_BY_ID[i.def] && ITEM_BY_ID[i.def].kind !== 'emote' || (!i.listed && ITEM_BY_ID[i.def]));
+    const give = new Set(), want = new Set();
+    const m = document.createElement('div'); m.className = 'cs cs-modal';
+    const draw = () => {
+      m.innerHTML = `<div class="cs-card" style="width:min(1100px,96vw);padding:0"><div class="cs-row" style="padding:14px 18px;border-bottom:1px solid #2e343d"><b style="font-size:17px">Trade with ${esc(friend.name)}#${esc(friend.tag)}</b><span style="flex:1"></span><button class="cs-btn alt sm" data-x>✕</button></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px"><div><div class="cs-sec" style="margin-top:0">You give (${give.size}) · coins <input id="gc" type="number" min="0" value="${m.gc || 0}" style="width:110px"></div><div class="cs-tiles" style="max-height:52vh;overflow:auto">${mine.map((i) => itemCard(i, '', give.has(i.uid) ? 'GIVING' : '')).join('')}</div></div>
+          <div><div class="cs-sec" style="margin-top:0">You get (${want.size}) · coins <input id="wc" type="number" min="0" value="${m.wc || 0}" style="width:110px"></div><div class="cs-tiles" style="max-height:52vh;overflow:auto">${theirs.map((i) => itemCard({ ...i, uid: 't' + i.uid }, '', want.has(i.uid) ? 'WANT' : '')).join('') || '<span class="cs-mut cs-small">They have no tradable items.</span>'}</div></div></div>
+        <div class="cs-row" style="padding:0 16px 16px"><span class="cs-mut cs-small">Both sides are checked again on the server when they accept.</span><span style="flex:1"></span><button class="cs-go" data-send style="padding:10px 26px;font-size:15px">SEND OFFER</button></div></div>`;
+      paintAll(m, [...mine, ...theirs.map((i) => ({ ...i, uid: 't' + i.uid }))]);
+      $('[data-x]', m).onclick = () => m.remove();
+      $('#gc', m).oninput = (e) => (m.gc = +e.target.value); $('#wc', m).oninput = (e) => (m.wc = +e.target.value);
+      m.querySelectorAll('[data-uid]').forEach((t) => (t.onclick = () => { const u = t.dataset.uid; if (u.startsWith('t')) { const r = u.slice(1); want.has(r) ? want.delete(r) : want.add(r); } else give.has(u) ? give.delete(u) : give.add(u); draw(); }));
+      $('[data-send]', m).onclick = async () => { try { await P.offerTrade(friend.id, [...give], m.gc || 0, [...want], m.wc || 0); this.h.toast('Offer sent'); m.remove(); this.render(); } catch (e) { this.h.toast(e.message); } };
+    };
+    document.body.appendChild(m); draw();
+  }
+  // ---- ADMIN (only accounts the owner put in cs_admins; the server re-checks every call) ----
+  async tab_admin(B) {
+    const P = this.P; if (!P.admin) { B.innerHTML = ''; return; }
+    const defs = Object.values(ITEM_BY_ID).filter((d) => d.kind !== 'emote' || true).sort((a, b) => b.tier - a.tier);
+    B.innerHTML = `<div class="cs-panel2"><h3>Admin · give coins and items</h3><div class="bd">
+      <div class="cs-row"><input id="aQ" placeholder="Search players by name" style="flex:1"><button class="cs-btn" id="aFind">Search</button></div><div id="aRes" style="margin-top:10px"></div>
+      <div class="cs-row" style="margin-top:12px"><input id="aCoins" type="number" placeholder="Coins (+/-)" style="width:160px"><select id="aDef" style="flex:1"><option value="">(no item)</option>${defs.map((d) => `<option value="${esc(d.id)}">[${esc(RARITY[d.tier].name)}] ${esc(itemInfo({ def: d.id, float: 0, seed: 0 }).label)}</option>`).join('')}</select><input id="aN" type="number" value="1" min="1" max="100" style="width:80px"></div>
+      <div class="cs-small cs-mut" style="margin-top:6px">Pick a player above, then Give. Every grant is logged on the server.</div></div></div>`;
+    let target = null;
+    $('#aFind', B).onclick = async () => {
+      try { const list = await P.adminFind($('#aQ', B).value.trim()); const R = $('#aRes', B); R.innerHTML = '';
+        for (const u of list) { const r = document.createElement('div'); r.className = 'cs-row'; r.style.margin = '4px 0'; r.innerHTML = '<span class="n" style="flex:1"></span><span class="cs-coin c"></span><button class="cs-btn sm">Give</button>';
+          $('.n', r).textContent = `${u.name}#${u.tag} · level ${Math.floor(Math.sqrt(u.xp / 100)) + 1}`; $('.c', r).textContent = '🪙 ' + Number(u.coins).toLocaleString();
+          $('button', r).onclick = async () => { target = u; try { const g = await P.adminGrant(u.id, +$('#aCoins', B).value || 0, $('#aDef', B).value, +$('#aN', B).value || 1); this.h.toast(`${u.name} now has 🪙 ${Number(g.coins).toLocaleString()}`); if (u.id === (P.sess && P.sess.user && P.sess.user.id)) P.sync(); $('#aFind', B).click(); } catch (e) { this.h.toast(e.message); } };
+          R.appendChild(r); } } catch (e) { this.h.toast(e.message); }
+    };
+    $('#aFind', B).click();
+  }
   // ---- QUESTS ----
   tab_quests(B) {
     const P = this.P; P.ensureQuests();
@@ -360,7 +553,7 @@ export class Menu {
         .map(([n, v]) => `<div class="cs-card"><div class="cs-mut cs-small">${n}</div><b style="font-size:20px">${v}</b></div>`).join('')}</div></div>
       <div class="cs-card" style="margin-top:12px" id="pfAcct"></div>`;
     $('#pfN', B).textContent = P.d.name || 'Player'; $('#pfName', B).value = P.d.name || '';
-    $('#pfSave', B).onclick = () => { P.d.name = $('#pfName', B).value.trim().slice(0, 20); P.changed(); this.render(); };
+    $('#pfSave', B).onclick = async () => { try { await P.setName($('#pfName', B).value.trim().slice(0, 20)); } catch (e) { this.h.toast(e.message); } this.render(); };
     const A = $('#pfAcct', B);
     if (!P.cloud) { A.innerHTML = '<b>Local profile</b><div class="cs-mut cs-small">Your coins and items are saved in this browser. (The game owner can switch on free accounts to sync across devices and trade.)</div>'; return; }
     if (P.signedIn) { A.innerHTML = `<b>Signed in</b> <span class="cs-mut cs-small">${P.online ? 'synced' : esc(P.err || 'offline')}</span><div class="cs-row" style="margin-top:8px"><button class="cs-btn alt sm" id="aSync">Sync now</button><button class="cs-btn alt sm" id="aOut">Sign out</button></div>`;
@@ -381,15 +574,17 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Colour</div><input type="color" data-k="xColor" value="${S.xColor}" style="width:100%;height:34px"></label>
         <label class="cs-card"><div class="cs-small cs-mut">Style</div><select data-k="xDyn"><option value="0">Static</option><option value="1">Dynamic</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Centre dot</div><select data-k="xDot"><option value="0">Off</option><option value="1">On</option></select></label>
-        <div class="cs-card" style="display:grid;place-items:center;min-height:90px;background:#3a4a3a"><div style="position:relative;width:1px;height:1px" id="xPrev"></div></div></div>
+        <div class="cs-card" style="display:grid;place-items:center;min-height:90px;background:#3a4a3a"><div class="cs-xh" style="position:relative;left:auto;top:auto;width:1px;height:1px" id="xPrev"></div></div></div>
       <div class="cs-h">Graphics</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Quality</div><select data-k="quality"><option value="0.5">Potato (fastest)</option><option value="0.75">Low</option><option value="1">Medium</option><option value="1.5">High</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Show FPS</div><select data-k="fps"><option value="0">Off</option><option value="1">On</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
         <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label></div>
       <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift walk · Ctrl (or C) crouch · Space jump · Mouse1 fire · Mouse2 scope / alt fire · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · Z X C radio · T emotes · F inspect · Esc menu</div>`;
-    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
+    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
     drawXh($('#xPrev', B), S, 0);
+    $('#vTry', B).onclick = (e) => { e.preventDefault(); this.h.announce('planted'); };
   }
 }
 
@@ -444,7 +639,8 @@ export class Hud {
     const n = (t, team) => { const s = document.createElement('span'); s.textContent = t; s.style.color = team === 'CT' ? 'var(--ct)' : 'var(--tt)'; return s; };
     if (e.killer) row.appendChild(n(e.killer, e.kteam));
     if (e.assist) { const a = document.createElement('span'); a.textContent = '+ ' + e.assist; a.style.opacity = .8; row.appendChild(a); }
-    const w = document.createElement('span'); w.className = 'wpn'; w.textContent = `[${itemName(e.weapon) || e.weapon}]${e.wallbang ? ' ⟂' : ''}${e.head ? ' ☠' : ''}`; row.appendChild(w);
+    const w = document.createElement('img'); w.className = 'wpn'; w.src = weaponIcon(W_BY_ID[e.weapon] || G_BY_ID[e.weapon] ? e.weapon : 'bomb'); w.title = itemName(e.weapon) || e.weapon; w.style.cssText = 'height:16px;padding:0 4px;opacity:.95'; row.appendChild(w);
+    for (const [on, t] of [[e.wallbang, '⟂'], [e.head, '☠']]) if (on) { const x = document.createElement('span'); x.textContent = t; x.style.color = '#fff'; row.appendChild(x); }
     row.appendChild(n(e.victim, e.vteam));
     box.appendChild(row); while (box.children.length > 6) box.firstChild.remove();
     setTimeout(() => row.remove(), 7000);

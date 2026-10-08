@@ -392,7 +392,7 @@ export class Match {
         this.sendInv(by);
       }
     }
-    this.event('kill', { killer: by ? by.name : '', kteam: by ? by.team : '', kid: by ? by.id : null, victim: v.name, vteam: v.team, vid: v.id, weapon, head, wallbang, assist: assist ? assist.name : '' });
+    this.event('kill', { fx: by && this.killFx ? this.killFx(by, weapon) : null, killer: by ? by.name : '', kteam: by ? by.team : '', kid: by ? by.id : null, victim: v.name, vteam: v.team, vid: v.id, weapon, head, wallbang, assist: assist ? assist.name : '' });
     this.checkWin();
   }
   scoreboard() { return [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, k: p.k, a: p.a, d: p.d, mvp: p.mvp, score: p.score, hs: p.hs, money: p.money, alive: p.alive, ping: p.ping })); }

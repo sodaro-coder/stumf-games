@@ -9,5 +9,29 @@
  "backend": {
   "url": "https://pgpuvmsgstqpwtojqxun.supabase.co",
   "anonKey": "sb_publishable_YRxCMKuj-wqJsNx1vK5XYA_IHleHeEf"
+ },
+ "topup": {
+  "contact": "Call AJ",
+  "cashtag": "$budtendersli",
+  "packs": [
+   [
+    2,
+    2500
+   ],
+   [
+    5,
+    7000
+   ],
+   [
+    10,
+    15000
+   ],
+   [
+    20,
+    35000
+   ]
+  ],
+  "coinsPerUsd": 1250,
+  "sol": {}
  }
 }

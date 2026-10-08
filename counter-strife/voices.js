@@ -1,0 +1,25 @@
+// Announcer packs: the browser's own text-to-speech with a pitch/speed and a script per character. Archetypes,
+// not impressions of real people.
+export const VOICE_PACKS = {
+  classic: { name: 'Classic Announcer', pitch: 0.75, rate: 1.05, go: ['Go go go!', "Let's go!"], planted: ['Bomb has been planted.'], defused: ['Bomb has been defused.'],
+    twin: ['Terrorists win.'], ctwin: ['Counter-Terrorists win.'], draw: ['Round draw.'] },
+  drill: { name: 'Drill Sergeant', pitch: 0.55, rate: 1.25, go: ['MOVE MOVE MOVE, MAGGOTS!', 'GET OUT THERE AND EARN YOUR LUNCH!'], planted: ['THE BOMB IS IN! I SAID THE BOMB IS IN!'],
+    defused: ['BOMB DEFUSED. NOW DROP AND GIVE ME TWENTY!'], twin: ['TERRORISTS WIN. PATHETIC, COUNTER-TERRORISTS!'], ctwin: ['COUNTER-TERRORISTS WIN. DO NOT GET COCKY!'], draw: ['A DRAW? YOU ARE ALL ON LATRINE DUTY!'] },
+  trailer: { name: 'Movie Trailer Guy', pitch: 0.2, rate: 0.85, go: ['In a world... where nobody checks the corners.'], planted: ['This summer... the bomb... has been planted.'],
+    defused: ['One hero. One pair of pliers. Bomb defused.'], twin: ['The Terrorists... win. Rated R.'], ctwin: ['The Counter-Terrorists... win. Coming soon to a server near you.'], draw: ['Nobody wins. Directed by nobody.'] },
+  pirate: { name: 'Pirate Captain', pitch: 0.7, rate: 1.0, go: ['Arr, hoist the sails, ye scallywags!'], planted: ["The powder keg be planted, matey!"], defused: ['The keg be defused! Blast it all!'],
+    twin: ['The Terrorists plunder the round! Yo ho ho!'], ctwin: ['The navy wins! Walk the plank, Terrorists!'], draw: ["Nobody gets the treasure. Arr."] },
+  robot: { name: 'Malfunctioning Robot', pitch: 0.1, rate: 0.9, go: ['ROUND. START. BEEP. BOOP.'], planted: ['EXPLOSIVE DEVICE. ARMED. I AM NOT. WORRIED.'], defused: ['DEVICE. DISARMED. DISAPPOINTING.'],
+    twin: ['TERRORIST VICTORY. COMPUTING. SADNESS.'], ctwin: ['COUNTER TERRORIST VICTORY. DOES. NOT. COMPUTE.'], draw: ['ERROR. NOBODY. WON.'] },
+  sports: { name: 'Overexcited Sportscaster', pitch: 1.05, rate: 1.35, go: ["AND THEY'RE OFF!"], planted: ['HE PLANTS IT! WHAT A PLAY! THE CROWD GOES WILD!'], defused: ['DEFUSED! UNBELIEVABLE SCENES HERE TONIGHT!'],
+    twin: ['TERRORISTS TAKE THE ROUND! WHAT A GAME!'], ctwin: ['COUNTER-TERRORISTS WIN IT! INCREDIBLE!'], draw: ['A DRAW! NOBODY SAW THAT COMING!'] },
+  grandma: { name: 'Sweet Grandma', pitch: 1.55, rate: 0.8, go: ['Go on, sweetie, have fun out there.'], planted: ['Oh dear, someone left a bomb on the carpet.'], defused: ["Oh good, the nice young man fixed the bomb."],
+    twin: ['The naughty boys won, dear.'], ctwin: ['The police won. Cookies for everyone!'], draw: ["Nobody won? That's nice, dear."] },
+  surfer: { name: 'Surfer Dude', pitch: 0.9, rate: 0.95, go: ['Duuude. Paddle out, bro.'], planted: ["Whoa, bomb's planted. Gnarly."], defused: ['Bomb defused, bro. Totally tubular.'],
+    twin: ['Terrorists win. Radical, I guess.'], ctwin: ['Counter-Terrorists win. Hang ten, my dudes.'], draw: ['Nobody won, bro. Chill.'] },
+  chipmunk: { name: 'Caffeinated Chipmunk', pitch: 2, rate: 1.5, go: ["Let's go let's go let's go!"], planted: ['Bomb bomb bomb! It is planted!'], defused: ['Yay! No more bomb!'],
+    twin: ['Terrorists win! Wheee!'], ctwin: ['Counter-Terrorists win! Yippee!'], draw: ['Nobody won! Again again!'] },
+  butler: { name: 'Posh Butler', pitch: 0.8, rate: 0.92, go: ['Your round has begun, sir.'], planted: ['Pardon the interruption. A bomb has been planted.'], defused: ['The explosive has been seen to, sir.'],
+    twin: ['The Terrorists have won, regrettably.'], ctwin: ['The Counter-Terrorists prevail. Splendid.'], draw: ['A draw. How very dull.'] },
+};
+export function line(pack, key) { const p = VOICE_PACKS[pack] || VOICE_PACKS.classic, l = p[key] || VOICE_PACKS.classic[key] || ['']; return { text: l[Math.floor(Math.random() * l.length)], pitch: p.pitch, rate: p.rate }; }

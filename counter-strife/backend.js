@@ -65,6 +65,7 @@ export class Profile {
       this.d.coins = p.coins; this.d.xp = p.xp; this.d.equipped = p.equipped || this.d.equipped; this.d.stats = Object.assign(this.d.stats, p.stats || {});
       if (p.name) this.d.name = p.name;
       this.d.pass = Array.isArray(p.pass) ? p.pass : [];
+      this.tag = p.tag || null; this.admin = !!p.admin; this.dep = p.dep || null;
       this.d.inventory = (p.items || []).map((i) => ({ uid: i.uid, def: i.def, float: i.float, st: i.st, seed: i.seed, kills: i.kills || 0, t: Date.parse(i.created) || 0, listed: i.listed || null }));
       this.online = true; this.changed(); return true;
     } catch (e) { this.online = false; this.err = String(e.message || e); return false; }
@@ -91,6 +92,19 @@ export class Profile {
   async listItem(uid, price) { await this.rpc('cs_list', { p_uid: uid, p_price: Math.round(price) }); await this.sync(); }
   async unlistItem(uid) { await this.rpc('cs_unlist', { p_uid: uid }); await this.sync(); }
   async buyListing(id) { await this.rpc('cs_buy', { p_listing: id }); await this.sync(); }
+  // ---- friends, trades, gifts (accounts only; every check runs on the server) ----
+  async setName(n) { if (this.signedIn) await this.rpc('cs_set_name', { p_name: n }); this.d.name = n; this.changed(); }
+  friends() { return this.rpc('cs_friends_list'); }
+  addFriend(handle) { return this.rpc('cs_friend_request', { p_handle: handle }); }
+  acceptFriend(id) { return this.rpc('cs_friend_accept', { p_id: id }); }
+  removeFriend(id) { return this.rpc('cs_friend_remove', { p_id: id }); }
+  friendItems(id) { return this.rpc('cs_friend_items', { p_id: id }); }
+  async giftCoins(id, n) { const c = await this.rpc('cs_gift_coins', { p_to: id, p_amount: Math.round(n) }); this.d.coins = c; this.changed(); return c; }
+  offerTrade(to, give, giveCoins, want, wantCoins) { return this.rpc('cs_trade_offer', { p_to: to, p_give: give, p_give_coins: Math.round(giveCoins || 0), p_want: want, p_want_coins: Math.round(wantCoins || 0) }); }
+  trades() { return this.rpc('cs_trades_list'); }
+  async respondTrade(id, ok) { const r = await this.rpc('cs_trade_respond', { p_id: id, p_accept: !!ok }); await this.sync(); return r; }
+  adminFind(q) { return this.rpc('cs_admin_find', { p_q: q || '' }); }
+  adminGrant(id, coins, def, count) { return this.rpc('cs_admin_grant', { p_id: id, p_coins: Math.round(coins || 0), p_def: def || null, p_count: Math.round(count || 1) }); }
   // ---- loadout ----
   equip(team, slotKey, uid) { this.d.equipped[team] = this.d.equipped[team] || {}; this.d.equipped[team][slotKey] = uid; this.saveEquip(); }
   unequip(uid) { for (const t of ['T', 'CT']) for (const k in this.d.equipped[t] || {}) if (this.d.equipped[t][k] === uid) delete this.d.equipped[t][k]; this.saveEquip(); }

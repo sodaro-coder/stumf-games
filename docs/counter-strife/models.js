@@ -112,7 +112,7 @@ export function skinTexture(item, info) {
 // dims per category: [receiver length, barrel length, stock, mag height, height]
 const SHAPE = { pistol: [0.2, 0.05, 0, 0.1, 0.1], smg: [0.32, 0.12, 0.14, 0.18, 0.12], heavy: [0.42, 0.34, 0.2, 0.08, 0.13], rifle: [0.46, 0.28, 0.22, 0.2, 0.12],
   sniper: [0.52, 0.42, 0.26, 0.12, 0.12], zeus: [0.18, 0.06, 0, 0.04, 0.1] };
-export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a') {
+export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = true) {
   const w = W_BY_ID[id] || { cat: 'pistol' }, g = new THREE.Group();
   const paint = tex ? new THREE.MeshLambertMaterial({ map: tex }) : lam(w.cat === 'zeus' ? '#e8d040' : w.cat === 'rifle' && w.team === 'T' ? '#6a4a2e' : w.cat === 'pistol' ? '#5a5f68' : '#454a52');
   const dark = lam('#24272c'), metal = lam('#6a6e76');
@@ -126,14 +126,14 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a') {
   if (w.zoom) part(g, 0.06, 0.06, 0.22, dark, 0, hh / 2 + 0.04, 0);          // scope
   if (w.cat === 'heavy' && w.pellets > 1) part(g, 0.06, 0.05, 0.18, lam('#5a3a22'), 0, -0.03, -rl / 2 + 0.05);  // pump
   // hands
-  part(g, 0.09, 0.09, 0.1, lam(glove), 0, -hh / 2 - 0.06, rl * 0.28 + 0.02);
-  part(g, 0.1, 0.1, 0.36, lam(sleeve), 0.02, -hh / 2 - 0.1, rl * 0.28 + 0.22);
-  if (w.cat !== 'pistol' && w.cat !== 'zeus') { part(g, 0.09, 0.09, 0.1, lam(glove), -0.02, -0.06, -rl / 2 + 0.02); part(g, 0.1, 0.1, 0.4, lam(sleeve), -0.14, -0.1, -rl / 2 + 0.24).rotation.y = -0.5; }
+  if (hands) part(g, 0.09, 0.09, 0.1, lam(glove), 0, -hh / 2 - 0.06, rl * 0.28 + 0.02);
+  if (hands) part(g, 0.1, 0.1, 0.36, lam(sleeve), 0.02, -hh / 2 - 0.1, rl * 0.28 + 0.22);
+  if (hands && w.cat !== 'pistol' && w.cat !== 'zeus') { part(g, 0.09, 0.09, 0.1, lam(glove), -0.02, -0.06, -rl / 2 + 0.02); part(g, 0.1, 0.1, 0.4, lam(sleeve), -0.14, -0.1, -rl / 2 + 0.24).rotation.y = -0.5; }
   const flash = new THREE.Mesh(box(0.12, 0.12, 0.12), basic('#ffd27a')); flash.position.set(0, 0.02, -rl / 2 - bl - (w.silenced ? 0.2 : 0.06)); flash.visible = false; g.add(flash);
   g.userData = { flash, len: rl + bl };
   return g;
 }
-export function makeKnife(knifeId, tex, sleeve = '#3c4e66', glove = '#2a2a2a') {
+export function makeKnife(knifeId, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = true) {
   const k = KNIFE_BY_ID[knifeId], model = k ? k.model : 'default', g = new THREE.Group();
   const blade = tex ? new THREE.MeshLambertMaterial({ map: tex }) : lam('#a8adb6'), handle = lam('#2a2622');
   const P = (w, h, d, m, x, y, z, rx = 0) => { const p = part(g, w, h, d, m, x, y, z); p.rotation.x = rx; return p; };
@@ -150,8 +150,8 @@ export function makeKnife(knifeId, tex, sleeve = '#3c4e66', glove = '#2a2a2a') {
     case 'bayonet': P(0.02, 0.05, 0.3, blade, 0, 0.03, -0.2); P(0.08, 0.02, 0.02, metal(), 0, 0.02, -0.04); P(0.035, 0.05, 0.13, handle, 0, 0.02, 0.04); break;
     default: P(0.02, 0.045, 0.22, blade, 0, 0.03, -0.14); P(0.035, 0.05, 0.12, handle, 0, 0.02, 0.04); break;
   }
-  part(g, 0.065, 0.065, 0.08, lam(glove), 0, -0.01, 0.07);
-  part(g, 0.075, 0.075, 0.3, lam(sleeve), 0.015, -0.05, 0.26);
+  if (hands) part(g, 0.065, 0.065, 0.08, lam(glove), 0, -0.01, 0.07);
+  if (hands) part(g, 0.075, 0.075, 0.3, lam(sleeve), 0.015, -0.05, 0.26);
   g.userData = { flash: null, len: 0.3 };
   return g;
 }

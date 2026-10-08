@@ -9,12 +9,14 @@ import { MAPS } from './maps.js';
 import { Match, moveStep, traceShot, eyeHeight, spreadOf, recoilAt, nadeStep, speedOf } from './sim.js';
 import { Bots, botNames } from './bots.js';
 import { Profile } from './backend.js';
-import { Menu, Hud, injectCss, esc } from './ui.js';
+import { Menu, Hud, injectCss, esc, weaponIcon } from './ui.js';
+import { line } from './voices.js';
+import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound } from './skins.js';
 import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
-const DEF_SET = { crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 1, fps: 0, hand: 1 };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 1, fps: 0, hand: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -131,7 +133,32 @@ export default function start({ cfg, E, N, smoke }) {
   if (profile.signedIn) profile.sync();
   const audio = makeAudio(() => S.vol);
   const toast = (t) => { const d = document.createElement('div'); d.className = 'cs'; d.textContent = t; d.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:400;background:#151b24;border:1px solid #2c3442;padding:10px 16px;border-radius:8px;font-weight:700'; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); };
+  // map tiles: a real 3D shot of the map (rendered once, cached), the flat plan meanwhile or without WebGL
+  const mapShots = new Map();
+  let shotR = null;
+  const mapShot = (id) => {
+    if (mapShots.has(id)) return mapShots.get(id);
+    try {
+      if (!shotR) { shotR = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); shotR.setPixelRatio(1); shotR.setSize(440, 260, false); }
+      const sc = new THREE.Scene(), Wd = buildWorld(E, MAPS[id], sc, 1), B = Wd.B;
+      sc.background = new THREE.Color(B.sky || 0x9ab); sc.fog = new THREE.Fog(B.fog || 0xaaaaaa, 60, 220);
+      sc.add(new THREE.HemisphereLight((B.amb || [])[0] || 0xffffff, (B.amb || [])[1] || 0x555555, 1.1));
+      const sun = new THREE.DirectionalLight(B.sunColor || 0xffffff, 0.8); sun.position.set(40, 80, 25); sc.add(sun);
+      for (const pr of B.props) Wd.group.add(makeProp({ ...pr, y: Wd.H(Math.floor(pr.x), Math.floor(pr.z)) }));
+      const site = Object.values(B.sites)[0] || [0, 0, B.w, B.d], tx = (site[0] + site[2]) / 2, tz = (site[1] + site[3]) / 2;
+      const cam = new THREE.PerspectiveCamera(48, 440 / 260, 0.5, 400), span = Math.max(B.w, B.d);
+      cam.position.set(tx + span * 0.32, span * 0.42, tz + span * 0.42); cam.lookAt(tx, 0, tz);
+      shotR.render(sc, cam);
+      const url = shotR.domElement.toDataURL('image/jpeg', 0.85);
+      Wd.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      mapShots.set(id, url); return url;
+    } catch (e) { mapShots.set(id, null); return null; }
+  };
   const mapPreview = (c, id) => {
+    flatPreview(c, id);
+    setTimeout(() => { const url = mapShot(id); if (!url || !c.isConnected) return; const im = new Image(); im.onload = () => c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); im.src = url; }, 30);
+  };
+  const flatPreview = (c, id) => {
     const B = MAPS[id].build(), g = c.getContext('2d'), sx = c.width / B.w, sz = c.height / B.d, s = Math.min(sx, sz);
     g.fillStyle = '#0b0e13'; g.fillRect(0, 0, c.width, c.height);
     const ox = (c.width - B.w * s) / 2, oz = (c.height - B.d * s) / 2;
@@ -139,7 +166,7 @@ export default function start({ cfg, E, N, smoke }) {
     g.fillStyle = '#ff6a4a'; g.font = 'bold 13px system-ui'; for (const [n, r] of Object.entries(B.sites)) g.fillText(n, ox + (r[0] + r[2]) / 2 * s - 4, oz + (r[1] + r[3]) / 2 * s + 4);
   };
   let menu = null;
-  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); } }); menu.show(); };
+  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate); } }); menu.show(); };
   if (smoke) runMatch({ mode: '5v5', map: 'dust', bot: 'normal', host: true, solo: true, smoke: true });
   else showMenu();
 
@@ -158,7 +185,10 @@ export default function start({ cfg, E, N, smoke }) {
     const hello = { name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
 
     // ---- renderer & scene ----
-    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    const hi = S.quality >= 1.5;  // High: antialiasing + real-time sun shadows; lower settings stay fast on weak machines
+    const renderer = new THREE.WebGLRenderer({ antialias: hi, powerPreference: 'high-performance' });
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
+    if (hi) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
     renderer.domElement.style.cssText = 'position:fixed;inset:0;width:100%;height:100%';
     document.body.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
@@ -173,7 +203,7 @@ export default function start({ cfg, E, N, smoke }) {
     const fpsM = S.fps ? E.fpsMeter() : () => {};
     const hud = new Hud(S);
 
-    let lobbyPanel = null;
+    let lobbyPanel = null, sunLight = null, sky = null, parts = null;
     let W = null, mode = opt.mode, mapId = opt.map, botLevel = opt.bot || 'normal', match = null, bots = null, ended = false, started = false;
     const st = { phase: 'warmup', timer: 0, round: 0, score: { T: 0, CT: 0 }, bomb: null, effects: [], drops: [], history: [], roster: new Map(), players: new Map() };
     const stats = { k: 0, d: 0, a: 0, hs: 0, mvp: 0, plant: 0, defuse: 0, pistol: 0, smg: 0, knife: 0, nade: 0, roundWin: 0, dmg: 0 };
@@ -190,8 +220,13 @@ export default function start({ cfg, E, N, smoke }) {
       scene.background = new THREE.Color(B.sky || 0x9ab); scene.fog = new THREE.Fog(B.fog || 0xaaaaaa, 40, 160);
       for (const l of scene.children.filter((c) => c.isLight)) scene.remove(l);
       scene.add(new THREE.HemisphereLight((B.amb || [])[0] || 0xffffff, (B.amb || [])[1] || 0x555555, 1.05));
-      const sun = new THREE.DirectionalLight(B.sunColor || 0xffffff, 0.75); sun.position.set(40, 80, 25); scene.add(sun);
+      const sun = new THREE.DirectionalLight(B.sunColor || 0xffffff, 0.85); sun.position.set(40, 80, 25); scene.add(sun); sunLight = sun;
+      if (hi) { sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); const c = sun.shadow.camera; c.left = c.bottom = -28; c.right = c.top = 28; c.near = 1; c.far = 200; sun.shadow.bias = -0.0008; scene.add(sun.target); }
       for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); }
+      if (hi) W.group.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = true; } });
+      if (sky) scene.remove(sky);
+      sky = skyDome(scene, B.fog || 0xaaaaaa, new THREE.Color(B.sky || 0x9ab).multiplyScalar(0.8).getHex());
+      if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       hud.radarBase(W);
     }
 
@@ -204,7 +239,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (r0 && r0.key === key) return r0;
       if (r0) scene.remove(r0.g);
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
-      const r = makePlayer(a.look, team); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
+      const r = makePlayer(a.look, team); if (hi) r.g.traverse((o) => { if (o.isMesh) o.castShadow = true; }); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
       if (id !== myId) {  // teammates' names float over their heads
         const c = document.createElement('canvas'); c.width = 256; c.height = 48; const g = c.getContext('2d');
         g.font = 'bold 28px system-ui,sans-serif'; g.textAlign = 'center'; g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.8)'; g.fillStyle = team === 'CT' ? '#9cc4ff' : '#ffd27a';
@@ -389,26 +424,26 @@ export default function start({ cfg, E, N, smoke }) {
       if (m.id === myId) return;
       const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
       audio.at(snd, m.o[0], m.o[1], m.o[2], cam, w.silenced ? 25 : w.cat === 'knife' ? 12 : 110);
-      if (m.e && w.cat !== 'knife') { tracer(m.o, m.e); }
+      if (m.e && w.cat !== 'knife') { tracer(m.o, m.e); if (parts) parts.emit(m.e[0], m.e[1], m.e[2], { n: 3, colors: ['#8a8070', '#ffd27a'], speed: 1.2, up: 0.5, size: 0.03, life: 0.35 }); }
       const r = rigs.get(m.id); if (r) r.flashT = 0.05;
     }
     function onBomb(b) { st.bomb = b ? { s: b.state, x: b.x, y: b.y, z: b.z, t: b.timer, site: b.site } : null; }
     function onDrops(d) { st.drops = d || []; syncDrops(); }
     function onFx(list) { st.effects = list || []; syncEffects(); }
     function onNade(n) { const m = makeGrenade(n.type); m.position.set(n.x, n.y, n.z); fx.add(m); flying.set(n.id, { n: { ...n }, m }); audio.at('bounce', n.x, n.y, n.z, cam, 20); }
-    function onChat(m) { hud.chat(m.name, m.team, m.text, m.teamOnly); audio.play('radio'); if (m.text.startsWith('📻 ')) announce(m.text.slice(3), 1.0); }
-    function announce(t, pitch) { if (S.voice) audio.say(t, pitch || 0.75); }
+    function onChat(m) { hud.chat(m.name, m.team, m.text, m.teamOnly); audio.play('radio'); if (m.text.startsWith('📻 ') && S.voice) audio.say(m.text.slice(3), 1.0); }
+    function announce(key) { if (!S.voice) return; const l = line(S.voicePack, key); audio.say(l.text, l.pitch, l.rate); }
     let specTarget = null, specNext = false;
     function onEvent({ type, data }) {
       if (type === 'round') {
         st.round = data.n; st.score = data.score;
         if (data.phase === 'freeze') { hud.banner(`Round ${data.n}`, MODES[mode].bomb ? (me.team === 'T' ? 'Plant the bomb or eliminate the enemy' : 'Defend the bomb sites') : 'Eliminate the enemy', 2500); audio.play('round'); }
-        if (data.phase === 'live') { hud.banner('', ''); audio.play('radio'); announce(me.team === 'T' ? "Let's go!" : 'Go go go!'); if (uiOpen === 'buy' && !canBuy()) closeBuy(); }
+        if (data.phase === 'live') { hud.banner('', ''); audio.play('radio'); announce('go'); if (uiOpen === 'buy' && !canBuy()) closeBuy(); }
       }
       if (type === 'roundEnd') {
         st.score = data.score; st.history = data.history || st.history;
         hud.banner(data.text, data.mvp ? `MVP: ${data.mvp}` : '', 4500);
-        audio.play(data.winner && data.winner === me.team ? 'win' : 'lose'); setTimeout(() => announce(data.text + '.'), 400);
+        audio.play(data.winner && data.winner === me.team ? 'win' : 'lose'); setTimeout(() => announce(!data.winner ? 'draw' : data.winner === 'T' ? 'twin' : 'ctwin'), 400);
         if (data.winner === me.team) stats.roundWin++;
         if (data.mvp && data.mvp === myName) stats.mvp++;
       }
@@ -422,10 +457,12 @@ export default function start({ cfg, E, N, smoke }) {
           hud.banner('You died', data.killer ? `${data.killer} · ${itemName(data.weapon)}${data.head ? ' · headshot' : ''}${k ? ` · they had ${Math.max(0, k.hp | 0)} HP` : ''} · you dealt ${gave}, took ${took}` : '', 4000);
         }
         if (data.assist === myName) stats.a++;
-        const r = rigs.get(data.vid); if (r) r.dieT = 0.001;
+        const r = rigs.get(data.vid); if (r) { r.dieT = 0.001; const kp2 = data.kid === myId ? me : st.players.get(data.kid), vp = st.players.get(data.vid); if (kp2 && vp) { const dx = vp.x - kp2.x, dz = vp.z - kp2.z, L = Math.hypot(dx, dz) || 1; r.fall = { x: dx / L, z: dz / L, side: Math.random() < 0.5 ? -1 : 1 }; } }
+        const fxd = data.fx && KILL_FX[data.fx], vp2 = data.vid === myId ? me : st.players.get(data.vid);
+        if (fxd && vp2) { if (parts) parts.emit(vp2.x, vp2.y + 1.2, vp2.z, { n: fxd.n, colors: fxd.colors, speed: fxd.speed, up: 1, size: 0.06, life: 1.4, g: fxd.g ?? 1 }); if (fxd.text) textPop(scene, vp2.x, vp2.y + 2.2, vp2.z, fxd.text, fxd.textColor); audio.at(fxd.sound, vp2.x, vp2.y, vp2.z, cam, 40); }
       }
-      if (type === 'planted') { hud.banner('The bomb has been planted', `Site ${data.site}`, 3000); audio.play('planted'); announce('Bomb has been planted.'); if (data.by === myName) stats.plant++; }
-      if (type === 'sound' && data.s === 'defused') { audio.play('defused'); announce('Bomb has been defused.'); hud.banner('The bomb has been defused', '', 3000); const b = match ? match.bomb : null; if (b && b.defuser === myId) stats.defuse++; if (!match && st.bomb && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2) stats.defuse++; }
+      if (type === 'planted') { hud.banner('The bomb has been planted', `Site ${data.site}`, 3000); audio.play('planted'); announce('planted'); if (data.by === myName) stats.plant++; }
+      if (type === 'sound' && data.s === 'defused') { audio.play('defused'); announce('defused'); hud.banner('The bomb has been defused', '', 3000); const b = match ? match.bomb : null; if (b && b.defuser === myId) stats.defuse++; if (!match && st.bomb && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2) stats.defuse++; }
       if (type === 'explode') { audio.at('explode', data.x, data.y, data.z, cam, 200); me.flash = Math.max(me.flash, Math.hypot(data.x - me.x, data.z - me.z) < data.r * 1.5 ? 1.2 : 0.4); camShake = 1.2; }
       if (type === 'nadefx') {
         const f = flying.get([...flying.keys()].find((k) => flying.get(k).n.owner === data.owner && flying.get(k).n.type === data.type)); if (f) { fx.remove(f.m); flying.delete(f.n.id); }
@@ -473,6 +510,7 @@ export default function start({ cfg, E, N, smoke }) {
       buildMap(mapId);
       match = new Match({ W, mode, mapId, botLevel, send: (t, d, to) => { if (session) session.send(t, d, to); }, onLocal: local });
       bots = new Bots(match);
+      match.killFx = (by, weapon) => funnyKey(weapon === 'knife' ? (by.knife || {})[by.team] : (Object.values(by.inv).find((i) => i && i.wid === weapon) || {}).skin);
       const mp = match.add(myId, { ...hello, loadout: sanitizeLoadout(loadout), agent: sanitizeAgent(hello.agent), knife: sanitizeKnife(hello.knife) });
       mp.local = true; me.team = mp.team; match.spawn(mp); match.sendInv(mp);
       if (session) {
@@ -575,7 +613,8 @@ export default function start({ cfg, E, N, smoke }) {
         const tr = traceShot(W, players, myId, eye, d, w);
         hits.push(...tr.hits); if (!end) end = tr.end;
         for (const h of tr.hits) { const p = st.players.get(h.id); if (p) puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); }
-        if (tr.wallHits[0]) decal(tr.wallHits[0], d);
+        if (tr.wallHits[0]) { decal(tr.wallHits[0], d); const hp = tr.wallHits[0]; if (parts) parts.emit(hp.x - d.x * 0.05, hp.y - d.y * 0.05, hp.z - d.z * 0.05, { n: 5, colors: ['#8a8070', '#b0a890', '#ffd27a'], speed: 1.6, up: 0.6, size: 0.035, life: 0.45 }); }
+        for (const h of tr.hits) { const p = st.players.get(h.id); if (p && parts) parts.emit(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, { n: 6, colors: ['#8a0a0a', '#c01a1a'], speed: 1.5, up: 0.4, size: 0.04, life: 0.5 }); }
       }
       me.punch += w.kick * 0.6; camKick = Math.min(camKick + w.kick * 0.8, 0.12);
       if (w.cat === 'zeus') for (const h of hits) h.group = 'chest';
@@ -583,6 +622,7 @@ export default function start({ cfg, E, N, smoke }) {
       toHost('shot', { w: w.id, h: hits.map((h) => ({ id: h.id, group: h.group, pen: +h.pen.toFixed(2) })), o: [eye.x, eye.y, eye.z], e: end ? [end.x, end.y, end.z] : null });
       if (end && w.cat !== 'zeus') tracer([eye.x + Math.cos(me.yaw) * 0.15 * S.hand, eye.y - 0.1, eye.z - Math.sin(me.yaw) * 0.15 * S.hand], [end.x, end.y, end.z]);
       audio.play(shotSound(w.id, it.skin, false), 0.8);
+      if (parts && w.cat !== 'zeus') { const rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw), fx2 = -Math.sin(me.yaw), fz2 = -Math.cos(me.yaw); parts.emit(eye.x + rx * 0.18 * S.hand + fx2 * 0.35, eye.y - 0.12, eye.z + rz * 0.18 * S.hand + fz2 * 0.35, { n: 1, colors: [w.pellets > 1 ? '#c8321e' : '#d4a640'], speed: 2.2, up: 0.9, size: w.cat === 'sniper' ? 0.05 : 0.035, life: 1.2, dir: { x: rx * S.hand, y: 0.3, z: rz * S.hand } }); }
       if (vm && vm.userData.flash) { vm.userData.flash.visible = true; flashT = 0.04; }
       if (it.ammo === 0 && it.reserve > 0) setTimeout(() => { if (me.inv[me.cur] === it && it.ammo === 0) startReload(); }, 250);
     }
@@ -688,7 +728,7 @@ export default function start({ cfg, E, N, smoke }) {
           if (kp('KeyQ')) switchTo(me.last || 1);
           if (kp('WheelDown') || kp('WheelUp')) { const order = [1, 2, 3, 4, 5].filter((s) => s === 4 ? me.nades.length : me.inv[s]); const i = order.indexOf(me.cur); switchTo(order[(i + (kp('WheelDown') ? 1 : order.length - 1)) % order.length]); }
           if (kp('KeyR') || E.input.touch.tapped.has('reload')) startReload();
-          if (kp('KeyF')) me.inspect = 2.2;
+          if (kp('KeyF')) { me.inspect = 2.2; const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)); if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
           if (kp('KeyG')) { if (me.cur === 5 && me.inv[5]) { toHost('dropc4', 1); } else if (me.cur === 1 || me.cur === 2) { sendAmmo(); toHost('drop', me.cur); } }
           if (kp('KeyE') || E.input.touch.tapped.has('use')) { const d = nearestDrop(); if (d && !(st.bomb && st.bomb.s === 'planted' && me.team === 'CT' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2)) { sendAmmo(); toHost('pickup', d.id); } }
           const w = curWeapon();
@@ -786,6 +826,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
         posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
+        if (r.dieT && r.fall) { const k = Math.min(1, r.dieT * 3); r.g.position.x += r.fall.x * 0.5 * k; r.g.position.z += r.fall.z * 0.5 * k; r.g.rotation.z = r.fall.side * 0.35 * k; r.g.rotation.y = Math.atan2(-r.fall.x, -r.fall.z) + Math.PI; }
         if (spectating && p.id === spectating.id) r.g.visible = false;
       }
       // own body while emoting: camera swings out in front, you see yourself
@@ -812,8 +853,13 @@ export default function start({ cfg, E, N, smoke }) {
         const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 ? 0.12 : 0;
         vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.12 : 0));
         vm.rotation.set(rel * 2 + camKick * 2 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.6 : 0), (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
-        vm.position.x *= 1;
+        if (vm.userData.sc == null) vm.userData.sc = vm.scale.x;
+        vm.scale.setScalar(vm.userData.sc);
+        if (me.inspect > 0 && me.inspectStyle) applyInspect(vm, me.inspectStyle, (2.2 - me.inspect) / 2.2);
       }
+      if (parts) parts.tick(dt);
+      if (sunLight && hi) { sunLight.position.set(me.x + 40, 80, me.z + 25); sunLight.target.position.set(me.x, 0, me.z); }
+      if (sky) sky.position.set(cam.position.x, 0, cam.position.z);
       // ---- draw ----
       renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if (vm && vm.visible) renderer.render(vmScene, vmCam);
       // ---- HUD (throttled) ----
@@ -829,7 +875,7 @@ export default function start({ cfg, E, N, smoke }) {
         hud.money(me.money, canBuy());
         const it = me.inv[me.cur];
         const ammoTxt = me.cur === 4 ? `${esc(itemName(me.nades[me.nadeSel] || ''))}` : w && w.cat !== 'knife' && it ? `${it.ammo}<small> / ${it.reserve}</small>` : '';
-        const slotHtml = [1, 2, 3, 6, 4, 5].map((s) => s === 4 ? (me.nades.length ? `<div class="slot ${me.cur === 4 ? 'on' : ''}"><b>4</b>${me.nades.map((n) => esc(itemName(n).split(' ')[0])).join(' · ')}</div>` : '') : me.inv[s] ? `<div class="slot ${me.cur === s ? 'on' : ''}"><b>${s === 6 ? 3 : s}</b>${esc(s === 5 ? 'C4 Bomb' : s === 6 ? 'Zap-27' : s === 3 && (loadout[me.team] || {}).knife ? (itemInfo((loadout[me.team] || {}).knife) || {}).wpn || 'Knife' : itemName(me.inv[s].wid))}</div>` : '').join('');
+        const slotHtml = [1, 2, 3, 6, 4, 5].map((s) => s === 4 ? (me.nades.length ? `<div class="slot ${me.cur === 4 ? 'on' : ''}"><b>4</b>${me.nades.map((n) => `<img src="${weaponIcon(n)}">`).join('')}</div>` : '') : me.inv[s] ? `<div class="slot ${me.cur === s ? 'on' : ''}"><b>${s === 6 ? 3 : s}</b><img src="${weaponIcon(s === 5 ? 'c4' : me.inv[s].wid)}">${esc(s === 5 ? 'C4 Bomb' : s === 6 ? 'Zap-27' : s === 3 && (loadout[me.team] || {}).knife ? (itemInfo((loadout[me.team] || {}).knife) || {}).wpn || 'Knife' : itemName(me.inv[s].wid))}</div>` : '').join('');
         hud.ammo(ammoTxt, me.alive ? slotHtml : '');
         hud.loc(W.zoneAt(me.x, me.z));
         const teams = { T: [], CT: [] };
