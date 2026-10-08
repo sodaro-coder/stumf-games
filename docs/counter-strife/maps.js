@@ -72,7 +72,7 @@ function dust() {
   B.sign(121.95, 94, 2.6, -Math.PI / 2, 'EMPLOYEE OF THE MONTH\nOSAMA (posthumous)', 3.6, 1.3, '#273', '#fff');
   B.prop('goat', 96, 24, {}).prop('goat', 20, 92, {}).prop('palm', 56, 110, {}).prop('palm', 86, 124, {}).prop('palm', 100, 92, {})
     .prop('tv', 10, 18, { rot: Math.PI / 2 }).prop('barrel', 74, 30, {}).prop('barrel', 120, 96, {}).prop('palm', 30, 10, {});
-  B.sky = 0xbcd4ec; B.fog = 0xd8c9a6; B.sunColor = 0xfff1d0; B.amb = [0xdfe9ff, 0x8a6a40];
+  B.sky = 0x6f9fd8; B.fog = 0xd9cdb4; B.sunColor = 0xffeed2; B.amb = [0xc4d8f2, 0x9c7c54]; B.sunDir = [0.62, 0.66, 0.42]; B.sunI = 2.7; B.ambI = 1.15;
   return B;
 }
 
@@ -115,7 +115,7 @@ function nuke() {
   B.sign(69.95, 12, 2.4, -Math.PI / 2, 'DUCK & COVER\n(the duck is optional)', 3.4, 1.2, '#fff4c2', '#7a1d0d');
   B.prop('dummy', 20, 34, {}).prop('dummy', 52, 22, {}).prop('dummy', 8, 44, {}).prop('dummy', 64, 6, {}).prop('duck', 36, 46, {})
     .prop('tree', 6, 6, {}).prop('tree', 66, 46, {}).prop('lamp', 27, 2.5, {}).prop('lamp', 45, 49, {});
-  B.sky = 0x9fd1ff; B.fog = 0xcfe6ff; B.sunColor = 0xffffff; B.amb = [0xeaf4ff, 0x5a7a4a];
+  B.sky = 0x5f9be0; B.fog = 0xcfe2f4; B.sunColor = 0xfff6e6; B.amb = [0xd2e4fa, 0x6a7a52]; B.sunDir = [0.5, 0.72, -0.45]; B.sunI = 2.6; B.ambI = 1.15;
   return B;
 }
 
@@ -141,7 +141,7 @@ function ship() {
   B.sign(37, 35.95, 1.8, Math.PI, 'OUT OF ORDER\ndon\'t ask', 1.8, 0.9, '#222', '#fd3');
   B.sign(20, 2.05, 3.2, 0, 'SHITMENT\nyou will respawn in 0.2 seconds', 8, 1.4, '#20262e', '#f0f4f8');
   B.prop('lamp', 2.5, 20, {}).prop('lamp', 37.5, 20, {}).prop('barrel', 24, 10, {}).prop('barrel', 10, 27, {});
-  B.sky = 0x6f7f96; B.fog = 0x8a96a8; B.sunColor = 0xeaeef6; B.amb = [0xd6e0ee, 0x4a4a52];
+  B.sky = 0x7a8aa0; B.fog = 0x9aa4b2; B.sunColor = 0xeef2fa; B.amb = [0xd6e0ee, 0x5a5a60]; B.sunDir = [0.45, 0.8, 0.5]; B.sunI = 1.5; B.ambI = 1.6;
   return B;
 }
 
@@ -185,7 +185,7 @@ function town() {
   B.sign(36.05, 30, 0.3, Math.PI / 2, 'HOT TUB (do not)', 1.6, 0.5, '#222', '#f60');
   B.prop('lamp', 25, 25, {}).prop('lamp', 39, 39, {}).prop('lamp', 39, 25, {}).prop('lamp', 25, 39, {}).prop('barrel', 26, 45, {}).prop('barrel', 38, 18, {})
     .prop('tree', 3, 26, {}).prop('tree', 61, 38, {});
-  B.sky = 0x3a2e3a; B.fog = 0x4a3438; B.sunColor = 0xffb070; B.amb = [0xffc8a0, 0x3a2a2a];
+  B.sky = 0x46405a; B.fog = 0x6a4a44; B.sunColor = 0xffa860; B.amb = [0xb8a8c0, 0x4a3430]; B.sunDir = [0.75, 0.38, 0.3]; B.sunI = 2.4; B.ambI = 1.0;
   return B;
 }
 

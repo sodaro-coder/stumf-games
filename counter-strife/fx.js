@@ -43,14 +43,44 @@ export function textPop(scene, x, y, z, text, color = '#ffd23a') {
   requestAnimationFrame(step);
 }
 
-// ---- sky: a big inside-out sphere with a vertical gradient (horizon to zenith) ----
-export function skyDome(scene, horizon, zenith) {
-  const geo = new THREE.SphereGeometry(300, 24, 12), col = [], a = new THREE.Color(horizon), b = new THREE.Color(zenith);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) { const k = Math.max(0, pos.getY(i) / 300); const c = a.clone().lerp(b, Math.pow(k, 0.6)); col.push(c.r, c.g, c.b); }
+// ---- sky: an inside-out sphere (horizon haze to deep blue, a warm glow around the sun), the sun, a cloud layer ----
+// It follows the camera (position it there each frame), so it never gets clipped.
+export function skyDome(scene, horizon, zenith, sunDir = [0.6, 0.7, 0.4], sunColor = 0xffffff) {
+  const g = new THREE.Group();
+  const geo = new THREE.SphereGeometry(300, 32, 16), col = [], a = new THREE.Color(horizon), b = new THREE.Color(zenith), sc = new THREE.Color(sunColor);
+  const pos = geo.attributes.position, sd = new THREE.Vector3(...sunDir).normalize(), v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.set(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize();
+    const k = Math.max(0, v.y), c = a.clone().lerp(b, Math.pow(k, 0.5)), sdot = Math.max(0, v.dot(sd));
+    c.lerp(sc, Math.pow(sdot, 6) * 0.45 + Math.pow(sdot, 40) * 0.4);
+    if (v.y < 0) c.copy(a);
+    col.push(c.r, c.g, c.b);
+  }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
-  m.renderOrder = -10; scene.add(m); return m;
+  const dome = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  dome.renderOrder = -10; g.add(dome);
+  const disk = document.createElement('canvas'); disk.width = disk.height = 64;
+  { const x = disk.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,250,1)'); gr.addColorStop(0.18, 'rgba(255,250,235,1)'); gr.addColorStop(0.3, 'rgba(255,240,210,.35)'); gr.addColorStop(1, 'rgba(255,230,200,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); }
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(disk), fog: false, depthWrite: false, transparent: true }));
+  sun.position.copy(sd).multiplyScalar(280); sun.scale.setScalar(70); sun.renderOrder = -9; g.add(sun);
+  const clouds = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cloudCanvas(256)), transparent: true, fog: false, depthWrite: false, side: THREE.DoubleSide, opacity: 0.85 }));
+  clouds.rotation.x = -Math.PI / 2; clouds.position.y = 120; clouds.renderOrder = -8; g.add(clouds);
+  g.userData.clouds = clouds;
+  scene.add(g); return g;
+}
+const cloudCache = new Map();
+function cloudCanvas(n) {
+  if (cloudCache.has(n)) return cloudCache.get(n);
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  const g = c.getContext('2d'), im = g.createImageData(n, n);
+  const hash = (x, y, s) => { let h = (x * 374761393 + y * 668265263 + s * 1442695041) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  const vn = (x, y, s) => { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); const A = hash(xi, yi, s), B = hash(xi + 1, yi, s), C = hash(xi, yi + 1, s), D = hash(xi + 1, yi + 1, s); return A + (B - A) * u + (C - A) * v + (A - B - C + D) * u * v; };
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    let f = 0, amp = 0.5, fr = 6 / n; for (let o = 0; o < 5; o++) { f += amp * vn(x * fr, y * fr, 7 + o); amp *= 0.5; fr *= 2; }
+    const r = Math.hypot(x / n - 0.5, y / n - 0.5) * 2, edge = Math.max(0, 1 - r * r), al = Math.max(0, Math.min(1, (f - 0.42) / 0.3)) * edge;
+    const k = (y * n + x) * 4, sh = 235 - al * 40; im.data[k] = sh; im.data[k + 1] = sh; im.data[k + 2] = sh + 8; im.data[k + 3] = al * 255;
+  }
+  g.putImageData(im, 0, 0); cloudCache.set(n, c); return c;
 }
 
 // ---- joke weapons: what's special about the one you hold / killed with ----

@@ -16,6 +16,17 @@ import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound } fro
 import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
+// sun, sky light, fog and sky for a map (shared by the match and the menu's map pictures)
+function dressScene(sc, B, shadows) {
+  for (const l of sc.children.filter((c) => c.isLight)) sc.remove(l);
+  const dir = B.sunDir || [0.6, 0.7, 0.4], L = Math.hypot(...dir), d = dir.map((v) => v / L), fog = B.fog || 0xaaaaaa;
+  sc.background = new THREE.Color(fog); sc.fog = new THREE.Fog(fog, 70, 260);
+  sc.add(new THREE.HemisphereLight((B.amb || [])[0] || 0xffffff, (B.amb || [])[1] || 0x555555, B.ambI || 1.1));
+  const sun = new THREE.DirectionalLight(B.sunColor || 0xffffff, B.sunI || 2.4); sun.position.set(d[0] * 90, d[1] * 90, d[2] * 90); sc.add(sun);
+  if (shadows) { sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); const c = sun.shadow.camera; c.left = c.bottom = -24; c.right = c.top = 24; c.near = 1; c.far = 220; sun.shadow.bias = -0.0008; sc.add(sun.target); }
+  const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff);
+  return { sun, sky, dir: d };
+}
 const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 1, fps: 0, hand: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
@@ -140,10 +151,8 @@ export default function start({ cfg, E, N, smoke }) {
     if (mapShots.has(id)) return mapShots.get(id);
     try {
       if (!shotR) { shotR = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); shotR.setPixelRatio(1); shotR.setSize(440, 260, false); }
-      const sc = new THREE.Scene(), Wd = buildWorld(E, MAPS[id], sc, 1), B = Wd.B;
-      sc.background = new THREE.Color(B.sky || 0x9ab); sc.fog = new THREE.Fog(B.fog || 0xaaaaaa, 60, 220);
-      sc.add(new THREE.HemisphereLight((B.amb || [])[0] || 0xffffff, (B.amb || [])[1] || 0x555555, 1.1));
-      const sun = new THREE.DirectionalLight(B.sunColor || 0xffffff, 0.8); sun.position.set(40, 80, 25); sc.add(sun);
+      const sc = new THREE.Scene(), Wd = buildWorld(E, MAPS[id], sc, 1, { bakeK: 2, aniso: 4 }), B = Wd.B;
+      dressScene(sc, B, false);
       for (const pr of B.props) Wd.group.add(makeProp({ ...pr, y: Wd.H(Math.floor(pr.x), Math.floor(pr.z)) }));
       const site = Object.values(B.sites)[0] || [0, 0, B.w, B.d], tx = (site[0] + site[2]) / 2, tz = (site[1] + site[3]) / 2;
       const cam = new THREE.PerspectiveCamera(48, 440 / 260, 0.5, 400), span = Math.max(B.w, B.d);
@@ -194,7 +203,7 @@ export default function start({ cfg, E, N, smoke }) {
     const scene = new THREE.Scene();
     const cam = new THREE.PerspectiveCamera(74, 1, 0.05, 400); cam.rotation.order = 'YXZ'; scene.add(cam);
     const vmCam = new THREE.PerspectiveCamera(60, 1, 0.01, 10), vmScene = new THREE.Scene();
-    vmScene.add(new THREE.HemisphereLight(0xffffff, 0x666666, 1.25)); const vmSun = new THREE.DirectionalLight(0xffffff, 0.7); vmSun.position.set(1, 2, 1); vmScene.add(vmSun);
+    const vmHemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2), vmSun = new THREE.DirectionalLight(0xffffff, 1.6); vmSun.position.set(1, 2, 1); vmScene.add(vmHemi, vmSun);
     const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = vmCam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); vmCam.updateProjectionMatrix(); };
     addEventListener('resize', resize); resize();
     renderer.autoClear = false;
@@ -203,7 +212,7 @@ export default function start({ cfg, E, N, smoke }) {
     const fpsM = S.fps ? E.fpsMeter() : () => {};
     const hud = new Hud(S);
 
-    let lobbyPanel = null, sunLight = null, sky = null, parts = null;
+    let lobbyPanel = null, sunLight = null, sky = null, parts = null, sunDir = [0.6, 0.7, 0.4];
     let W = null, mode = opt.mode, mapId = opt.map, botLevel = opt.bot || 'normal', match = null, bots = null, ended = false, started = false;
     const st = { phase: 'warmup', timer: 0, round: 0, score: { T: 0, CT: 0 }, bomb: null, effects: [], drops: [], history: [], roster: new Map(), players: new Map() };
     const stats = { k: 0, d: 0, a: 0, hs: 0, mvp: 0, plant: 0, defuse: 0, pistol: 0, smg: 0, knife: 0, nade: 0, roundWin: 0, dmg: 0 };
@@ -215,17 +224,13 @@ export default function start({ cfg, E, N, smoke }) {
     // ---- world ----
     function buildMap(id) {
       if (W) { scene.remove(W.group); W.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
-      mapId = id; W = buildWorld(E, MAPS[id], scene, S.quality);
+      mapId = id; W = buildWorld(E, MAPS[id], scene, S.quality, { aniso: renderer.capabilities.getMaxAnisotropy() });
       const B = W.B;
-      scene.background = new THREE.Color(B.sky || 0x9ab); scene.fog = new THREE.Fog(B.fog || 0xaaaaaa, 40, 160);
-      for (const l of scene.children.filter((c) => c.isLight)) scene.remove(l);
-      scene.add(new THREE.HemisphereLight((B.amb || [])[0] || 0xffffff, (B.amb || [])[1] || 0x555555, 1.05));
-      const sun = new THREE.DirectionalLight(B.sunColor || 0xffffff, 0.85); sun.position.set(40, 80, 25); scene.add(sun); sunLight = sun;
-      if (hi) { sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); const c = sun.shadow.camera; c.left = c.bottom = -28; c.right = c.top = 28; c.near = 1; c.far = 200; sun.shadow.bias = -0.0008; scene.add(sun.target); }
-      for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); }
-      if (hi) W.group.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = true; } });
-      if (sky) scene.remove(sky);
-      sky = skyDome(scene, B.fog || 0xaaaaaa, new THREE.Color(B.sky || 0x9ab).multiplyScalar(0.8).getHex());
+      if (sky) { scene.remove(sky); sky = null; }
+      const lit = dressScene(scene, B, hi); sunLight = lit.sun; sky = lit.sky; sunDir = lit.dir;
+      vmHemi.color.set(B.amb[0]); vmHemi.groundColor.set(B.amb[1]); vmSun.color.set(B.sunColor);
+      for (const p of B.props) W.group.add(makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }));
+      if (hi) W.group.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       hud.radarBase(W);
     }
@@ -251,7 +256,7 @@ export default function start({ cfg, E, N, smoke }) {
     }
 
     // ---- first-person view model ----
-    let vm = null, vmKey = '';
+    let vm = null, vmKey = '', vmSunK = 1;
     function setViewModel() {
       const it = me.cur === 4 ? { wid: me.nades[me.nadeSel] } : me.inv[me.cur];
       const wid = it ? it.wid : null;
@@ -858,7 +863,12 @@ export default function start({ cfg, E, N, smoke }) {
         if (me.inspect > 0 && me.inspectStyle) applyInspect(vm, me.inspectStyle, (2.2 - me.inspect) / 2.2);
       }
       if (parts) parts.tick(dt);
-      if (sunLight && hi) { sunLight.position.set(me.x + 40, 80, me.z + 25); sunLight.target.position.set(me.x, 0, me.z); }
+      if (sunLight && hi) { sunLight.position.set(me.x + sunDir[0] * 90, sunDir[1] * 90, me.z + sunDir[2] * 90); sunLight.target.position.set(me.x, 0, me.z); }
+      if (W) {   // first-person arms catch the sun only when you stand in it (from the same baked shadows as the map)
+        const sv = W.sunAt(cam.position.x, cam.position.y - 0.25, cam.position.z); vmSunK += (sv - vmSunK) * Math.min(1, dt * 8);
+        vmSun.intensity = (W.B.sunI || 2.4) * 0.75 * vmSunK; vmHemi.intensity = (W.B.ambI || 1.1) * 0.95;
+        const yw = cam.rotation.y, lx = sunDir[0], lz = sunDir[2], c = Math.cos(-yw), s2 = Math.sin(-yw); vmSun.position.set(lx * c + lz * s2, sunDir[1], -lx * s2 + lz * c);
+      }
       if (sky) sky.position.set(cam.position.x, 0, cam.position.z);
       // ---- draw ----
       renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if (vm && vm.visible) renderer.render(vmScene, vmCam);

@@ -4,20 +4,22 @@
 // and A* paths. That's what keeps it smooth on weak machines.
 import * as THREE from '../sdk/three.module.min.js';
 import { PHYS } from './data.js';
+import { surface, macroCanvas } from './textures.js';
 
-export const MATS = {  // procedural materials: base colour, pixel pattern, world size of one texture tile (m), wall-bang density
-  sand: { c: [196, 168, 118], p: null, s: 2, d: 6 }, sandwall: { c: [214, 186, 136], p: 'bricks', s: 3, d: 4 },
-  plaster: { c: [222, 206, 172], p: null, s: 3, d: 3 }, brick: { c: [150, 82, 62], p: 'bricks', s: 2, d: 5 },
-  wood: { c: [138, 98, 58], p: 'planks', s: 1, d: 1 }, crate: { c: [160, 118, 64], p: 'planks', s: 1, d: 1 },
-  metal: { c: [120, 128, 136], p: 'stripes', s: 2, d: 2.5, stripe: '#8b939b' }, concrete: { c: [150, 150, 146], p: null, s: 3, d: 6 },
-  asphalt: { c: [62, 64, 68], p: 'stripes', s: 4, d: 8, stripe: '#d8c548' }, grass: { c: [92, 140, 70], p: 'grass', s: 2, d: 6 },
-  roof: { c: [120, 60, 50], p: 'planks', s: 1.5, d: 3 }, carpet: { c: [120, 40, 46], p: null, s: 2, d: 6 }, tile: { c: [200, 200, 196], p: 'bricks', s: 1, d: 6 },
-  cred: { c: [168, 54, 44], p: 'planks', s: 1, d: 2.5 }, cblue: { c: [46, 92, 160], p: 'planks', s: 1, d: 2.5 },
-  cgreen: { c: [62, 128, 74], p: 'planks', s: 1, d: 2.5 }, corange: { c: [210, 120, 40], p: 'planks', s: 1, d: 2.5 },
-  yellow: { c: [226, 190, 80], p: null, s: 2, d: 3 }, green: { c: [110, 168, 120], p: null, s: 2, d: 3 },
-  fence: { c: [236, 232, 220], p: 'planks', s: 1, d: 1 }, lava: { c: [240, 90, 20], p: null, s: 2, d: 9, glow: true },
-  dirt: { c: [120, 92, 66], p: null, s: 2, d: 6 }, rock: { c: [110, 100, 92], p: 'bricks', s: 4, d: 8 }, bus: { c: [232, 180, 40], p: 'windows', s: 2, d: 2 },
-  potty: { c: [60, 110, 200], p: 'planks', s: 1, d: 1 }, darkwood: { c: [86, 58, 40], p: 'planks', s: 1, d: 1 },
+export const MATS = {  // surfaces (painted in textures.js): base colour (radar, particles), world size of one texture tile (m), wall-bang density
+  sand: { c: [196, 168, 118], s: 3, d: 6 }, sandwall: { c: [214, 186, 136], s: 4, d: 4, trim: 1 },
+  plaster: { c: [222, 206, 172], s: 3, d: 3, trim: 1 }, brick: { c: [150, 82, 62], s: 2, d: 5, trim: 1 },
+  wood: { c: [138, 98, 58], s: 2, d: 1 }, crate: { c: [160, 118, 64], s: 1, d: 1 },
+  metal: { c: [120, 128, 136], s: 2, d: 2.5 }, concrete: { c: [150, 150, 146], s: 4, d: 6, trim: 1 },
+  asphalt: { c: [62, 64, 68], s: 4, d: 8 }, grass: { c: [92, 140, 70], s: 3, d: 6 },
+  roof: { c: [120, 60, 50], s: 2, d: 3 }, carpet: { c: [120, 40, 46], s: 2, d: 6 }, tile: { c: [200, 200, 196], s: 1.2, d: 6 },
+  cred: { c: [168, 54, 44], s: 2, d: 2.5 }, cblue: { c: [46, 92, 160], s: 2, d: 2.5 },
+  cgreen: { c: [62, 128, 74], s: 2, d: 2.5 }, corange: { c: [210, 120, 40], s: 2, d: 2.5 },
+  yellow: { c: [226, 190, 80], s: 3, d: 3, trim: 1 }, green: { c: [110, 168, 120], s: 3, d: 3, trim: 1 },
+  fence: { c: [236, 232, 220], s: 2, d: 1 }, lava: { c: [240, 90, 20], s: 4, d: 9, glow: true },
+  dirt: { c: [120, 92, 66], s: 3, d: 6 }, rock: { c: [110, 100, 92], s: 4, d: 8, trim: 1 }, bus: { c: [232, 180, 40], s: 3, d: 2 },
+  potty: { c: [60, 110, 200], s: 1, d: 1 }, darkwood: { c: [86, 58, 40], s: 2, d: 1 },
+  trim: { c: [222, 204, 166], s: 2, d: 6 },
 };
 export const MAT_LIST = Object.keys(MATS);
 const MAT_ID = Object.fromEntries(MAT_LIST.map((k, i) => [k, i]));
@@ -29,19 +31,21 @@ export class MapBuilder {
     this.h = new Float32Array(w * d).fill(wallH);
     this.mat = new Uint8Array(w * d).fill(MAT_ID[wallMat]);
     this.flag = new Uint8Array(w * d);  // 1 = lava, 2 = open (walkable area)
+    this.rid = new Int16Array(w * d).fill(-1); this.ramps = [];  // which ramp a cell belongs to (drawn and walked as a smooth slope)
     this.floorMat = floorMat; this.wallMat = wallMat;
     this.spawns = { T: [], CT: [] }; this.sites = {}; this.zones = []; this.buy = {}; this.signs = []; this.props = []; this.duel = { T: [], CT: [] };
   }
   _rect(x0, z0, x1, z1, fn) {
-    for (let z = Math.max(0, z0); z < Math.min(this.d, z1); z++) for (let x = Math.max(0, x0); x < Math.min(this.w, x1); x++) fn(z * this.w + x, x, z);
+    for (let z = Math.max(0, z0); z < Math.min(this.d, z1); z++) for (let x = Math.max(0, x0); x < Math.min(this.w, x1); x++) { this.rid[z * this.w + x] = -1; fn(z * this.w + x, x, z); }
   }
   open(x0, z0, x1, z1, h = 0, mat = this.floorMat) { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 2; }); return this; }
   // stairs/ramp rising from h0 to h1 along +x ('x'), -x ('-x'), +z ('z') or -z ('-z')
   ramp(x0, z0, x1, z1, h0, h1, dir, mat = this.floorMat) {
-    const n = dir.endsWith('x') ? x1 - x0 : z1 - z0;
+    const n = dir.endsWith('x') ? x1 - x0 : z1 - z0, r = this.ramps.length;
+    this.ramps.push({ x0, z0, x1, z1, h0, h1, dir, n });
     this._rect(x0, z0, x1, z1, (i, x, z) => {
       let k = dir.endsWith('x') ? x - x0 : z - z0; if (dir[0] === '-') k = n - 1 - k;
-      this.h[i] = h0 + (h1 - h0) * (k + 1) / n; this.mat[i] = MAT_ID[mat]; this.flag[i] = 2;
+      this.h[i] = h0 + (h1 - h0) * (k + 1) / n; this.mat[i] = MAT_ID[mat]; this.flag[i] = 2; this.rid[i] = r;
     });
     return this;
   }
@@ -68,21 +72,84 @@ export class MapBuilder {
   prop(type, x, z, o = {}) { this.props.push({ type, x, z, ...o }); return this; }
 }
 
+// ---- lighting shared by the world and the players: the baked sun-shadow/AO texture, applied in the shader ----
+export const LIGHT = { shTex: { value: null }, shInfo: { value: new THREE.Vector4(1, 1, 0, 0) }, macro: { value: null }, bake: { value: 0 } };
+let macroT = null;
+export const macroTex = () => { if (!macroT) { macroT = new THREE.CanvasTexture(macroCanvas(64)); macroT.wrapS = macroT.wrapT = THREE.RepeatWrapping; } return macroT; };
+// kind 'world': static surfaces (shadow looked up just outside the surface, AO on floors and wall bases, large-scale
+// colour variation so tiling doesn't show); 'dyn': players and props (shadow at their own position)
+export function litPatch(mat, kind = 'dyn') {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.shTex = LIGHT.shTex; sh.uniforms.shInfo = LIGHT.shInfo; sh.uniforms.macroTex = LIGHT.macro; sh.uniforms.bakeOn = LIGHT.bake;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vWN;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWN = normalize(mat3(modelMatrix) * objectNormal);');
+    let f = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vWN;\nuniform sampler2D shTex;\nuniform vec4 shInfo;\nuniform sampler2D macroTex;\nuniform float bakeOn;');
+    if (kind === 'world') f = f.replace('#include <map_fragment>', '#include <map_fragment>\n\tdiffuseColor.rgb *= mix(1.0, 0.8 + 0.4 * texture2D(macroTex, vWP.xz * 0.037 + vec2(vWP.y * 0.029, vWP.y * 0.013)).r, bakeOn);');
+    f = f.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+	{
+		vec4 bk = texture2D(shTex, (vWP.xz + ${kind === 'world' ? 'vWN.xz * 0.3' : 'vec2(0.0)'}) * shInfo.xy);
+		float shH = bk.r * 16.0 - 2.0;
+		float vis = smoothstep(shH - 0.05, shH + 0.16, vWP.y);
+		float ao = 1.0;
+		${kind === 'world' ? 'if (vWN.y > 0.5) ao = bk.g; else if (vWN.y > -0.5) ao = mix(0.45, 1.0, smoothstep(0.0, 1.4, vWP.y - (bk.b * 16.0 - 2.0)));' : 'ao = mix(0.7, 1.0, smoothstep(0.0, 0.9, vWP.y - (bk.b * 16.0 - 2.0)));'}
+		vis = mix(1.0, vis, bakeOn); ao = mix(1.0, ao, bakeOn);
+		reflectedLight.directDiffuse *= vis * mix(1.0, ao, 0.35);
+		reflectedLight.indirectDiffuse *= ao;
+	}`);
+    sh.fragmentShader = f;
+  };
+  mat.customProgramCacheKey = () => 'lit-' + kind;
+  return mat;
+}
+
 // ---- the world built from a map ----------------------------------------------------------------------------------
-export function buildWorld(E, def, scene, quality = 1) {
+export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   const B = def.build();
   const { w, d, h, mat, flag } = B;
+  const rid = B.rid, ramps = B.ramps, headless = typeof document === 'undefined';
   const idx = (x, z) => (x < 0 || z < 0 || x >= w || z >= d ? -1 : z * w + x);
   const H = (x, z) => { const i = idx(x, z); return i < 0 ? B.wallH : h[i]; };
-
-  // --- meshes: greedy-merged tops + side faces, grouped per material, vertex colours for cheap shading/AO ---
-  const geo = MAT_LIST.map(() => ({ pos: [], uv: [], col: [], idx: [] }));
-  const quad = (m, a, b, c, dd, uvs, cols) => {
-    const g = geo[m], base = g.pos.length / 3;
-    g.pos.push(...a, ...b, ...c, ...dd); g.uv.push(...uvs); g.col.push(...cols); g.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  // ramps are smooth slopes: the slope's height at a point (clamped to the ramp)
+  const slope = (r, x, z) => {
+    const R = ramps[r]; let k;
+    switch (R.dir) { case 'x': k = (x - R.x0) / R.n; break; case '-x': k = (R.x1 - x) / R.n; break; case 'z': k = (z - R.z0) / R.n; break; default: k = (R.z1 - z) / R.n; }
+    return R.h0 + (R.h1 - R.h0) * Math.min(1, Math.max(0, k));
   };
-  // tops: greedy rectangles of equal (height, material)
+  // the surface height at a point; a cell's height as seen from a point (ramps: the slope at the cell's nearest point)
+  const topAt = (x, z) => { const i = idx(Math.floor(x), Math.floor(z)); if (i < 0) return B.wallH; return rid[i] >= 0 ? slope(rid[i], x, z) : h[i]; };
+  const cellTop = (xx, zz, px, pz) => { const i = idx(xx, zz); if (i < 0) return B.wallH; const r = rid[i]; return r < 0 ? h[i] : slope(r, Math.min(xx + 1, Math.max(xx, px)), Math.min(zz + 1, Math.max(zz, pz))); };
+
+  // --- meshes: greedy-merged tops + side faces, one mesh per material; ramps as slopes; stone coping along wall tops ---
+  const geo = MAT_LIST.map(() => ({ pos: [], uv: [], idx: [] }));
+  const quad = (m, a, b, c, dd, uvs) => {
+    const g = geo[m], base = g.pos.length / 3;
+    g.pos.push(...a, ...b, ...c, ...dd); g.uv.push(...uvs); g.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  const tsOf = (m) => 1 / MATS[MAT_LIST[m]].s;
+  // a horizontal quad (y per corner: (x0,z1) (x1,z1) (x1,z0) (x0,z0)); down = facing down
+  const flat = (m, x0, z0, x1, z1, ya, yb = ya, yc = ya, yd = ya, down = false) => {
+    const k = tsOf(m);
+    if (!down) quad(m, [x0, ya, z1], [x1, yb, z1], [x1, yc, z0], [x0, yd, z0], [x0 * k, z1 * k, x1 * k, z1 * k, x1 * k, z0 * k, x0 * k, z0 * k]);
+    else quad(m, [x0, yd, z0], [x1, yc, z0], [x1, yb, z1], [x0, ya, z1], [x0 * k, z0 * k, x1 * k, z0 * k, x1 * k, z1 * k, x0 * k, z1 * k]);
+  };
+  // a vertical face on the dir side of column/row a, along s0..s1, bottom b0/b1 and top t0/t1 at each end, pushed out by off
+  const wallFace = (m, dirx, dirz, a, s0, s1, b0, b1, t0, t1, off = 0) => {
+    const f = (dirx || dirz) > 0 ? a + 1 : a, k = tsOf(m), flip = dirx > 0 || dirz < 0, sg = flip ? -1 : 1;
+    const P = (s, y) => (dirx ? [f + dirx * off, y, s] : [s, y, f + dirz * off]);
+    if (flip) quad(m, P(s1, b1), P(s0, b0), P(s0, t0), P(s1, t1), [s1 * k * sg, b1 * k, s0 * k * sg, b0 * k, s0 * k * sg, t0 * k, s1 * k * sg, t1 * k]);
+    else quad(m, P(s0, b0), P(s1, b1), P(s1, t1), P(s0, t0), [s0 * k * sg, b0 * k, s1 * k * sg, b1 * k, s1 * k * sg, t1 * k, s0 * k * sg, t0 * k]);
+  };
+  const TRIM = MAT_ID.trim;
+  const coping = (dirx, dirz, a, s0, s1, top) => {   // a capstone ledge: front, underside and cap
+    const o = 0.08, ch = 0.2, lip = 0.03, e0 = s0 - o, e1 = s1 + o, f = (dirx || dirz) > 0 ? a + 1 : a, dir = dirx || dirz;
+    wallFace(TRIM, dirx, dirz, a, e0, e1, top - ch, top - ch, top + lip, top + lip, o);
+    const pa = f + dir * o, pb = f - dir * 0.3, lo = Math.min(pa, pb), hi2 = Math.max(pa, pb), la = Math.min(f, pa), ha = Math.max(f, pa);
+    if (dirx) { flat(TRIM, la, e0, ha, e1, top - ch, top - ch, top - ch, top - ch, true); flat(TRIM, lo, e0, hi2, e1, top + lip); }
+    else { flat(TRIM, e0, la, e1, ha, top - ch, top - ch, top - ch, top - ch, true); flat(TRIM, e0, lo, e1, hi2, top + lip); }
+  };
+  // tops: greedy rectangles of equal (height, material); ramp cells get sloped quads of their own
   const done = new Uint8Array(w * d);
+  for (let i = 0; i < w * d; i++) if (rid[i] >= 0) { done[i] = 1; const x = i % w, z = (i / w) | 0, r = rid[i]; flat(mat[i], x, z, x + 1, z + 1, slope(r, x, z + 1), slope(r, x + 1, z + 1), slope(r, x + 1, z), slope(r, x, z)); }
   for (let z = 0; z < d; z++) for (let x = 0; x < w; x++) {
     const i = z * w + x; if (done[i]) continue;
     const hh = h[i], mm = mat[i];
@@ -90,33 +157,32 @@ export function buildWorld(E, def, scene, quality = 1) {
     let z1 = z + 1;
     outer: while (z1 < d) { for (let k = x; k < x1; k++) { const j = z1 * w + k; if (done[j] || h[j] !== hh || mat[j] !== mm) break outer; } z1++; }
     for (let zz = z; zz < z1; zz++) for (let k = x; k < x1; k++) done[zz * w + k] = 1;
-    const s = 1 / MATS[MAT_LIST[mm]].s, c = 1;
-    quad(mm, [x, hh, z1], [x1, hh, z1], [x1, hh, z], [x, hh, z], [x * s, z1 * s, x1 * s, z1 * s, x1 * s, z * s, x * s, z * s], [c, c, c, c, c, c, c, c, c, c, c, c]);
+    flat(mm, x, z, x1, z1, hh);
   }
   // sides: where a cell is higher than its neighbour, merged along rows
   const side = (dirx, dirz) => {
-    const shade = dirx ? 0.74 : 0.86;
     const along = dirx ? d : w, across = dirx ? w : d;
     for (let a = 0; a < across; a++) {
       let run = null;
       const flush = () => {
         if (!run) return;
-        const { s0, s1, top, bot, m } = run, ts = 1 / MATS[MAT_LIST[m]].s, lo = shade * 0.62, hi = shade;
-        if (dirx) {  // face on the x side of column a, spanning z s0..s1
-          const fx = dirx > 0 ? a + 1 : a;
-          const p = dirx > 0 ? [[fx, bot, s1], [fx, bot, s0], [fx, top, s0], [fx, top, s1]] : [[fx, bot, s0], [fx, bot, s1], [fx, top, s1], [fx, top, s0]];
-          quad(m, ...p, [0, bot * ts, (s1 - s0) * ts, bot * ts, (s1 - s0) * ts, top * ts, 0, top * ts], [lo, lo, lo, lo, lo, lo, hi, hi, hi, hi, hi, hi]);
-        } else {
-          const fz = dirz > 0 ? a + 1 : a;
-          const p = dirz > 0 ? [[s0, bot, fz], [s1, bot, fz], [s1, top, fz], [s0, top, fz]] : [[s1, bot, fz], [s0, bot, fz], [s0, top, fz], [s1, top, fz]];
-          quad(m, ...p, [0, bot * ts, (s1 - s0) * ts, bot * ts, (s1 - s0) * ts, top * ts, 0, top * ts], [lo, lo, lo, lo, lo, lo, hi, hi, hi, hi, hi, hi]);
-        }
+        const { s0, s1, top, bot, m } = run;
+        wallFace(m, dirx, dirz, a, s0, s1, bot, bot, top, top);
+        if (MATS[MAT_LIST[m]].trim && top - bot >= 1.6 && top >= 2.2) coping(dirx, dirz, a, s0, s1, top);
         run = null;
       };
       for (let b = 0; b < along; b++) {
         const x = dirx ? a : b, z = dirx ? b : a, i = z * w + x;
-        const nx = x + dirx, nz = z + dirz, ni = idx(nx, nz);
-        const top = h[i], bot = ni < 0 ? top : h[ni], m = mat[i];
+        const ni = idx(x + dirx, z + dirz), m = mat[i], ri = rid[i], rn = ni >= 0 ? rid[ni] : -1;
+        if (ri >= 0 || rn >= 0) {   // a ramp on either side: one cell's face, following the slope
+          flush();
+          const f = (dirx || dirz) > 0 ? a + 1 : a, ax = dirx ? f : b, az = dirx ? b : f, bx = dirx ? f : b + 1, bz = dirx ? b + 1 : f;
+          const tA = ri >= 0 ? slope(ri, ax, az) : h[i], tB = ri >= 0 ? slope(ri, bx, bz) : h[i];
+          const bA = ni < 0 ? tA : rn >= 0 ? slope(rn, ax, az) : h[ni], bB = ni < 0 ? tB : rn >= 0 ? slope(rn, bx, bz) : h[ni];
+          if (tA > bA + 1e-3 || tB > bB + 1e-3) wallFace(m, dirx, dirz, a, b, b + 1, bA, bB, Math.max(tA, bA), Math.max(tB, bB));
+          continue;
+        }
+        const top = h[i], bot = ni < 0 ? top : h[ni];
         if (top > bot + 1e-3) {
           if (run && run.top === top && run.bot === bot && run.m === m && run.s1 === b) run.s1 = b + 1;
           else { flush(); run = { s0: b, s1: b + 1, top, bot, m }; }
@@ -127,34 +193,69 @@ export function buildWorld(E, def, scene, quality = 1) {
   };
   side(1, 0); side(-1, 0); side(0, 1); side(0, -1);
 
+  // --- baked light: for every 1/K m of floor, how high the sun's shadow reaches there, plus ambient occlusion ---
+  // One small texture gives soft sun shadows on every floor, wall and player and darkened corners, for the price of a
+  // texture read: nothing is re-rendered per frame, so it's as fast on a school laptop as on a gaming PC.
+  const K = opt.bakeK || (quality >= 1.5 ? 6 : quality >= 0.75 ? 4 : 2), TW = w * K, TD = d * K;
+  const sd = B.sunDir || [0.62, 0.66, 0.42], sl = Math.hypot(sd[0], sd[2]), hx = sd[0] / sl, hz = sd[2] / sl, tanEl = sd[1] / sl;
+  let maxH = B.wallH; for (let i = 0; i < w * d; i++) if (h[i] > maxH) maxH = h[i];
+  const bake = new Uint8Array(TW * TD * 4), enc = (v) => Math.max(0, Math.min(255, Math.round((v + 2) / 16 * 255)));
+  const AO_D = [0.3, 0.65, 1.1, 1.8, 2.6], AO_DIR = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.707, 0.707], [-0.707, 0.707], [0.707, -0.707], [-0.707, -0.707]];
+  const st = 1 / K;
+  for (let tz = 0; tz < TD; tz++) for (let tx = 0; tx < TW; tx++) {
+    const px = (tx + 0.5) / K, pz = (tz + 0.5) / K, ox = Math.floor(px), oz = Math.floor(pz), y0 = topAt(px, pz);
+    let best = -2;
+    for (let t = st; ; t += st) {
+      const lim = maxH - t * tanEl; if (lim <= best || lim < y0 - 0.3) break;
+      const qx = px + hx * t, qz = pz + hz * t; if (Math.floor(qx) === ox && Math.floor(qz) === oz) continue;
+      const c = topAt(qx, qz) - t * tanEl; if (c > best) best = c;
+    }
+    let occ = 0;
+    for (const [dx, dz] of AO_DIR) { let mo = 0; for (const dd of AO_D) { const dh = topAt(px + dx * dd, pz + dz * dd) - y0; if (dh > 0.05) { const s = dh / Math.hypot(dh, dd); if (s > mo) mo = s; } } occ += mo; }
+    const k = (tz * TW + tx) * 4;
+    bake[k] = enc(best); bake[k + 1] = Math.round(255 * (1 - occ / 8 * 0.8)); bake[k + 2] = enc(y0); bake[k + 3] = 255;
+  }
+  const bakeTex = new THREE.DataTexture(bake, TW, TD, THREE.RGBAFormat, THREE.UnsignedByteType);
+  bakeTex.magFilter = bakeTex.minFilter = THREE.LinearFilter; bakeTex.needsUpdate = true;
+  const useLight = () => { LIGHT.shTex.value = bakeTex; LIGHT.shInfo.value.set(1 / w, 1 / d, 0, 0); LIGHT.bake.value = 1; if (!LIGHT.macro.value && !headless) LIGHT.macro.value = macroTex(); };
+  useLight();
+  // is the sun hitting this point? (CPU side of the same bake: the first-person arms darken in the shade)
+  const sunAt = (x, y, z) => {
+    const tx = Math.min(TW - 1, Math.max(0, Math.floor(x * K))), tz = Math.min(TD - 1, Math.max(0, Math.floor(z * K)));
+    const sh = bake[(tz * TW + tx) * 4] / 255 * 16 - 2; return Math.min(1, Math.max(0, (y - sh + 0.05) / 0.2));
+  };
+
   const group = new THREE.Group(); scene.add(group);
+  const texSize = quality >= 1 ? 256 : 128, bumpOn = quality >= 0.75, aniso = Math.min(8, opt.aniso || 1);
   const texCache = {};
   const matTex = (k) => {
     if (texCache[k]) return texCache[k];
-    const M = MATS[k];
-    const t = new THREE.CanvasTexture(E.tex.pixel(M.c, { pattern: M.p, seed: k.length * 7 + 3, noise: 16, stripe: M.stripe, lit: 0.6 }));
-    t.magFilter = THREE.NearestFilter; t.minFilter = quality > 0.6 ? THREE.NearestMipmapLinearFilter : THREE.NearestFilter;
-    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
-    return (texCache[k] = t);
+    const sf = surface(k, texSize, bumpOn), mk = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    return (texCache[k] = { map: mk(sf.map, true), bump: sf.bump ? mk(sf.bump, false) : null });
+  };
+  const worldMat = (k) => {
+    if (headless) return new THREE.MeshBasicMaterial();   // simulations without a browser: geometry only
+    const M = MATS[k], t = matTex(k);
+    if (M.glow) return new THREE.MeshBasicMaterial({ map: t.map });
+    return litPatch(new THREE.MeshLambertMaterial({ map: t.map, bumpMap: t.bump, bumpScale: t.bump ? 1.2 : 1 }), 'world');
   };
   geo.forEach((g, m) => {
     if (!g.pos.length) return;
     const bg = new THREE.BufferGeometry();
     bg.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3));
     bg.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
-    bg.setAttribute('color', new THREE.Float32BufferAttribute(g.col, 3));
     bg.setIndex(g.idx); bg.computeVertexNormals();
-    const k = MAT_LIST[m], M = MATS[k];
-    const mtl = M.glow ? new THREE.MeshBasicMaterial({ map: matTex(k), vertexColors: true }) : new THREE.MeshLambertMaterial({ map: matTex(k), vertexColors: true });
-    const mesh = new THREE.Mesh(bg, mtl); mesh.matrixAutoUpdate = false; group.add(mesh);
+    const mesh = new THREE.Mesh(bg, worldMat(MAT_LIST[m])); mesh.matrixAutoUpdate = false; group.add(mesh);
   });
   // roofs over buildings (look only: walls are too tall to climb)
+  const roofM = worldMat('roof');
   for (const [x0, z0, x1, z1, rh] of B.roofs || []) {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + 0.6, 0.3, z1 - z0 + 0.6), new THREE.MeshLambertMaterial({ map: matTex('roof') }));
+    const r = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + 0.6, 0.3, z1 - z0 + 0.6), roofM);
     r.position.set((x0 + x1) / 2, rh + 0.15, (z0 + z1) / 2); group.add(r);
   }
 
-  // --- signs (text painted onto a canvas texture) ---
+  // --- signs (text painted onto a board) ---
+  const boardM = worldMat('darkwood');
   for (const s of B.signs) {
     const cw = 256, ch = Math.max(32, Math.round(256 * s.h / s.w));
     const c = E.tex.canvas(cw, ch, (g) => {
@@ -164,10 +265,13 @@ export function buildWorld(E, def, scene, quality = 1) {
       g.font = `900 ${fs}px system-ui,sans-serif`;
       while (lines.some((l) => g.measureText(l).width > cw - 16) && fs > 9) { fs -= 1; g.font = `900 ${fs}px system-ui,sans-serif`; }
       lines.forEach((l, k) => g.fillText(l, cw / 2, ch / 2 + (k - (lines.length - 1) / 2) * fs * 1.08));
+      const gr = g.createLinearGradient(0, 0, cw, ch); if (gr) { gr.addColorStop(0, 'rgba(255,255,255,.06)'); gr.addColorStop(1, 'rgba(0,0,0,.18)'); g.fillStyle = gr; g.fillRect(0, 0, cw, ch); }
     });
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.h), new THREE.MeshBasicMaterial({ map: t, side: THREE.DoubleSide }));
+    const t = headless ? null : new THREE.CanvasTexture(c); if (t) { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; }
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.h), litPatch(new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }), 'world'));
     m.position.set(s.x, s.y, s.z); m.rotation.y = s.rot; group.add(m);
+    const bd = new THREE.Mesh(new THREE.BoxGeometry(s.w + 0.12, s.h + 0.12, 0.05), boardM);
+    bd.position.set(s.x - Math.sin(s.rot) * 0.03, s.y, s.z - Math.cos(s.rot) * 0.03); bd.rotation.y = s.rot; group.add(bd);
   }
 
   // --- collision helpers ---
@@ -176,7 +280,7 @@ export function buildWorld(E, def, scene, quality = 1) {
   const groundAt = (x, z, feet, r = R) => {
     let g = -50;
     for (let zz = Math.floor(z - r); zz <= Math.floor(z + r); zz++) for (let xx = Math.floor(x - r); xx <= Math.floor(x + r); xx++) {
-      const hh = H(xx, zz); if (hh <= feet + PHYS.step + 1e-3 && hh > g) g = hh;
+      const hh = cellTop(xx, zz, x, z); if (hh <= feet + PHYS.step + 1e-3 && hh > g) g = hh;
     }
     return g;
   };
@@ -186,7 +290,7 @@ export function buildWorld(E, def, scene, quality = 1) {
     const tryAxis = (ax) => {
       const nx = ax === 0 ? p.x + dx : p.x, nz = ax === 1 ? p.z + dz : p.z;
       for (let zz = Math.floor(nz - r); zz <= Math.floor(nz + r); zz++) for (let xx = Math.floor(nx - r); xx <= Math.floor(nx + r); xx++) {
-        if (H(xx, zz) > lim) {
+        if (cellTop(xx, zz, nx, nz) > lim) {
           if (ax === 0) p.x = dx > 0 ? Math.min(nx, xx - r - 1e-4) : Math.max(nx, xx + 1 + r + 1e-4); else p.z = dz > 0 ? Math.min(nz, zz - r - 1e-4) : Math.max(nz, zz + 1 + r + 1e-4);
           return false;
         }
@@ -211,10 +315,17 @@ export function buildWorld(E, def, scene, quality = 1) {
     let tmz = Math.abs(dr.z) < 1e-9 ? 1e9 : t + ((sz > 0 ? z + 1 - pz : pz - z) * tdz);
     for (let n = 0; n < 600; n++) {
       const tExit = Math.min(tmx, tmz, maxT);
-      const hh = H(x, z);
+      const ci = idx(x, z), r = ci >= 0 ? rid[ci] : -1;
       const y0 = o.y + dr.y * t, y1 = o.y + dr.y * tExit;
-      if (y0 < hh) return { t, x, z, m: mat[idx(x, z)] ?? 0, side: true };
-      if (y1 < hh) { const th = (hh - o.y) / dr.y; return { t: th, x, z, m: mat[idx(x, z)] ?? 0, side: false }; }
+      if (r < 0) {
+        const hh = ci < 0 ? B.wallH : h[ci];
+        if (y0 < hh) return { t, x, z, m: mat[ci] ?? 0, side: true };
+        if (y1 < hh) { const th = (hh - o.y) / dr.y; return { t: th, x, z, m: mat[ci] ?? 0, side: false }; }
+      } else {   // a ramp: compare with the slope where the ray enters and leaves the cell
+        const f0 = y0 - slope(r, o.x + dr.x * t, o.z + dr.z * t), f1 = y1 - slope(r, o.x + dr.x * tExit, o.z + dr.z * tExit);
+        if (f0 < 0) return { t, x, z, m: mat[ci], side: true };
+        if (f1 < 0) return { t: t + (tExit - t) * f0 / (f0 - f1), x, z, m: mat[ci], side: false };
+      }
       if (tExit >= maxT) return null;
       if (tmx < tmz) { t = tmx; tmx += tdx; x += sx; } else { t = tmz; tmz += tdz; z += sz; }
     }
@@ -225,7 +336,7 @@ export function buildWorld(E, def, scene, quality = 1) {
     if (!false && Math.abs(dr.y) > 0.9) return Infinity;
     for (let k = 0.05; k <= maxLen; k += 0.05) {
       const tt = t + k, px = o.x + dr.x * tt, py = o.y + dr.y * tt, pz = o.z + dr.z * tt;
-      if (py >= H(Math.floor(px), Math.floor(pz))) return k;
+      if (py >= topAt(px, pz)) return k;
     }
     return Infinity;
   };
@@ -301,5 +412,5 @@ export function buildWorld(E, def, scene, quality = 1) {
   const siteAt = (x, z) => { for (const [n, r] of Object.entries(B.sites)) if (inRect(r, x, z)) return n; return ''; };
 
   return { B, w, d, h, mat, flag, H, idx, group, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
-    density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex };
+    topAt, sunAt, useLight, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
 }
