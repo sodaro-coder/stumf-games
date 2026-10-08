@@ -10,50 +10,115 @@ import { Match, moveStep, traceShot, eyeHeight, spreadOf, recoilAt, nadeStep, sp
 import { Bots, botNames } from './bots.js';
 import { Profile } from './backend.js';
 import { Menu, Hud, injectCss, esc } from './ui.js';
-import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID } from './skins.js';
+import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound } from './skins.js';
 import { makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
-const DEF_SET = { sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 1, fps: 0, hand: 1 };
+const DEF_SET = { voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 1, fps: 0, hand: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
+// which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
+const shotSound = (wid, skin, hit) => {
+  if (wid === 'knife') return skinSound(skin, hit ? 'hit' : 'miss') || (hit ? 'stab' : 'knife');
+  return skinSound(skin, 'fire') || wid;
+};
 const angDiff = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
 
-// ---- positional synth sound (no audio files) ----------------------------------------------------------------------
+// ---- positional synth sound (no audio files: every sound is generated, so nothing is copied) -------------------------
+// Each gun has its own recipe (crack, body, low thump, length, tail) so they're told apart by ear the way you learn
+// guns in the classic game; distance muffles and adds an echo tail. Joke skins swap in their own sounds.
+const GUN_SND = {  // [crack Hz, body Hz, thump Hz, length s, loudness, tail]
+  glock: [3600, 1900, 180, 0.12, 0.7, 0.2], usp: [0, 900, 120, 0.09, 0.35, 0.05], p2000: [3300, 1700, 170, 0.13, 0.75, 0.2], dualies: [3500, 1800, 170, 0.12, 0.75, 0.2],
+  p250: [3200, 1600, 160, 0.14, 0.8, 0.22], tec9: [3800, 2000, 190, 0.11, 0.75, 0.2], fiveseven: [4200, 2300, 200, 0.12, 0.75, 0.22], cz75: [3700, 1900, 180, 0.11, 0.7, 0.2],
+  deagle: [2600, 900, 90, 0.32, 1.25, 0.6], r8: [2400, 850, 80, 0.36, 1.3, 0.65],
+  mac10: [4000, 2100, 160, 0.08, 0.7, 0.15], mp9: [4300, 2300, 170, 0.08, 0.7, 0.15], mp7: [3900, 2000, 150, 0.09, 0.75, 0.18], mp5: [0, 1100, 120, 0.08, 0.4, 0.06],
+  ump: [3000, 1400, 120, 0.12, 0.85, 0.22], p90: [4500, 2500, 180, 0.07, 0.7, 0.14], bizon: [3800, 1800, 150, 0.09, 0.7, 0.16],
+  nova: [2000, 700, 70, 0.4, 1.3, 0.6], xm1014: [2200, 800, 80, 0.32, 1.2, 0.5], sawedoff: [1800, 650, 65, 0.42, 1.35, 0.6], mag7: [2100, 750, 70, 0.38, 1.3, 0.55],
+  m249: [2600, 1100, 90, 0.16, 1.05, 0.35], negev: [2800, 1200, 100, 0.13, 1.0, 0.3],
+  galil: [2900, 1300, 110, 0.15, 0.95, 0.35], famas: [3100, 1400, 120, 0.14, 0.9, 0.32], ak47: [2500, 1000, 85, 0.2, 1.15, 0.45], m4a4: [3200, 1500, 110, 0.15, 1.0, 0.38],
+  m4a1s: [0, 1000, 110, 0.1, 0.45, 0.08], sg553: [2800, 1200, 100, 0.17, 1.05, 0.4], aug: [3000, 1300, 105, 0.16, 1.0, 0.38],
+  ssg08: [3400, 1500, 90, 0.3, 1.1, 0.7], awp: [2200, 700, 55, 0.55, 1.5, 1.1], g3sg1: [2600, 1000, 80, 0.26, 1.15, 0.6], scar20: [2700, 1050, 85, 0.25, 1.15, 0.6],
+  zeus: null, knife: null,
+};
+const STEP_SND = { metal: [1800, 0.07, 'clank'], cred: [1500, 0.06, 'clank'], cblue: [1500, 0.06, 'clank'], cgreen: [1500, 0.06, 'clank'], corange: [1500, 0.06, 'clank'], bus: [1600, 0.06, 'clank'],
+  wood: [600, 0.06, 'knock'], crate: [650, 0.06, 'knock'], darkwood: [550, 0.06, 'knock'], fence: [700, 0.05, 'knock'], roof: [600, 0.05, 'knock'],
+  sand: [900, 0.07, 'soft'], dirt: [700, 0.07, 'soft'], grass: [800, 0.08, 'soft'], carpet: [500, 0.05, 'soft'] };
 function makeAudio(getVol) {
-  let ctx = null, master = null;
-  const ensure = () => { if (!ctx) { const A = window.AudioContext || window.webkitAudioContext; if (!A) return null; ctx = new A(); master = ctx.createGain(); master.connect(ctx.destination); } if (ctx.state === 'suspended') ctx.resume(); master.gain.value = getVol(); return ctx; };
+  let ctx = null, master = null, verb = null;
+  const ensure = () => {
+    if (!ctx) { const A = window.AudioContext || window.webkitAudioContext; if (!A) return null; ctx = new A(); master = ctx.createGain(); master.connect(ctx.destination);
+      // a cheap echo for far shots: a feedback delay through a lowpass
+      verb = ctx.createDelay(1); verb.delayTime.value = 0.13; const fb = ctx.createGain(); fb.gain.value = 0.35; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+      verb.connect(lp); lp.connect(fb); fb.connect(verb); lp.connect(master); }
+    if (ctx.state === 'suspended') ctx.resume(); master.gain.value = getVol(); return ctx; };
   addEventListener('pointerdown', ensure); addEventListener('keydown', ensure);
   let noiseBuf = null;
-  const noise = () => { if (!noiseBuf) { noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 1.2, ctx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; } const s = ctx.createBufferSource(); s.buffer = noiseBuf; return s; };
-  const out = (vol, pan) => { const g = ctx.createGain(); g.gain.value = vol; let n = g; if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(master); } else g.connect(master); return n; };
-  const burst = (dur, freq, vol, pan, q = 0.7, type = 'lowpass') => { const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain(), t = ctx.currentTime; f.type = type; f.frequency.value = freq; f.Q.value = q; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); s.connect(f); f.connect(g); g.connect(out(1, pan)); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05); };
-  const tone = (type, f0, f1, dur, vol, pan, delay = 0) => { const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + delay; o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g); g.connect(out(1, pan)); o.start(t); o.stop(t + dur + 0.05); };
+  const noise = () => { if (!noiseBuf) { noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 1.5, ctx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; } const s = ctx.createBufferSource(); s.buffer = noiseBuf; return s; };
+  let far = 0;  // 0 near .. 1 far (set by at())
+  const out = (pan, wet = 0) => { const g = ctx.createGain(); let n = g; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 18000 - far * 15000; g.connect(lp);
+    if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; lp.connect(p); p.connect(master); if (wet) { const w = ctx.createGain(); w.gain.value = wet; p.connect(w); w.connect(verb); } } else lp.connect(master);
+    return n; };
+  const burst = (dur, freq, vol, pan, q = 0.7, type = 'lowpass', delay = 0, wet = 0) => { const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain(), t = ctx.currentTime + delay; f.type = type; f.frequency.value = freq; f.Q.value = q; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.003); g.gain.exponentialRampToValueAtTime(0.001, t + dur); s.connect(f); f.connect(g); g.connect(out(pan, wet)); s.start(t, Math.random() * 0.8); s.stop(t + dur + 0.05); };
+  const tone = (type, f0, f1, dur, vol, pan, delay = 0, wet = 0, vib = 0) => { const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + delay; o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    if (vib) { const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = vib; lg.gain.setValueAtTime(f0 * 0.35, t); lg.gain.exponentialRampToValueAtTime(1, t + dur); l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t + dur + 0.05); }
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g); g.connect(out(pan, wet)); o.start(t); o.stop(t + dur + 0.05); };
+  const gun = (r, v, p) => { const [crack, body, thump, len, loud, tail] = r, V = v * loud;
+    if (crack) burst(0.025, crack, V * 0.9, p, 0.8, 'highpass');
+    burst(len, body, V, p, 0.9, 'lowpass', 0, tail * (0.3 + far));
+    tone('sine', thump * 2.2, thump, len * 0.9, V * 0.55, p);
+    if (tail > 0.3) burst(tail, body * 0.6, V * 0.25 * (0.4 + far), p, 0.5, 'lowpass', len * 0.6, 0.4); };
   const SND = {
-    pistol: (v, p) => { burst(0.14, 3200, v, p); tone('square', 300, 80, 0.06, v * 0.25, p); }, rifle: (v, p) => { burst(0.18, 2200, v * 1.1, p); tone('sawtooth', 160, 50, 0.1, v * 0.35, p); },
-    smg: (v, p) => { burst(0.1, 2800, v * 0.9, p); }, heavy: (v, p) => { burst(0.3, 1100, v * 1.2, p); tone('sawtooth', 120, 35, 0.2, v * 0.4, p); },
-    sniper: (v, p) => { burst(0.45, 1500, v * 1.3, p); tone('sawtooth', 90, 30, 0.35, v * 0.5, p); burst(0.6, 500, v * 0.4, p); }, silenced: (v, p) => { burst(0.08, 1200, v * 0.5, p, 2); },
-    zeus: (v, p) => { tone('square', 1800, 200, 0.3, v * 0.4, p); burst(0.3, 6000, v * 0.4, p, 1, 'highpass'); }, knife: (v, p) => { burst(0.12, 5000, v * 0.4, p, 2, 'highpass'); },
-    step: (v, p) => { burst(0.05, 700, v * 0.35, p, 1); }, land: (v, p) => burst(0.09, 500, v * 0.5, p),
-    hit: (v) => tone('triangle', 1400, 900, 0.05, v * 0.25, 0), head: (v) => { tone('square', 2400, 1800, 0.08, v * 0.35, 0); tone('sine', 3600, 3000, 0.12, v * 0.2, 0); },
-    hurt: (v) => burst(0.12, 900, v * 0.6, 0), reload: (v, p) => { tone('square', 900, 700, 0.03, v * 0.2, p); tone('square', 600, 500, 0.04, v * 0.2, p, 0.25); }, empty: (v) => tone('square', 1800, 1800, 0.02, v * 0.2, 0),
-    beep: (v, p) => tone('sine', 2100, 2100, 0.09, v * 0.5, p), planted: (v) => { tone('sine', 900, 900, 0.15, v * 0.5, 0); tone('sine', 1200, 1200, 0.15, v * 0.5, 0, 0.18); },
-    defused: (v) => { tone('sine', 700, 1400, 0.4, v * 0.4, 0); }, explode: (v, p) => { burst(1.6, 400, v * 1.8, p); tone('sine', 70, 25, 1.4, v * 0.9, p); },
-    he: (v, p) => { burst(0.9, 600, v * 1.5, p); tone('sine', 90, 30, 0.7, v * 0.7, p); }, flash: (v, p) => { burst(0.25, 5000, v, p, 1, 'highpass'); tone('sine', 3200, 3000, 2.5, v * 0.15, 0); },
-    smoke: (v, p) => burst(1.4, 900, v * 0.5, p, 0.5), fire: (v, p) => burst(0.8, 1600, v * 0.6, p), bounce: (v, p) => tone('square', 700, 500, 0.03, v * 0.3, p),
-    buy: (v) => { tone('square', 700, 700, 0.04, v * 0.2, 0); tone('square', 1050, 1050, 0.05, v * 0.2, 0, 0.05); }, round: (v) => { tone('sine', 440, 440, 0.12, v * 0.3, 0); tone('sine', 660, 660, 0.18, v * 0.3, 0, 0.13); },
-    win: (v) => [523, 659, 784, 1046].forEach((f, k) => tone('triangle', f, f, 0.2, v * 0.25, 0, k * 0.12)), lose: (v) => [392, 330, 262].forEach((f, k) => tone('triangle', f, f * 0.98, 0.25, v * 0.25, 0, k * 0.15)),
+    step: (v, p, m) => { const [f, d, k] = STEP_SND[m] || [1100, 0.05, 'hard']; burst(d, f, v * (k === 'soft' ? 0.35 : 0.45), p, k === 'clank' ? 6 : 1.2, k === 'clank' ? 'bandpass' : 'lowpass'); if (k === 'clank') tone('triangle', f * 1.3, f, 0.08, v * 0.12, p); if (k === 'knock') tone('sine', 180, 120, 0.06, v * 0.25, p); },
+    land: (v, p) => { burst(0.1, 500, v * 0.55, p); tone('sine', 120, 60, 0.1, v * 0.3, p); },
+    knife: (v, p) => burst(0.13, 5200, v * 0.4, p, 2, 'highpass'), stab: (v, p) => { burst(0.08, 2400, v * 0.6, p, 1); tone('sine', 300, 120, 0.08, v * 0.3, p); },
+    zeus: (v, p) => { tone('sawtooth', 1800, 200, 0.35, v * 0.35, p, 0, 0, 40); burst(0.3, 6000, v * 0.4, p, 1, 'highpass'); },
+    hit: (v) => { burst(0.04, 1800, v * 0.4, 0, 1.5, 'bandpass'); tone('sine', 220, 120, 0.05, v * 0.25, 0); },
+    head: (v) => { tone('square', 2600, 2400, 0.05, v * 0.25, 0); tone('sine', 4200, 3900, 0.14, v * 0.2, 0); burst(0.05, 3000, v * 0.3, 0, 3, 'bandpass'); },
+    armor: (v) => { tone('triangle', 1500, 1200, 0.06, v * 0.25, 0); burst(0.04, 2500, v * 0.3, 0, 4, 'bandpass'); },
+    hurt: (v) => { burst(0.12, 900, v * 0.6, 0); tone('sine', 160, 90, 0.12, v * 0.3, 0); },
+    magout: (v, p) => { tone('square', 900, 700, 0.025, v * 0.18, p); burst(0.03, 2500, v * 0.25, p, 3, 'bandpass'); },
+    magin: (v, p) => { tone('square', 700, 500, 0.03, v * 0.2, p); burst(0.04, 1800, v * 0.3, p, 3, 'bandpass', 0.03); },
+    bolt: (v, p) => { burst(0.05, 3000, v * 0.3, p, 2, 'bandpass'); tone('square', 1200, 900, 0.02, v * 0.15, p, 0.06); burst(0.05, 2200, v * 0.3, p, 2, 'bandpass', 0.09); },
+    shell: (v, p) => { burst(0.05, 1500, v * 0.3, p, 2, 'bandpass'); tone('triangle', 500, 400, 0.04, v * 0.2, p, 0.04); },
+    empty: (v) => tone('square', 1800, 1800, 0.02, v * 0.2, 0), deploy: (v) => { burst(0.05, 2500, v * 0.2, 0, 2, 'bandpass'); tone('square', 500, 650, 0.03, v * 0.12, 0, 0.04); },
+    beep: (v, p) => tone('square', 1900, 1900, 0.07, v * 0.25, p), planted: (v) => { for (let k = 0; k < 4; k++) tone('square', 1900, 1900, 0.05, v * 0.2, 0, k * 0.1); },
+    plantbeep: (v) => tone('square', 1400, 1400, 0.04, v * 0.15, 0), defusing: (v) => burst(0.06, 2600, v * 0.25, 0, 3, 'bandpass'),
+    defused: (v) => { tone('sine', 700, 1400, 0.4, v * 0.35, 0); }, explode: (v, p) => { burst(2.2, 380, v * 1.9, p, 0.5, 'lowpass', 0, 0.6); tone('sine', 65, 22, 1.6, v * 0.9, p); burst(0.3, 3000, v * 0.6, p, 0.5, 'highpass'); },
+    he: (v, p) => { burst(1.1, 600, v * 1.5, p, 0.6, 'lowpass', 0, 0.5); tone('sine', 85, 28, 0.8, v * 0.7, p); burst(0.08, 4000, v * 0.5, p, 0.5, 'highpass'); },
+    flash: (v, p) => { burst(0.2, 5000, v * 0.9, p, 1, 'highpass'); burst(0.25, 900, v * 0.7, p); }, ring: (v) => tone('sine', 3300, 3200, 3, v * 0.1, 0),
+    smoke: (v, p) => burst(1.8, 800, v * 0.45, p, 0.4), fire: (v, p) => { burst(0.9, 1600, v * 0.55, p); burst(0.2, 3000, v * 0.4, p, 1, 'highpass'); }, bounce: (v, p) => { tone('square', 700, 500, 0.03, v * 0.25, p); burst(0.03, 2000, v * 0.2, p, 2, 'bandpass'); },
+    buy: (v) => { tone('square', 700, 700, 0.04, v * 0.2, 0); tone('square', 1050, 1050, 0.05, v * 0.2, 0, 0.05); }, round: (v) => { tone('triangle', 440, 440, 0.12, v * 0.25, 0); tone('triangle', 660, 660, 0.18, v * 0.25, 0, 0.13); },
+    win: (v) => [523, 659, 784, 1046].forEach((f, k) => tone('triangle', f, f, 0.22, v * 0.22, 0, k * 0.12)), lose: (v) => [392, 330, 262].forEach((f, k) => tone('triangle', f, f * 0.98, 0.25, v * 0.22, 0, k * 0.15)),
     tick: (v) => tone('square', 2400, 2400, 0.012, v * 0.15, 0), reveal: (v) => [660, 880].forEach((f, k) => tone('triangle', f, f, 0.2, v * 0.3, 0, k * 0.1)),
     rare: (v) => [523, 659, 784, 1046, 1318].forEach((f, k) => tone('triangle', f, f, 0.3, v * 0.35, 0, k * 0.09)), radio: (v) => { burst(0.08, 3000, v * 0.2, 0, 3, 'bandpass'); tone('square', 1200, 1200, 0.03, v * 0.15, 0); },
-    deploy: (v) => tone('square', 400, 600, 0.04, v * 0.15, 0),
+    // ---- the joke skins ----
+    wetslap: (v, p) => { burst(0.09, 1300, v * 0.9, p, 1.6, 'bandpass'); tone('sine', 170, 70, 0.1, v * 0.55, p); burst(0.07, 900, v * 0.5, p, 1.2, 'bandpass', 0.045); burst(0.05, 2400, v * 0.25, p, 2, 'bandpass', 0.09); },
+    doing: (v, p) => { tone('sine', 180, 260, 0.8, v * 0.5, p, 0, 0, 22); tone('triangle', 360, 520, 0.6, v * 0.15, p, 0.02, 0, 22); },
+    pewpew: (v, p) => { tone('square', 1500, 280, 0.13, v * 0.35, p); tone('sine', 1500, 280, 0.13, v * 0.3, p); tone('square', 1600, 300, 0.14, v * 0.35, p, 0.17); tone('sine', 1600, 300, 0.14, v * 0.3, p, 0.17); },
+    fart: (v, p) => { const f = 70 + Math.random() * 50; tone('sawtooth', f * 1.3, f, 0.5, v * 0.45, p, 0, 0, 28); burst(0.45, 300, v * 0.35, p, 2, 'lowpass'); },
+    squirt: (v, p) => { burst(0.35, 3200, v * 0.55, p, 1.5, 'bandpass'); burst(0.25, 5000, v * 0.3, p, 1, 'highpass', 0.05); },
+    boing: (v, p) => tone('sine', 120, 380, 0.5, v * 0.5, p, 0, 0, 16),
+    squeak: (v, p) => { tone('sawtooth', 900, 1700, 0.18, v * 0.3, p, 0, 0, 30); tone('sawtooth', 1700, 700, 0.25, v * 0.3, p, 0.17, 0, 30); },
+    squish: (v, p) => { burst(0.15, 600, v * 0.7, p, 2, 'lowpass'); tone('sine', 220, 70, 0.15, v * 0.4, p); },
+    fwoop: (v, p) => { tone('sine', 250, 950, 0.18, v * 0.5, p); burst(0.12, 1200, v * 0.4, p, 2, 'bandpass', 0.1); },
+    crunch: (v, p) => { for (let k = 0; k < 4; k++) burst(0.03, 2500 + k * 300, v * 0.45, p, 2, 'bandpass', k * 0.03); },
+    flop: (v, p) => { burst(0.12, 800, v * 0.8, p, 1.4, 'bandpass'); tone('sine', 130, 60, 0.12, v * 0.5, p); burst(0.08, 500, v * 0.4, p, 1, 'lowpass', 0.07); },
+    whoosh: (v, p) => burst(0.2, 1800, v * 0.35, p, 1.5, 'bandpass'),
   };
+  // the announcer and radio voice: the browser's own text-to-speech (works offline with system voices)
+  const say = (text, pitch = 0.75, rate = 1.05) => { try { if (!window.speechSynthesis || getVol() <= 0) return; const u = new SpeechSynthesisUtterance(text); u.volume = Math.min(1, getVol() * 1.3); u.pitch = pitch; u.rate = rate; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) { /* no voices */ } };
   return {
-    play(name, vol = 1, pan = 0) { if (!ensure() || !SND[name]) return; try { SND[name](vol, Math.max(-1, Math.min(1, pan))); } catch (e) { /* audio busy */ } },
-    at(name, x, y, z, cam, range = 60) {  // positional: volume by distance, pan by angle
+    play(name, vol = 1, pan = 0, extra) { if (!ensure()) return; far = 0; try { if (GUN_SND[name]) gun(GUN_SND[name], vol, pan); else if (SND[name]) SND[name](vol, Math.max(-1, Math.min(1, pan)), extra); } catch (e) { /* audio busy */ } },
+    at(name, x, y, z, cam, range = 60, extra) {  // positional: volume by distance, pan by angle, muffled when far
+      if (!ensure()) return;
       const dx = x - cam.position.x, dz = z - cam.position.z, d = Math.hypot(dx, dy(y, cam), dz); if (d > range) return;
-      const yaw = cam.rotation.y, side = Math.sin(Math.atan2(-dx, -dz) - yaw);
-      this.play(name, Math.max(0.05, 1 - d / range) ** 1.4, -side * 0.8);
+      const side = Math.sin(Math.atan2(-dx, -dz) - cam.rotation.y);
+      far = Math.min(1, d / range);
+      try { const v = Math.max(0.05, 1 - d / range) ** 1.3, p = Math.max(-1, Math.min(1, -side * 0.8)); if (GUN_SND[name]) gun(GUN_SND[name], v, p); else if (SND[name]) SND[name](v, p, extra); } catch (e) { /* audio busy */ }
+      far = 0;
     },
+    say,
+    selfTest() { if (!ensure()) return ['no audio']; const bad = []; for (const [k, f] of Object.entries(SND)) { try { f(0.001, 0, 'metal'); } catch (e) { bad.push(k + ': ' + e.message); } } for (const [k, r] of Object.entries(GUN_SND)) if (r) { try { gun(r, 0.001, 0); } catch (e) { bad.push(k + ': ' + e.message); } } return bad; },
   };
 }
 const dy = (y, cam) => y - cam.position.y;
@@ -260,7 +325,8 @@ export default function start({ cfg, E, N, smoke }) {
         if (Math.hypot(o.x - p.x, o.z - p.z) > 2) return;
         const hits = (Array.isArray(d.h) ? d.h : []).filter((h) => h && typeof h.id === 'string' && ['head', 'chest', 'stomach', 'legs'].includes(h.group)).map((h) => ({ id: h.id, group: h.group, pen: Math.max(0.1, Math.min(1, +h.pen || 1)), heavy: !!h.heavy }));
         match.shot(p, d.w, hits, o);
-        const fireMsg = { id: peer, wid: d.w, o: [o.x, o.y, o.z], e: Array.isArray(d.e) ? d.e.slice(0, 3).map(Number) : null };
+        const held = d.w === 'knife' ? ((p.knife || {})[p.team]) : (Object.values(p.inv).find((i) => i && i.wid === d.w) || {}).skin;
+        const fireMsg = { id: peer, wid: d.w, o: [o.x, o.y, o.z], e: Array.isArray(d.e) ? d.e.slice(0, 3).map(Number) : null, s: shotSound(d.w, held, hits.length > 0 || !!d.wh) };
         send('fire', fireMsg); onFire(fireMsg); if (bots) bots.heard(o.x, o.z, p);
         return;
       }
@@ -312,8 +378,8 @@ export default function start({ cfg, E, N, smoke }) {
     function onHitConfirm(m) { audio.play(m.group === 'head' ? 'head' : 'hit'); stats.dmg += m.dmg | 0; }
     function onFire(m) {
       if (m.id === myId) return;
-      const w = W_BY_ID[m.wid] || {}; const snd = w.silenced ? 'silenced' : w.cat === 'sniper' ? 'sniper' : w.cat === 'heavy' ? 'heavy' : w.cat === 'smg' ? 'smg' : w.cat === 'knife' ? 'knife' : w.cat === 'zeus' ? 'zeus' : w.cat === 'pistol' ? 'pistol' : 'rifle';
-      audio.at(snd, m.o[0], m.o[1], m.o[2], cam, w.silenced ? 25 : 110);
+      const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
+      audio.at(snd, m.o[0], m.o[1], m.o[2], cam, w.silenced ? 25 : w.cat === 'knife' ? 12 : 110);
       if (m.e && w.cat !== 'knife') { tracer(m.o, m.e); }
       const r = rigs.get(m.id); if (r) r.flashT = 0.05;
     }
@@ -321,18 +387,19 @@ export default function start({ cfg, E, N, smoke }) {
     function onDrops(d) { st.drops = d || []; syncDrops(); }
     function onFx(list) { st.effects = list || []; syncEffects(); }
     function onNade(n) { const m = makeGrenade(n.type); m.position.set(n.x, n.y, n.z); fx.add(m); flying.set(n.id, { n: { ...n }, m }); audio.at('bounce', n.x, n.y, n.z, cam, 20); }
-    function onChat(m) { hud.chat(m.name, m.team, m.text, m.teamOnly); audio.play('radio'); }
+    function onChat(m) { hud.chat(m.name, m.team, m.text, m.teamOnly); audio.play('radio'); if (m.text.startsWith('📻 ')) announce(m.text.slice(3), 1.0); }
+    function announce(t, pitch) { if (S.voice) audio.say(t, pitch || 0.75); }
     let specTarget = null, specNext = false;
     function onEvent({ type, data }) {
       if (type === 'round') {
         st.round = data.n; st.score = data.score;
         if (data.phase === 'freeze') { hud.banner(`Round ${data.n}`, MODES[mode].bomb ? (me.team === 'T' ? 'Plant the bomb or eliminate the enemy' : 'Defend the bomb sites') : 'Eliminate the enemy', 2500); audio.play('round'); }
-        if (data.phase === 'live') { hud.banner('', ''); audio.play('radio'); if (uiOpen === 'buy' && !canBuy()) closeBuy(); }
+        if (data.phase === 'live') { hud.banner('', ''); audio.play('radio'); announce(me.team === 'T' ? "Let's go!" : 'Go go go!'); if (uiOpen === 'buy' && !canBuy()) closeBuy(); }
       }
       if (type === 'roundEnd') {
         st.score = data.score; st.history = data.history || st.history;
         hud.banner(data.text, data.mvp ? `MVP: ${data.mvp}` : '', 4500);
-        audio.play(data.winner && data.winner === me.team ? 'win' : 'lose');
+        audio.play(data.winner && data.winner === me.team ? 'win' : 'lose'); setTimeout(() => announce(data.text + '.'), 400);
         if (data.winner === me.team) stats.roundWin++;
         if (data.mvp && data.mvp === myName) stats.mvp++;
       }
@@ -344,8 +411,8 @@ export default function start({ cfg, E, N, smoke }) {
         if (data.assist === myName) stats.a++;
         const r = rigs.get(data.vid); if (r) r.dieT = 0.001;
       }
-      if (type === 'planted') { hud.banner('The bomb has been planted', `Site ${data.site}`, 3000); audio.play('planted'); if (data.by === myName) stats.plant++; }
-      if (type === 'sound' && data.s === 'defused') { audio.play('defused'); hud.banner('The bomb has been defused', '', 3000); const b = match ? match.bomb : null; if (b && b.defuser === myId) stats.defuse++; if (!match && st.bomb && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2) stats.defuse++; }
+      if (type === 'planted') { hud.banner('The bomb has been planted', `Site ${data.site}`, 3000); audio.play('planted'); announce('Bomb has been planted.'); if (data.by === myName) stats.plant++; }
+      if (type === 'sound' && data.s === 'defused') { audio.play('defused'); announce('Bomb has been defused.'); hud.banner('The bomb has been defused', '', 3000); const b = match ? match.bomb : null; if (b && b.defuser === myId) stats.defuse++; if (!match && st.bomb && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2) stats.defuse++; }
       if (type === 'explode') { audio.at('explode', data.x, data.y, data.z, cam, 200); me.flash = Math.max(me.flash, Math.hypot(data.x - me.x, data.z - me.z) < data.r * 1.5 ? 1.2 : 0.4); camShake = 1.2; }
       if (type === 'nadefx') {
         const f = flying.get([...flying.keys()].find((k) => flying.get(k).n.owner === data.owner && flying.get(k).n.type === data.type)); if (f) { fx.remove(f.m); flying.delete(f.n.id); }
@@ -502,18 +569,19 @@ export default function start({ cfg, E, N, smoke }) {
       if (w.cat === 'zeus') { const zr = w.range || 4.5; for (let i = hits.length - 1; i >= 0; i--) if (hits[i].dist > zr) hits.splice(i, 1); }
       toHost('shot', { w: w.id, h: hits.map((h) => ({ id: h.id, group: h.group, pen: +h.pen.toFixed(2) })), o: [eye.x, eye.y, eye.z], e: end ? [end.x, end.y, end.z] : null });
       if (end && w.cat !== 'zeus') tracer([eye.x + Math.cos(me.yaw) * 0.15 * S.hand, eye.y - 0.1, eye.z - Math.sin(me.yaw) * 0.15 * S.hand], [end.x, end.y, end.z]);
-      const snd = w.silenced ? 'silenced' : w.cat === 'sniper' ? 'sniper' : w.cat === 'heavy' ? 'heavy' : w.cat === 'smg' ? 'smg' : w.cat === 'zeus' ? 'zeus' : w.cat === 'pistol' ? 'pistol' : 'rifle';
-      audio.play(snd, 0.8);
+      audio.play(shotSound(w.id, it.skin, false), 0.8);
       if (vm && vm.userData.flash) { vm.userData.flash.visible = true; flashT = 0.04; }
       if (it.ammo === 0 && it.reserve > 0) setTimeout(() => { if (me.inv[me.cur] === it && it.ammo === 0) startReload(); }, 250);
     }
     function knife(heavy) {
-      me.cd = heavy ? 1.1 : 0.45; me.knifeSwing = 0.25; audio.play('knife', 0.6);
+      me.cd = heavy ? 1.1 : 0.45; me.knifeSwing = 0.25;
       const eye = { x: me.x, y: me.y + eyeHeight(me), z: me.z }, d = { x: -Math.sin(me.yaw) * Math.cos(me.pitch), y: Math.sin(me.pitch), z: -Math.cos(me.yaw) * Math.cos(me.pitch) };
       const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0 }));
       const tr = traceShot(W, players, myId, eye, d, W_BY_ID.knife, heavy ? 1.5 : 1.9);
       const h = tr.hits[0]; if (h) { const p = st.players.get(h.id); if (p) puff(p.x, p.y + 1.2, p.z); }
-      toHost('shot', { w: 'knife', h: h ? [{ id: h.id, group: 'chest', pen: 1, heavy: !!heavy }] : [], o: [eye.x, eye.y, eye.z], e: null });
+      const wall = !h && tr.wallHits.length > 0;
+      audio.play(shotSound('knife', (loadout[me.team] || {}).knife, !!h || wall), 0.7);
+      toHost('shot', { w: 'knife', h: h ? [{ id: h.id, group: 'chest', pen: 1, heavy: !!heavy }] : [], o: [eye.x, eye.y, eye.z], e: null, wh: wall });
     }
     function throwNade(lob) {
       const type = me.nades[me.nadeSel]; if (!type || me.cd > 0 || me.deploy > 0) return;
@@ -529,7 +597,9 @@ export default function start({ cfg, E, N, smoke }) {
     }
     function startReload() {
       const it = me.inv[me.cur], w = curWeapon(); if (!it || !w || w.cat === 'knife' || w.cat === 'zeus' || me.reload > 0 || it.ammo >= w.mag || it.reserve <= 0) return;
-      me.reload = w.shellReload ? w.reload : w.reload; me.scoped = 0; audio.play('reload', 0.6);
+      me.reload = w.reload; me.scoped = 0;
+      if (w.shellReload) audio.play('shell', 0.6);
+      else { const it0 = it; audio.play('magout', 0.6); setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play('magin', 0.6); }, w.reload * 600); if (w.cat !== 'pistol') setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play('bolt', 0.6); }, w.reload * 850); }
     }
     function switchTo(slot) {
       if (slot === 4) { if (!me.nades.length) return; if (me.cur === 4) me.nadeSel = (me.nadeSel + 1) % me.nades.length; else { me.last = me.cur; me.cur = 4; } me.reload = 0; setViewModel(); return; }
@@ -540,14 +610,10 @@ export default function start({ cfg, E, N, smoke }) {
     function sendAmmo() { const a = {}; for (const s of [1, 2]) if (me.inv[s] && me.inv[s].wid) a[s] = [me.inv[s].wid, me.inv[s].ammo, me.inv[s].reserve]; toHost('ammo', a); }
     function nearestDrop() { let best = null, bd = 1.8; for (const d of st.drops) { const dist = Math.hypot(d.x - me.x, d.z - me.z); if (dist < bd) { bd = dist; best = d; } } return best; }
 
-    // ---- loop ----
-    let netT = 0, hudT = 0, radarT = 0, flashT = 0, camKick = 0, camShake = 0, viewY = 0, bob = 0, ammoT = 0, sbT = 0, timeAlive = 0;
-    let radioOpen = null;
-    const loopH = E.loop((dt) => {
-      if (!W) return;
-      timeAlive += dt;
-      // ---- host simulation ----
-      if (match) {
+    // the host's simulation step: the local player's state into the Match, bots, rules, the render mirror, snapshots
+    let lastSim = performance.now();
+    function simHost(dt) {
+        lastSim = performance.now();
         const mp = match.players.get(myId);
         if (mp) { mp.x = me.x; mp.y = me.y; mp.z = me.z; mp.yaw = me.yaw; mp.pitch = me.pitch; mp.crouch = me.crouch; mp.onGround = me.onGround; mp.vx = me.vx; mp.vz = me.vz;
           mp.cur = me.cur === 4 ? 4 : me.cur; mp.plant = me.cur === 5 && me.alive && (mouseBtn[0] || kd('KeyE') || E.input.touch.buttons.has('use')); mp.defusing = me.alive && (kd('KeyE') || E.input.touch.buttons.has('use')) && st.bomb && st.bomb.s === 'planted' && me.team === 'CT';
@@ -567,7 +633,26 @@ export default function start({ cfg, E, N, smoke }) {
         if (st.roster.size !== match.players.size || [...match.players.values()].some((p) => (st.roster.get(p.id) || {}).team !== p.team)) setRoster([...match.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife })));
         netT += dt;
         if (session && netT >= 0.05) { netT = 0; session.send('snap', match.snap()); }
-      } else {
+    }
+    // hidden or minimised tabs pause animation frames; a worker's timer keeps the host's match running for everyone
+    let hiddenTick = null;
+    if (isHost && !solo && typeof Worker !== 'undefined') {
+      try {
+        const url = URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 16)'], { type: 'text/javascript' }));
+        hiddenTick = new Worker(url); let last = performance.now();
+        hiddenTick.onmessage = () => { const now = performance.now(); let dt = Math.min(0.25, (now - last) / 1000); last = now; if (now - lastSim < 120 || !match || ended) return;  // frames stalled (hidden / minimised tab)
+          dt = Math.min(0.25, (now - lastSim) / 1000); while (dt > 0) { const step = Math.min(dt, 1 / 60); simHost(step); dt -= step; } };
+      } catch (e) { hiddenTick = null; }
+    }
+    // ---- loop ----
+    let netT = 0, hudT = 0, radarT = 0, flashT = 0, camKick = 0, camShake = 0, viewY = 0, bob = 0, ammoT = 0, sbT = 0, timeAlive = 0;
+    let radioOpen = null;
+    const loopH = E.loop((dt) => {
+      if (!W) return;
+      timeAlive += dt;
+      // ---- host simulation (a background timer takes over while the host's tab is hidden) ----
+      if (match) simHost(dt);
+      if (!match) {
         for (const p of st.players.values()) { const k = Math.min(1, dt * 14); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.z += (p.tz - p.z) * k; }
         netT += dt; ammoT += dt;
         if (session && netT >= 1 / 30) { netT = 0; const fl = (me.cur === 5 && (mouseBtn[0] || kd('KeyE')) ? 1 : 0) | ((kd('KeyE') || E.input.touch.buttons.has('use')) && me.team === 'CT' ? 2 : 0) | (me.onGround ? 4 : 0);
@@ -628,7 +713,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (!wasG && me.onGround && me.wasAir > 0.25) audio.play('land', 0.5);
         me.wasAir = me.onGround ? 0 : (me.wasAir || 0) + dt;
         const spd = speedOf(me);
-        if (me.onGround && spd > 3 && !inp.walk && !inp.crouch) { me.stepT -= dt * spd / 3.3; if (me.stepT <= 0) { me.stepT = 1; audio.play('step', 0.5); } }
+        if (me.onGround && spd > 3 && !inp.walk && !inp.crouch) { me.stepT -= dt * spd / 3.3; if (me.stepT <= 0) { me.stepT = 1; audio.play('step', 0.5, 0, W.matName(W.mat[W.idx(Math.floor(me.x), Math.floor(me.z))])); } }
         bob += spd * dt * 1.9;
         if (W.lavaAt(me.x, me.z) && me.y < 0.2 && !match) { /* host applies lava damage */ }
       }
@@ -637,7 +722,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (me.reload > 0) {
         me.reload -= dt; const it = me.inv[me.cur], w = curWeapon();
         if (me.reload <= 0 && it && w) {
-          if (w.shellReload) { if (it.reserve > 0 && it.ammo < w.mag) { it.ammo++; it.reserve--; if (it.ammo < w.mag && it.reserve > 0) me.reload = w.reload; } }
+          if (w.shellReload) { if (it.reserve > 0 && it.ammo < w.mag) { it.ammo++; it.reserve--; if (it.ammo < w.mag && it.reserve > 0) { me.reload = w.reload; audio.play('shell', 0.6); } } }
           else { const take = Math.min(w.mag - it.ammo, it.reserve); it.ammo += take; it.reserve -= take; }
         }
         if (w && w.shellReload && mouseBtn[0] && it && it.ammo > 0) me.reload = 0;
@@ -683,6 +768,7 @@ export default function start({ cfg, E, N, smoke }) {
         const sp = Math.hypot(p.x - r.x, p.z - r.z) / Math.max(dt, 1e-3); r.x = p.x; r.z = p.z;
         r.g.position.set(p.x, p.y, p.z); r.g.rotation.y = p.yaw;
         r.t += dt;
+        if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
         posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
         if (spectating && p.id === spectating.id) r.g.visible = false;
@@ -778,6 +864,7 @@ export default function start({ cfg, E, N, smoke }) {
     function quit() {
       ended = true;
       try { loopH.stop(); } catch (e) { /* already stopped */ }
+      if (hiddenTick) hiddenTick.terminate();
       try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* not locked */ }
       removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('mousemove', onMove); removeEventListener('mouseup', onUp); removeEventListener('resize', resize);
       document.removeEventListener('pointerlockchange', onLock);
@@ -788,6 +875,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (!smoke) showMenu();
     }
-    window.__cs = { me, st, get match() { return match; }, hud, switchTo }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, get match() { return match; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

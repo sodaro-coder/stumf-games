@@ -102,9 +102,23 @@ function makeCrate(id, name, desc, theme, seed, knives, price) {
   for (const k of knives) for (const f of KNIFE_FINISHES) items.push({ id: `${id}:${k}:${f.name}`, kind: 'knife', weapon: k, finish: f.name, paint: f.paint, tier: 4 });
   return { id, name, desc, price, items };
 }
+// joke finishes that come with their own sounds (everything else sounds like the base gun)
+const FINGER_GUN = { id: 'toilet:deagle:Finger Gun', kind: 'skin', weapon: 'deagle', finish: 'Finger Gun', paint: { t: 'text', c: ['#f2c8a0', '#c8462e'], s: 'PEW' }, tier: 2 };
+export const SKIN_SOUNDS = {  // by finish name (guns) or knife model: which sound plays on fire / hit / miss
+  'Finger Gun': { fire: 'pewpew' }, 'BRRRT': { fire: 'fart' }, 'Fart Cloud': { fire: 'fart' }, 'Golden Shower': { fire: 'squirt' }, 'Hot Dog Water': { fire: 'squirt' },
+  'Thicc Boi': { fire: 'boing' }, 'Poop Emoji Party': { fire: 'fart' }, 'Dong Doppler': { fire: 'boing' },
+  dildo: { hit: 'wetslap', miss: 'doing' }, hotdog: { hit: 'squish', miss: 'whoosh' }, plunger: { hit: 'fwoop', miss: 'whoosh' }, chicken: { hit: 'squeak', miss: 'squeak' },
+  baguette: { hit: 'crunch', miss: 'whoosh' }, fish: { hit: 'flop', miss: 'whoosh' }, banana: { hit: 'squish', miss: 'boing' },
+};
+export function skinSound(skin, what) {
+  const d = skin && ITEM_BY_ID[skin.def]; if (!d) return null;
+  const k = d.kind === 'knife' ? (KNIFE_BY_ID[d.weapon] || {}).model : d.finish;
+  return (SKIN_SOUNDS[k] || {})[what] || null;
+}
+
 export const CRATES = [
   makeCrate('sand', 'Sandstorm Case', 'Serious finishes for serious sweats.', SERIOUS, 7, ['k_bayonet', 'k_karambit', 'k_butterfly'], 250),
-  makeCrate('toilet', 'Toilet Humor Case', 'Crude finishes and the dumbest knives ever made.', CRUDE, 13, ['k_hotdog', 'k_dildo', 'k_plunger', 'k_chicken'], 250),
+  (() => { const c = makeCrate('toilet', 'Toilet Humor Case', 'Crude finishes and the dumbest knives ever made. Some skins have their own sounds.', CRUDE, 13, ['k_hotdog', 'k_dildo', 'k_plunger', 'k_chicken'], 250); c.items.push(FINGER_GUN); return c; })(),
   makeCrate('nuke', 'Nuclear Family Case', 'Glowing, radioactive, family friendly.', NUKE, 21, ['k_baguette', 'k_fish', 'k_banana'], 300),
   { id: 'agents', name: 'Fashion Disaster Case', desc: 'Player models nobody asked for.', price: 350,
     items: AGENTS.filter((a) => a.tier >= 0).map((a) => ({ id: 'agents:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })) },

@@ -99,6 +99,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('toilet:k_chicken:Tiger Tooth','toilet',4,'knife'),
 ('toilet:k_chicken:Crimson Web','toilet',4,'knife'),
 ('toilet:k_chicken:Marble Fade','toilet',4,'knife'),
+('toilet:deagle:Finger Gun','toilet',2,'skin'),
 ('nuke:usp:Glow Lawn','nuke',0,'skin'),
 ('nuke:r8:Hazmat','nuke',0,'skin'),
 ('nuke:mac10:Picket Fence','nuke',0,'skin'),
