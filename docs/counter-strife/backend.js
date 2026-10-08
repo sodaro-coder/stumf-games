@@ -74,7 +74,7 @@ export class Profile {
       this.d.coins = p.coins; this.d.xp = p.xp; this.d.equipped = p.equipped || this.d.equipped; this.d.stats = Object.assign(this.d.stats, p.stats || {});
       if (p.name) this.d.name = p.name;
       this.d.pass = Array.isArray(p.pass) ? p.pass : []; if (p.guns && typeof p.guns === 'object') this.d.guns = p.guns;
-      this.tag = p.tag || null; this.admin = !!p.admin; this.dep = p.dep || null;
+      this.tag = p.tag || null; this.username = p.username || null; this.admin = !!p.admin; this.dep = p.dep || null;
       this.d.inventory = (p.items || []).map((i) => ({ uid: i.uid, def: i.def, float: i.float, st: i.st, seed: i.seed, kills: i.kills || 0, t: Date.parse(i.created) || 0, listed: i.listed || null }));
       this.online = true; this.changed(); return true;
     } catch (e) { this.online = false; this.err = String(e.message || e); return false; }
@@ -113,6 +113,12 @@ export class Profile {
       }
     }
     this.d.name = n; this.changed(); return n;
+  }
+  async setUsername(u) {
+    u = String(u || '').trim();
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(u)) throw new Error('Usernames are 3-16 letters, numbers or _');
+    if (!this.signedIn) throw new Error('Sign in to pick a username');
+    this.username = await this.rpc('cs_set_username', { p_user: u }); this.changed(); return this.username;
   }
   friends() { return this.rpc('cs_friends_list'); }
   addFriend(handle) { return this.rpc('cs_friend_request', { p_handle: handle }); }

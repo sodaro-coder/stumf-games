@@ -513,9 +513,9 @@ export class Menu {
     try { [list, trades] = await Promise.all([P.friends(), P.trades()]); } catch (e) { B.innerHTML = `<div class="cs-mut">${esc(e.message)}</div>`; return; }
     const tile = (it) => itemCard({ ...it, uid: 'x' + it.uid });
     B.innerHTML = `<div style="display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:20px">
-      <div><div class="cs-panel2"><h3>Add a friend</h3><div class="bd"><div class="cs-row"><input id="fAdd" placeholder="Name#1234" style="flex:1"><button class="cs-btn" id="fAddGo">Add</button></div>
-        <div class="cs-small cs-mut" style="margin-top:6px">You are <b style="color:#fff">${esc(P.d.name || 'Player')}#${esc(P.tag || '')}</b></div></div></div>
-        <div class="cs-panel2"><h3>Friends (${list.filter((f) => f.state === 'accepted').length})</h3><div class="bd" id="fList">${list.map((f) => `<div class="cs-row" style="margin-bottom:8px"><div style="flex:1;min-width:0"><b>${esc(f.name)}</b><span class="cs-mut">#${esc(f.tag)}</span><div class="cs-small cs-mut">${f.state === 'accepted' ? 'friend' : f.incoming ? 'wants to be friends' : 'request sent'}</div></div>
+      <div><div class="cs-panel2"><h3>Add a friend</h3><div class="bd"><div class="cs-row"><input id="fAdd" placeholder="Username (or Name#1234)" style="flex:1"><button class="cs-btn" id="fAddGo">Add</button></div>
+        <div class="cs-small cs-mut" style="margin-top:6px">You are <b style="color:#fff">${P.username ? '@' + esc(P.username) : esc(P.d.name || 'Player') + '#' + esc(P.tag || '')}</b>${P.username ? '' : ' · pick a username in Profile so friends can find you'}</div></div></div>
+        <div class="cs-panel2"><h3>Friends (${list.filter((f) => f.state === 'accepted').length})</h3><div class="bd" id="fList">${list.map((f) => `<div class="cs-row" style="margin-bottom:8px"><div style="flex:1;min-width:0"><b>${esc(f.name)}</b><span class="cs-mut">${f.username ? ' @' + esc(f.username) : '#' + esc(f.tag)}</span><div class="cs-small cs-mut">${f.state === 'accepted' ? 'friend' : f.incoming ? 'wants to be friends' : 'request sent'}</div></div>
           ${f.state === 'accepted' ? `<button class="cs-btn sm" data-trade="${esc(f.id)}">Trade</button><button class="cs-btn alt sm" data-gift="${esc(f.id)}">Send coins</button>` : f.incoming ? `<button class="cs-btn sm" data-acc="${esc(f.id)}">Accept</button>` : ''}<button class="cs-btn alt sm" data-rm="${esc(f.id)}">✕</button></div>`).join('') || '<span class="cs-mut cs-small">No friends yet.</span>'}</div></div></div>
       <div><div class="cs-panel2"><h3>Open trades</h3><div class="bd">${trades.map((t) => `<div style="border-bottom:1px solid #2e343d;padding-bottom:10px;margin-bottom:10px"><div class="cs-row"><b>${t.mine ? 'You → ' + esc(t.to_name) : esc(t.from_name) + ' → you'}</b><span style="flex:1"></span>
           ${t.mine ? `<button class="cs-btn alt sm" data-tr="${t.id}" data-ok="0">Cancel</button>` : `<button class="cs-btn sm" data-tr="${t.id}" data-ok="1">Accept</button><button class="cs-btn alt sm" data-tr="${t.id}" data-ok="0">Decline</button>`}</div>
@@ -610,10 +610,12 @@ export class Menu {
     const P = this.P, s = P.d.stats;
     B.innerHTML = `<div class="cs-card"><div class="cs-row"><b style="font-size:20px" id="pfN"></b><span class="cs-chip cs-lvl">Level ${P.level}</span></div>
       <div class="cs-row" style="margin-top:10px"><input id="pfName" maxlength="20" placeholder="Your name"><button class="cs-btn alt sm" id="pfSave">Save name</button></div>
+      <div class="cs-row" style="margin-top:8px"><input id="pfUser" maxlength="16" placeholder="Username (friends add you by this)"><button class="cs-btn alt sm" id="pfUserSave">Save username</button></div>
       <div class="cs-grid" style="margin-top:12px">${[['Matches', s.matches], ['Wins', s.wins], ['Kills', s.k], ['Deaths', s.d], ['K/D', (s.k / Math.max(1, s.d)).toFixed(2)], ['Headshot %', Math.round(s.hs / Math.max(1, s.k) * 100) + '%'], ['MVPs', s.mvp]]
         .map(([n, v]) => `<div class="cs-card"><div class="cs-mut cs-small">${n}</div><b style="font-size:20px">${v}</b></div>`).join('')}</div></div>
       <div class="cs-card" style="margin-top:12px" id="pfAcct"></div>`;
-    $('#pfN', B).textContent = P.d.name || 'Player'; $('#pfName', B).value = P.d.name || '';
+    $('#pfN', B).textContent = P.d.name || 'Player'; $('#pfName', B).value = P.d.name || ''; $('#pfUser', B).value = P.username || '';
+    $('#pfUserSave', B).onclick = async () => { try { const u = await P.setUsername($('#pfUser', B).value); this.h.toast('Username saved: @' + u); } catch (e) { this.h.toast(e.message); } this.render(); };
     $('#pfSave', B).onclick = async () => { try { const n = await P.setName($('#pfName', B).value); this.h.toast('Name saved: ' + n + (P.tag ? '#' + P.tag : '')); } catch (e) { this.h.toast(e.message); } this.render(); };
     const A = $('#pfAcct', B);
     if (!P.cloud) { A.innerHTML = '<b>Local profile</b><div class="cs-mut cs-small">Your coins and items are saved in this browser. (The game owner can switch on free accounts to sync across devices and trade.)</div>'; return; }
@@ -641,7 +643,7 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
-        <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · announced in online matches)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
+        <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · same as phones)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
       <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift walk · Ctrl (or C) crouch · Space jump · Mouse1 fire · Mouse2 scope / aim down sights (hold) · Q / E lean while aiming · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · Z X C radio · T emotes · F inspect · Esc menu</div>`;
     B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
     drawXh($('#xPrev', B), S, 0);
@@ -796,11 +798,13 @@ export class Hud {
     p.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;min-width:260px"><b style="font-size:18px">PAUSED</b><div class="cs-mut cs-small">${esc(h.info)}</div>
       <button class="cs-btn" data-r>RESUME</button>${h.invite ? `<button class="cs-btn alt" data-inv>COPY INVITE LINK</button>` : ''}
       <label class="cs-small cs-mut">Sensitivity <input type="range" min="0.2" max="6" step="0.05" value="${h.S.sens}" data-sens style="width:100%"></label>
+      ${h.admin ? `<button class="cs-btn alt" data-rh>RECOIL HELP: ${h.S.recoilHelp ? 'ON' : 'OFF'}</button>` : ''}
       <button class="cs-btn alt" data-q>LEAVE MATCH</button></div>`;
     document.body.appendChild(p);
     $('[data-r]', p).onclick = h.resume; $('[data-q]', p).onclick = h.quit;
     const inv = $('[data-inv]', p); if (inv) inv.onclick = () => { const t = document.createElement('textarea'); t.value = h.invite; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) { /* old browsers */ } t.remove(); inv.textContent = 'COPIED: ' + h.code; };
     $('[data-sens]', p).oninput = (e) => h.setSens(+e.target.value);
+    const rh = $('[data-rh]', p); if (rh) rh.onclick = () => { h.setRecoilHelp(!h.S.recoilHelp); rh.textContent = 'RECOIL HELP: ' + (h.S.recoilHelp ? 'ON' : 'OFF'); };
   }
   endScreen(d, onDone) {
     if (this.panel) this.panel.remove();

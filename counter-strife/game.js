@@ -207,8 +207,8 @@ export default function start({ cfg, E, N, smoke }) {
     // recoil help: the admin's account only (checked on the server at sign-in). It cuts recoil to about a third. In an
     // online match everyone is told it's on, in chat, when you join: no secret advantage over friends.
     const touchPlayer = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
-    const adminHelp = !!(S.recoilHelp && profile.admin) && !touchPlayer;
-    const RH = adminHelp || touchPlayer ? 0.4 : 1; let rhSaid = !adminHelp || !session;   // phones always get it (thumbs vs a mouse)
+    // recoil help: phones always (thumbs vs a mouse); on PC only the admin account, switched in Settings or the pause menu
+    const rhK = () => (touchPlayer || (S.recoilHelp && profile.admin) ? 0.4 : 1);
     const hello = { name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
 
     // ---- renderer & scene ----
@@ -678,7 +678,7 @@ export default function start({ cfg, E, N, smoke }) {
     function openPause() {
       if (ended) return; uiOpen = 'pause';
       hud.pauseMenu(true, { info: `${MODES[mode].name} · ${MAPS[mapId].name}${session ? ' · code ' + session.code : ''}`, S, invite: session ? location.origin + location.pathname + '#' + session.code : '', code: session ? session.code : '',
-        resume: () => { hud.pauseMenu(false); uiOpen = null; lock(); }, quit, setSens: (v) => { S.sens = v; saveSet(S); } });
+        resume: () => { hud.pauseMenu(false); uiOpen = null; lock(); }, quit, setSens: (v) => { S.sens = v; saveSet(S); }, admin: !!profile.admin && !touchPlayer, setRecoilHelp: (on) => { S.recoilHelp = on ? 1 : 0; saveSet(S); } });
     }
     function fire(alt) {
       const it = me.inv[me.cur], w = curWeapon();
@@ -691,7 +691,7 @@ export default function start({ cfg, E, N, smoke }) {
       const eye = eyePos(me);
       const adsOn = me.ads > 0.6, n0 = me.spray;
       const adsSpread = () => { const [st0, mv, jp] = w.inacc || [0.005, 0.03, 0.1]; return st0 * 0.25 + (me.onGround ? 0 : jp) + Math.max(0, speedOf(me) / (w.speed * U) - 0.34) * mv * 0.5; };
-      const rc0 = adsOn ? { up: 0, side: 0 } : recoilAt(w, me.spray), rc = { up: rc0.up * RH, side: rc0.side * RH }, sp = (adsOn ? adsSpread() : spreadOf(w, me, me.scoped > 0, me.spray)) * (me.flash > 1 ? 1.3 : 1);
+      const rc0 = adsOn ? { up: 0, side: 0 } : recoilAt(w, me.spray), RH = rhK(), rc = { up: rc0.up * RH, side: rc0.side * RH }, sp = (adsOn ? adsSpread() : spreadOf(w, me, me.scoped > 0, me.spray)) * (me.flash > 1 ? 1.3 : 1);
       me.spray++; me.sprayT = 0.4 + 60 / w.rpm; me.lastGun = w.id; me.lastShotAt = performance.now();
       if (w.zoom && me.scoped && w.cat === 'sniper') me.unscopeAfterShot = true;
       const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0, yaw: p.yaw || 0, lean: p.lean || 0 }));
@@ -799,7 +799,6 @@ export default function start({ cfg, E, N, smoke }) {
       timeAlive += dt;
       // ---- host simulation (a background timer takes over while the host's tab is hidden) ----
       if (match) simHost(dt);
-      if (!rhSaid && started && (isHost || session.hostId)) { rhSaid = true; toHost('chat', { text: '🎯 I have recoil help on (admin)', team: false }); }
       if (!match) {
         for (const p of st.players.values()) { const k = Math.min(1, dt * 14); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.z += (p.tz - p.z) * k; }
         netT += dt; ammoT += dt;

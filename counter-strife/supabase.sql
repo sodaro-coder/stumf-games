@@ -718,7 +718,8 @@ begin
   end if;
   -- once: the owner's inventory reset to one of everything (re-run any time from the Admin tab)
   if cs_is_admin() and not exists (select 1 from cs_log where action = 'admin_collection') then perform cs_admin_collection(); end if;
-  return (select json_build_object('name', p.name, 'tag', p.tag, 'dep', p.dep_code, 'admin', cs_is_admin(), 'guns', coalesce(p.guns, '{}'::jsonb) - '_day', 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
+  if cs_is_admin() and not exists (select 1 from cs_log where action = 'admin_max') then perform cs_admin_max(); end if;
+  return (select json_build_object('name', p.name, 'username', p.username, 'tag', p.tag, 'dep', p.dep_code, 'admin', cs_is_admin(), 'guns', coalesce(p.guns, '{}'::jsonb) - '_day', 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
     'items', coalesce((select json_agg(json_build_object('uid', i.uid, 'def', i.def, 'float', i.float, 'st', i.st, 'seed', i.seed, 'kills', i.kills,
       'created', i.created, 'listed', (select l.price from cs_listings l where l.uid = i.uid)) order by i.created desc) from cs_items i where i.owner = me), '[]'::json))
     from cs_profiles p where p.id = me);
@@ -841,12 +842,25 @@ create or replace function cs_is_admin() returns boolean language sql stable sec
   select exists (select 1 from auth.users u where u.id = auth.uid() and lower(u.email) = 'aaronsodaro@gmail.com' and u.email_confirmed_at is not null)
 $$;
 delete from cs_admins where id not in (select id from auth.users where lower(email) = 'aaronsodaro@gmail.com');
+-- usernames: unique handles friends add you by (letters, numbers, underscore; 3-16; case doesn't matter)
+alter table cs_profiles add column if not exists username text;
+create unique index if not exists cs_profiles_username on cs_profiles (lower(username));
+create or replace function cs_set_username(p_user text) returns text language plpgsql security definer set search_path = public as $$
+declare u text := trim(coalesce(p_user, ''));
+begin
+  if auth.uid() is null then raise exception 'sign in first'; end if;
+  if u !~ '^[A-Za-z0-9_]{3,16}$' then raise exception 'Usernames are 3-16 letters, numbers or _'; end if;
+  if exists (select 1 from cs_profiles where lower(username) = lower(u) and id <> auth.uid()) then raise exception 'That username is taken'; end if;
+  update cs_profiles set username = u where id = auth.uid();
+  return u;
+end $$;
 create or replace function cs_find(p_handle text) returns uuid language plpgsql stable security definer set search_path = public as $$
 declare nm text := split_part(p_handle, '#', 1); tg int; r uuid;
 begin
   begin tg := nullif(split_part(p_handle, '#', 2), '')::int; exception when others then tg := null; end;
+  if position('#' in p_handle) = 0 then select id into r from cs_profiles where lower(username) = lower(trim(p_handle)); if r is not null then return r; end if; end if;
   select id into r from cs_profiles where lower(name) = lower(trim(nm)) and (tg is null or tag = tg) order by created limit 1;
-  if r is null then raise exception 'No player called % (use Name#1234)', p_handle; end if;
+  if r is null then raise exception 'No player called % (use their username, or Name#1234)', p_handle; end if;
   return r;
 end $$;
 create or replace function cs_set_name(p_name text) returns void language plpgsql security definer set search_path = public as $$
@@ -871,7 +885,7 @@ begin update cs_friends set state = 'accepted' where a = p_id and b = auth.uid()
 create or replace function cs_friend_remove(p_id uuid) returns void language plpgsql security definer set search_path = public as $$
 begin delete from cs_friends where (a = auth.uid() and b = p_id) or (a = p_id and b = auth.uid()); end $$;
 create or replace function cs_friends_list() returns json language sql stable security definer set search_path = public as $$
-  select coalesce(json_agg(json_build_object('id', p.id, 'name', p.name, 'tag', p.tag, 'state', f.state, 'incoming', f.b = auth.uid()) order by p.name), '[]'::json)
+  select coalesce(json_agg(json_build_object('id', p.id, 'name', p.name, 'tag', p.tag, 'username', p.username, 'state', f.state, 'incoming', f.b = auth.uid()) order by p.name), '[]'::json)
   from cs_friends f join cs_profiles p on p.id = case when f.a = auth.uid() then f.b else f.a end where auth.uid() in (f.a, f.b)
 $$;
 create or replace function cs_friend_items(p_id uuid) returns json language plpgsql stable security definer set search_path = public as $$
@@ -948,6 +962,17 @@ begin
   insert into cs_log (actor, action, detail) values (me, 'admin_collection', json_build_object('items', n));
   return n;
 end $$;
+-- the owner's account maxed: top player level (every pass tier marked claimed: the collection already holds them) and
+-- every gun at Level 10, so every attachment is unlocked. Attachments chosen before are kept.
+create or replace function cs_admin_max() returns void language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); g jsonb; mx jsonb := jsonb_build_object('glock', jsonb_build_object('xp', 13500), 'usp', jsonb_build_object('xp', 13500), 'p2000', jsonb_build_object('xp', 13500), 'dualies', jsonb_build_object('xp', 13500), 'p250', jsonb_build_object('xp', 13500), 'tec9', jsonb_build_object('xp', 13500), 'fiveseven', jsonb_build_object('xp', 13500), 'cz75', jsonb_build_object('xp', 13500), 'deagle', jsonb_build_object('xp', 13500), 'r8', jsonb_build_object('xp', 13500), 'mac10', jsonb_build_object('xp', 13500), 'mp9', jsonb_build_object('xp', 13500), 'mp7', jsonb_build_object('xp', 13500), 'mp5', jsonb_build_object('xp', 13500), 'ump', jsonb_build_object('xp', 13500), 'p90', jsonb_build_object('xp', 13500), 'bizon', jsonb_build_object('xp', 13500), 'nova', jsonb_build_object('xp', 13500), 'xm1014', jsonb_build_object('xp', 13500), 'sawedoff', jsonb_build_object('xp', 13500), 'mag7', jsonb_build_object('xp', 13500), 'm249', jsonb_build_object('xp', 13500), 'negev', jsonb_build_object('xp', 13500), 'galil', jsonb_build_object('xp', 13500), 'famas', jsonb_build_object('xp', 13500)) || jsonb_build_object('ak47', jsonb_build_object('xp', 13500), 'm4a4', jsonb_build_object('xp', 13500), 'm4a1s', jsonb_build_object('xp', 13500), 'sg553', jsonb_build_object('xp', 13500), 'aug', jsonb_build_object('xp', 13500), 'ssg08', jsonb_build_object('xp', 13500), 'awp', jsonb_build_object('xp', 13500), 'g3sg1', jsonb_build_object('xp', 13500), 'scar20', jsonb_build_object('xp', 13500)); k text;
+begin
+  if not cs_is_admin() then raise exception 'admin only'; end if;
+  select guns into g from cs_profiles where id = me;
+  for k in select jsonb_object_keys(mx) loop g := jsonb_set(coalesce(g, '{}'::jsonb), array[k], coalesce(g->k, '{}'::jsonb) || jsonb_build_object('xp', 13500)); end loop;
+  update cs_profiles set xp = greatest(xp, 1000000), guns = g, pass_claimed = (select array_agg(t) from generate_series(1, 50) t) where id = me;
+  insert into cs_log (actor, action, detail) values (me, 'admin_max', '{}'::jsonb);
+end $$;
 -- admin (only the owner's confirmed address: see cs_is_admin)
 create or replace function cs_admin_find(p_q text) returns json language plpgsql stable security definer set search_path = public as $$
 begin
@@ -970,8 +995,8 @@ begin
   return (select json_build_object('coins', coins) from cs_profiles where id = p_id);
 end $$;
 
-revoke all on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_admin_collection(), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) from public, anon;
-grant execute on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_admin_collection(), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) to authenticated;
+revoke all on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_admin_collection(), cs_admin_max(), cs_set_username(text), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) from public, anon;
+grant execute on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_admin_collection(), cs_admin_max(), cs_set_username(text), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) to authenticated;
 revoke all on function cs_value(text, real, boolean) from public, anon;
 
 -- ===== gun levels and attachments ================================================================================
