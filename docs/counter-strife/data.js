@@ -114,7 +114,7 @@ export const BOMB = { timer: 40, plant: 3.2, defuse: 10, defuseKit: 5, radius: 5
 
 // player physics (classic numbers in metres)
 export const PHYS = {
-  speed: 250 * U, walk: 0.52, crouch: 0.34, accel: 5.5, friction: 5.2, stop: 80 * U, airAccel: 12,
+  speed: 250 * U, walk: 0.52, sprint: 1.3, prone: 0.22, proneEye: 0.42, crouch: 0.34, accel: 5.5, friction: 5.2, stop: 80 * U, airAccel: 12,
   gravity: 800 * U, jump: 301.993 * U, height: 72 * U, crouchHeight: 54 * U, eye: 64 * U, crouchEye: 46 * U, radius: 16 * U, step: 18 * U,
   hp: 100,
 };
@@ -128,7 +128,7 @@ export const BOT_LEVELS = {
 };
 
 export const RADIO = {
-  z: ['Go go go!', 'Fall back!', 'Stick together!', 'Hold this position.', 'Follow me.', 'Taking fire, need help!'],
+  v: ['Go go go!', 'Fall back!', 'Stick together!', 'Hold this position.', 'Follow me.', 'Taking fire, need help!'],
   x: ['Roger that.', 'Negative.', 'Enemy spotted.', 'Need backup.', 'Sector clear.', "I'm in position."],
   c: ['Affirmative.', 'Enemy down.', 'Report in.', 'Bomb spotted!', 'Thanks!', 'Nice shot!'],
 };

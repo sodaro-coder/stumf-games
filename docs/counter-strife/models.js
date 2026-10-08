@@ -517,6 +517,21 @@ export function makeKnife(knifeId, tex, sleeve = '#3c4e66', glove = '#2a2a2a', h
   const k = KNIFE_BY_ID[knifeId], model = k ? k.model : 'default', g = new THREE.Group();
   const buckets = {}, G = (key, geo) => { (buckets[key] = buckets[key] || []).push([geo, null]); };
   const paintKey = tex ? 'body' : null;
+  // a blade with a real grind: full thickness along the spine (v >= full), thinning to an edge at v = edge
+  const blade = (pts, thick, edge, full) => {
+    const geo = ext(pts, thick, 0.0007), p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) { const t = Math.min(1, Math.max(0, (p.getY(i) - edge) / ((full - edge) || 1))); p.setX(i, p.getX(i) * (0.12 + 0.88 * t)); }
+    geo.computeVertexNormals(); return geo;
+  };
+  const pin = (u, v, len = 0.03) => place(CYL(0.0028, 0.0028, len, 8), [0, v, -u], [0, 0, Math.PI / 2]);
+  const guardAndHandle = (w, len, hook) => {   // a folder's handle: two scales, steel liners, pins, a bolster and a clip
+    G('steelk', ext([[-0.014, -0.016], [0.004, -0.015], [0.004, 0.017], [-0.014, 0.017]], w, 0.002));   // bolster
+    G('gripk', ext([[-len, -0.014], ['q', -len * 0.5, -0.019, -0.014, -0.015], [-0.014, 0.017], ['q', -len * 0.5, 0.019, -len, 0.015], ['q', -len - 0.008, 0, -len, -0.014]], w - 0.002, 0.0025));
+    for (const x of [-(w / 2 - 0.0035), w / 2 - 0.0035]) G('steelk', ext([[-len + 0.004, -0.013], [-0.014, -0.014], [-0.014, 0.016], [-len + 0.004, 0.014]], 0.0016, 0).translate(x, 0, 0));
+    for (const u of [-0.03, -len * 0.55, -len + 0.012]) G('steelk', pin(u, 0, w + 0.002));
+    G('steelk', blk(-len + 0.006, -len * 0.45, 0.004, 0.009, 0.0016, w / 2 + 0.0015));                    // pocket clip
+    if (hook) G('darkk', pin(0.005, 0.012, w * 0.6));
+  };
   switch (model) {
     case 'hotdog': G('bun', place(CAP(0.042, 0.3, 10), [0, -0.012, -0.15], [Math.PI / 2, 0, 0], [1.3, 1, 0.75])); G(paintKey || 'sausage', place(CAP(0.026, 0.36, 10), [0, 0.022, -0.15], [Math.PI / 2, 0, 0])); for (let i = 0; i < 6; i++) G('mustard', place(BOX(0.04, 0.006, 0.012), [i % 2 ? 0.008 : -0.008, 0.048, -0.02 - i * 0.05], [0, i % 2 ? 0.6 : -0.6, 0])); break;
     case 'dildo': break;   // built below as a jointed, springy shaft
@@ -525,12 +540,62 @@ export function makeKnife(knifeId, tex, sleeve = '#3c4e66', glove = '#2a2a2a', h
     case 'baguette': G(paintKey || 'bread', place(CAP(0.034, 0.52, 10), [0, 0.02, -0.2], [Math.PI / 2 + 0.05, 0, 0], [1, 1, 0.85])); for (let i = 0; i < 5; i++) G('crust', place(BOX(0.05, 0.006, 0.014), [0, 0.052, -0.04 - i * 0.09], [0, 0.7, 0])); break;
     case 'fish': G(paintKey || 'salmon', place(SPH(0.06, 12, 9), [0, 0.02, -0.15], [0, 0, 0], [0.4, 1, 3])); G(paintKey || 'salmon2', ext([[0.0, 0.0], [-0.08, 0.06], [-0.08, -0.06]], 0.01, 0.002).translate(0, 0.02, 0.04)); G('eyek', place(SPH(0.01, 6, 4), [0.022, 0.035, -0.29])); break;
     case 'banana': { const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 0, 0.02), new THREE.Vector3(0, 0.1, -0.18), new THREE.Vector3(0, 0.0, -0.4)); G(paintKey || 'yellowk', new THREE.TubeGeometry(curve, 12, 0.026, 8)); G('brown', place(CYL(0.01, 0.014, 0.04, 6), [0, 0.0, 0.03], [Math.PI / 2, 0, 0])); break; }
-    case 'karambit': G(paintKey || 'blade', ext([[0, 0.01], [0.06, 0.03], ['q', 0.14, 0.04, 0.17, -0.04], ['q', 0.12, 0.0, 0.05, -0.005], [0, -0.01]], 0.006, 0.0015)); G('gripk', ext([[-0.11, -0.012], [0, -0.012], [0, 0.014], [-0.11, 0.016]], 0.024)); G('steelk', place(new THREE.TorusGeometry(0.022, 0.006, 6, 12), [0, 0, 0.13], [0, Math.PI / 2, 0])); break;
-    case 'butterfly': G(paintKey || 'blade', ext([[0, -0.012], [0.16, -0.008], [0.21, 0.01], [0.15, 0.018], [0, 0.016]], 0.005, 0.0015)); for (const x of [-0.009, 0.009]) G('steelk', ext([[-0.13, -0.014], [0, -0.014], [0, 0.012], [-0.13, 0.012]], 0.012, 0.002, [[[-0.11, -0.006], [-0.02, -0.006], [-0.02, 0.004], [-0.11, 0.004]]]).translate(x, 0, 0)); break;
-    case 'bayonet': G(paintKey || 'blade', ext([[0, -0.016], [0.24, -0.01], [0.29, 0.012], [0.22, 0.02], [0, 0.02]], 0.006, 0.0015)); G('steelk', blk(-0.01, 0.006, -0.03, 0.035, 0.022)); G('gripk', ext([[-0.12, -0.016], [-0.01, -0.016], [-0.01, 0.018], [-0.12, 0.016]], 0.026)); for (let i = 0; i < 6; i++) G('steelk', blk(-0.115 + i * 0.018, -0.11 + i * 0.018, -0.017, 0.019, 0.027)); break;
-    default: G(paintKey || 'blade', ext([[0, -0.014], [0.17, -0.009], [0.215, 0.012], [0.15, 0.02], [0, 0.018]], 0.005, 0.0015)); G('steelk', blk(-0.008, 0.004, -0.024, 0.03, 0.02)); G('gripk', ext([[-0.11, -0.014], [-0.008, -0.014], [-0.008, 0.016], [-0.11, 0.014]], 0.024)); break;
+    // the real knives: ground blades (thick spine thinning to a sharp edge), fullers, sawbacks, guards, handle scales
+    // with pins and liners, finger rings: shaped after the classic patterns, at real sizes
+    case 'karambit': {
+      G(paintKey || 'blade', blade([[0, 0.012], ['q', 0.07, 0.045, 0.15, 0.006], ['q', 0.175, -0.012, 0.17, -0.042], ['q', 0.13, -0.004, 0.06, -0.008], ['q', 0.02, -0.01, 0, -0.012]], 0.0055, -0.03, 0.02));
+      G('gripk', ext([[-0.105, -0.016], ['q', -0.05, -0.024, 0, -0.014], [0, 0.015], ['q', -0.05, 0.022, -0.105, 0.014]], 0.02, 0.002));
+      for (const x of [-0.0105, 0.0105]) G('steelk', ext([[-0.104, -0.014], ['q', -0.05, -0.022, 0, -0.012], [0, 0.013], ['q', -0.05, 0.02, -0.104, 0.012]], 0.0015, 0).translate(x, 0, 0));   // liners
+      for (const u of [-0.02, -0.06, -0.09]) G('steelk', pin(u, 0));
+      G('steelk', place(new THREE.TorusGeometry(0.019, 0.0055, 8, 18), [0, 0, 0.125], [0, Math.PI / 2, 0]));
+      G('gripk', place(new THREE.TorusGeometry(0.019, 0.0085, 8, 18), [0, 0, 0.125], [0, Math.PI / 2, 0], [0.75, 1, 1]));
+      break;
+    }
+    case 'gut': {
+      G(paintKey || 'blade', blade([[0, -0.016], [0.15, -0.014], ['q', 0.2, -0.008, 0.212, 0.008], ['q', 0.2, 0.016, 0.175, 0.016], ['q', 0.165, 0.004, 0.15, 0.012], ['q', 0.14, 0.02, 0.12, 0.02], [0, 0.02]], 0.0055, -0.016, 0.004));
+      G('darkk', blk(0.02, 0.11, 0.008, 0.011, 0.006));                                      // fuller
+      guardAndHandle(0.026, 0.11, true);
+      break;
+    }
+    case 'butterfly': {
+      G(paintKey || 'blade', blade([[0, -0.013], [0.155, -0.011], ['q', 0.2, -0.004, 0.205, 0.007], ['q', 0.185, 0.011, 0.15, 0.012], [0.1, 0.016], [0, 0.016]], 0.005, -0.013, 0.006));
+      for (const x of [-0.0095, 0.0095]) {                                                    // two channel handles with skeleton cut-outs
+        G('steelk', ext([[-0.135, -0.015], [0, -0.015], ['q', 0.006, 0, 0, 0.013], [-0.135, 0.013], ['q', -0.141, -0.001, -0.135, -0.015]], 0.011, 0.0015,
+          [[[-0.118, -0.007], [-0.075, -0.007], [-0.075, 0.005], [-0.118, 0.005]], [[-0.062, -0.007], [-0.018, -0.007], [-0.018, 0.005], [-0.062, 0.005]]]).translate(x, 0, 0));
+      }
+      G('steelk', pin(-0.006, -0.008, 0.032)); G('steelk', pin(-0.006, 0.008, 0.032));        // pivot pins
+      G('darkk', blk(-0.142, -0.132, -0.01, 0.008, 0.026));                                    // latch
+      break;
+    }
+    case 'bayonet': {
+      G(paintKey || 'blade', blade([[0, -0.018], [0.2, -0.016], ['q', 0.255, -0.01, 0.272, 0.006], [0.215, 0.012], [0.13, 0.02], [0, 0.02]], 0.0058, -0.018, 0.004));
+      G('darkk', blk(0.015, 0.15, 0.007, 0.0105, 0.0064));                                    // fuller
+      for (let i = 0; i < 9; i++) G(paintKey || 'blade', ext([[0.03 + i * 0.011, 0.0195], [0.0355 + i * 0.011, 0.027], [0.041 + i * 0.011, 0.0195]], 0.004, 0));   // sawback
+      G('steelk', ext([[-0.013, -0.036], [0, -0.034], [0, 0.03], [-0.013, 0.03]], 0.024, 0.002));          // crossguard
+      G('steelk', place(new THREE.TorusGeometry(0.011, 0.004, 6, 14), [0, 0.042, 0.007], [0, Math.PI / 2, 0]));   // muzzle ring
+      G('gripk', ext([[-0.125, -0.017], ['q', -0.07, -0.021, -0.013, -0.018], [-0.013, 0.019], ['q', -0.07, 0.022, -0.125, 0.018]], 0.027, 0.003));
+      for (let i = 0; i < 7; i++) G('darkk', blk(-0.115 + i * 0.014, -0.111 + i * 0.014, -0.0185, 0.02, 0.0285));   // grip ribs
+      G('steelk', ext([[-0.142, -0.016], [-0.124, -0.018], [-0.124, 0.019], [-0.142, 0.016]], 0.03, 0.003)); G('darkk', pin(-0.134, 0, 0.032));   // pommel
+      break;
+    }
+    case 'huntsman': {
+      G(paintKey || 'blade', blade([[0, -0.02], [0.2, -0.019], ['q', 0.26, -0.012, 0.28, 0.006], [0.225, 0.014], ['q', 0.17, 0.02, 0.13, 0.022], [0, 0.022]], 0.006, -0.02, 0.006));
+      for (let i = 0; i < 8; i++) G(paintKey || 'blade', ext([[0.02 + i * 0.012, 0.0215], [0.026 + i * 0.012, 0.029], [0.032 + i * 0.012, 0.0215]], 0.0042, 0));
+      G('darkk', blk(0.01, 0.16, 0.006, 0.0095, 0.0066));
+      G('steelk', ext([[-0.012, -0.04], [0, -0.038], [0, 0.034], [-0.012, 0.03]], 0.026, 0.002));
+      G('gripk', ext([[-0.13, -0.017], ['q', -0.11, -0.025, -0.095, -0.018], ['q', -0.08, -0.025, -0.065, -0.018], ['q', -0.05, -0.025, -0.035, -0.018], ['q', -0.022, -0.024, -0.012, -0.02], [-0.012, 0.02], [-0.13, 0.017]], 0.028, 0.003));   // finger grooves
+      for (const u of [-0.03, -0.075, -0.115]) G('steelk', pin(u, 0, 0.03));
+      G('steelk', ext([[-0.146, -0.016], [-0.129, -0.018], [-0.129, 0.019], [-0.146, 0.016]], 0.03, 0.003));
+      break;
+    }
+    default: {   // a folding flipper: drop point, thumb stud, scales, liners, pins and a pocket clip
+      G(paintKey || 'blade', blade([[0, -0.014], [0.15, -0.012], ['q', 0.205, -0.004, 0.215, 0.012], ['q', 0.16, 0.02, 0.05, 0.019], [0, 0.018]], 0.005, -0.014, 0.006));
+      G('steelk', pin(0.022, 0.011, 0.016));                                                    // thumb stud
+      guardAndHandle(0.024, 0.11, false);
+      break;
+    }
   }
-  const KC = { bun: '#e0a85a', sausage: '#b8402a', mustard: '#f2d33c', pink: '#ff4ad2', pink2: '#e030b8', woodk: '#8a5a2a', red: '#b8221e', yellowk: '#f2d33c', orange: '#e8702a', bread: '#d8a050', crust: '#9a6024', salmon: '#e8806a', salmon2: '#c8604a', eyek: '#111', brown: '#5a3a1a', gripk: '#26221f', steelk: '#8a9098' };
+  const KC = { bun: '#e0a85a', sausage: '#b8402a', mustard: '#f2d33c', pink: '#ff4ad2', pink2: '#e030b8', woodk: '#8a5a2a', red: '#b8221e', yellowk: '#f2d33c', orange: '#e8702a', bread: '#d8a050', crust: '#9a6024', salmon: '#e8806a', salmon2: '#c8604a', eyek: '#111', brown: '#5a3a1a', gripk: '#26221f', steelk: '#8a9098', darkk: '#2a2c30' };
   for (const [key, list] of Object.entries(buckets)) {
     const geo = merge(list);
     if (key === 'body' || key === 'blade') { geo.computeBoundingBox(); const b = geo.boundingBox, p = geo.attributes.position, uv = geo.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, (b.max.z - p.getZ(i)) / ((b.max.z - b.min.z) || 1), (p.getY(i) - b.min.y) / ((b.max.y - b.min.y) || 1)); }

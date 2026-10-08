@@ -13,12 +13,12 @@ export const xpFor = (lvl) => (lvl - 1) ** 2 * 100;
 
 // quests: picked fresh each day / week, tracked from match events
 const QUEST_POOL = [
-  { id: 'kills', text: 'Get {n} kills', n: [12, 40], coins: [120, 400], stat: 'k' }, { id: 'wins', text: 'Win {n} matches', n: [2, 6], coins: [180, 500], stat: 'win' },
-  { id: 'hs', text: 'Get {n} headshot kills', n: [5, 20], coins: [140, 420], stat: 'hs' }, { id: 'plant', text: 'Plant the bomb {n} times', n: [2, 8], coins: [120, 350], stat: 'plant' },
-  { id: 'defuse', text: 'Defuse the bomb {n} times', n: [1, 4], coins: [150, 400], stat: 'defuse' }, { id: 'pistol', text: 'Get {n} pistol kills', n: [5, 18], coins: [130, 380], stat: 'pistol' },
-  { id: 'smg', text: 'Get {n} SMG kills', n: [4, 15], coins: [130, 360], stat: 'smg' }, { id: 'knife', text: 'Get {n} knife kill(s)', n: [1, 3], coins: [200, 450], stat: 'knife' },
-  { id: 'rounds', text: 'Win {n} rounds', n: [10, 40], coins: [120, 380], stat: 'roundWin' }, { id: 'dmg', text: 'Deal {n} damage', n: [1500, 6000], coins: [120, 380], stat: 'dmg' },
-  { id: 'mvp', text: 'Earn {n} MVPs', n: [3, 10], coins: [140, 400], stat: 'mvp' }, { id: 'nade', text: 'Get {n} grenade kills', n: [1, 4], coins: [180, 420], stat: 'nade' },
+  { id: 'kills', text: 'Send {n} noobs to the shadow realm', n: [12, 40], coins: [120, 400], stat: 'k' }, { id: 'wins', text: 'Win {n} matches (carry ur bots)', n: [2, 6], coins: [180, 500], stat: 'win' },
+  { id: 'hs', text: 'Bonk {n} heads', n: [5, 20], coins: [140, 420], stat: 'hs' }, { id: 'plant', text: 'Plant the bomb {n} times like a big boy', n: [2, 8], coins: [120, 350], stat: 'plant' },
+  { id: 'defuse', text: 'Defuse {n} bombs with ur sweaty fingers', n: [1, 4], coins: [150, 400], stat: 'defuse' }, { id: 'pistol', text: 'Get {n} pew-pew pistol kills', n: [5, 18], coins: [130, 380], stat: 'pistol' },
+  { id: 'smg', text: 'Hose down {n} noobs with an SMG', n: [4, 15], coins: [130, 360], stat: 'smg' }, { id: 'knife', text: 'Shank {n} fool(s)', n: [1, 3], coins: [200, 450], stat: 'knife' },
+  { id: 'rounds', text: 'Win {n} rounds (no crying)', n: [10, 40], coins: [120, 380], stat: 'roundWin' }, { id: 'dmg', text: 'Deal {n} damage (and hurt their feelings)', n: [1500, 6000], coins: [120, 380], stat: 'dmg' },
+  { id: 'mvp', text: 'Be the MVP {n} times (show off)', n: [3, 10], coins: [140, 400], stat: 'mvp' }, { id: 'nade', text: 'Yeet {n} grenade kills', n: [1, 4], coins: [180, 420], stat: 'nade' },
 ];
 const dayKey = () => Math.floor(Date.now() / 86400000), weekKey = () => Math.floor((Date.now() / 86400000 + 3) / 7);
 function makeQuests(key, weekly) {

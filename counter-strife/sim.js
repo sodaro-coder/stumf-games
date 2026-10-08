@@ -10,18 +10,22 @@ export function moveStep(W, p, inp, dt, maxSpeed) {
   wish.x = fx * inp.f + rx * inp.s; wish.z = fz * inp.f + rz * inp.s;
   const wl = Math.hypot(wish.x, wish.z); if (wl > 1e-6) { wish.x /= wl; wish.z /= wl; }
   p.crouch = Math.max(0, Math.min(1, p.crouch + (inp.crouch ? 1 : -1) * dt * 8));
-  let top = maxSpeed * (inp.walk ? PHYS.walk : 1) * (p.crouch > 0.5 ? PHYS.crouch : 1);
+  p.prone = Math.max(0, Math.min(1, (p.prone || 0) + (inp.prone ? 1 : -1) * dt * 2.6));   // going prone / getting up takes a moment
+  const sprint = inp.sprint && inp.f > 0.3 && p.crouch < 0.5 && !p.prone;   // sprint: forward only, standing only
+  let top = maxSpeed * (inp.walk ? PHYS.walk : 1) * (sprint ? PHYS.sprint : 1) * (p.crouch > 0.5 ? PHYS.crouch : 1);
+  if (p.prone) top *= 1 - p.prone * (1 - PHYS.prone);
+  p.sprinting = sprint && wl > 1e-6;
   if (wl < 1e-6) top = 0;
   const ground = W.groundAt(p.x, p.z, p.y);
   const onGround = p.y <= ground + 0.02 && p.vy <= 0;
   if (onGround) {
     // friction
     const sp = Math.hypot(p.vx, p.vz);
-    if (sp > 0) { const ctl = Math.max(sp, PHYS.stop), drop = ctl * PHYS.friction * dt, ns = Math.max(0, sp - drop) / sp; p.vx *= ns; p.vz *= ns; }
+    if (sp > 0) { const ctl = Math.max(sp, PHYS.stop * (1 - (p.prone || 0) * 0.85)), drop = ctl * PHYS.friction * dt, ns = Math.max(0, sp - drop) / sp; p.vx *= ns; p.vz *= ns; }
     // accelerate
     const cur = p.vx * wish.x + p.vz * wish.z, add = top - cur;
     if (add > 0) { const acc = Math.min(PHYS.accel * dt * Math.max(top, 0.1), add); p.vx += acc * wish.x; p.vz += acc * wish.z; }
-    if (inp.jump && !p.jumpHeld) { p.vy = PHYS.jump; p.jumpHeld = true; p.y = ground + 0.03; }
+    if (inp.jump && !p.jumpHeld && !p.prone) { p.vy = PHYS.jump; p.jumpHeld = true; p.y = ground + 0.03; }
     else { p.y = ground; p.vy = 0; }
   } else {
     const wsp = Math.min(top, 30 * U), cur = p.vx * wish.x + p.vz * wish.z, add = wsp - cur;
@@ -37,7 +41,7 @@ export function moveStep(W, p, inp, dt, maxSpeed) {
   p.onGround = p.y <= g2 + 0.02;
   return p.onGround;
 }
-export const eyeHeight = (p) => PHYS.eye - (PHYS.eye - PHYS.crouchEye) * p.crouch;
+export const eyeHeight = (p) => { const e = PHYS.eye - (PHYS.eye - PHYS.crouchEye) * p.crouch; return e + (PHYS.proneEye - e) * (p.prone || 0); };
 export const speedOf = (p) => Math.hypot(p.vx, p.vz);
 
 // ---- hitboxes and shot tracing -----------------------------------------------------------------------------------
@@ -55,6 +59,10 @@ export const LEAN = 0.38;   // metres the eye moves at full lean
 export const leanOff = (p, f = 1) => { const l = (p.lean || 0) * LEAN * f; return { x: Math.cos(p.yaw || 0) * l, z: -Math.sin(p.yaw || 0) * l }; };
 export const eyePos = (p) => { const o = leanOff(p); return { x: p.x + o.x, y: p.y + eyeHeight(p) - Math.abs(p.lean || 0) * 0.05, z: p.z + o.z }; };
 export function hitboxes(p) {
+  if ((p.prone || 0) > 0.6) {   // lying down: head out in front, legs behind, everything low
+    const fx = -Math.sin(p.yaw || 0), fz = -Math.cos(p.yaw || 0), at = (d, r, y0, y1) => [p.x + fx * d - r, p.y + y0, p.z + fz * d - r, p.x + fx * d + r, p.y + y1, p.z + fz * d + r];
+    return [['head', at(0.72, 0.15, 0.12, 0.45)], ['chest', at(0.3, 0.24, 0.02, 0.38)], ['stomach', at(-0.1, 0.22, 0.02, 0.32)], ['legs', at(-0.62, 0.26, 0.0, 0.26)]];
+  }
   const k = 1 - p.crouch * 0.28, y = p.y, h = leanOff(p), c = leanOff(p, 0.55), s = leanOff(p, 0.2);
   const box = (o, r, y0, y1, rz = r) => [p.x + o.x - r, y0, p.z + o.z - rz, p.x + o.x + r, y1, p.z + o.z + rz];
   return [['head', box(h, 0.15, y + 1.5 * k, y + 1.86 * k)], ['chest', box(c, 0.24, y + 1.15 * k, y + 1.5 * k)],
@@ -93,7 +101,7 @@ export function spreadOf(w, p, scoped, sprayIdx) {
     return w.scopedInacc + (p.onGround ? 0 : jump) + Math.max(0, sp - 0.34) * move;
   }
   const sp = Math.min(1, speedOf(p) / (w.speed * U));
-  let s = stand * (p.crouch > 0.5 ? 0.7 : 1) + Math.max(0, sp - 0.34) * move * 1.4 + (p.onGround ? 0 : jump);
+  let s = stand * ((p.prone || 0) > 0.6 ? 0.5 : p.crouch > 0.5 ? 0.7 : 1) + Math.max(0, sp - 0.34) * move * 1.4 + (p.sprinting ? move * 0.6 : 0) + (p.onGround ? 0 : jump);
   if (w.cat === 'sniper' && !scoped) s = Math.max(s, w.inacc[1] * 0.6);
   s += Math.min(sprayIdx, 12) * (w.kick || 0.01) * 0.12;
   return s;
@@ -406,7 +414,7 @@ export class Match {
   snap() {
     return { ph: this.phase, tm: Math.max(0, this.timer).toFixed(1) * 1, r: this.round, sc: this.score,
       p: [...this.players.values()].map((p) => [p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(2), +p.pitch.toFixed(2), +p.crouch.toFixed(1), Math.max(0, Math.round(p.hp)), p.alive ? 1 : 0,
-        (p.inv[p.cur] || {}).wid || 'knife', p.inv[5] ? 1 : 0, p.planting ? +(p.planting / BOMB.plant).toFixed(2) : 0, Math.round(p.armor), p.helmet ? 1 : 0, p.money, +(p.lean || 0).toFixed(2)]),
+        (p.inv[p.cur] || {}).wid || 'knife', p.inv[5] ? 1 : 0, p.planting ? +(p.planting / BOMB.plant).toFixed(2) : 0, Math.round(p.armor), p.helmet ? 1 : 0, p.money, +(p.lean || 0).toFixed(2), +(p.prone || 0).toFixed(1)]),
       b: this.bomb ? { s: this.bomb.state, x: this.bomb.x, y: this.bomb.y, z: this.bomb.z, t: this.bomb.timer != null ? +this.bomb.timer.toFixed(1) : null, d: this.bomb.dprog ? +(this.bomb.dprog / (this.bomb.kit ? BOMB.defuseKit : BOMB.defuse)).toFixed(2) : 0, site: this.bomb.site } : null };
   }
 }

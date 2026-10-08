@@ -258,7 +258,7 @@ export default function start({ cfg, E, N, smoke }) {
 
     // ---- the local player ----
     const me = { id: myId, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, crouch: 0, onGround: true, alive: false, team: 'T', hp: 100, armor: 0, helmet: false, money: 0,
-      inv: {}, nades: [], cur: 2, last: 1, nadeSel: 0, cd: 0, reload: 0, deploy: 0, spray: 0, sprayT: 0, punch: 0, scoped: 0, ads: 0, burst: false, burstLeft: 0, flash: 0, defuser: false, inspect: 0, knifeSwing: 0, stepT: 0, wasGround: true, lean: 0, leanWant: 0 };
+      inv: {}, nades: [], cur: 2, last: 1, nadeSel: 0, cd: 0, reload: 0, deploy: 0, spray: 0, sprayT: 0, punch: 0, scoped: 0, ads: 0, burst: false, burstLeft: 0, flash: 0, defuser: false, inspect: 0, knifeSwing: 0, stepT: 0, wasGround: true, lean: 0, leanWant: 0, prone: 0, proneWant: false };
 
     // ---- world ----
     function buildMap(id) {
@@ -443,7 +443,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (![x, y, z, yaw, pitch, cr].every(Number.isFinite)) return;
         if (p.alive) { const jump = Math.hypot(x - p.x, z - p.z); if (jump < 4 || !p.seen) { p.x = x; p.y = y; p.z = z; } p.seen = true; }
         p.yaw = yaw; p.pitch = Math.max(-1.6, Math.min(1.6, pitch)); p.crouch = Math.max(0, Math.min(1, cr)); p.plant = !!(fl & 1); p.defusing = !!(fl & 2);
-        p.lean = Number.isFinite(+d[8]) ? Math.max(-1, Math.min(1, +d[8])) : 0;
+        p.lean = Number.isFinite(+d[8]) ? Math.max(-1, Math.min(1, +d[8])) : 0; p.prone = Number.isFinite(+d[9]) ? Math.max(0, Math.min(1, +d[9])) : 0;
         if ([1, 2, 3, 4, 5, 6].includes(cur) && (p.inv[cur] || cur === 4)) p.cur = cur; p.onGround = !!(fl & 4); p.vx = 0; p.vz = 0;
         return;
       }
@@ -630,11 +630,11 @@ export default function start({ cfg, E, N, smoke }) {
     function applySnap(s) {
       st.phase = s.ph; st.timer = s.tm; st.round = s.r; st.score = s.sc;
       for (const a of s.p) {
-        const [id, x, y, z, yaw, pitch, crouch, hp, alive, wid, c4, plant, armor, helmet, money, lean] = a;
+        const [id, x, y, z, yaw, pitch, crouch, hp, alive, wid, c4, plant, armor, helmet, money, lean, prone] = a;
         if (id === myId) { me.hp = hp; if (me.alive && !alive) me.alive = false; me.armor = armor; me.helmet = !!helmet; me.money = money; me.planting = plant; continue; }
         let p = st.players.get(id); if (!p) st.players.set(id, (p = { id, x, y, z, tx: x, ty: y, tz: z }));
         if (Math.hypot(x - p.x, z - p.z) > 4) { p.x = x; p.y = y; p.z = z; }
-        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team;
+        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team;
       }
       for (const id of [...st.players.keys()]) if (!s.p.some((a) => a[0] === id)) st.players.delete(id);
       if (s.b) st.bomb = { s: s.b.s, x: s.b.x, y: s.b.y, z: s.b.z, t: s.b.t, d: s.b.d, site: s.b.site }; else if (st.bomb && st.bomb.s !== 'exploded' && st.bomb.s !== 'defused') st.bomb = null;
@@ -694,7 +694,7 @@ export default function start({ cfg, E, N, smoke }) {
       const rc0 = adsOn ? { up: 0, side: 0 } : recoilAt(w, me.spray), RH = rhK(), rc = { up: rc0.up * RH, side: rc0.side * RH }, sp = (adsOn ? adsSpread() : spreadOf(w, me, me.scoped > 0, me.spray)) * (me.flash > 1 ? 1.3 : 1);
       me.spray++; me.sprayT = 0.4 + 60 / w.rpm; me.lastGun = w.id; me.lastShotAt = performance.now();
       if (w.zoom && me.scoped && w.cat === 'sniper') me.unscopeAfterShot = true;
-      const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0, yaw: p.yaw || 0, lean: p.lean || 0 }));
+      const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0, yaw: p.yaw || 0, lean: p.lean || 0, prone: p.prone || 0 }));
       const hits = []; let end = null;
       for (let k = 0; k < (w.pellets || 1); k++) {
         const r1 = (Math.random() - 0.5) * 2, r2 = (Math.random() - 0.5) * 2, spr = sp + (w.spread || 0) * (w.pellets > 1 ? 1 : 0);
@@ -762,7 +762,7 @@ export default function start({ cfg, E, N, smoke }) {
     function simHost(dt) {
         lastSim = performance.now();
         const mp = match.players.get(myId);
-        if (mp) { mp.x = me.x; mp.y = me.y; mp.z = me.z; mp.yaw = me.yaw; mp.pitch = me.pitch; mp.crouch = me.crouch; mp.lean = me.lean; mp.onGround = me.onGround; mp.vx = me.vx; mp.vz = me.vz;
+        if (mp) { mp.x = me.x; mp.y = me.y; mp.z = me.z; mp.yaw = me.yaw; mp.pitch = me.pitch; mp.crouch = me.crouch; mp.lean = me.lean; mp.prone = me.prone || 0; mp.onGround = me.onGround; mp.vx = me.vx; mp.vz = me.vz;
           mp.cur = me.cur === 4 ? 4 : me.cur; mp.plant = me.cur === 5 && me.alive && (mouseBtn[0] || kd('KeyE') || E.input.touch.buttons.has('use')); mp.defusing = me.alive && ((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && st.bomb && st.bomb.s === 'planted' && me.team === 'CT';
           for (const s of [1, 2]) if (mp.inv[s] && me.inv[s] && mp.inv[s].wid === me.inv[s].wid) { mp.inv[s].ammo = me.inv[s].ammo; mp.inv[s].reserve = me.inv[s].reserve; } }
         if (bots) bots.tick(dt);
@@ -803,7 +803,7 @@ export default function start({ cfg, E, N, smoke }) {
         for (const p of st.players.values()) { const k = Math.min(1, dt * 14); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.z += (p.tz - p.z) * k; }
         netT += dt; ammoT += dt;
         if (session && netT >= 1 / 30) { netT = 0; const fl = (me.cur === 5 && (mouseBtn[0] || kd('KeyE')) ? 1 : 0) | (((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && me.team === 'CT' ? 2 : 0) | (me.onGround ? 4 : 0);
-          session.toHost('pose', [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(3), +me.pitch.toFixed(3), +me.crouch.toFixed(2), fl, me.cur, +me.lean.toFixed(2)]); }
+          session.toHost('pose', [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(3), +me.pitch.toFixed(3), +me.crouch.toFixed(2), fl, me.cur, +me.lean.toFixed(2), +(me.prone || 0).toFixed(2)]); }
         if (ammoT > 1) { ammoT = 0; sendAmmo(); }
       }
 
@@ -828,6 +828,7 @@ export default function start({ cfg, E, N, smoke }) {
           else if (kp('KeyQ')) switchTo(me.last || 1);
           if (kp('WheelDown') || kp('WheelUp')) { const order = [1, 2, 3, 4, 5].filter((s) => s === 4 ? me.nades.length : me.inv[s]); const i = order.indexOf(me.cur); switchTo(order[(i + (kp('WheelDown') ? 1 : order.length - 1)) % order.length]); }
           if (kp('KeyR') || E.input.touch.tapped.has('reload')) startReload();
+          if (kp('KeyZ') || E.input.touch.tapped.has('prone')) me.proneWant = !me.proneWant;   // Z: go prone / get up
           const tt = E.input.touch.tapped;
           if (tt.has('swap')) { const order = [1, 2, 3].filter((k) => me.inv[k]); const i = order.indexOf(me.cur); switchTo(order[(i + 1) % order.length]); }
           if (tt.has('nade')) switchTo(4);
@@ -857,7 +858,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (kp('KeyY')) hud.chatInput(false, (t) => toHost('chat', { text: t, team: false }));
         if (kp('KeyU')) hud.chatInput(true, (t) => toHost('chat', { text: t, team: true }));
         if (kp('KeyT') && me.alive) { radioOpen = 'emote'; hud.emoteWheel(profile.wheel().map((id) => EMOTE_BY_ID[id]).filter(Boolean), (e) => toHost('emote', e.id)); }
-        for (const k of S.crouchKey === 'c' ? ['z', 'x'] : ['z', 'x', 'c']) if (kp('Key' + k.toUpperCase()) && !kd('ControlLeft')) { radioOpen = k; hud.radio(k, me.team, (t) => toHost('chat', { text: '📻 ' + t, team: true })); }
+        for (const k of S.crouchKey === 'c' ? ['v', 'x'] : ['v', 'x', 'c']) if (kp('Key' + k.toUpperCase()) && !kd('ControlLeft')) { radioOpen = k; hud.radio(k, me.team, (t) => toHost('chat', { text: '📻 ' + t, team: true })); }
       } else if (uiOpen === 'buy') {
         if (kp('KeyB') || kp('Escape')) closeBuy();
         if (!canBuy()) closeBuy();
@@ -875,13 +876,14 @@ export default function start({ cfg, E, N, smoke }) {
       const mv = typing || uiOpen === 'pause' ? { x: 0, y: 0 } : (() => { let x = (kd('KeyD') ? 1 : 0) - (kd('KeyA') ? 1 : 0), y = (kd('KeyW') ? 1 : 0) - (kd('KeyS') ? 1 : 0); if (E.input.touch.active && (E.input.touch.move.x || E.input.touch.move.y)) { x = E.input.touch.move.x; y = E.input.touch.move.y; } return { x, y }; })();
       if (me.emote) { me.emote.t += dt; if (me.emote.t > me.emote.dur || !me.alive || mv.x || mv.y || mouseBtn[0] || kd('Space')) me.emote = null; }
       if (me.alive) {
-        const inp = { f: frozen ? 0 : mv.y, s: frozen ? 0 : mv.x, jump: !frozen && !typing && (kd('Space') || E.input.touch.buttons.has('jump')), crouch: !typing && (S.crouchKey === 'c' ? kd('KeyC') : (kd('ControlLeft') || kd('ControlRight'))) || E.input.touch.buttons.has('crouch'), walk: !typing && (kd('ShiftLeft') || kd('ShiftRight')) };
+        const inp = { f: frozen ? 0 : mv.y, s: frozen ? 0 : mv.x, jump: !frozen && !typing && (kd('Space') || E.input.touch.buttons.has('jump')), crouch: !typing && !me.proneWant && (S.crouchKey === 'c' ? kd('KeyC') : (kd('ControlLeft') || kd('ControlRight'))) || E.input.touch.buttons.has('crouch'), prone: !!me.proneWant, sprint: !typing && (kd('ShiftLeft') || kd('ShiftRight') || E.input.touch.buttons.has('sprint')) && me.ads < 0.3 };
+        if (inp.jump && me.proneWant) { me.proneWant = false; inp.jump = false; }   // jump gets you up
         const wasG = me.onGround;
         moveStep(W, me, inp, dt, wspeed);
         if (!wasG && me.onGround && me.wasAir > 0.25) audio.play('land', 0.5);
         me.wasAir = me.onGround ? 0 : (me.wasAir || 0) + dt;
         const spd = speedOf(me);
-        if (me.onGround && spd > 3 && !inp.walk && !inp.crouch) { me.stepT -= dt * spd / 3.3; if (me.stepT <= 0) { me.stepT = 1; audio.play('step', 0.5, 0, W.matName(W.mat[W.idx(Math.floor(me.x), Math.floor(me.z))])); } }
+        if (me.onGround && spd > 3 && !inp.crouch && !me.prone) { me.stepT -= dt * spd / 3.3; if (me.stepT <= 0) { me.stepT = 1; audio.play('step', me.sprinting ? 0.75 : 0.5, 0, W.matName(W.mat[W.idx(Math.floor(me.x), Math.floor(me.z))])); } }
         bob += spd * dt * 1.9;
         if (W.lavaAt(me.x, me.z) && me.y < 0.2 && !match) { /* host applies lava damage */ }
       }
@@ -936,7 +938,7 @@ export default function start({ cfg, E, N, smoke }) {
         const sp = Math.hypot(p.x - r.x, p.z - r.z) / Math.max(dt, 1e-3), kv = Math.min(1, dt * 10);
         r.vx = (r.vx || 0) + ((p.x - r.x) / Math.max(dt, 1e-3) - (r.vx || 0)) * kv; r.vz = (r.vz || 0) + ((p.z - r.z) / Math.max(dt, 1e-3) - (r.vz || 0)) * kv; r.vy = (r.vy || 0) + ((p.y - (r.y || p.y)) / Math.max(dt, 1e-3) - (r.vy || 0)) * kv;
         r.x = p.x; r.z = p.z; r.y = p.y;
-        r.g.position.set(p.x, p.y, p.z); r.g.rotation.y = p.yaw;
+        { const pr = p.prone || 0; r.g.position.set(p.x + Math.sin(p.yaw) * 0.85 * pr, p.y + pr * 0.14, p.z + Math.cos(p.yaw) * 0.85 * pr); }   // feet behind the hitbox centre when lying r.g.rotation.order = 'YXZ'; r.g.rotation.y = p.yaw; r.g.rotation.x = r.dieT ? 0 : -(p.prone || 0) * Math.PI / 2 * 0.94;   // prone: lie forward
         setTpGun(r, p.wid || 'knife', rosterAtt(p.id, p.wid));
         if (r.tag) r.tag.visible = p.alive && p.team === me.team && !(spectating && p.id === spectating.id);
         r.t += dt;
@@ -975,6 +977,8 @@ export default function start({ cfg, E, N, smoke }) {
         const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
         vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.12 : 0));
         vm.rotation.set(rel * 2 + camKick * 2 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.6 : 0), (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
+        me.sprintK = (me.sprintK || 0) + ((me.sprinting ? 1 : 0) - (me.sprintK || 0)) * Math.min(1, dt * 10);
+        if (me.sprintK > 0.01) { vm.rotation.x -= 0.32 * me.sprintK; vm.rotation.y += 0.45 * me.sprintK * S.hand; vm.position.y -= 0.035 * me.sprintK; vm.position.x -= 0.03 * me.sprintK * S.hand; }   // gun lowered while sprinting
         if (vm.userData.sc == null) vm.userData.sc = vm.scale.x;
         vm.scale.setScalar(vm.userData.sc);
         if (me.inspect > 0 && me.inspectStyle) applyInspect(vm, me.inspectStyle, (2.2 - me.inspect) / 2.2);

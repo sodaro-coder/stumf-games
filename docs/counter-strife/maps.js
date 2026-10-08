@@ -76,10 +76,10 @@ function dust() {
   B.sign(63.5, 40.05, 2.6, 0, 'HIDE & SEEK\nWORLD CHAMPION\n2001 – 2011', 4, 1.6, '#1d3b24', '#f3e9b0');
   B.sign(70, 4.05, 3.2, 0, 'NO VISITORS\nNO PHONES • NO WI-FI\nNO NAVY', 4, 1.5, '#5a1f14', '#fff1d6');
   B.sign(10, 44.05, 2.7, 0, 'CAVE SWEET CAVE', 4, 1, '#3a2a1a', '#ffd98a');
-  B.sign(104.05, 60, 3.4, Math.PI / 2, 'BEARD TRIM\n50% OFF\n(nobody ever comes)', 3.5, 1.5, '#203a5a', '#fff');
+  B.sign(104.05, 60, 3.4, Math.PI / 2, 'BEARD TRIM 50% OFF\n(also does back hair)', 3.5, 1.5, '#203a5a', '#fff');
   B.sign(6.05, 20, 2.7, Math.PI / 2, 'DIALYSIS MACHINE\nDO NOT UNPLUG\n(seriously)', 3.5, 1.4, '#eeeeee', '#b01818');
   B.sign(87.95, 46, 4.2, -Math.PI / 2, 'HOME VIDEOS\nVOL. 1 – 69\nmostly me watching myself on TV', 3.6, 1.5, '#111', '#e8e8e8');
-  B.sign(45, 24.05, 2.6, 0, 'COMPOUND HOA:\nNO THIRD FLOOR\nBALCONIES', 3.2, 1.4, '#efe6cf', '#3a2a1a');
+  B.sign(45, 24.05, 2.6, 0, 'NO PEEING\nIN THE CAVE\n(looking at you, Gary)', 3.2, 1.4, '#efe6cf', '#3a2a1a');
   B.sign(121.95, 94, 3.1, -Math.PI / 2, 'EMPLOYEE OF THE MONTH\nOSAMA (posthumous)', 3.6, 1.3, '#273', '#fff');
   B.prop('goat', 96, 24, {}).prop('goat', 20, 92, {}).prop('palm', 56, 110, {}).prop('palm', 86, 124, {}).prop('palm', 100, 92, {})
     .prop('tv', 10, 18, { rot: Math.PI / 2 }).prop('barrel', 74, 30, {}).prop('barrel', 120, 96, {}).prop('palm', 30, 10, {});
@@ -139,8 +139,8 @@ function nuke() {
   B.duelSpawn('T', 22, 6, -Math.PI / 2).duelSpawn('CT', 50, 46, Math.PI / 2);
   B.sign(36, 2.05, 3, 0, 'NUKE TOWN 2069\nPOPULATION: 69 (and dropping)', 6, 1.6, '#f6f0d8', '#c0281e');
   B.sign(35.5, 16.95, 2.2, Math.PI, 'SCHOOL BUS\nnext stop: the blast radius', 4.2, 0.9, '#1a1a1a', '#ffd23a');
-  B.sign(2.05, 36, 2.4, Math.PI / 2, 'HOA NOTICE:\nGLOWING LAWNS\nARE NOT A FEATURE', 3.4, 1.4, '#e8f6e8', '#0b5e1c');
-  B.sign(69.95, 12, 2.4, -Math.PI / 2, 'DUCK & COVER\n(the duck is optional)', 3.4, 1.2, '#fff4c2', '#7a1d0d');
+  B.sign(2.05, 36, 2.4, Math.PI / 2, 'DO NOT EAT\nTHE GLOWING SNOW', 3.4, 1.4, '#e8f6e8', '#0b5e1c');
+  B.sign(69.95, 12, 2.4, -Math.PI / 2, 'DUCK & COVER\nYOUR NUTS', 3.4, 1.2, '#fff4c2', '#7a1d0d');
   B.prop('dummy', 20, 34, {}).prop('dummy', 52, 22, {}).prop('dummy', 8, 44, {}).prop('dummy', 64, 6, {}).prop('duck', 36, 46, {})
     .prop('tree', 6, 6, {}).prop('tree', 66, 46, {}).prop('lamp', 27, 2.5, {}).prop('lamp', 45, 49, {});
   B.sky = 0x5f9be0; B.fog = 0xcfe2f4; B.sunColor = 0xfff6e6; B.amb = [0xd2e4fa, 0x6a7a52]; B.sunDir = [0.5, 0.72, -0.45]; B.sunI = 2.6; B.ambI = 1.15;

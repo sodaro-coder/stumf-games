@@ -1,6 +1,9 @@
 // Announcer packs: the browser's own text-to-speech with a pitch/speed and a script per character. Archetypes,
 // not impressions of real people.
 export const VOICE_PACKS = {
+  tween: { name: 'Toxic 13-Year-Old', pitch: 1.35, rate: 1.3, go: ["Bro I'm literally gonna carry you noobs.", 'Go go go, stop being bots!', "Don't be trash this round."],
+    planted: ['Bomb planted. Get rekt.', "Bomb's down, cry about it."], defused: ['Bro defused it. So sweaty.', 'Defused. Ok sweatlord.'],
+    twin: ['Terrorists win. Get destroyed, losers.', 'T win. Uninstall.'], ctwin: ['CT wins. Ur all trash.', 'CT wins. Ez. Go cry to ur mom.'], draw: ['A draw? Ur all bots.'] },
   classic: { name: 'Classic Announcer', pitch: 0.75, rate: 1.05, go: ['Go go go!', "Let's go!"], planted: ['Bomb has been planted.'], defused: ['Bomb has been defused.'],
     twin: ['Terrorists win.'], ctwin: ['Counter-Terrorists win.'], draw: ['Round draw.'] },
   drill: { name: 'Drill Sergeant', pitch: 0.55, rate: 1.25, go: ['MOVE MOVE MOVE, MAGGOTS!', 'GET OUT THERE AND EARN YOUR LUNCH!'], planted: ['THE BOMB IS IN! I SAID THE BOMB IS IN!'],

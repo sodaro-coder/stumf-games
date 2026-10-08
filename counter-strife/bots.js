@@ -4,7 +4,7 @@
 import { W_BY_ID, BOT_LEVELS, PHYS, BOMB } from './data.js';
 import { moveStep, traceShot, eyeHeight, spreadOf, recoilAt, speedOf } from './sim.js';
 
-const NAMES = ['Gerald', 'Moist Mike', 'Chad', 'Brenda', 'Uncle Rick', 'Doug', 'Big Lenny', 'Karen', 'Tiny Tim', 'Sweaty Steve', 'Grandpa Joe', 'Kevin', 'Bubba', 'Linda', 'Dwayne', 'Pickle', 'Noodle', 'Nugget'];
+const NAMES = ['Gassy Gary', 'Moist Mike', 'Butt Crack Barry', 'Stinky Pete', 'Diarrhea Dan', 'Skidmark Steve', 'Big Lenny', 'Booger', 'Lil Nugget', 'Sweaty Steve', 'Toilet Tom', 'Wet Willy', 'Bubba', 'Ur Mom', 'Dwayne', 'Pickle', 'Noodle', 'Chungus'];
 export const botNames = (seed = 0) => NAMES.slice(seed % NAMES.length).concat(NAMES.slice(0, seed % NAMES.length));
 
 const angDiff = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };

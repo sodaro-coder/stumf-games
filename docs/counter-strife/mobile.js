@@ -86,7 +86,7 @@ export function mobileControls(input) {
   const row = document.createElement('div'); row.className = 'row'; root.appendChild(row);
   btn(row, '', 'buy', 'BUY'); btn(row, '', 'score', 'TAB', 'hold'); btn(row, '', 'menu', '❚❚');
   const row2 = document.createElement('div'); row2.className = 'row2'; root.appendChild(row2);
-  btn(row2, '', 'swap', 'SWAP'); btn(row2, '', 'nade', 'NADE'); btn(row2, '', 'use', 'USE', 'hold'); btn(row2, '', 'inspect', 'LOOK');
+  btn(row2, '', 'prone', 'PRONE'); btn(row2, '', 'sprint', 'RUN', 'hold'); btn(row2, '', 'swap', 'SWAP'); btn(row2, '', 'nade', 'NADE'); btn(row2, '', 'use', 'USE', 'hold'); btn(row2, '', 'inspect', 'LOOK');
   let aiming = false;
   return {
     root,
