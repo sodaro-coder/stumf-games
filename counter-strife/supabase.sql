@@ -10,6 +10,11 @@ create table if not exists cs_catalog (def text primary key, crate text not null
 create table if not exists cs_crates (id text primary key, price int not null);
 create table if not exists cs_pass (tier int primary key, def text not null references cs_catalog);
 alter table cs_profiles add column if not exists pass_claimed int[] not null default '{}';
+alter table cs_profiles add column if not exists rr int not null default 0;            -- ranked: Rank Rating
+alter table cs_profiles add column if not exists ranked_n int not null default 0;      -- ranked matches played (first 5 = placements)
+alter table cs_profiles add column if not exists ranked_w int not null default 0;
+alter table cs_profiles add column if not exists ranked_best int not null default 0;   -- best rank reached (rank-up rewards are paid once each)
+alter table cs_profiles add column if not exists ranked_last timestamptz;
 create table if not exists cs_items (uid text primary key, owner uuid not null references auth.users on delete cascade, def text not null references cs_catalog,
   float real not null, st boolean not null default false, seed int not null, kills int not null default 0, created timestamptz default now());
 create table if not exists cs_listings (id bigserial primary key, uid text unique not null references cs_items on delete cascade, seller uuid not null,
@@ -720,6 +725,7 @@ begin
   if cs_is_admin() and not exists (select 1 from cs_log where action = 'admin_collection') then perform cs_admin_collection(); end if;
   if cs_is_admin() and not exists (select 1 from cs_log where action = 'admin_max') then perform cs_admin_max(); end if;
   return (select json_build_object('name', p.name, 'username', p.username, 'tag', p.tag, 'dep', p.dep_code, 'admin', cs_is_admin(), 'guns', coalesce(p.guns, '{}'::jsonb) - '_day', 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
+    'rank', json_build_object('rr', p.rr, 'n', p.ranked_n, 'w', p.ranked_w, 'best', p.ranked_best),
     'items', coalesce((select json_agg(json_build_object('uid', i.uid, 'def', i.def, 'float', i.float, 'st', i.st, 'seed', i.seed, 'kills', i.kills,
       'created', i.created, 'listed', (select l.price from cs_listings l where l.uid = i.uid)) order by i.created desc) from cs_items i where i.owner = me), '[]'::json))
     from cs_profiles p where p.id = me);
@@ -1046,3 +1052,32 @@ begin
 end $$;
 revoke all on function cs_gun_xp(jsonb), cs_gun_equip(text, text, text) from public, anon;
 grant execute on function cs_gun_xp(jsonb), cs_gun_equip(text, text, text) to authenticated;
+
+-- ===== ranked =====================================================================================================
+-- Rank Rating per account, worked out here (the game only reports the result): a win +25, a loss -20, both nudged by
+-- up to 5 for how you played (kills minus deaths); wins against bot opponents count half; the first 5 matches are
+-- placements (double swings). One report per 2.5 minutes. Reaching a rank for the first time pays 300 coins x its
+-- number, once; every ranked win pays 50.
+create or replace function cs_rank_tier(p_rr int) returns int language sql immutable as $$
+  select (count(*) - 1)::int from unnest(array[0, 100, 200, 300, 400, 550, 700, 850, 1000, 1200, 1400]) v where coalesce(p_rr, 0) >= v $$;
+create or replace function cs_ranked(p_win boolean, p_draw boolean, p_k int, p_d int, p_vs_bots boolean) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); r cs_profiles%rowtype; dl int; t int; pay int := 0; i int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  select * into r from cs_profiles where id = me for update;
+  if r.ranked_last is not null and r.ranked_last > now() - interval '150 seconds' then raise exception 'One ranked result every few minutes'; end if;
+  dl := case when p_draw then 0 when p_win then 25 else -20 end + greatest(-5, least(5, coalesce(p_k, 0) - coalesce(p_d, 0)));
+  if p_draw then dl := 0; end if;
+  if p_win and dl < 10 then dl := 10; end if;                 -- a win always gains
+  if not p_win and not p_draw and dl > -8 then dl := -8; end if;  -- a loss always costs a little
+  if p_vs_bots and dl > 0 then dl := dl / 2; end if;
+  if r.ranked_n < 5 then dl := dl * 2; end if;
+  r.rr := greatest(0, r.rr + dl); t := cs_rank_tier(r.rr);
+  if t > r.ranked_best then for i in r.ranked_best + 1 .. t loop pay := pay + 300 * i; end loop; end if;
+  if p_win then pay := pay + 50; end if;
+  update cs_profiles set rr = r.rr, ranked_n = ranked_n + 1, ranked_w = ranked_w + (case when p_win then 1 else 0 end), ranked_best = greatest(ranked_best, t),
+    ranked_last = now(), coins = coins + pay where id = me returning coins into r.coins;
+  return json_build_object('rr', r.rr, 'delta', dl, 'tier', t, 'up', t > r.ranked_best, 'pay', pay, 'coins', r.coins, 'n', r.ranked_n + 1);
+end $$;
+revoke all on function cs_ranked(boolean, boolean, int, int, boolean) from public, anon;
+grant execute on function cs_ranked(boolean, boolean, int, int, boolean) to authenticated;

@@ -25,4 +25,24 @@ export const VOICE_PACKS = {
   butler: { name: 'Posh Butler', pitch: 0.8, rate: 0.92, go: ['Your round has begun, sir.'], planted: ['Pardon the interruption. A bomb has been planted.'], defused: ['The explosive has been seen to, sir.'],
     twin: ['The Terrorists have won, regrettably.'], ctwin: ['The Counter-Terrorists prevail. Splendid.'], draw: ['A draw. How very dull.'] },
 };
+// event lines (kills, deaths, flashes) and the soundboard effects that go with them: only these two packs have them
+Object.assign(VOICE_PACKS, {
+  mlg: { name: 'MLG 420 Announcer', pitch: 1.2, rate: 1.25, go: ['GET REKT SCRUBS, ROUND START!', 'Four twenty blaze it, go go go!', 'Quickscope or go home!'],
+    planted: ['BOMB PLANTED! GET SHREKT!', 'Bomb is down, just like your K D!'], defused: ['DEFUSED! GET REKT!', 'Defused by a certified pro gamer!'],
+    twin: ['Terrorists win! REKT!', 'T win! Absolutely destroyed!'], ctwin: ['CT win! Get noscoped!', 'CT win! Sit down, scrubs!'], draw: ['A draw? Lame. Get gud.'],
+    headshot: ['MOM, GET THE CAMERA!', 'HEADSHOT! MOM, GET THE CAMERA!'], double: ['Oh baby, a double!', 'DOUBLE KILL!'], triple: ['OH BABY, A TRIPLE!', 'OH BABY A TRIPLE!'],
+    quad: ['QUAD KILL! OH MY GOD!'], ace: ['ACE! ACE! OH MY GOD! SHREKT!'], noscope: ['NOOOO SCOPE! GET REKT!', 'Three sixty no scope! Oh my god!'],
+    wallbang: ['WALLBANG! Through the wall, son!'], knife: ['KNIFED! Absolutely humiliated!'], first: ['FIRST BLOOD! Get rekt!'],
+    died: ['How the fuck did he not die? What the fuck?!', 'What the fuck?! How?!', 'Bro, that was lag, what the fuck!'],
+    flashed: ["I'm flashed! I'm fucking flashed!", "I can't see! I'm flashed, I'm flashed!"],
+    sfx: { headshot: ['hitmarker', 'airhorn'], double: ['hitmarker', 'airhorn'], triple: ['airhorn', 'wow'], quad: ['airhorn', 'wub'], ace: ['airhorn', 'wub', 'wow'], noscope: ['hitmarker', 'airhorn', 'wow'],
+      wallbang: ['hitmarker', 'hitmarker'], knife: ['wow'], first: ['airhorn'], died: ['wub'], flashed: ['ring'], planted: ['airhorn'], twin: ['airhorn'], ctwin: ['airhorn'] } },
+  og: { name: 'West Coast OG', pitch: 0.62, rate: 0.82, go: ["Aight. Let's get it, real smooth.", 'Easy now. Roll out, nephew.'], planted: ["Bomb's down. Ain't no thing."], defused: ['Defused, real smooth. Respect.'],
+    twin: ['Terrorists took it. Cool, cool.'], ctwin: ['Counter-Terrorists got it. That is a fact.'], draw: ['Nobody won. Pass the snacks.'],
+    headshot: ['Ooh. Right in the dome.'], double: ['Two for two. Smooth like butter.'], triple: ["Three in a row? Now that's lit."], quad: ['Four? Somebody call your mama.'],
+    ace: ['Whole team, gone. Legendary.'], noscope: ['No scope? Smooth operator.'], wallbang: ['Through the wall. Cold, man.'], knife: ["Knifed him? That's cold, nephew."], first: ['First one down. Easy.'],
+    died: ['Dang, they got you. Breathe, nephew.'], flashed: ["Whoa. Too bright, can't see nothin'."], sfx: { headshot: ['hitmarker'], triple: ['wow'], ace: ['airhorn'] } },
+});
+export const sfxFor = (pack, key) => ((VOICE_PACKS[pack] || {}).sfx || {})[key] || [];
+export const hasLine = (pack, key) => !!(VOICE_PACKS[pack] || {})[key];
 export function line(pack, key) { const p = VOICE_PACKS[pack] || VOICE_PACKS.classic, l = p[key] || VOICE_PACKS.classic[key] || ['']; return { text: l[Math.floor(Math.random() * l.length)], pitch: p.pitch, rate: p.rate }; }

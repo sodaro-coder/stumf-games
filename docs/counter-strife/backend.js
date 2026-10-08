@@ -3,6 +3,7 @@
 // items live on the server and every coin-changing action runs server-side (crates roll there, daily earning caps
 // apply), so a player can't just edit their way to a knife. The public key in the config is meant to be public.
 import { DEFAULT_ATT, gunLevel, attOK } from './guns.js';
+import { rankOf as RANKS_T } from './data.js';
 import { CRATE_BY_ID, CRATES, rollCrate, itemInfo, newItem, ITEM_BY_ID, PASS, DEFAULT_EMOTES, EMOTE_BY_ID } from './skins.js';
 
 const LS = 'cs:profile:v1', TOK = 'cs:session:v1';
@@ -28,7 +29,7 @@ function makeQuests(key, weekly) {
   return out;
 }
 
-const fresh = () => ({ guns: {}, name: '', coins: 500, xp: 0, inventory: [], equipped: { T: {}, CT: {} }, stats: { matches: 0, wins: 0, k: 0, d: 0, hs: 0, mvp: 0 }, quests: null, qday: 0, qweek: 0, lastDaily: 0, settings: {}, pass: [] });
+const fresh = () => ({ guns: {}, name: '', coins: 500, xp: 0, inventory: [], equipped: { T: {}, CT: {} }, stats: { matches: 0, wins: 0, k: 0, d: 0, hs: 0, mvp: 0 }, rank: { rr: 0, n: 0, w: 0, best: 0 }, quests: null, qday: 0, qweek: 0, lastDaily: 0, settings: {}, pass: [] });
 
 export class Profile {
   constructor(cfg) {
@@ -73,6 +74,7 @@ export class Profile {
       const p = await this.rpc('cs_profile', { p_name: this.d.name || 'Player' });
       this.d.coins = p.coins; this.d.xp = p.xp; this.d.equipped = p.equipped || this.d.equipped; this.d.stats = Object.assign(this.d.stats, p.stats || {});
       if (p.name) this.d.name = p.name;
+      if (p.rank) this.d.rank = { rr: p.rank.rr | 0, n: p.rank.n | 0, w: p.rank.w | 0, best: p.rank.best | 0 };
       this.d.pass = Array.isArray(p.pass) ? p.pass : []; if (p.guns && typeof p.guns === 'object') this.d.guns = p.guns;
       this.tag = p.tag || null; this.username = p.username || null; this.admin = !!p.admin; this.dep = p.dep || null;
       this.d.inventory = (p.items || []).map((i) => ({ uid: i.uid, def: i.def, float: i.float, st: i.st, seed: i.seed, kills: i.kills || 0, t: Date.parse(i.created) || 0, listed: i.listed || null }));
@@ -188,6 +190,21 @@ export class Profile {
     const xp = 100 + r.k * 15 + r.roundWin * 20 + (r.win ? 150 : 0);
     const got = await this.reward('match', coins, xp, { k: r.k, d: r.d, win: !!r.win, rounds: r.rounds });
     this.changed(); return { coins: got, xp };
+  }
+  // ranked result: the server works out the Rank Rating (offline: the same rules locally, no coins)
+  async rankedDone(r) {
+    const k = this.d.rank || (this.d.rank = { rr: 0, n: 0, w: 0, best: 0 });
+    if (this.signedIn) {
+      try { const x = await this.rpc('cs_ranked', { p_win: !!r.win, p_draw: !!r.draw, p_k: r.k | 0, p_d: r.d | 0, p_vs_bots: !!r.vsBots });
+        Object.assign(k, { rr: x.rr, n: x.n, w: k.w + (r.win ? 1 : 0), best: Math.max(k.best, x.tier) }); this.d.coins = x.coins; this.changed(); return x; }
+      catch (e) { this.err = String(e.message || e); return { error: this.err }; }
+    }
+    let dl = r.draw ? 0 : (r.win ? 25 : -20) + Math.max(-5, Math.min(5, (r.k | 0) - (r.d | 0)));
+    if (r.win) dl = Math.max(10, dl); else if (!r.draw) dl = Math.min(-8, dl);
+    if (r.vsBots && dl > 0) dl = Math.floor(dl / 2); if (k.n < 5) dl *= 2;
+    k.rr = Math.max(0, k.rr + dl); k.n++; if (r.win) k.w++;
+    const t = RANKS_T(k.rr), up = t > k.best; k.best = Math.max(k.best, t); this.changed();
+    return { rr: k.rr, delta: dl, tier: t, up, pay: 0, n: k.n };
   }
   async claimQuest(id) { const q = this.d.quests.find((x) => x.id === id); if (!q || q.claimed || q.prog < q.goal) return 0; q.claimed = true; const got = await this.reward('quest', q.coins, q.coins / 2, { q: id }); this.changed(); return got; }
   async daily() { if (this.d.lastDaily === dayKey()) return 0; this.d.lastDaily = dayKey(); return this.reward('daily', 100, 50, {}); }

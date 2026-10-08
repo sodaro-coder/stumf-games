@@ -2,7 +2,7 @@
 // (health/armor, money, ammo, weapon slots, radar, round timer with team alive icons, kill feed, buy menu,
 // scoreboard, chat, radio, spectating, scope, flash) and the end-of-match screen. Plain DOM, one stylesheet.
 // Anything another player typed (names, chat) only ever goes in through textContent / esc().
-import { WEAPONS, W_BY_ID, G_BY_ID, GEAR_BY_ID, BUY_MENU, MODES, BOT_LEVELS, RADIO, itemName, itemPrice, forTeam } from './data.js';
+import { WEAPONS, W_BY_ID, G_BY_ID, GEAR_BY_ID, BUY_MENU, MODES, BOT_LEVELS, RADIO, itemName, itemPrice, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS } from './data.js';
 import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_ID, ITEM_BY_ID, PASS, PASS_TIERS, EMOTE_BY_ID } from './skins.js';
 import { MAPS } from './maps.js';
 import { thumb, stage } from './thumbs.js';
@@ -370,8 +370,12 @@ export class Menu {
       <div class="cs-small cs-mut" style="margin:-6px 0 14px">${MODES[s.mode].bomb ? 'Bomb defusal' : 'Combat only: no kill when time runs out = draw'} · first to ${MODES[s.mode].winTo} · bots fill empty slots</div>
       <div class="cs-maps">${Object.values(MAPS).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
       <div style="display:grid;grid-template-columns:1fr 340px;gap:22px;margin-top:20px">
-        <div><div class="cs-sec">Bot difficulty</div><div class="cs-seg">${Object.entries(BOT_LEVELS).map(([k, b]) => `<button data-bot="${k}" class="${s.bot === k ? 'on' : ''}">${b.name}</button>`).join('')}</div>
-          <div class="cs-sec">Lobby</div><div class="cs-seg">${[['bots', 'Offline with bots'], ['pub', 'Host public'], ['priv', 'Host private']].map(([k, n]) => `<button data-host="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <div><div class="cs-sec">Lobby</div><div class="cs-seg">${[['bots', 'Offline with bots'], ['pub', 'Host public'], ['priv', 'Host private'], ['ranked', '🏆 Ranked']].map(([k, n]) => `<button data-host="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+          <div class="cs-sec">Bot difficulty</div><div class="cs-seg">${Object.entries(BOT_LEVELS).filter(([k]) => s.host !== 'ranked' || RANKED_BOTS.includes(k)).map(([k, b]) => `<button data-bot="${k}" class="${s.bot === k ? 'on' : ''}">${b.name}</button>`).join('')}</div>
+          ${s.host === 'ranked' ? (() => { const rk = this.P.d.rank || { rr: 0, n: 0, w: 0 }, R = RANKS[rankOf(rk.rr)], nx = RANKS[rankOf(rk.rr) + 1];
+            return `<div class="cs-panel2" style="margin-top:10px"><h3>Your rank</h3><div class="bd"><b style="color:${R.c};font-size:18px">${rk.n < PLACEMENTS ? 'Unranked' : esc(R.name)}</b>
+              <div class="cs-small cs-mut">${rk.n < PLACEMENTS ? `Placement matches: ${rk.n}/${PLACEMENTS} (double rating swings)` : `${rk.rr} RR${nx ? ` · ${nx.rr - rk.rr} to ${esc(nx.name)}` : ' · top rank'}`} · ${rk.w} wins</div>
+              <div class="cs-small cs-mut" style="margin-top:6px">Ranked rules: bots only on Normal or Hard, and one team must be all real players before it starts. Wins vs bot opponents count half. First time you reach a rank: 300 coins × its tier.${this.P.cloud && !this.P.signedIn ? ' <b>Sign in to save your rank.</b>' : ''}</div></div></div>`; })() : ''}
           <div style="margin-top:22px"><button class="cs-go" id="pGo">GO</button></div></div>
         <div><div class="cs-panel2"><h3>Join a friend</h3><div class="bd"><div class="cs-row"><input id="pCode" maxlength="5" placeholder="INVITE CODE" style="flex:1;text-transform:uppercase"><button class="cs-btn" id="pJoin">Join</button></div></div></div>
           <div class="cs-panel2"><h3>Open lobbies</h3><div class="bd" id="pList"><span class="cs-mut cs-small">Looking for lobbies…</span></div></div></div></div>`;
@@ -380,13 +384,14 @@ export class Menu {
     B.querySelectorAll('[data-bot]').forEach((e) => (e.onclick = () => { s.bot = e.dataset.bot; this.render(); }));
     B.querySelectorAll('[data-host]').forEach((e) => (e.onclick = () => { s.host = e.dataset.host; this.render(); }));
     B.querySelectorAll('canvas[data-mapprev]').forEach((c) => this.h.mapPreview(c, c.dataset.mapprev));
-    $('#pGo', B).onclick = () => this.h.play({ mode: s.mode, map: s.map, bot: s.bot, host: true, solo: s.host === 'bots', pub: s.host === 'pub' });
+    $('#pGo', B).onclick = () => { const rkd = s.host === 'ranked'; if (rkd && !RANKED_BOTS.includes(s.bot)) s.bot = 'hard';
+      this.h.play({ mode: s.mode, map: s.map, bot: s.bot, host: true, solo: s.host === 'bots', pub: s.host === 'pub' || rkd, ranked: rkd }); };
     const code = $('#pCode', B); const hash = location.hash.slice(1).toUpperCase(); if (/^[A-Z0-9]{5}$/.test(hash)) code.value = hash;
     $('#pJoin', B).onclick = () => { const c = code.value.trim().toUpperCase(); if (c.length === 5) this.h.play({ code: c, host: false }); };
     if (!this.lb) this.lb = this.h.lobbies((list) => { this.lobbies = list; const el = $('#pList', this.root); if (!el) return;
       el.innerHTML = list.length ? '' : '<span class="cs-mut cs-small">No open lobbies right now: host one!</span>';
       for (const l of list) { const r = document.createElement('div'); r.className = 'cs-row'; r.style.marginBottom = '8px'; r.innerHTML = '<div style="flex:1;min-width:0"><b class="n" style="display:block;font-size:13px"></b><span class="cs-mut cs-small m"></span></div><button class="cs-btn sm">Join</button>';
-        $('.n', r).textContent = String(l.name || 'Lobby').slice(0, 30); $('.m', r).textContent = `${String(l.mode || '').slice(0, 4)} · ${(MAPS[l.map] || {}).short || ''} · ${l.players | 0}/${l.max | 0}`;
+        $('.n', r).textContent = String(l.name || 'Lobby').slice(0, 30); $('.m', r).textContent = `${l.ranked ? '🏆 RANKED · ' : ''}${String(l.mode || '').slice(0, 4)} · ${(MAPS[l.map] || {}).short || ''} · ${l.players | 0}/${l.max | 0}`;
         $('button', r).onclick = () => this.h.play({ code: l.code, host: false }); el.appendChild(r); } });
   }
   // ---- INVENTORY ----
@@ -655,7 +660,7 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Style</div><select data-k="xDyn"><option value="0">Static</option><option value="1">Dynamic</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Centre dot</div><select data-k="xDot"><option value="0">Off</option><option value="1">On</option></select></label>
         <div class="cs-card" style="display:grid;place-items:center;min-height:90px;background:#3a4a3a"><div class="cs-xh" style="position:relative;left:auto;top:auto;width:1px;height:1px" id="xPrev"></div></div></div>
-      <div class="cs-h">Graphics</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Quality</div><select data-k="quality"><option value="0">Auto (keeps 40+ fps)</option><option value="0.5">Potato (fastest)</option><option value="0.75">Low</option><option value="1">Medium</option><option value="1.5">High</option></select></label>
+      <div class="cs-h">Graphics</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Quality</div><select data-k="quality"><option value="0">Auto (keeps 40+ fps)</option><option value="0.5">Potato (fastest)</option><option value="0.75">Low</option><option value="1">Medium</option><option value="1.5">High</option><option value="2">Ultra (4K, gaming PCs)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Show FPS</div><select data-k="fps"><option value="0">Off</option><option value="1">On</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>

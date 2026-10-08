@@ -8,7 +8,7 @@ import { surface, macroCanvas } from './textures.js';
 import { raiseBuildings, dressWorld, mergeGeos } from './dress.js';
 
 export const MATS = {  // surfaces (painted in textures.js): base colour (radar, particles), world size of one texture tile (m), wall-bang density
-  sand: { c: [196, 168, 118], s: 3, d: 6 }, sandwall: { c: [214, 186, 136], s: 4, d: 4, trim: 1 },
+  sand: { c: [196, 168, 118], s: 3, d: 6 }, sandwall: { c: [214, 186, 136], s: 6, d: 4, trim: 1 },
   plaster: { c: [222, 206, 172], s: 3, d: 3, trim: 1 }, brick: { c: [150, 82, 62], s: 2, d: 5, trim: 1 },
   wood: { c: [138, 98, 58], s: 2, d: 1 }, crate: { c: [160, 118, 64], s: 1, d: 1 },
   metal: { c: [120, 128, 136], s: 2, d: 2.5 }, concrete: { c: [150, 150, 146], s: 4, d: 6, trim: 1 },
@@ -98,16 +98,26 @@ uniform vec3 sunDir; uniform vec3 sunCol; uniform vec3 skyCol; uniform vec3 gndC
 #ifdef BUMP
 uniform sampler2D bumpMap;
 #endif
+#ifdef NMAP
+uniform sampler2D nMap; uniform float nOn;
+#endif
+#ifdef DETAIL
+uniform sampler2D dMap;
+#endif
 varying vec2 vUv; varying vec3 vWP; varying vec3 vWN;
 #include <common>
 #include <fog_pars_fragment>
 void main() {
   vec3 alb = texture2D(map, vUv).rgb * tint;
+  float mac = 0.5;
   #ifdef MACRO
-  alb *= 0.8 + 0.4 * texture2D(macroTex, vWP.xz * 0.037 + vec2(vWP.y * 0.029, vWP.y * 0.013)).r;
+  mac = texture2D(macroTex, vWP.xz * 0.037 + vec2(vWP.y * 0.029, vWP.y * 0.013)).r;
+  alb *= 0.8 + 0.4 * mac;
   #endif
   vec3 N = normalize(vWN);
   if (!gl_FrontFacing) N = -N;
+  vec3 Vd = cameraPosition - vWP; float dist = length(Vd); Vd /= max(dist, 1e-4);
+  float rough = 0.85;
   #ifdef BUMP
   {
     vec3 dx = dFdx(vWP), dy = dFdy(vWP); vec2 du = dFdx(vUv), dv = dFdy(vUv);
@@ -116,28 +126,82 @@ void main() {
     if (abs(det) > 1e-9) { vec3 g = (hx * r1 + hy * r2) * 1.4 / det; vec3 n2 = N - g * sign(det) * 0.5; if (dot(n2, n2) > 1e-8) N = normalize(n2); }
   }
   #endif
+  #ifdef NMAP
+  {   // painted normal + roughness map; tangent frame from screen derivatives (no tangents needed on the merged geometry)
+    vec4 nm = texture2D(nMap, vUv);
+    vec2 txy = (nm.rg * 2.0 - 1.0) * nOn;
+    rough = mix(0.85, nm.b, nOn);
+    #ifdef DETAIL
+    float df = 1.0 - smoothstep(3.0, 12.0, dist);   // close up: fine grit and pores on everything
+    if (df > 0.0) txy += (texture2D(dMap, vUv * 7.0).rg * 2.0 - 1.0) * 0.55 * df;
+    #endif
+    vec3 dp1 = dFdx(vWP), dp2 = dFdy(vWP); vec2 duv1 = dFdx(vUv), duv2 = dFdy(vUv);
+    vec3 p2 = cross(dp2, N), p1 = cross(N, dp1);
+    vec3 T = p2 * duv1.x + p1 * duv2.x, B = p2 * duv1.y + p1 * duv2.y;
+    float im = max(dot(T, T), dot(B, B));
+    if (im > 1e-20) { im = inversesqrt(im); vec3 n2 = T * im * txy.x + B * im * txy.y + N * sqrt(max(0.05, 1.0 - dot(txy, txy))); N = normalize(n2); }
+  }
+  #endif
   vec4 bk = texture2D(shTex, (vWP.xz + vWN.xz * 0.3) * shInfo.xy);
+  float floorY = bk.b * 16.0 - 2.0;
   float shH = bk.r * 16.0 - 2.0, vis = smoothstep(shH - 0.05, shH + 0.16, vWP.y), ao = 1.0;
-  if (vWN.y > 0.5) ao = bk.g; else if (vWN.y > -0.5) ao = mix(0.45, 1.0, smoothstep(0.0, 1.4, vWP.y - (bk.b * 16.0 - 2.0)));
+  if (vWN.y > 0.5) ao = bk.g; else if (vWN.y > -0.5) {
+    ao = mix(0.45, 1.0, smoothstep(0.0, 1.4, vWP.y - floorY));
+    #ifdef NMAP
+    alb *= mix(0.62, 1.0, smoothstep(0.0, 0.5 + mac * 1.1, vWP.y - floorY) * bakeOn + (1.0 - bakeOn));   // dirt splashed up the foot of walls
+    #endif
+  }
   vis = mix(1.0, vis, bakeOn); ao = mix(1.0, ao, bakeOn);
-  vec3 light = mix(gndCol, skyCol, N.y * 0.5 + 0.5) * ao + sunCol * max(dot(N, sunDir), 0.0) * vis * mix(1.0, ao, 0.35);
-  gl_FragColor = vec4(alb * light, 1.0);
+  float ndl = max(dot(N, sunDir), 0.0);
+  vec3 light = mix(gndCol, skyCol, N.y * 0.5 + 0.5) * ao + sunCol * ndl * vis * mix(1.0, ao, 0.35);
+  light += sunCol * vec3(1.0, 0.92, 0.8) * 0.22 * (0.5 - 0.5 * N.y) * ao;   // warm bounce off the sunlit ground into shade
+  vec3 col = alb * light;
+  #ifdef NMAP
+  {   // sheen: sun glints (normalised Blinn-Phong) and the sky reflected in smooth surfaces, both with Fresnel
+    float a = rough * rough, p = clamp(2.0 / max(a * a, 1e-3) - 2.0, 1.0, 2048.0);
+    vec3 H = normalize(sunDir + Vd); float ndh = max(dot(N, H), 0.0), ndv = max(dot(N, Vd), 1e-3);
+    float F = 0.04 + 0.96 * pow(1.0 - max(dot(Vd, H), 0.0), 5.0);
+    col += sunCol * PI * (p + 8.0) / (8.0 * PI) * pow(ndh, p) * F * ndl * vis;
+    vec3 R = reflect(-Vd, N); float Fv = 0.04 + 0.96 * pow(1.0 - ndv, 5.0);
+    vec3 env = mix(gndCol * 0.8, skyCol * 1.25, smoothstep(-0.25, 0.35, R.y));
+    col += env * Fv * (1.0 - rough) * (1.0 - rough) * ao * 1.2;
+  }
+  #endif
+  gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>
 }`;
-let whiteT = null;
-export function fastMat({ map = null, color = 0xffffff, bump = null, macro = true, side = THREE.FrontSide } = {}) {
+let whiteT = null, flatN = null;
+export function fastMat({ map = null, color = 0xffffff, bump = null, nmap = null, detail = null, macro = true, side = THREE.FrontSide } = {}) {
   if (!map) { if (!whiteT) { whiteT = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); whiteT.needsUpdate = true; } map = whiteT; }
   const m = new THREE.ShaderMaterial({
     uniforms: { ...THREE.UniformsLib.fog, map: { value: map }, bumpMap: { value: bump }, tint: { value: new THREE.Color(color) }, shTex: LIGHT.shTex, shInfo: LIGHT.shInfo, macroTex: LIGHT.macro, bakeOn: LIGHT.bake,
-      sunDir: LIGHT.sunDir, sunCol: LIGHT.sunCol, skyCol: LIGHT.skyCol, gndCol: LIGHT.gndCol },
+      sunDir: LIGHT.sunDir, sunCol: LIGHT.sunCol, skyCol: LIGHT.skyCol, gndCol: LIGHT.gndCol, nMap: { value: nmap }, nOn: { value: nmap ? 1 : 0 }, dMap: { value: detail } },
     vertexShader: FAST_VS, fragmentShader: FAST_FS, fog: true, side, defines: {},
   });
   if (bump) m.defines.BUMP = ''; if (macro) m.defines.MACRO = '';
-  if (bump) m.extensions = { derivatives: true };
+  if (nmap) { m.defines.NMAP = ''; if (detail) m.defines.DETAIL = ''; }
+  if (bump || nmap) m.extensions = { derivatives: true };
   return m;
 }
+// the shipped surface photos, loaded once per file (and per filter quality) for every map that uses them
+const txCache = new Map();
+export function loadTx(file, srgb, aniso = 4, quality = 1) {
+  const key = file + '|' + aniso + '|' + (quality < 0.75 ? 0 : 1);
+  if (!txCache.has(key)) {
+    txCache.set(key, new Promise((res) => {
+      new THREE.TextureLoader().load(file, (t) => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+        if (quality < 0.75) t.minFilter = THREE.LinearMipmapNearestFilter;
+        res(t);
+      }, undefined, () => res(null));
+    }));
+  }
+  return txCache.get(key);
+}
+// a 1 x 1 'flat, fairly matte' normal map: what a surface uses until its painted maps have downloaded
+export const flatNormal = () => { if (!flatN) { flatN = new THREE.DataTexture(new Uint8Array([128, 128, 217, 255]), 1, 1); flatN.needsUpdate = true; } return flatN; };
 
 // three's bump mapping divides by zero when the camera is exactly level (the resting aim in an FPS): a guarded copy
 const BUMP_SAFE = `#ifdef USE_BUMPMAP
@@ -290,7 +354,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   // --- baked light: for every 1/K m of floor, how high the sun's shadow reaches there, plus ambient occlusion ---
   // One small texture gives soft sun shadows on every floor, wall and player and darkened corners, for the price of a
   // texture read: nothing is re-rendered per frame, so it's as fast on a school laptop as on a gaming PC.
-  const K = opt.bakeK || (quality >= 1.5 ? 6 : quality >= 0.75 ? 4 : 2), TW = w * K, TD = d * K;
+  const K = opt.bakeK || (quality >= 2 ? 8 : quality >= 1.5 ? 6 : quality >= 0.75 ? 4 : 2), TW = w * K, TD = d * K;
   const sd = B.sunDir || [0.62, 0.66, 0.42], sl = Math.hypot(sd[0], sd[2]), hx = sd[0] / sl, hz = sd[2] / sl, tanEl = sd[1] / sl;
   let maxH = B.wallH; for (let i = 0; i < w * d; i++) if (hr[i] > maxH) maxH = hr[i];
   // ceilings: the sun can't get under them (rooms and tunnels are in shade, lit by the sky through doors and windows)
@@ -320,7 +384,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   { // sun and sky for the surface shader (same numbers as the scene's lights)
     const sl2 = Math.hypot(...sd); LIGHT.sunDir.value.set(sd[0] / sl2, sd[1] / sl2, sd[2] / sl2);
     LIGHT.sunCol.value.set(B.sunColor || 0xffffff).multiplyScalar((B.sunI || 2.4) / Math.PI);
-    LIGHT.skyCol.value.set((B.amb || [])[0] || 0xffffff).multiplyScalar((B.ambI || 1.1) / Math.PI); LIGHT.gndCol.value.set((B.amb || [])[1] || 0x555555).multiplyScalar((B.ambI || 1.1) / Math.PI);
+    LIGHT.skyCol.value.set((B.amb || [])[0] || 0xffffff).multiplyScalar(1.45 * (B.ambI || 1.1) / Math.PI); LIGHT.gndCol.value.set((B.amb || [])[1] || 0x555555).multiplyScalar(1.45 * (B.ambI || 1.1) / Math.PI);
   }
   const useLight = () => { LIGHT.shTex.value = bakeTex; LIGHT.shInfo.value.set(1 / w, 1 / d, 0, 0); LIGHT.bake.value = 1; if (!LIGHT.macro.value && !headless) LIGHT.macro.value = macroTex(); };
   useLight();
@@ -331,18 +395,30 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   };
 
   const group = new THREE.Group(); scene.add(group);
-  const texSize = quality >= 1.5 ? 512 : quality >= 1 ? 256 : 128, bumpOn = quality >= 1, aniso = Math.min(quality >= 1.5 ? 8 : quality >= 1 ? 4 : 1, opt.aniso || 1);
+  // surfaces: the painted photo maps shipped with the game (texgen.py): colour on every setting; from Medium up also a
+  // normal + roughness map (light catches every brick and plank, smooth things shine), on High and Ultra 1024 px with a
+  // fine detail layer up close. While they download, the quick in-browser painter fills in, so the map is never blank.
+  const texSize = quality >= 1.5 ? 1024 : 512, nmOn = quality >= 1, aniso = Math.min(quality >= 2 ? 16 : quality >= 1.5 ? 8 : quality >= 1 ? 4 : 1, opt.aniso || 1);
   const texCache = {};
   const matTex = (k) => {
     if (texCache[k]) return texCache[k];
-    const sf = surface(k, texSize, bumpOn), mk = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (quality < 1) t.minFilter = THREE.LinearMipmapNearestFilter; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
-    return (texCache[k] = { map: mk(sf.map, true), bump: sf.bump ? mk(sf.bump, false) : null });
+    const sf = surface(k, 128, false), mk = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (quality < 0.75) t.minFilter = THREE.LinearMipmapNearestFilter; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    return (texCache[k] = { map: mk(sf.map, true), bump: null });
   };
+  const photo = (mat, k) => {   // swap in the photo maps once they arrive (cached across map changes)
+    loadTx(`tx_${k}_${texSize}.jpg`, true, aniso, quality).then((t) => { if (t) { mat.uniforms ? (mat.uniforms.map.value = t) : (mat.map = t, mat.needsUpdate = true); } });
+    if (nmOn && mat.uniforms && mat.uniforms.nMap) loadTx(`tx_${k}_${texSize}n.jpg`, false, aniso, quality).then((t) => { if (t) { mat.uniforms.nMap.value = t; mat.uniforms.nOn.value = 1; } });
+  };
+  const detailT = quality >= 1.5 ? flatNormal() : null;
+  if (detailT && !headless) loadTx('tx_detail_512n.jpg', false, aniso, quality).then((t) => { if (t) for (const m of matCache.values()) if (m.uniforms && m.uniforms.dMap) m.uniforms.dMap.value = t; });
   const worldMat = (k) => {
     if (headless) return new THREE.MeshBasicMaterial();   // simulations without a browser: geometry only
     const M = MATS[k], t = matTex(k);
-    if (M.glow) return new THREE.MeshBasicMaterial({ map: t.map });
-    return fastMat({ map: t.map, bump: t.bump, macro: quality >= 0.75 });
+    if (M.glow) { const m = new THREE.MeshBasicMaterial({ map: t.map }); photo(m, k); return m; }
+    const m = fastMat({ map: t.map, nmap: nmOn ? flatNormal() : null, detail: detailT, macro: quality >= 0.75 });
+    if (nmOn) m.uniforms.nOn.value = 0;
+    photo(m, k);
+    return m;
   };
   const matCache = new Map(), matFor = (k) => { if (!matCache.has(k)) matCache.set(k, k === 'glassdark' ? fastMat({ color: 0x1c2328, macro: false }) : worldMat(k)); return matCache.get(k); };
   const chunks = [];

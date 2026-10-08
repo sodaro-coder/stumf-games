@@ -127,6 +127,18 @@ export const BOT_LEVELS = {
   expert: { name: 'Expert', react: 0.17, aimErr: 0.015, turn: 14, head: 0.3, spray: 0.95, burst: 10 },
 };
 
+// ranked: Rank Rating (RR) thresholds, worked out on the server (cs_ranked). First 5 matches are placements.
+export const RANKS = [
+  { rr: 0, name: 'Bronze Bum', c: '#a0703c' }, { rr: 100, name: 'Silver Sweat I', c: '#b8c2cc' }, { rr: 200, name: 'Silver Sweat II', c: '#cfd8e2' },
+  { rr: 300, name: 'Gold Goblin I', c: '#e2b23c' }, { rr: 400, name: 'Gold Goblin II', c: '#f2c84a' }, { rr: 550, name: 'Platinum Pisser', c: '#5fd0c8' },
+  { rr: 700, name: 'Diamond Degenerate', c: '#7ab0ff' }, { rr: 850, name: 'Master Tryhard', c: '#b07aff' }, { rr: 1000, name: 'Legendary Sweatlord', c: '#ff7a5a' },
+  { rr: 1200, name: 'Global Elite Ego', c: '#ff4a8a' }, { rr: 1400, name: 'The Supreme No-Lifer', c: '#ffe14a' },
+];
+export const PLACEMENTS = 5;
+export const rankOf = (rr) => { let i = 0; for (let k = 0; k < RANKS.length; k++) if ((rr || 0) >= RANKS[k].rr) i = k; return i; };
+// ranked rules: bots only on Normal or Hard, and at least one team must be all real players
+export const RANKED_BOTS = ['normal', 'hard'];
+
 export const RADIO = {
   v: ['Go go go!', 'Fall back!', 'Stick together!', 'Hold this position.', 'Follow me.', 'Taking fire, need help!'],
   x: ['Roger that.', 'Negative.', 'Enemy spotted.', 'Need backup.', 'Sector clear.', "I'm in position."],

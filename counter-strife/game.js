@@ -3,7 +3,7 @@
 // rounds and the bomb, then sends 20 snapshots a second. Rendering is one merged mesh per material plus simple
 // box-built players, so it holds 60 fps on weak integrated graphics.
 import * as THREE from '../sdk/three.module.min.js';
-import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forTeam } from './data.js';
+import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS } from './data.js';
 import { buildWorld } from './world.js';
 import { MAPS } from './maps.js';
 import { mobileControls } from './mobile.js';
@@ -11,12 +11,12 @@ import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf,
 import { Bots, botNames } from './bots.js';
 import { Profile } from './backend.js';
 import { Menu, Hud, injectCss, esc, weaponIcon } from './ui.js';
-import { line } from './voices.js';
+import { line, sfxFor, hasLine } from './voices.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
 import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent } from './chars.js';
-import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
+import { setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
 // sun, sky light, fog and sky for a map (shared by the match and the menu's map pictures)
@@ -83,6 +83,20 @@ function makeAudio(getVol) {
     burst(len, body, V, p, 0.9, 'lowpass', 0, tail * (0.3 + far));
     tone('sine', thump * 2.2, thump, len * 0.9, V * 0.55, p);
     if (tail > 0.3) burst(tail, body * 0.6, V * 0.25 * (0.4 + far), p, 0.5, 'lowpass', len * 0.6, 0.4); };
+  // a vowel from a buzzing source through moving formant filters: cheap speech-like noises with no audio files
+  const vox = (delay, dur, f0a, f0b, fm, vol, pan) => {
+    const t = ctx.currentTime + delay, o = ctx.createOscillator(), g = ctx.createGain(), dst = out(pan);
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(f0a, t); o.frequency.exponentialRampToValueAtTime(f0b, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02); g.gain.setValueAtTime(vol, t + dur * 0.6); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    fm.forEach(([a, b], i) => { const f = ctx.createBiquadFilter(), fg = ctx.createGain(); f.type = 'bandpass'; f.Q.value = 9; f.frequency.setValueAtTime(a, t); f.frequency.exponentialRampToValueAtTime(b, t + dur * 0.8); fg.gain.value = [1, 0.7, 0.35][i] || 0.3; o.connect(f); f.connect(fg); fg.connect(g); });
+    g.connect(dst); o.start(t); o.stop(t + dur + 0.05);
+  };
+  const wub = (v, p) => {   // a dubstep wobble: a low saw through a lowpass swept by an LFO
+    const t = ctx.currentTime, o = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), l = ctx.createOscillator(), lg = ctx.createGain(), g = ctx.createGain();
+    o.type = o2.type = 'sawtooth'; o.frequency.value = 55; o2.frequency.value = 55.6; f.type = 'lowpass'; f.Q.value = 12; f.frequency.value = 500; l.frequency.value = 6; lg.gain.value = 420;
+    l.connect(lg); lg.connect(f.frequency); o.connect(f); o2.connect(f); f.connect(g); g.gain.setValueAtTime(v * 0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1.1); g.connect(out(p));
+    [o, o2, l].forEach((x) => { x.start(t); x.stop(t + 1.15); });
+  };
   const SND = {
     step: (v, p, m) => { const [f, d, k] = STEP_SND[m] || [1100, 0.05, 'hard']; burst(d, f, v * (k === 'soft' ? 0.35 : 0.45), p, k === 'clank' ? 6 : 1.2, k === 'clank' ? 'bandpass' : 'lowpass'); if (k === 'clank') tone('triangle', f * 1.3, f, 0.08, v * 0.12, p); if (k === 'knock') tone('sine', 180, 120, 0.06, v * 0.25, p); },
     land: (v, p) => { burst(0.1, 500, v * 0.55, p); tone('sine', 120, 60, 0.1, v * 0.3, p); },
@@ -111,7 +125,11 @@ function makeAudio(getVol) {
     wetslap: (v, p) => { burst(0.11, 1100, v * 1.0, p, 1.8, 'bandpass'); tone('sine', 190, 55, 0.14, v * 0.7, p); burst(0.09, 700, v * 0.6, p, 1.4, 'bandpass', 0.04); burst(0.16, 2600, v * 0.35, p, 3, 'bandpass', 0.06); tone('sine', 420, 140, 0.09, v * 0.25, p, 0.05, 0, 40); burst(0.06, 4200, v * 0.2, p, 4, 'bandpass', 0.12); },
     doing: (v, p) => { tone('sine', 140, 300, 0.9, v * 0.55, p, 0, 0, 26); tone('triangle', 280, 600, 0.7, v * 0.18, p, 0.02, 0, 26); burst(0.07, 900, v * 0.35, p, 1.6, 'bandpass'); },
     squelch: (v, p) => { burst(0.13, 800 + Math.random() * 500, v * 0.7, p, 2.2, 'bandpass'); burst(0.1, 2600, v * 0.3, p, 3.5, 'bandpass', 0.05); tone('sine', 260, 90, 0.11, v * 0.3, p, 0.02, 0, 30); },
-    pewpew: (v, p) => { tone('square', 1500, 280, 0.13, v * 0.35, p); tone('sine', 1500, 280, 0.13, v * 0.3, p); tone('square', 1600, 300, 0.14, v * 0.35, p, 0.17); tone('sine', 1600, 300, 0.14, v * 0.3, p, 0.17); },
+    pewpew: (v, p) => { const r = 0.92 + Math.random() * 0.16; burst(0.018, 900, v * 0.5, p, 1.2, 'bandpass'); vox(0.012, 0.2, 230 * r, 150 * r, [[320, 360], [2300, 850], [2900, 2400]], v * 0.9, p); },   // a guy going "pew!"
+    airhorn: (v, p) => { [[0, 0.16], [0.21, 0.11], [0.36, 0.62]].forEach(([d, l]) => [466, 554, 698].forEach((f) => tone('sawtooth', f, f * 0.985, l, v * 0.16, p, d))); },
+    hitmarker: (v) => { tone('square', 3200, 3000, 0.02, v * 0.25, 0); burst(0.03, 6000, v * 0.4, 0, 2, 'highpass'); },
+    wow: (v, p) => vox(0, 0.62, 190, 130, [[750, 420], [1150, 800], [2600, 2500]], v * 0.8, p),
+    wub: (v, p) => wub(v, p),
     fart: (v, p) => { const f = 70 + Math.random() * 50; tone('sawtooth', f * 1.3, f, 0.5, v * 0.45, p, 0, 0, 28); burst(0.45, 300, v * 0.35, p, 2, 'lowpass'); },
     squirt: (v, p) => { burst(0.35, 3200, v * 0.55, p, 1.5, 'bandpass'); burst(0.25, 5000, v * 0.3, p, 1, 'highpass', 0.05); },
     boing: (v, p) => tone('sine', 120, 380, 0.5, v * 0.5, p, 0, 0, 16),
@@ -195,7 +213,7 @@ export default function start({ cfg, E, N, smoke }) {
       session = N.session(cfg.id, { code: opt.code, host: isHost, name: myName });
       myId = session.id;
       history.replaceState(null, '', '#' + session.code);
-      if (isHost && opt.pub) { lobby = N.lobbyBrowser(cfg.id, () => {}); lobby.announce({ code: session.code, name: myName + "'s lobby", players: 1, max: MODES[opt.mode].size * 2, mode: opt.mode, map: opt.map }); }
+      if (isHost && opt.pub) { lobby = N.lobbyBrowser(cfg.id, () => {}); lobby.announce({ code: session.code, name: (opt.ranked ? 'RANKED · ' : '') + myName + "'s lobby", players: 1, max: MODES[opt.mode].size * 2, mode: opt.mode, map: opt.map, ranked: !!opt.ranked }); }
     }
     const loadout = { T: profile.loadoutFor('T'), CT: profile.loadoutFor('CT') };
     const myAtt = (wid) => ((loadout[me.team] || {}).att || {})[wid] || null;
@@ -215,10 +233,11 @@ export default function start({ cfg, E, N, smoke }) {
     // ---- renderer & scene ----
     // graphics quality: a fixed preset, or Auto (0): start from what this device has done before (or a guess from its
     // cores/memory), then step down whenever it can't hold ~40 fps even at reduced resolution. Remembered per device.
-    const AUTO = !S.quality, QSTEPS = [0.5, 0.75, 1, 1.5];
+    const AUTO = !S.quality, QSTEPS = [0.5, 0.75, 1, 1.5, 2];
     let Q = S.quality;
-    if (AUTO) { const saved = +(localStorage.getItem('cs:autoq') || 0), weak = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS/i.test(navigator.userAgent); Q = QSTEPS.includes(saved) ? saved : weak ? 0.75 : 1; }
+    if (AUTO) { const saved = +(localStorage.getItem('cs:autoq') || 0), weak = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS/i.test(navigator.userAgent); Q = QSTEPS.includes(saved) && saved < 2 ? saved : weak ? 0.75 : 1; }
     const hi = Q >= 1.5;  // High: antialiasing, sharper bump detail; lower settings stay fast on weak machines
+    const ultra = Q >= 2;  // Ultra: renders up to 2x the screen's pixels (4K on a 1080p screen), 16x texture filtering, finer baked light
     setModelQuality(Q);
     if (Q >= 0.75) loadChars();
     const renderer = new THREE.WebGLRenderer({ antialias: hi, powerPreference: 'high-performance' });
@@ -228,7 +247,9 @@ export default function start({ cfg, E, N, smoke }) {
     const scene = new THREE.Scene();
     const cam = new THREE.PerspectiveCamera(74, 1, 0.05, 400); cam.rotation.order = 'YXZ'; scene.add(cam);
     const vmCam = new THREE.PerspectiveCamera(60, 1, 0.01, 10), vmScene = new THREE.Scene();
-    const vmHemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2), vmSun = new THREE.DirectionalLight(0xffffff, 1.6); vmSun.position.set(1, 2, 1); vmScene.add(vmHemi, vmSun);
+    const vmHemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2), vmSun = new THREE.DirectionalLight(0xffffff, 1.6); vmSun.position.set(1, 2, 1);
+    const vmFill = new THREE.DirectionalLight(0xfff2e0, 0.5); vmFill.position.set(-0.3, 0.6, 1);   // soft fill from the viewer's side: the gun always reads, like any shooter's viewmodel
+    vmScene.add(vmHemi, vmSun, vmFill);
     // the final look (Medium and up): the frame is drawn in HDR, then one pass adds a soft bloom on the brightest things
     // (muzzle flashes, the sun, glowing skins), filmic tone mapping, a gentle contrast/colour grade (cool shadows, warm
     // highlights), a vignette and fine film grain. Low and Potato skip it and draw straight to the screen.
@@ -279,8 +300,8 @@ export default function start({ cfg, E, N, smoke }) {
     const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = vmCam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); vmCam.updateProjectionMatrix(); };
     addEventListener('resize', resize); resize();
     renderer.autoClear = false;
-    let scale = Math.min(1, devicePixelRatio || 1) * Q;
-    const govMinOf = () => (Q <= 0.5 ? 0.4 : AUTO ? 0.55 : 0.4); let govMin = govMinOf(); const mkGov = () => E.qualityGovernor((s) => { if (window.__lockPR) return; scale = s; renderer.setPixelRatio(s); }, { start: Math.min(devicePixelRatio || 1, 1) * Math.min(Q, 1), max: Math.min(1.5, (devicePixelRatio || 1) * Q), min: govMin, targetMs: 21 });
+    let scale = ultra ? Math.min(2, (devicePixelRatio || 1) * 2) : Math.min(1, devicePixelRatio || 1) * Q;
+    const govMinOf = () => (Q <= 0.5 ? 0.4 : AUTO ? 0.55 : 0.4); let govMin = govMinOf(); const mkGov = () => E.qualityGovernor((s) => { if (window.__lockPR) return; scale = s; renderer.setPixelRatio(s); }, { start: ultra ? Math.min(2, (devicePixelRatio || 1) * 2) : Math.min(devicePixelRatio || 1, 1) * Math.min(Q, 1), max: ultra ? Math.min(3, (devicePixelRatio || 1) * 2) : Math.min(1.5, (devicePixelRatio || 1) * Q), min: ultra ? 1 : govMin, targetMs: ultra ? 30 : 21 });
     let gov = mkGov(), perfSum = 0, perfN = 0;
     // Auto: still under ~40 fps at the lowest resolution step -> one preset down (the map is rebuilt lighter)
     const autoCheck = (dt) => {
@@ -291,7 +312,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (avg > 1 / 40 && scale <= govMin + 0.06 && i > 0) {
         Q = QSTEPS[i - 1]; try { localStorage.setItem('cs:autoq', String(Q)); } catch (e) { /* private mode */ }
         setModelQuality(Q); buildMap(mapId); vmKey = ''; setViewModel(); govMin = govMinOf(); gov = mkGov();
-        toast('Graphics: ' + ['Potato', 'Low', 'Medium', 'High'][i - 1] + ' (Auto) to keep it smooth');
+        toast('Graphics: ' + ['Potato', 'Low', 'Medium', 'High', 'Ultra'][i - 1] + ' (Auto) to keep it smooth');
       } else if (avg < 1 / 75 && i < 2 && scale >= Math.min(1, devicePixelRatio || 1) * Math.min(Q, 1) - 0.01) {
         try { localStorage.setItem('cs:autoq', String(QSTEPS[i + 1])); } catch (e) { /* private mode */ }   // headroom: next match one step up
       }
@@ -301,6 +322,9 @@ export default function start({ cfg, E, N, smoke }) {
 
     let lobbyPanel = null, sunLight = null, sky = null, parts = null, sunDir = [0.6, 0.7, 0.4];
     let W = null, mode = opt.mode, mapId = opt.map, botLevel = opt.bot || 'normal', match = null, bots = null, ended = false, started = false;
+    // ranked: bots only on Normal or Hard, real players fill one team first, and that team must be all real to start
+    let ranked = !!opt.ranked; if (ranked && !RANKED_BOTS.includes(botLevel)) botLevel = 'hard';
+    const rankedReady = () => { if (!match) return false; const n = MODES[mode].size; return [...match.players.values()].filter((q) => !q.bot && q.team === 'T').length >= n || [...match.players.values()].filter((q) => !q.bot && q.team === 'CT').length >= n; };
     const st = { phase: 'warmup', timer: 0, round: 0, score: { T: 0, CT: 0 }, bomb: null, effects: [], drops: [], history: [], roster: new Map(), players: new Map() };
     const stats = { k: 0, d: 0, a: 0, hs: 0, mvp: 0, plant: 0, defuse: 0, pistol: 0, smg: 0, knife: 0, nade: 0, roundWin: 0, dmg: 0 };
 
@@ -309,6 +333,25 @@ export default function start({ cfg, E, N, smoke }) {
       inv: {}, nades: [], cur: 2, last: 1, nadeSel: 0, cd: 0, reload: 0, deploy: 0, spray: 0, sprayT: 0, punch: 0, scoped: 0, ads: 0, burst: false, burstLeft: 0, flash: 0, defuser: false, inspect: 0, knifeSwing: 0, stepT: 0, wasGround: true, lean: 0, leanWant: 0, prone: 0, proneWant: false };
 
     // ---- world ----
+    // what shiny things reflect (Medium and up): this map's own sky, horizon haze, sunlit ground and the sun, blurred
+    // into a tiny environment map once per map. Gun metal, knives, scopes and brass pick it up like real metal.
+    let envRT = null;
+    function setEnv(B) {
+      const es = new THREE.Scene(), sd = new THREE.Vector3(...(B.sunDir || [0.6, 0.7, 0.4])).normalize();
+      es.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
+        uniforms: { sky: { value: new THREE.Color(B.sky || 0x88aadd) }, fog: { value: new THREE.Color(B.fog || 0xccccbb) }, gnd: { value: new THREE.Color((B.amb || [])[1] || 0x776655) },
+          sun: { value: new THREE.Color(B.sunColor || 0xffffff).multiplyScalar(B.sunI || 2.4) }, sd: { value: sd } },
+        vertexShader: 'varying vec3 vD; void main() { vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: `uniform vec3 sky; uniform vec3 fog; uniform vec3 gnd; uniform vec3 sun; uniform vec3 sd; varying vec3 vD;
+          void main() { float y = vD.y; vec3 c = y > 0.0 ? mix(fog * 1.1, sky, pow(y, 0.6)) : mix(fog * 0.8, gnd * 1.3, min(1.0, -y * 3.0));
+            c = mix(vec3(dot(c, vec3(0.3, 0.55, 0.15))), c, 0.4);   // reflections in rough metal read greyer than the sky itself
+            c += sun * (pow(max(dot(vD, sd), 0.0), 600.0) * 20.0 + pow(max(dot(vD, sd), 0.0), 8.0) * 0.25); gl_FragColor = vec4(c, 1.0); }` })));
+      const pm = new THREE.PMREMGenerator(renderer);
+      if (envRT) envRT.dispose();
+      envRT = pm.fromScene(es, 0.02); pm.dispose();
+      scene.environment = envRT.texture; vmScene.environment = envRT.texture;
+      es.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    }
     function buildMap(id) {
       if (W) { scene.remove(W.group); W.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
       mapId = id; W = buildWorld(E, MAPS[id], scene, Q, { aniso: renderer.capabilities.getMaxAnisotropy() });
@@ -316,6 +359,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (sky) { scene.remove(sky); sky = null; }
       const lit = dressScene(scene, B, false, Q >= 1); sunLight = lit.sun; sky = lit.sky; sunDir = lit.dir;
       vmHemi.color.set(B.amb[0]); vmHemi.groundColor.set(B.amb[1]); vmSun.color.set(B.sunColor);
+      if (Q >= 1) setEnv(B);
       for (const p of B.props) W.group.add(makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }));
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       hud.radarBase(W);
@@ -361,6 +405,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (wid === 'knife') { const ki = knife ? itemInfo({ ...knife }) : null; vm = makeKnife(ki ? ki.weapon : null, knife && ki && !/:Vanilla$/.test(knife.def) ? skinTexture(knife, ki) : null, sleeve, glove); }   // Vanilla keeps the knife's own colours
       else if (G_BY_ID[wid]) { vm = makeGrenade(wid, sleeve, glove, true); vm.scale.setScalar(1.25); }
       else if (wid === 'c4') { vm = makeBomb(sleeve, glove, true); vm.scale.setScalar(0.9); }
+      else if (it.skin && /:Finger Gun$/.test(it.skin.def)) vm = makeFingerGun(sleeve);   // the Finger Gun is literally a finger gun
       else { const sk = it.skin, si = sk ? itemInfo(sk) : null; vm = makeGun(wid, sk && si ? skinTexture(sk, si) : null, sleeve, glove, true, att); }
       const small = (W_BY_ID[wid] || {}).cat === 'pistol' || wid === 'zeus';
       vm.userData.base = small ? new THREE.Vector3(0.17 * S.hand, -0.16, -0.44) : new THREE.Vector3(0.19 * S.hand, -0.2, -0.46); vm.userData.ry = (small ? 0.28 : 0.16) * S.hand; vm.scale.multiplyScalar(small ? 0.62 : 0.85);
@@ -501,6 +546,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (p) return;
         const info = d && typeof d === 'object' ? d : {};
         const clean = { name: String(info.name || 'Player').slice(0, 20), loadout: sanitizeLoadout(info.loadout), agent: sanitizeAgent(info.agent), knife: sanitizeKnife(info.knife) };
+        if (ranked && !started) { const n = MODES[mode].size, onT = [...match.players.values()].filter((q) => !q.bot && q.team === 'T').length; clean.team = onT < n ? 'T' : 'CT'; }
         if (started) {  // replace a bot on the team that needs a human most
           const humans = (tm) => [...match.players.values()].filter((q) => q.team === tm && !q.bot).length;
           const team = humans('T') <= humans('CT') ? 'T' : 'CT';
@@ -508,7 +554,7 @@ export default function start({ cfg, E, N, smoke }) {
           if (bot) { match.remove(bot.id); clean.team = bot.team; }
         }
         match.add(peer, clean);
-        send('lobby', { mode, map: mapId, bot: botLevel, started }, peer);
+        send('lobby', { mode, map: mapId, bot: botLevel, started, ranked }, peer);
         if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
         return;
       }
@@ -596,7 +642,10 @@ export default function start({ cfg, E, N, smoke }) {
     function onFx(list) { st.effects = list || []; syncEffects(); }
     function onNade(n) { { const r = rigs.get(n.owner); if (r && r.soldier) soldierEvent(r, 'throw'); } const m = makeGrenade(n.type); m.position.set(n.x, n.y, n.z); fx.add(m); flying.set(n.id, { n: { ...n }, m }); audio.at('bounce', n.x, n.y, n.z, cam, 20); }
     function onChat(m) { hud.chat(m.name, m.team, m.text, m.teamOnly); audio.play('radio'); if (m.text.startsWith('📻 ') && S.voice) audio.say(m.text.slice(3), 1.0); }
-    function announce(key) { if (!S.voice) return; const l = line(S.voicePack, key); audio.say(l.text, l.pitch, l.rate); }
+    function announce(key) { if (!S.voice) return; const l = line(S.voicePack, key); if (l.text) audio.say(l.text, l.pitch, l.rate); sfxFor(S.voicePack, key).forEach((n, i) => setTimeout(() => audio.play(n, 0.8), i * 160)); }
+    // kill / death / flash call-outs (packs that have them, e.g. MLG 420): soundboard effects first, then the line
+    let mkN = 0, mkT = 0, mkR = -1, flashSaid = 0, firstDone = -1;
+    function announceEv(key) { if (!S.voice || !hasLine(S.voicePack, key)) return; announce(key); }
     let specTarget = null, specNext = false;
     // spectating: you see through their eyes like a player would, their gun in their hands (attachments too), their
     // aim smoothed the way a person's view moves, flashes and kick when they fire
@@ -630,9 +679,16 @@ export default function start({ cfg, E, N, smoke }) {
       if (type === 'banner') hud.banner(data.text, data.sub || '', 3000);
       if (type === 'kill') {
         hud.feed(data, myId);
+        if (data.kid === myId && data.vteam !== me.team) {
+          const now = performance.now(); mkN = now - mkT < 4500 && mkR === st.round ? mkN + 1 : 1; mkT = now; mkR = st.round;
+          const w2 = W_BY_ID[data.weapon] || {}, foes = [...st.players.values()].filter((q) => q.team && q.team !== me.team).length;
+          const ev = mkN >= 5 || (foes >= 3 && mkN >= foes) ? 'ace' : mkN === 4 ? 'quad' : mkN === 3 ? 'triple' : mkN === 2 ? 'double'
+            : w2.cat === 'sniper' && w2.zoom && !me.lastScoped ? 'noscope' : data.wallbang ? 'wallbang' : data.weapon === 'knife' ? 'knife' : data.head ? 'headshot' : firstDone !== st.round ? 'first' : null;
+          firstDone = st.round; if (ev) announceEv(ev);
+        }
         if (data.kid === myId && data.vteam !== me.team) { addXp(data.weapon, XP_RULES.kill + (data.head ? XP_RULES.head : 0)); stats.k++; if (data.head) stats.hs++; const w = W_BY_ID[data.weapon]; if (w && w.cat === 'pistol') stats.pistol++; if (w && w.cat === 'smg') stats.smg++; if (data.weapon === 'knife') stats.knife++; if (G_BY_ID[data.weapon]) stats.nade++; bumpStatTrak(data.weapon); }
         if (data.vid === myId) {
-          stats.d++; me.alive = false;
+          stats.d++; me.alive = false; firstDone = st.round; setTimeout(() => announceEv('died'), 300);
           const k = data.kid ? st.players.get(data.kid) : null, took = data.kid ? (dmgFrom.get(data.kid) || 0) : 0, gave = data.kid ? (dmgTo.get(data.kid) || 0) : 0;
           hud.banner('You died', data.killer ? `${data.killer} · ${itemName(data.weapon)}${data.head ? ' · headshot' : ''}${k ? ` · they had ${Math.max(0, k.hp | 0)} HP` : ''} · you dealt ${gave}, took ${took}` : '', 4000);
         }
@@ -668,6 +724,7 @@ export default function start({ cfg, E, N, smoke }) {
           const facing = Math.abs(angDiff(me.yaw, Math.atan2(-(p.x - eye.x), -(p.z - eye.z))));
           const k = facing < 0.9 ? 1 : facing < 1.8 ? 0.55 : 0.2;
           me.flash = Math.max(me.flash, (4.8 * k) * Math.max(0.25, 1 - dist / 40));
+          if (me.flash > 2.2 && performance.now() - flashSaid > 4000) { flashSaid = performance.now(); announceEv('flashed'); }
         }
       }
       if (match && bots) for (const q of match.players.values()) if (q.bot && q.alive) { const e = { x: q.x, y: q.y + 1.6, z: q.z }, p = { x: d.x, y: d.y + 0.2, z: d.z }, dist = Math.hypot(p.x - e.x, p.z - e.z); if (dist < 30 && W.los(e, p)) { const facing = Math.abs(angDiff(q.yaw, Math.atan2(-(p.x - e.x), -(p.z - e.z)))); bots.flashed(q.id, (facing < 1 ? 3.5 : 1.2) * (1 - dist / 30)); } }
@@ -691,7 +748,7 @@ export default function start({ cfg, E, N, smoke }) {
       match = new Match({ W, mode, mapId, botLevel, send: (t, d, to) => { if (session) session.send(t, d, to); }, onLocal: local });
       bots = new Bots(match);
       match.killFx = (by, weapon) => funnyKey(weapon === 'knife' ? (by.knife || {})[by.team] : (Object.values(by.inv).find((i) => i && i.wid === weapon) || {}).skin);
-      const mp = match.add(myId, { ...hello, loadout: sanitizeLoadout(loadout), agent: sanitizeAgent(hello.agent), knife: sanitizeKnife(hello.knife) });
+      const mp = match.add(myId, { ...hello, ...(ranked ? { team: 'T' } : {}), loadout: sanitizeLoadout(loadout), agent: sanitizeAgent(hello.agent), knife: sanitizeKnife(hello.knife) });
       mp.local = true; me.team = mp.team; match.spawn(mp); match.sendInv(mp);
       if (session) {
         session.on('_join', () => {});
@@ -703,7 +760,7 @@ export default function start({ cfg, E, N, smoke }) {
       hud.banner('Joining…', 'connecting to the host', 0);
       session.on('lobby', (d, peer) => {
         if (peer !== session.hostId || !d || !MODES[d.mode] || !MAPS[d.map]) return;
-        mode = d.mode; botLevel = d.bot; if (!W || mapId !== d.map) buildMap(d.map);
+        mode = d.mode; botLevel = d.bot; ranked = !!d.ranked; if (!W || mapId !== d.map) buildMap(d.map);
         started = !!d.started; hud.banner(started ? '' : 'Waiting for the host to start', `${MODES[mode].name} · ${MAPS[mapId].name}`, started ? 1 : 0);
       });
       const msgTypes = { inv: onInv, spawn: onSpawn, hurt: onHurt, hitconfirm: onHitConfirm, ev: onEvent, fire: onFire, bomb: onBomb, drops: onDrops, fx: onFx, nade: onNade, chat: onChat, toast: (t) => toast(String(t).slice(0, 80)) };
@@ -738,10 +795,12 @@ export default function start({ cfg, E, N, smoke }) {
         if (!lobbyPanel) return;
         const list = [...match.players.values()].filter((p) => !p.bot);
         lobbyPanel.innerHTML = `<div style="min-width:min(440px,90vw)"><b style="font-size:18px">${esc(MODES[mode].name)} · ${esc(MAPS[mapId].name)}</b>
-          <div class="cs-mut cs-small" style="margin:4px 0 10px">Invite code <b style="color:var(--o);font-size:16px">${esc(session.code)}</b> · bots (${esc(botLevel)}) fill empty slots</div>
+          <div class="cs-mut cs-small" style="margin:4px 0 10px">${ranked ? '<b style="color:#ffd84a">RANKED</b> · ' : ''}Invite code <b style="color:var(--o);font-size:16px">${esc(session.code)}</b> · bots (${esc(botLevel)}) fill empty slots</div>
+          ${ranked && !rankedReady() ? `<div class="cs-small" style="color:#ffb04a;margin-bottom:8px">Ranked starts when one team is all real players: ${[...match.players.values()].filter((q) => !q.bot && q.team === 'T').length}/${MODES[mode].size} on T. Share the invite code.</div>` : ''}
           ${list.map((p) => `<div class="cs-row"><span style="color:${p.team === 'CT' ? 'var(--ct)' : 'var(--tt)'}">●</span> ${esc(p.name)} <span class="cs-mut cs-small">${p.team}</span></div>`).join('')}
           <div class="cs-row" style="margin-top:12px"><button class="cs-btn" data-s>START MATCH</button><button class="cs-btn alt" data-c>COPY INVITE LINK</button><button class="cs-btn alt" data-q>LEAVE</button></div></div>`;
-        lobbyPanel.querySelector('[data-s]').onclick = () => { lobbyPanel.remove(); lobbyPanel = null; startMatch(); };
+        const sb = lobbyPanel.querySelector('[data-s]'); if (ranked && !rankedReady()) { sb.disabled = true; sb.style.opacity = 0.45; }
+        sb.onclick = () => { if (ranked && !rankedReady()) return; lobbyPanel.remove(); lobbyPanel = null; startMatch(); };
         lobbyPanel.querySelector('[data-c]').onclick = (e) => { const t = document.createElement('textarea'); t.value = location.origin + location.pathname + '#' + session.code; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (er) { /* old browser */ } t.remove(); e.target.textContent = 'COPIED'; };
         lobbyPanel.querySelector('[data-q]').onclick = quit;
       };
@@ -752,7 +811,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (lobbyPanel) { clearInterval(lobbyPanel.iv); lobbyPanel.remove(); lobbyPanel = null; }
       uiOpen = null; started = true;
       match.fillBots(botNames(Math.floor(Math.random() * 18)));
-      match.start(); send('lobby', { mode, map: mapId, bot: botLevel, started: true });
+      match.start(); send('lobby', { mode, map: mapId, bot: botLevel, started: true, ranked });
       if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
     }
 
@@ -788,7 +847,7 @@ export default function start({ cfg, E, N, smoke }) {
       me.shotK = 1; me.shotRoll = Math.random() - 0.5;
       if (w.cat !== 'knife' && w.cat !== 'zeus' && !w.shellReload) { const fx2 = -Math.sin(me.yaw), fz2 = -Math.cos(me.yaw); ejectCasing({ x: eye.x + fx2 * 0.2, y: eye.y - 0.04, z: eye.z + fz2 * 0.2 }, Math.cos(me.yaw) * S.hand, -Math.sin(me.yaw) * S.hand, fx2, fz2, false); }
       if (parts && w.cat !== 'knife' && w.cat !== 'zeus' && Math.random() < 0.5) { const fx2 = -Math.sin(me.yaw) * Math.cos(me.pitch), fy2 = Math.sin(me.pitch), fz2 = -Math.cos(me.yaw) * Math.cos(me.pitch); parts.smoke(eye.x + fx2 * 1.0 + Math.cos(me.yaw) * 0.12 * S.hand, eye.y + fy2 * 1.0 - 0.08, eye.z + fz2 * 1.0 - Math.sin(me.yaw) * 0.12 * S.hand, { size: 0.12, life: 0.8, alpha: 0.3 }); }   // a wisp of muzzle smoke
-      me.spray++; me.sprayT = 0.4 + 60 / w.rpm; me.lastGun = w.id; me.lastShotAt = performance.now();
+      me.spray++; me.sprayT = 0.4 + 60 / w.rpm; me.lastGun = w.id; me.lastShotAt = performance.now(); me.lastScoped = me.scoped > 0;
       if (w.zoom && me.scoped && w.cat === 'sniper') me.unscopeAfterShot = true;
       const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0, yaw: p.yaw || 0, lean: p.lean || 0, prone: p.prone || 0 }));
       const hits = []; let end = null;
@@ -1151,7 +1210,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (sunLight && hi) { sunLight.position.set(me.x + sunDir[0] * 90, sunDir[1] * 90, me.z + sunDir[2] * 90); sunLight.target.position.set(me.x, 0, me.z); }
       if (W) {   // first-person arms catch the sun only when you stand in it (from the same baked shadows as the map)
         const sv = W.sunAt(cam.position.x, cam.position.y - 0.25, cam.position.z); vmSunK += (sv - vmSunK) * Math.min(1, dt * 8);
-        vmSun.intensity = (W.B.sunI || 2.4) * 0.75 * vmSunK; vmHemi.intensity = (W.B.ambI || 1.1) * 0.95;
+        vmSun.intensity = (W.B.sunI || 2.4) * 0.75 * vmSunK; vmHemi.intensity = (W.B.ambI || 1.1) * 1.4; vmFill.intensity = (W.B.ambI || 1.1) * (0.35 + 0.3 * (1 - vmSunK)) + (W.B.sunI || 2.4) * 0.12 * vmSunK;
         const yw = cam.rotation.y, lx = sunDir[0], lz = sunDir[2], c = Math.cos(-yw), s2 = Math.sin(-yw); vmSun.position.set(lx * c + lz * s2, sunDir[1], -lx * s2 + lz * c);
       }
       if (W) W.sortChunks(cam);
@@ -1227,7 +1286,16 @@ export default function start({ cfg, E, N, smoke }) {
       const res = await profile.matchDone({ ...stats, k: mine.k, d: mine.d, hs: mine.hs, mvp: mine.mvp, win: won ? 1 : 0, draw, rounds: st.round, botsOnly: humans <= 1 });
       const ups = await saveGunXp();
       const lv = ups.filter((u) => u.to > u.from).map((u) => `${W_BY_ID[u.wid].name} → Lv ${u.to}${u.to >= 10 ? ' ★ PRESTIGE (suppressor)' : ''}${unlocksAt(u.wid, u.to).length ? ' (new: ' + unlocksAt(u.wid, u.to).join(', ') + ')' : ''}`);
-      set(`+${res.coins} coins · +${res.xp} XP${res.coins === 0 && profile.signedIn ? ' (daily coin limit reached)' : ''}${lv.length ? ' · ' + lv.join(' · ') : ''}`);
+      let rk = '';
+      if (ranked && !smoke) {   // the Rank Rating result (worked out on the server for accounts)
+        const enemy = won ? null : null, vsBots = match ? [...match.players.values()].some((q) => q.bot && q.team !== me.team) : true; void enemy;
+        const r = await profile.rankedDone({ win: !!won, draw, k: mine.k, d: mine.d, vsBots });
+        if (r && !r.error) { const R = RANKS[r.tier] || RANKS[0], pl = r.n <= PLACEMENTS;
+          rk = ` · RANKED ${r.delta >= 0 ? '+' : ''}${r.delta} RR → ${pl ? `placement ${r.n}/${PLACEMENTS}` : R.name + ' (' + r.rr + ' RR)'}${r.up && !pl ? ' · RANK UP!' : ''}${r.pay ? ' · +' + r.pay + ' coins' : ''}`;
+          if (r.up && !pl) toast('🏆 RANK UP: ' + R.name); }
+        else if (r && r.error) rk = ' · ranked result not saved: ' + r.error;
+      }
+      set(`+${res.coins} coins · +${res.xp} XP${res.coins === 0 && profile.signedIn ? ' (daily coin limit reached)' : ''}${lv.length ? ' · ' + lv.join(' · ') : ''}${rk}`);
     }
     function quit() {
       ended = true; saveGunXp();
