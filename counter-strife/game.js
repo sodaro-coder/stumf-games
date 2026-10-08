@@ -13,7 +13,7 @@ import { Menu, Hud, injectCss, esc, weaponIcon } from './ui.js';
 import { line } from './voices.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound } from './skins.js';
-import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic } from './models.js';
+import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
 // sun, sky light, fog and sky for a map (shared by the match and the menu's map pictures)
@@ -194,7 +194,8 @@ export default function start({ cfg, E, N, smoke }) {
     const hello = { name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
 
     // ---- renderer & scene ----
-    const hi = S.quality >= 1.5;  // High: antialiasing + real-time sun shadows; lower settings stay fast on weak machines
+    const hi = S.quality >= 1.5;  // High: antialiasing + real-time player shadows; lower settings stay fast on weak machines
+    setModelQuality(S.quality);
     const renderer = new THREE.WebGLRenderer({ antialias: hi, powerPreference: 'high-performance' });
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
     if (hi) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
@@ -237,14 +238,17 @@ export default function start({ cfg, E, N, smoke }) {
 
     // ---- remote players (rigs) ----
     const rigs = new Map();
+    // a soft dark patch under each player (contact shadow), cheap on every setting
+    const blobGeo = new THREE.PlaneGeometry(1, 1), blobMat = new THREE.MeshBasicMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(0,0,0,.55)'); gr.addColorStop(0.55, 'rgba(0,0,0,.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
     function rigFor(id) {
       const r0 = rigs.get(id), info = st.roster.get(id) || {}, team = info.team || 'T';
       const agentId = (info.agent || {})[team] || (team === 'T' ? 'a_t_default' : 'a_ct_default');
       const key = agentId + team;
       if (r0 && r0.key === key) return r0;
-      if (r0) scene.remove(r0.g);
+      if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
-      const r = makePlayer(a.look, team); if (hi) r.g.traverse((o) => { if (o.isMesh) o.castShadow = true; }); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
+      const r = makePlayer(a.look, team); if (hi) r.g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      r.blob = new THREE.Mesh(blobGeo, blobMat); r.blob.rotation.x = -Math.PI / 2; r.blob.renderOrder = 1; scene.add(r.blob); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
       if (id !== myId) {  // teammates' names float over their heads
         const c = document.createElement('canvas'); c.width = 256; c.height = 48; const g = c.getContext('2d');
         g.font = 'bold 28px system-ui,sans-serif'; g.textAlign = 'center'; g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.8)'; g.fillStyle = team === 'CT' ? '#9cc4ff' : '#ffd27a';
@@ -265,12 +269,12 @@ export default function start({ cfg, E, N, smoke }) {
       const key = `${wid}|${it && it.skin ? it.skin.uid : ''}|${team}|${knife ? knife.uid : ''}`;
       if (key === vmKey) return; vmKey = key;
       if (vm) vmScene.remove(vm);
-      const sleeve = team === 'T' ? '#6a5a3a' : '#3c4e66';
+      const sleeve = team === 'T' ? '#5e5440' : '#33445c', glove = team === 'T' ? '#2c2824' : '#1e2126';
       if (!wid) { vm = null; return; }
-      if (wid === 'knife') { const ki = knife ? itemInfo({ ...knife }) : null; vm = makeKnife(ki ? ki.weapon : null, knife && ki ? skinTexture(knife, ki) : null, sleeve); }
-      else if (G_BY_ID[wid]) { vm = makeGrenade(wid); vm.scale.setScalar(1.6); }
-      else if (wid === 'c4') { vm = makeBomb(); vm.scale.setScalar(0.9); }
-      else { const sk = it.skin, si = sk ? itemInfo(sk) : null; vm = makeGun(wid, sk && si ? skinTexture(sk, si) : null, sleeve); }
+      if (wid === 'knife') { const ki = knife ? itemInfo({ ...knife }) : null; vm = makeKnife(ki ? ki.weapon : null, knife && ki ? skinTexture(knife, ki) : null, sleeve, glove); }
+      else if (G_BY_ID[wid]) { vm = makeGrenade(wid, sleeve, glove, true); vm.scale.setScalar(1.25); }
+      else if (wid === 'c4') { vm = makeBomb(sleeve, glove, true); vm.scale.setScalar(0.9); }
+      else { const sk = it.skin, si = sk ? itemInfo(sk) : null; vm = makeGun(wid, sk && si ? skinTexture(sk, si) : null, sleeve, glove); }
       const small = (W_BY_ID[wid] || {}).cat === 'pistol' || wid === 'zeus';
       vm.userData.base = small ? new THREE.Vector3(0.17 * S.hand, -0.16, -0.44) : new THREE.Vector3(0.19 * S.hand, -0.2, -0.46); vm.userData.ry = (small ? 0.28 : 0.16) * S.hand; vm.scale.multiplyScalar(small ? 0.62 : 0.85);
       vm.position.copy(vm.userData.base); vmScene.add(vm);
@@ -306,7 +310,7 @@ export default function start({ cfg, E, N, smoke }) {
     const dropObjs = new Map();
     function syncDrops() {
       const keep = new Set();
-      for (const d of st.drops) { keep.add(d.id); if (dropObjs.has(d.id)) continue; const sk = d.skin, si = sk ? itemInfo(sk) : null; const m = makeGun(d.wid, sk && si ? skinTexture(sk, si) : null); m.children.slice(-3).forEach((c) => { if (c.material && c.geometry.parameters && c.geometry.parameters.depth > 0.3) c.visible = false; }); m.rotation.set(0, Math.random() * 6, Math.PI / 2); m.position.set(d.x, d.y + 0.05, d.z); fx.add(m); dropObjs.set(d.id, m); }
+      for (const d of st.drops) { keep.add(d.id); if (dropObjs.has(d.id)) continue; const sk = d.skin, si = sk ? itemInfo(sk) : null; const m = makeGun(d.wid, sk && si ? skinTexture(sk, si) : null, undefined, undefined, false); m.rotation.set(0, Math.random() * 6, Math.PI / 2); m.position.set(d.x, d.y + 0.04, d.z); fx.add(m); dropObjs.set(d.id, m); }
       for (const [k, m] of dropObjs) if (!keep.has(k)) { fx.remove(m); dropObjs.delete(k); }
     }
     const bombObj = makeBomb(); bombObj.visible = false; scene.add(bombObj);
@@ -521,7 +525,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (session) {
         session.on('_join', () => {});
         for (const t of ['hello', 'pose', 'shot', 'buy', 'nade', 'pickup', 'drop', 'dropc4', 'ammo', 'chat', 'emote']) session.on(t, (d, peer) => hostRecv(t, d, peer));
-        session.on('_leave', (_, peer) => { if (match) { match.remove(peer); const r = rigs.get(peer); if (r) { scene.remove(r.g); rigs.delete(peer); } if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length }); } });
+        session.on('_leave', (_, peer) => { if (match) { match.remove(peer); const r = rigs.get(peer); if (r) { scene.remove(r.g); if (r.blob) scene.remove(r.blob); rigs.delete(peer); } if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length }); } });
       }
       if (solo) startMatch(); else showLobbyPanel();
     } else {
@@ -543,7 +547,7 @@ export default function start({ cfg, E, N, smoke }) {
       setTimeout(() => { if (!W) { toast('Could not reach that lobby'); quit(); } }, 20000);
     }
 
-    function setRoster(list) { st.roster = new Map(list.map((r) => [r.id, r])); const mine = st.roster.get(myId); if (mine) { if (mine.team !== me.team) { me.team = mine.team; vmKey = ''; setViewModel(); } } for (const [id, r] of rigs) if (!st.roster.has(id) && id !== myId) { scene.remove(r.g); rigs.delete(id); } }
+    function setRoster(list) { st.roster = new Map(list.map((r) => [r.id, r])); const mine = st.roster.get(myId); if (mine) { if (mine.team !== me.team) { me.team = mine.team; vmKey = ''; setViewModel(); } } for (const [id, r] of rigs) if (!st.roster.has(id) && id !== myId) { scene.remove(r.g); if (r.blob) scene.remove(r.blob); rigs.delete(id); } }
     function applySnap(s) {
       st.phase = s.ph; st.timer = s.tm; st.round = s.r; st.score = s.sc;
       for (const a of s.p) {
@@ -628,7 +632,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (end && w.cat !== 'zeus') tracer([eye.x + Math.cos(me.yaw) * 0.15 * S.hand, eye.y - 0.1, eye.z - Math.sin(me.yaw) * 0.15 * S.hand], [end.x, end.y, end.z]);
       audio.play(shotSound(w.id, it.skin, false), 0.8);
       if (parts && w.cat !== 'zeus') { const rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw), fx2 = -Math.sin(me.yaw), fz2 = -Math.cos(me.yaw); parts.emit(eye.x + rx * 0.18 * S.hand + fx2 * 0.35, eye.y - 0.12, eye.z + rz * 0.18 * S.hand + fz2 * 0.35, { n: 1, colors: [w.pellets > 1 ? '#c8321e' : '#d4a640'], speed: 2.2, up: 0.9, size: w.cat === 'sniper' ? 0.05 : 0.035, life: 1.2, dir: { x: rx * S.hand, y: 0.3, z: rz * S.hand } }); }
-      if (vm && vm.userData.flash) { vm.userData.flash.visible = true; flashT = 0.04; }
+      if (vm && vm.userData.flash) { vm.userData.flash.visible = true; vm.userData.flash.rotation.z = Math.random() * 6.3; vm.userData.flash.scale.setScalar(0.8 + Math.random() * 0.5); flashT = 0.04; }
       if (it.ammo === 0 && it.reserve > 0) setTimeout(() => { if (me.inv[me.cur] === it && it.ammo === 0) startReload(); }, 250);
     }
     function knife(heavy) {
@@ -831,13 +835,15 @@ export default function start({ cfg, E, N, smoke }) {
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
         posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
+        if (r.blob) { r.blob.visible = r.g.visible; const gy = W.groundAt(p.x, p.z, p.y + 0.1); r.blob.position.set(p.x, gy + 0.02, p.z); const k = Math.max(0.2, 1 - (p.y - gy) * 0.8); r.blob.scale.setScalar(0.95 * k); }
+        { const gf = r.tpGun.children[0]; if (gf && gf.userData.flash) { r.flashT = (r.flashT || 0) - dt; gf.userData.flash.visible = r.flashT > 0; if (r.flashT > 0) gf.userData.flash.rotation.z = Math.random() * 6.3; } }
         if (r.dieT && r.fall) { const k = Math.min(1, r.dieT * 3); r.g.position.x += r.fall.x * 0.5 * k; r.g.position.z += r.fall.z * 0.5 * k; r.g.rotation.z = r.fall.side * 0.35 * k; r.g.rotation.y = Math.atan2(-r.fall.x, -r.fall.z) + Math.PI; }
-        if (spectating && p.id === spectating.id) r.g.visible = false;
+        if (spectating && p.id === spectating.id) { r.g.visible = false; if (r.blob) r.blob.visible = false; }
       }
       // own body while emoting: camera swings out in front, you see yourself
       const selfRig = me.emote || rigs.has(myId) ? rigFor(myId) : null;
       if (selfRig) {
-        selfRig.g.visible = !!me.emote && me.alive;
+        selfRig.g.visible = !!me.emote && me.alive; if (selfRig.blob) selfRig.blob.visible = selfRig.g.visible;
         if (me.emote) {
           selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw;
           posePlayer(selfRig, { t: selfRig.t, emote: me.emote });
@@ -946,6 +952,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, get match() { return match; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, get W() { return W; }, get match() { return match; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }
