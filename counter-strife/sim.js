@@ -84,7 +84,7 @@ export function traceShot(W, players, shooterId, o, d, w, range = 8192 * U) {
     }
     if (best) { res.hits.push({ id: best.id, group: best.group, dist: best.t, pen }); hitIds.add(best.id); if (res.hits.length >= 2) break; continue; }
     if (!wall) { res.end = { x: o.x + d.x * range, y: o.y + d.y * range, z: o.z + d.z * range }; break; }
-    const pt = { x: o.x + d.x * wall.t, y: o.y + d.y * wall.t, z: o.z + d.z * wall.t };
+    const pt = { x: o.x + d.x * wall.t, y: o.y + d.y * wall.t, z: o.z + d.z * wall.t, m: wall.m };
     res.wallHits.push(pt); res.end = pt;
     const th = W.thickness(o, d, wall.t), cost = th * W.density(wall.m), cap = (w.pen || 1) * 0.55;
     if (!isFinite(th) || cost >= cap) break;

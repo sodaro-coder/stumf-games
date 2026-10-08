@@ -121,6 +121,7 @@ function makeAudio(getVol) {
     crunch: (v, p) => { for (let k = 0; k < 4; k++) burst(0.03, 2500 + k * 300, v * 0.45, p, 2, 'bandpass', k * 0.03); },
     flop: (v, p) => { burst(0.12, 800, v * 0.8, p, 1.4, 'bandpass'); tone('sine', 130, 60, 0.12, v * 0.5, p); burst(0.08, 500, v * 0.4, p, 1, 'lowpass', 0.07); },
     whoosh: (v, p) => burst(0.2, 1800, v * 0.35, p, 1.5, 'bandpass'),
+    ricochet: (v, p) => { tone('sine', 3400 + Math.random() * 800, 1400, 0.28, v * 0.16, p, 0, 0, 18); burst(0.04, 5000, v * 0.2, p, 2, 'highpass'); },
     shimmer: (v, p) => { [880, 1320, 1760, 2640, 1980].forEach((f, k) => tone('sine', f, f * 1.01, 0.9 - k * 0.1, v * 0.16, p, k * 0.07)); tone('sine', 110, 55, 1.2, v * 0.35, p); burst(0.6, 6000, v * 0.12, p, 1, 'highpass', 0.05); },
   };
   // the announcer and radio voice: the browser's own text-to-speech (works offline with system voices)
@@ -228,6 +229,41 @@ export default function start({ cfg, E, N, smoke }) {
     const cam = new THREE.PerspectiveCamera(74, 1, 0.05, 400); cam.rotation.order = 'YXZ'; scene.add(cam);
     const vmCam = new THREE.PerspectiveCamera(60, 1, 0.01, 10), vmScene = new THREE.Scene();
     const vmHemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2), vmSun = new THREE.DirectionalLight(0xffffff, 1.6); vmSun.position.set(1, 2, 1); vmScene.add(vmHemi, vmSun);
+    // the final look (Medium and up): the frame is drawn in HDR, then one pass adds a soft bloom on the brightest things
+    // (muzzle flashes, the sun, glowing skins), filmic tone mapping, a gentle contrast/colour grade (cool shadows, warm
+    // highlights), a vignette and fine film grain. Low and Potato skip it and draw straight to the screen.
+    const post = { rt: null, w: 0, h: 0 };
+    post.mat = new THREE.ShaderMaterial({
+      uniforms: { tex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `uniform sampler2D tex; uniform vec2 res; uniform float time; uniform float exposure; varying vec2 vUv;
+        vec3 aces(vec3 c) { const mat3 i = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
+          const mat3 o = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
+          c = i * c; vec3 a = c * (c + 0.0245786) - 0.000090537, b = c * (0.983729 * c + 0.4329510) + 0.238081; return clamp(o * (a / b), 0.0, 1.0); }
+        vec3 srgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+        void main() {
+          vec3 c = texture2D(tex, vUv).rgb, bl = vec3(0.0);
+          for (int k = 0; k < 8; k++) { float a = float(k) * 0.785398; vec2 o = vec2(cos(a), sin(a)) / res;
+            bl += max(texture2D(tex, vUv + o * 5.0).rgb - 0.9, 0.0) + max(texture2D(tex, vUv + o * 12.0).rgb - 0.9, 0.0) * 0.6; }
+          c += bl * 0.045;
+          c = aces(c * exposure / 0.6);
+          c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);                                   // contrast
+          float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = mix(vec3(l), c, 1.08);   // a touch more colour
+          c += (1.0 - l) * vec3(-0.012, 0.0, 0.018) + l * vec3(0.016, 0.006, -0.012);   // cool shadows, warm highlights
+          vec2 q = vUv - 0.5; c *= 1.0 - 0.32 * pow(length(q * vec2(1.25, 1.0)) * 1.3, 2.4);   // vignette
+          c += (fract(sin(dot(vUv * res + time * 61.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.007;   // grain
+          gl_FragColor = vec4(srgb(clamp(c, 0.0, 1.0)), 1.0);
+        }`,
+      depthTest: false, depthWrite: false,
+    });
+    post.scene = new THREE.Scene(); post.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post.mat); post.quad.frustumCulled = false; post.scene.add(post.quad);
+    post.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const postOn = () => Q >= 1 && renderer.capabilities.isWebGL2;
+    const postTarget = () => {
+      const v = renderer.getDrawingBufferSize(new THREE.Vector2()), w = Math.max(1, v.x | 0), h = Math.max(1, v.y | 0);
+      if (!post.rt || post.w !== w || post.h !== h) { if (post.rt) post.rt.dispose(); post.rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: hi ? 4 : 0 }); post.w = w; post.h = h; post.mat.uniforms.res.value.set(w, h); }
+      return post.rt;
+    };
     const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = vmCam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); vmCam.updateProjectionMatrix(); };
     addEventListener('resize', resize); resize();
     renderer.autoClear = false;
@@ -360,6 +396,33 @@ export default function start({ cfg, E, N, smoke }) {
     const tracerMat = new THREE.LineBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.6 });
     const tracers = [];
     const tracer = (a, b) => { if (tracers.length > 24) { const t = tracers.shift(); fx.remove(t.l); t.l.geometry.dispose(); } const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]); const l = new THREE.Line(g, tracerMat); fx.add(l); tracers.push({ l, t: 0.05 }); };
+    // spent brass: flies out of the ejection port, tumbles, bounces and tinkles, then lies there a while
+    const brassGeo = new THREE.CylinderGeometry(0.0045, 0.0045, 0.022, 6), shellGeo = new THREE.CylinderGeometry(0.009, 0.009, 0.06, 7), casings = [];
+    const brassMat = lam('#c8a048'), shellMat = lam('#b8221e');
+    function ejectCasing(o, rx, rz, ax, az, shell) {
+      let c = casings.length > 40 ? casings.shift() : null;
+      if (!c) c = { m: new THREE.Mesh(shell ? shellGeo : brassGeo, shell ? shellMat : brassMat) };
+      c.m.geometry = shell ? shellGeo : brassGeo; c.m.material = shell ? shellMat : brassMat;
+      c.m.position.set(o.x + rx * 0.16 + ax * 0.32, o.y - 0.08, o.z + rz * 0.16 + az * 0.32); c.m.rotation.set(Math.random() * 6, Math.random() * 6, 0);
+      c.v = new THREE.Vector3(rx * (1.6 + Math.random()) - ax * 0.3, 1.6 + Math.random() * 0.8, rz * (1.6 + Math.random()) - az * 0.3); c.spin = 18 + Math.random() * 10; c.t = 0; c.bounced = 0;
+      fx.add(c.m); casings.push(c);
+    }
+    function stepCasings(dt) {
+      for (let i = casings.length - 1; i >= 0; i--) {
+        const c = casings[i]; c.t += dt;
+        if (c.t > 8) { fx.remove(c.m); casings.splice(i, 1); continue; }
+        if (c.bounced > 2) continue;
+        c.v.y -= 9.8 * dt; c.m.position.addScaledVector(c.v, dt); c.m.rotation.x += c.spin * dt; c.m.rotation.z += c.spin * 0.7 * dt;
+        const g = W ? W.groundAt(c.m.position.x, c.m.position.z, c.m.position.y + 0.3) : 0;
+        if (c.m.position.y < g + 0.005) { c.m.position.y = g + 0.005; if (c.v.y < -0.6) { c.v.y *= -0.35; c.v.x *= 0.5; c.v.z *= 0.5; c.spin *= 0.5; c.bounced++; if (c.bounced === 1) audio.at('shell', c.m.position.x, c.m.position.y, c.m.position.z, cam, 14); } else { c.bounced = 3; c.m.rotation.set(Math.PI / 2, Math.random() * 6, 0); } }
+      }
+    }
+    // what a bullet throws up depends on what it hit
+    const IMPACT = { metal: { colors: ['#fff3c0', '#ffd27a', '#ffffff'], n: 8, speed: 3.2, up: 0.3, size: 0.012, life: 0.22 }, cred: 'metal', cblue: 'metal', cgreen: 'metal', corange: 'metal', bus: 'metal', potty: 'metal',
+      wood: { colors: ['#8a5a2a', '#c89a5a', '#5a3a1a'], n: 6, speed: 1.8, up: 0.6, size: 0.018, life: 0.6 }, crate: 'wood', darkwood: 'wood', fence: 'wood',
+      sand: { colors: ['#d8c49a', '#c8b07a', '#e8d8b0'], n: 5, speed: 1.0, up: 0.9, size: 0.016, life: 0.7 }, dirt: 'sand', grass: 'sand',
+      concrete: { colors: ['#9a9a96', '#c8c8c0', '#6a6a66'], n: 6, speed: 1.6, up: 0.7, size: 0.018, life: 0.6 } };
+    const impactFx = (m) => { let e = IMPACT[m] || IMPACT.concrete; if (typeof e === 'string') e = IMPACT[e]; return e; };
     const decalGeo = new THREE.PlaneGeometry(0.12, 0.12), decalMat = new THREE.MeshBasicMaterial({ color: 0x1a1612, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
     const decals = [];
     const decal = (p, d) => { const m = new THREE.Mesh(decalGeo, decalMat); m.position.set(p.x - d.x * 0.01, p.y - d.y * 0.01, p.z - d.z * 0.01); m.lookAt(p.x - d.x, p.y - d.y, p.z - d.z); fx.add(m); decals.push(m); if (decals.length > 60) fx.remove(decals.shift()); };
@@ -709,6 +772,9 @@ export default function start({ cfg, E, N, smoke }) {
       const adsOn = me.ads > 0.6, n0 = me.spray;
       const adsSpread = () => { const [st0, mv, jp] = w.inacc || [0.005, 0.03, 0.1]; return st0 * 0.25 + (me.onGround ? 0 : jp) + Math.max(0, speedOf(me) / (w.speed * U) - 0.34) * mv * 0.5; };
       const rc0 = adsOn ? { up: 0, side: 0 } : recoilAt(w, me.spray), RH = rhK(), rc = { up: rc0.up * RH, side: rc0.side * RH }, sp = (adsOn ? adsSpread() : spreadOf(w, me, me.scoped > 0, me.spray)) * (me.flash > 1 ? 1.3 : 1);
+      me.shotK = 1; me.shotRoll = Math.random() - 0.5;
+      if (w.cat !== 'knife' && w.cat !== 'zeus' && !w.shellReload) { const fx2 = -Math.sin(me.yaw), fz2 = -Math.cos(me.yaw); ejectCasing({ x: eye.x + fx2 * 0.2, y: eye.y - 0.04, z: eye.z + fz2 * 0.2 }, Math.cos(me.yaw) * S.hand, -Math.sin(me.yaw) * S.hand, fx2, fz2, false); }
+      if (parts && w.cat !== 'knife' && w.cat !== 'zeus' && Math.random() < 0.5) { const fx2 = -Math.sin(me.yaw) * Math.cos(me.pitch), fy2 = Math.sin(me.pitch), fz2 = -Math.cos(me.yaw) * Math.cos(me.pitch); parts.smoke(eye.x + fx2 * 1.0 + Math.cos(me.yaw) * 0.12 * S.hand, eye.y + fy2 * 1.0 - 0.08, eye.z + fz2 * 1.0 - Math.sin(me.yaw) * 0.12 * S.hand, { size: 0.12, life: 0.8, alpha: 0.3 }); }   // a wisp of muzzle smoke
       me.spray++; me.sprayT = 0.4 + 60 / w.rpm; me.lastGun = w.id; me.lastShotAt = performance.now();
       if (w.zoom && me.scoped && w.cat === 'sniper') me.unscopeAfterShot = true;
       const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0, yaw: p.yaw || 0, lean: p.lean || 0, prone: p.prone || 0 }));
@@ -720,7 +786,7 @@ export default function start({ cfg, E, N, smoke }) {
         const tr = traceShot(W, players, myId, eye, d, w);
         hits.push(...tr.hits); if (!end) end = tr.end;
         for (const h of tr.hits) { const p = st.players.get(h.id); if (p) puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); }
-        if (tr.wallHits[0]) { decal(tr.wallHits[0], d); const hp = tr.wallHits[0]; if (parts) parts.emit(hp.x - d.x * 0.05, hp.y - d.y * 0.05, hp.z - d.z * 0.05, { n: 5, colors: ['#8a8070', '#b0a890', '#ffd27a'], speed: 1.6, up: 0.6, size: 0.035, life: 0.45 }); }
+        if (tr.wallHits[0]) { decal(tr.wallHits[0], d); const hp = tr.wallHits[0], mn = W.matName(hp.m), e = impactFx(mn); if (parts) { parts.emit(hp.x - d.x * 0.05, hp.y - d.y * 0.05, hp.z - d.z * 0.05, e); if (e !== IMPACT.metal) parts.smoke(hp.x - d.x * 0.1, hp.y - d.y * 0.1, hp.z - d.z * 0.1, { n: 2, color: e.colors[0], size: e === IMPACT.sand ? 0.22 : 0.14, life: 1.1, rise: 0.15, alpha: 0.55 }); } if (e === IMPACT.metal && Math.random() < 0.35) audio.at('ricochet', hp.x, hp.y, hp.z, cam, 30); }
         for (const h of tr.hits) { const p = st.players.get(h.id); if (p && parts) parts.emit(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, { n: 6, colors: ['#8a0a0a', '#c01a1a'], speed: 1.5, up: 0.4, size: 0.04, life: 0.5 }); }
       }
       if (adsOn) {   // aimed in: the gun climbs your actual view (pull down to control it), at a bit over half the hip-fire pattern
@@ -911,7 +977,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (inp.jump && me.proneWant) { me.proneWant = false; inp.jump = false; }   // jump gets you up
         const wasG = me.onGround;
         moveStep(W, me, inp, dt, wspeed);
-        if (!wasG && me.onGround && me.wasAir > 0.25) audio.play('land', 0.5);
+        if (!wasG && me.onGround && me.wasAir > 0.25) { audio.play('land', 0.5); me.landK = Math.min(1.2, me.wasAir * 1.6); }
         me.wasAir = me.onGround ? 0 : (me.wasAir || 0) + dt;
         const spd = speedOf(me);
         if (me.onGround && spd > 3 && !inp.crouch && !me.prone) { me.stepT -= dt * spd / 3.3; if (me.stepT <= 0) { me.stepT = 1; audio.play('step', me.sprinting ? 0.75 : 0.5, 0, W.matName(W.mat[W.idx(Math.floor(me.x), Math.floor(me.z))])); } }
@@ -1023,6 +1089,18 @@ export default function start({ cfg, E, N, smoke }) {
         vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.12 : 0));
         vm.rotation.set(rel * 2 + camKick * 2 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.6 : 0), (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
         me.sprintK = (me.sprintK || 0) + ((me.sprinting ? 1 : 0) - (me.sprintK || 0)) * Math.min(1, dt * 10);
+        { // the feel of holding a real gun: it lags behind your aim, breathes, tilts as you strafe, dips when you land,
+          // and each shot kicks it back and up with a little roll before it settles
+          const F = me.vmF || (me.vmF = { x: 0, y: 0, vx: 0, vy: 0, t: 0 }), aim = 1 - 0.75 * me.ads;
+          for (const [a, k] of [['x', -lookDX], ['y', lookDY]]) { F['v' + a] += (k * 0.6 - 90 * F[a] - 14 * F['v' + a]) * dt; F[a] += F['v' + a] * dt; F[a] = Math.max(-1.2, Math.min(1.2, F[a])); }
+          F.t += dt; const br = Math.sin(F.t * 1.7), still = 1 - Math.min(1, sp / 2);
+          const side = (me.vx * Math.cos(me.yaw) - me.vz * Math.sin(me.yaw)) / 6;
+          me.landK = Math.max(0, (me.landK || 0) - dt * 3); me.shotK = Math.max(0, (me.shotK || 0) - dt * 14);
+          vm.position.x += F.x * 0.012 * aim; vm.position.y += (F.y * 0.01 + br * 0.0016 * still) * aim - me.landK * 0.035 * Math.sin(Math.min(1, me.landK) * Math.PI);
+          vm.position.z += me.shotK * 0.022;
+          vm.rotation.y += F.x * 0.05 * aim; vm.rotation.x += (F.y * 0.035 + br * 0.004 * still) * aim + me.shotK * 0.05;
+          vm.rotation.z += (F.x * 0.06 - Math.max(-1, Math.min(1, side)) * 0.07) * aim + me.shotK * (me.shotRoll || 0) * 0.05;
+        }
         if (me.sprintK > 0.01) { vm.rotation.x -= 0.32 * me.sprintK; vm.rotation.y += 0.45 * me.sprintK * S.hand; vm.position.y -= 0.035 * me.sprintK; vm.position.x -= 0.03 * me.sprintK * S.hand; }   // gun lowered while sprinting
         if (vm.userData.sc == null) vm.userData.sc = vm.scale.x;
         vm.scale.setScalar(vm.userData.sc);
@@ -1050,6 +1128,7 @@ export default function start({ cfg, E, N, smoke }) {
         }
       }
       if (parts) parts.tick(dt);
+      stepCasings(dt);
       if (sunLight && hi) { sunLight.position.set(me.x + sunDir[0] * 90, sunDir[1] * 90, me.z + sunDir[2] * 90); sunLight.target.position.set(me.x, 0, me.z); }
       if (W) {   // first-person arms catch the sun only when you stand in it (from the same baked shadows as the map)
         const sv = W.sunAt(cam.position.x, cam.position.y - 0.25, cam.position.z); vmSunK += (sv - vmSunK) * Math.min(1, dt * 8);
@@ -1060,7 +1139,11 @@ export default function start({ cfg, E, N, smoke }) {
       if (sky) { sky.position.set(cam.position.x, 0, cam.position.z); if (sky.userData.drift) sky.userData.drift.x += dt * 0.0015; }
       // ---- draw ----
       animateGlow(now, dt);   // Mythic finishes and outfits: pulsing, crawling veins
-      renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
+      if (postOn()) {
+        const rt = postTarget(); renderer.setRenderTarget(rt);
+        renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
+        renderer.setRenderTarget(null); post.mat.uniforms.tex.value = rt.texture; post.mat.uniforms.time.value = (post.mat.uniforms.time.value + dt) % 100; renderer.render(post.scene, post.cam);
+      } else { renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam); }
       // ---- HUD (throttled) ----
       hudT += dt; radarT += dt;
       hud.flashAmt(me.flash > 1.5 ? 1 : me.flash / 1.5);
@@ -1138,6 +1221,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, get W() { return W; }, get match() { return match; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

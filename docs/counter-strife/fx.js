@@ -7,7 +7,7 @@ import { cloudCanvas } from './textures.js';
 // ---- particles: a fixed pool of tiny boxes, gravity + bounce on the floor height, no garbage ----
 export class Particles {
   constructor(scene, groundAt, n = 220) {
-    this.geo = new THREE.BoxGeometry(1, 1, 1); this.mats = new Map(); this.p = []; this.groundAt = groundAt;
+    this.scene = scene; this.geo = new THREE.BoxGeometry(1, 1, 1); this.mats = new Map(); this.p = []; this.groundAt = groundAt;
     for (let i = 0; i < n; i++) { const m = new THREE.Mesh(this.geo, this.mat('#ffffff')); m.visible = false; m.matrixAutoUpdate = true; scene.add(m); this.p.push({ m, t: 0, vx: 0, vy: 0, vz: 0, g: 1, spin: 0 }); }
     this.i = 0;
   }
@@ -20,7 +20,27 @@ export class Particles {
       q.t = life * (0.6 + Math.random() * 0.8); q.g = g; q.spin = (Math.random() - 0.5) * 20;
     }
   }
+  // soft smoke and dust: round, see-through puffs that grow, drift up and fade (muzzle smoke, impact dust)
+  smoke(x, y, z, { n = 1, color = '#c8c4bc', size = 0.15, grow = 1.6, life = 1.0, rise = 0.25, drift = 0.15, alpha = 0.45 } = {}) {
+    if (!this.sp) {
+      const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.45, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+      const tex = new THREE.CanvasTexture(c); this.sp = []; this.si = 0;
+      for (let i = 0; i < 48; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0 })); m.visible = false; this.scene.add(m); this.sp.push({ m, t: 0 }); }
+    }
+    for (let k = 0; k < n; k++) {
+      const q = this.sp[this.si = (this.si + 1) % this.sp.length];
+      q.m.visible = true; q.m.position.set(x + (Math.random() - 0.5) * size, y, z + (Math.random() - 0.5) * size); q.m.material.color.set(color);
+      q.t = q.life = life * (0.7 + Math.random() * 0.6); q.s0 = size; q.grow = grow; q.a = alpha; q.vy = rise; q.vx = (Math.random() - 0.5) * drift; q.vz = (Math.random() - 0.5) * drift;
+    }
+  }
   tick(dt) {
+    if (this.sp) for (const q of this.sp) {
+      if (q.t <= 0) continue;
+      q.t -= dt; if (q.t <= 0) { q.m.visible = false; continue; }
+      const k = 1 - q.t / q.life; q.m.position.x += q.vx * dt; q.m.position.y += q.vy * dt; q.m.position.z += q.vz * dt;
+      q.m.scale.setScalar(q.s0 * (1 + q.grow * k)); q.m.material.opacity = q.a * (1 - k) * Math.min(1, k * 8);
+    }
     for (const q of this.p) {
       if (q.t <= 0) continue;
       q.t -= dt; if (q.t <= 0) { q.m.visible = false; continue; }
