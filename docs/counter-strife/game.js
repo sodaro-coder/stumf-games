@@ -6,6 +6,7 @@ import * as THREE from '../sdk/three.module.min.js';
 import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forTeam } from './data.js';
 import { buildWorld } from './world.js';
 import { MAPS } from './maps.js';
+import { mobileControls } from './mobile.js';
 import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf, recoilAt, nadeStep, speedOf } from './sim.js';
 import { Bots, botNames } from './bots.js';
 import { Profile } from './backend.js';
@@ -29,7 +30,7 @@ function dressScene(sc, B, shadows, clouds = true) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0 };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -181,7 +182,7 @@ export default function start({ cfg, E, N, smoke }) {
   };
   let menu = null;
   const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate); } }); menu.show(); };
-  if (smoke) runMatch({ mode: '5v5', map: 'dust', bot: 'normal', host: true, solo: true, smoke: true });
+  if (smoke) { let m = 'dust'; try { const q = new URLSearchParams(location.search).get('map'); if (MAPS[q]) m = q; } catch (e) { /* no page */ } runMatch({ mode: '5v5', map: m, bot: 'normal', host: true, solo: true, smoke: true }); }
   else showMenu();
 
   // ====================================================================================================================
@@ -205,7 +206,9 @@ export default function start({ cfg, E, N, smoke }) {
     const saveGunXp = async () => { if (gunXPSaved) return []; gunXPSaved = true; try { return await profile.gunXp(gunXP); } catch (e) { return []; } };
     // recoil help: the admin's account only (checked on the server at sign-in). It cuts recoil to about a third. In an
     // online match everyone is told it's on, in chat, when you join: no secret advantage over friends.
-    const RH = S.recoilHelp && profile.admin ? 0.35 : 1; let rhSaid = RH === 1 || !session;
+    const touchPlayer = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
+    const adminHelp = !!(S.recoilHelp && profile.admin) && !touchPlayer;
+    const RH = adminHelp || touchPlayer ? 0.4 : 1; let rhSaid = !adminHelp || !session;   // phones always get it (thumbs vs a mouse)
     const hello = { name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
 
     // ---- renderer & scene ----
@@ -407,7 +410,9 @@ export default function start({ cfg, E, N, smoke }) {
     const onLock = () => { locked = document.pointerLockElement === renderer.domElement; if (!locked && !uiOpen && !ended && !smoke) openPause(); };
     document.addEventListener('pointerlockchange', onLock);
     const lock = () => { try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock(['ControlLeft', 'KeyW', 'Tab']).catch(() => {}); };
-    E.touchControls(['fire', 'jump', 'reload', 'use', 'alt', 'crouch', 'buy']);
+    let mob = null; try { if (matchMedia('(pointer: coarse)').matches) mob = mobileControls(E.input); } catch (e) { /* no touch */ }
+    if (mob) { hud.el.classList.add('touch'); mob.setSens(S.touchSens || 1); }
+    let mobShown = true;
     const kd = (c) => keys.has(c), kp = (c) => pressed.has(c);
 
     // ---- networking ----
@@ -743,6 +748,7 @@ export default function start({ cfg, E, N, smoke }) {
       else { const it0 = it; audio.play('magout', 0.6); setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play('magin', 0.6); }, w.reload * 600); if (w.cat !== 'pistol') setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play('bolt', 0.6); }, w.reload * 850); }
     }
     function switchTo(slot) {
+      me.adsToggle = false;
       if (slot === 4) { if (!me.nades.length) return; if (me.cur === 4) me.nadeSel = (me.nadeSel + 1) % me.nades.length; else { me.last = me.cur; me.cur = 4; } me.reload = 0; setViewModel(); return; }
       if (slot === 3 && (me.cur === 3 || me.cur === 6) && me.inv[6]) slot = me.cur === 3 ? 6 : 3;  // 3 again: knife <-> taser
       if (!me.inv[slot] || slot === me.cur) return;
@@ -823,7 +829,14 @@ export default function start({ cfg, E, N, smoke }) {
           else if (kp('KeyQ')) switchTo(me.last || 1);
           if (kp('WheelDown') || kp('WheelUp')) { const order = [1, 2, 3, 4, 5].filter((s) => s === 4 ? me.nades.length : me.inv[s]); const i = order.indexOf(me.cur); switchTo(order[(i + (kp('WheelDown') ? 1 : order.length - 1)) % order.length]); }
           if (kp('KeyR') || E.input.touch.tapped.has('reload')) startReload();
-          if (kp('KeyF')) { me.inspect = 2.2; const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)) || (isMythic(held) ? 'mythic' : null); if (me.inspectStyle === 'mythic') { flareGlow(1); me.inspectGlow = ((itemInfo(held) || {}).paint || {}).glow || '#ff2e4c'; } if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
+          const tt = E.input.touch.tapped;
+          if (tt.has('swap')) { const order = [1, 2, 3].filter((k) => me.inv[k]); const i = order.indexOf(me.cur); switchTo(order[(i + 1) % order.length]); }
+          if (tt.has('nade')) switchTo(4);
+          if (tt.has('menu')) openPause();
+          if (leaning && tt.has('leanL')) me.leanWant = me.leanWant === -1 ? 0 : -1;
+          if (leaning && tt.has('leanR')) me.leanWant = me.leanWant === 1 ? 0 : 1;
+          if (tt.has('alt') && adsOptic) me.adsToggle = !me.adsToggle;
+          if (kp('KeyF') || E.input.touch.tapped.has('inspect')) { me.inspect = 2.2; const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)) || (isMythic(held) ? 'mythic' : null); if (me.inspectStyle === 'mythic') { flareGlow(1); me.inspectGlow = ((itemInfo(held) || {}).paint || {}).glow || '#ff2e4c'; } if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
           if (kp('KeyG')) { if (me.cur === 5 && me.inv[5]) { toHost('dropc4', 1); } else if (me.cur === 1 || me.cur === 2) { sendAmmo(); toHost('drop', me.cur); } }
           if (!leaning && (kp('KeyE') || E.input.touch.tapped.has('use'))) { const d = nearestDrop(); if (d && !(st.bomb && st.bomb.s === 'planted' && me.team === 'CT' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2)) { sendAmmo(); toHost('pickup', d.id); } }
           const w = curWeapon();
@@ -850,9 +863,10 @@ export default function start({ cfg, E, N, smoke }) {
         if (kp('KeyB') || kp('Escape')) closeBuy();
         if (!canBuy()) closeBuy();
       }
-      showSb = kd('Tab');
+      showSb = kd('Tab') || E.input.touch.buttons.has('score');
+      if (mob) { const sh = !uiOpen && !ended; if (sh !== mobShown) { mobShown = sh; mob.show(sh); } mob.setAiming(me.ads > 0.5); }
       // movement (frozen in freeze time)
-      { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || E.input.touch.buttons.has('alt')); me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0;
+      { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || me.adsToggle); if (!wantAds && !mouseBtn[2] && (me.reload > 0 || !adsOptic || !me.alive)) me.adsToggle = false; me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0;
         // lean: only while aimed in; never through a wall (the eye stops short of whatever is beside you)
         if (me.ads < 0.3 || !me.alive) me.leanWant = 0;
         let want = me.leanWant;
@@ -888,7 +902,7 @@ export default function start({ cfg, E, N, smoke }) {
       me.inspect = Math.max(0, me.inspect - dt); me.knifeSwing = Math.max(0, me.knifeSwing - dt);
       if (flashT > 0) { flashT -= dt; if (flashT <= 0 && vm && vm.userData.flash) vm.userData.flash.visible = false; }
       if (!me.alive && pressed.has('M0')) specNext = true;
-      pressed.clear();
+      pressed.clear(); E.input.touch.tapped.clear();   // a tap counts once, however many logic steps this frame runs
 
       // grenades in flight (visual)
       for (const [id, f] of flying) { nadeStep(W, f.n, dt); f.m.position.set(f.n.x, f.n.y + 0.06, f.n.z); f.m.rotation.x += dt * 8; f.n.age += dt; if (f.n.age > 8) { fx.remove(f.m); flying.delete(id); } }
@@ -1026,7 +1040,7 @@ export default function start({ cfg, E, N, smoke }) {
         else if (st.bomb && st.bomb.s === 'planted' && st.bomb.d > 0) hud.progress(me.team === 'CT' ? 'Defusing…' : 'The bomb is being defused!', st.bomb.d);
         else hud.progress(null);
         let hint = '';
-        if (st.phase === 'freeze') hint = `Buy time · ${Math.ceil(st.timer)}s · press B`;
+        if (st.phase === 'freeze') hint = `Buy time · ${Math.ceil(st.timer)}s · ${mob ? 'tap BUY' : 'press B'}`;
         else if (me.alive && me.inv[5] && W.siteAt(me.x, me.z) && (!MODES[mode].bombSite || MODES[mode].bombSite === W.siteAt(me.x, me.z))) hint = me.cur === 5 ? 'Hold fire or E to plant' : 'Press 5 to take out the bomb';
         else if (me.alive && me.team === 'CT' && st.bomb && st.bomb.s === 'planted' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 1.8) hint = `Hold E to defuse${me.defuser ? ' (kit: 5s)' : ' (10s)'}`;
         else { const d = me.alive && nearestDrop(); if (d) hint = `E: pick up ${itemName(d.wid)}`; }
@@ -1067,7 +1081,7 @@ export default function start({ cfg, E, N, smoke }) {
       try { loopH.stop(); } catch (e) { /* already stopped */ }
       if (hiddenTick) hiddenTick.terminate();
       try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* not locked */ }
-      removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('mousemove', onMove); removeEventListener('mouseup', onUp); removeEventListener('resize', resize);
+      if (mob) mob.destroy(); removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('mousemove', onMove); removeEventListener('mouseup', onUp); removeEventListener('resize', resize);
       document.removeEventListener('pointerlockchange', onLock);
       if (session) session.leave(); if (lobby) lobby.close();
       if (lobbyPanel) { clearInterval(lobbyPanel.iv); lobbyPanel.remove(); }

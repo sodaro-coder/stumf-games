@@ -67,6 +67,12 @@ const CSS = `
 .cs-hud canvas.radar{width:190px;height:190px;border-radius:6px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12);display:block}
 .cs-hud .loc{font-size:13px;margin-top:4px;color:#d8e0ea}.cs-hud .money{font-size:20px;color:#7ed957;margin-top:2px}.cs-hud .money.minus{color:#ff6a5a}
 .cs-hud .buyic{font-size:12px;color:#ffd45a;margin-top:2px}
+.cs-hud.touch canvas.radar{width:100px;height:100px}.cs-hud.touch .tl{left:calc(env(safe-area-inset-left,0px) + 8px);top:6px}
+.cs-hud.touch .loc{font-size:11px}.cs-hud.touch .money{font-size:15px}.cs-hud.touch .buyic{display:none}.cs-hud.touch .slots{display:none}
+.cs-hud.touch .bl{left:50%;bottom:6px;transform:translateX(-80%);gap:6px}.cs-hud.touch .stat{font-size:17px;min-width:58px;padding:2px 8px 2px 6px}.cs-hud.touch .stat .ic{font-size:13px}
+.cs-hud.touch .br{right:calc(env(safe-area-inset-right,0px) + 196px);bottom:124px}.cs-hud.touch .ammo{font-size:22px}.cs-hud.touch .ammo small{font-size:12px}
+.cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:4px;transform:translateX(-50%) scale(.72);transform-origin:top center}
+.cs-hud.touch .banner{font-size:18px;padding:6px 14px}.cs-hud.touch .center{top:16%}
 .cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px}
 .cs-hud .team{display:flex;gap:3px}.cs-hud .team i{width:16px;height:22px;border-radius:3px;display:block}
 .cs-hud .team i.dead{opacity:.25}
@@ -624,7 +630,7 @@ export class Menu {
   tab_settings(B) {
     const S = this.h.settings();
     const sl = (k, n, min, max, step) => `<label class="cs-card"><div class="cs-small cs-mut">${n}: <b id="v_${k}">${S[k]}</b></div><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${S[k]}" style="width:100%"></label>`;
-    B.innerHTML = `<div class="cs-h">Mouse & view</div><div class="cs-grid">${sl('sens', 'Sensitivity', 0.2, 6, 0.05)}${sl('fov', 'Field of view', 70, 110, 1)}${sl('vol', 'Volume', 0, 1, 0.05)}</div>
+    B.innerHTML = `<div class="cs-h">Mouse & view</div><div class="cs-grid">${sl('sens', 'Sensitivity', 0.2, 6, 0.05)}${sl('fov', 'Field of view', 70, 110, 1)}${sl('touchSens', 'Touch look speed (phones)', 0.3, 3, 0.05)}${sl('vol', 'Volume', 0, 1, 0.05)}</div>
       <div class="cs-h">Crosshair</div><div class="cs-grid">${sl('xSize', 'Size', 1, 20, 1)}${sl('xGap', 'Gap', -4, 12, 1)}${sl('xThick', 'Thickness', 1, 6, 1)}${sl('xOutline', 'Outline', 0, 1, 0.1)}
         <label class="cs-card"><div class="cs-small cs-mut">Colour</div><input type="color" data-k="xColor" value="${S.xColor}" style="width:100%;height:34px"></label>
         <label class="cs-card"><div class="cs-small cs-mut">Style</div><select data-k="xDyn"><option value="0">Static</option><option value="1">Dynamic</option></select></label>

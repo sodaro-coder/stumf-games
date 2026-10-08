@@ -63,6 +63,8 @@ export class MapBuilder {
     this.roofs = this.roofs || []; this.roofs.push([x0, z0, x1, z1, h]);
     return this;
   }
+  // a ceiling (tunnels, covered passages, porches): look only, but it shades what's under it in the baked light
+  roof(x0, z0, x1, z1, h, mat = 'roof') { this.roofs = this.roofs || []; this.roofs.push([x0, z0, x1, z1, h, mat]); return this; }
   spawn(team, x, z, yaw = 0) { this.spawns[team].push([x, z, yaw]); return this; }
   duelSpawn(team, x, z, yaw = 0) { this.duel[team].push([x, z, yaw]); return this; }
   site(name, x0, z0, x1, z1) { this.sites[name] = [x0, z0, x1, z1]; return this; }
@@ -289,21 +291,27 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   const K = opt.bakeK || (quality >= 1.5 ? 6 : quality >= 0.75 ? 4 : 2), TW = w * K, TD = d * K;
   const sd = B.sunDir || [0.62, 0.66, 0.42], sl = Math.hypot(sd[0], sd[2]), hx = sd[0] / sl, hz = sd[2] / sl, tanEl = sd[1] / sl;
   let maxH = B.wallH; for (let i = 0; i < w * d; i++) if (hr[i] > maxH) maxH = hr[i];
+  // ceilings: the sun can't get under them (rooms and tunnels are in shade, lit by the sky through doors and windows)
+  const roofH = new Float32Array(w * d).fill(-99);
+  for (const [x0, z0, x1, z1, rh] of B.roofs || []) { for (let z = Math.max(0, z0); z < Math.min(d, z1); z++) for (let x = Math.max(0, x0); x < Math.min(w, x1); x++) roofH[z * w + x] = Math.max(roofH[z * w + x], rh); if (rh > maxH) maxH = rh; }
+  const roofAt = (x, z) => { const ix = Math.floor(x), iz = Math.floor(z); return ix < 0 || iz < 0 || ix >= w || iz >= d ? -99 : roofH[iz * w + ix]; };
+  const occAt = (x, z) => Math.max(topR(x, z), roofAt(x, z));
   const bake = new Uint8Array(TW * TD * 4), enc = (v) => Math.max(0, Math.min(255, Math.round((v + 2) / 16 * 255)));
   const AO_D = [0.3, 0.65, 1.1, 1.8, 2.6], AO_DIR = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.707, 0.707], [-0.707, 0.707], [0.707, -0.707], [-0.707, -0.707]];
   const st = 1 / K;
   for (let tz = 0; tz < TD; tz++) for (let tx = 0; tx < TW; tx++) {
     const px = (tx + 0.5) / K, pz = (tz + 0.5) / K, ox = Math.floor(px), oz = Math.floor(pz), y0 = topR(px, pz);
-    let best = -2;
+    const rOver = roofAt(px, pz), under = rOver > y0;
+    let best = under ? rOver : -2;
     for (let t = st; ; t += st) {
       const lim = maxH - t * tanEl; if (lim <= best || lim < y0 - 0.3) break;
       const qx = px + hx * t, qz = pz + hz * t; if (Math.floor(qx) === ox && Math.floor(qz) === oz) continue;
-      const c = topR(qx, qz) - t * tanEl; if (c > best) best = c;
+      const c = occAt(qx, qz) - t * tanEl; if (c > best) best = c;
     }
     let occ = 0;
     for (const [dx, dz] of AO_DIR) { let mo = 0; for (const dd of AO_D) { const dh = topR(px + dx * dd, pz + dz * dd) - y0; if (dh > 0.05) { const s = dh / Math.hypot(dh, dd); if (s > mo) mo = s; } } occ += mo; }
     const k = (tz * TW + tx) * 4;
-    bake[k] = enc(best); bake[k + 1] = Math.round(255 * (1 - occ / 8 * 0.8)); bake[k + 2] = enc(y0); bake[k + 3] = 255;
+    bake[k] = enc(best); bake[k + 1] = Math.round(255 * (1 - occ / 8 * 0.8) * (under ? 0.62 : 1)); bake[k + 2] = enc(y0); bake[k + 3] = 255;
   }
   const bakeTex = new THREE.DataTexture(bake, TW, TD, THREE.RGBAFormat, THREE.UnsignedByteType);
   bakeTex.magFilter = bakeTex.minFilter = THREE.LinearFilter; bakeTex.needsUpdate = true;
@@ -349,8 +357,8 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   const sortChunks = (cam) => { const p = cam.position; for (const c of chunks) { const s2 = c.geometry.boundingSphere; c.renderOrder = Math.floor(Math.max(0, Math.hypot(s2.center.x - p.x, s2.center.z - p.z) - s2.radius) / 4); } };
   // roofs over buildings (look only: walls are too tall to climb)
   const roofM = worldMat('roof');
-  for (const [x0, z0, x1, z1, rh] of B.roofs || []) {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + 0.6, 0.3, z1 - z0 + 0.6), roofM);
+  for (const [x0, z0, x1, z1, rh, rm] of B.roofs || []) {
+    const ov = rm ? 0 : 0.6, r = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + ov, 0.3, z1 - z0 + ov), rm ? worldMat(rm) : roofM);
     r.position.set((x0 + x1) / 2, rh + 0.15, (z0 + z1) / 2); group.add(r);
   }
 
