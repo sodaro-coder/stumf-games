@@ -121,7 +121,7 @@ export const PHYS = {
 
 // bot difficulty, picked by the host
 export const BOT_LEVELS = {
-  easy: { name: 'Easy', react: 0.85, aimErr: 0.11, turn: 3, head: 0.02, spray: 0.35, burst: 4 },
+  easy: { name: 'Easy', react: 1.35, aimErr: 0.2, turn: 2, head: 0, spray: 0.2, burst: 3 },   // slow to react, sloppy aim, never aims for the head
   normal: { name: 'Normal', react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5 },
   hard: { name: 'Hard', react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },
   expert: { name: 'Expert', react: 0.17, aimErr: 0.015, turn: 14, head: 0.3, spray: 0.95, burst: 10 },

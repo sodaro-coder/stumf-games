@@ -29,9 +29,13 @@ export function mobileControls(input) {
   .kc-t .row2{position:absolute;right:calc(env(safe-area-inset-right,0px) + 196px);bottom:14px;display:grid;grid-template-columns:repeat(2,46px);gap:8px;pointer-events:none}
   .kc-t .row2 b{position:static;width:46px;height:46px;font-size:9px}
   @media (max-width:720px){.kc-t .row2{right:calc(env(safe-area-inset-right,0px) + 186px);grid-template-columns:repeat(2,40px)}.kc-t .row2 b{width:40px;height:40px}.kc-t b.aim{right:calc(env(safe-area-inset-right,0px) + 112px)}}
+  .kc-rot{position:fixed;inset:0;z-index:200;background:#101317;color:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;font:600 15px system-ui;text-align:center}
+  .kc-rot div{font-size:56px}.kc-rot span{color:#8d97a5;font-size:13px}
+  @media (orientation:portrait){.kc-rot{display:flex}}
   @media (max-height:340px){.kc-t b.fire{width:76px;height:76px;bottom:44px}.kc-t b.jump{bottom:130px}.kc-t b.reload{bottom:142px}.kc-t b.aim{bottom:80px}.kc-t b.leanL,.kc-t b.leanR{bottom:148px}}`;
   document.head.appendChild(css);
   const root = document.createElement('div'); root.className = 'kc-t'; document.body.appendChild(root);
+  const rot = document.createElement('div'); rot.className = 'kc-rot'; rot.innerHTML = '<div>📱↻</div><b>Turn your phone sideways</b><span>The game plays in landscape</span>'; document.body.appendChild(rot);
   const I = {   // tiny line icons
     aim: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg>',
     jump: '<svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>', crouch: '<svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
@@ -94,6 +98,6 @@ export function mobileControls(input) {
     setCrouch(on) { if (!on && t.buttons.has('crouch')) { t.buttons.delete('crouch'); crouchB.classList.remove('tog'); } },
     setSens(k) { sens.k = k; },
     show(on) { root.style.display = on ? '' : 'none'; if (!on) { t.buttons.clear(); t.move.x = t.move.y = 0; looks.clear(); crouchB.classList.remove('tog'); } },
-    destroy() { root.remove(); css.remove(); t.buttons.clear(); t.active = false; },
+    destroy() { root.remove(); rot.remove(); css.remove(); t.buttons.clear(); t.active = false; },
   };
 }

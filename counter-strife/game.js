@@ -816,7 +816,21 @@ export default function start({ cfg, E, N, smoke }) {
       const adsZoom = 1 + ((ATTACH[adsOptic] || {}).zoom - 1 || 0) * me.ads;
       const zoomK = (me.scoped ? (curWeapon() && curWeapon().zoom ? curWeapon().zoom[me.scoped - 1] / S.fov : 1) : 1) / adsZoom;
       const sens = S.sens * 0.022 * Math.PI / 180 * zoomK;
-      if (!uiOpen && me.alive) { me.yaw -= lk.dx * sens; me.pitch = Math.max(-1.55, Math.min(1.55, me.pitch - lk.dy * sens)); }
+      // phones: light aim assist (thumbs vs a mouse): the view slows over an enemy and, while you shoot or aim, eases onto them
+      let assist = null;
+      if (touchPlayer && me.alive && !uiOpen && W) {
+        const eye = eyePos(me); let best = 0.13;
+        for (const p of st.players.values()) {
+          if (!p.alive || p.team === me.team || p.id === myId) continue;
+          const ty = p.y + (p.prone > 0.6 ? 0.3 : 1.25 - (p.crouch || 0) * 0.35), dx = p.x - eye.x, dz = p.z - eye.z, dist = Math.hypot(dx, dz); if (dist > 40) continue;
+          const yaw = Math.atan2(-dx, -dz), pitch = Math.atan2(ty - eye.y, dist);
+          let dy = yaw - me.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); const off = Math.hypot(dy, pitch - me.pitch);
+          if (off < best && W.los(eye, { x: p.x, y: ty, z: p.z })) { best = off; assist = { dy, dp: pitch - me.pitch }; }
+        }
+      }
+      const slow = assist ? 0.55 : 1;
+      if (!uiOpen && me.alive) { me.yaw -= lk.dx * sens * slow; me.pitch = Math.max(-1.55, Math.min(1.55, me.pitch - lk.dy * sens * slow)); }
+      if (assist && (E.input.touch.buttons.has('fire') || me.ads > 0.5)) { const k = Math.min(1, dt * 2.2); me.yaw += assist.dy * k; me.pitch += assist.dp * k * 0.6; }
       lookDX = Math.max(-40, Math.min(40, lk.dx * sens * 60)); lookDY = Math.max(-40, Math.min(40, lk.dy * sens * 60));
       if (radioOpen) { for (let k = 1; k <= 6; k++) if (kp('Digit' + k)) { hud.radioPick(k - 1); radioOpen = null; } if (kp('Digit0') || kp('Escape')) { hud.radio(null); hud.emoteWheel(null); radioOpen = null; } }
       if (!typing && !uiOpen && !radioOpen) {

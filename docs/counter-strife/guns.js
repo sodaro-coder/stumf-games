@@ -38,6 +38,7 @@ Object.assign(P, {
 });
 export function recoilPattern(w, i) {
   const p = P[w.id];
+  i = Math.max(0, Math.floor(Number.isFinite(i) ? i : 0));   // the spray count recovers smoothly between bursts: round it to a bullet
   let x, y;
   if (p) { const k = Math.min(i, p.length - 1); [x, y] = p[k]; if (i >= p.length) { const e = i - p.length + 1; x += Math.sin(e * 0.7) * 1.2; y += e * 0.05; } }
   else { y = Math.min(i, 9) * 1.0 + Math.max(0, i - 9) * 0.1; x = i > 8 ? Math.sin((i - 8) * 0.55) * 2.4 : Math.sin(i * 0.9) * 0.2; }

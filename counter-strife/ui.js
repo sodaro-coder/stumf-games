@@ -133,7 +133,7 @@ const MENU_CSS = `
 .cs-rank{display:flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;border:1px solid #2e343d;border-radius:3px;background:#1b1f25}
 .cs-rank b{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 30% 30%,#7ab8ff,#2a5aa8);font:800 13px system-ui;color:#fff}
 .cs-rank .xp{width:84px;height:4px;background:#0d1015;border-radius:2px;overflow:hidden}.cs-rank .xp i{display:block;height:100%;background:#7ab8ff}
-.cs-coinbox{font:700 15px system-ui;color:#ffd45a;padding:6px 12px;border:1px solid #2e343d;border-radius:3px;background:#1b1f25}
+.cs-coinbox{font:700 15px system-ui;color:#ffd45a;padding:6px 12px;white-space:nowrap;border:1px solid #2e343d;border-radius:3px;background:#1b1f25}
 .cs-ibtn{width:36px;height:36px;border:1px solid #2e343d;border-radius:3px;background:#1b1f25;color:#c8d0da}
 .cs-page{position:absolute;top:60px;left:0;right:0;bottom:0;overflow:auto;padding:22px 26px;z-index:2}
 .cs-page.solid{background:rgba(16,19,23,.96)}
@@ -173,6 +173,22 @@ const MENU_CSS = `
 .cs-btn{border-radius:2px;letter-spacing:.08em;text-transform:uppercase;font-size:12px}
 .cs-card{border-radius:3px;background:rgba(26,30,36,.94);border-color:#2e343d}
 @media (max-width:900px){.cs-home{grid-template-columns:1fr}.cs-home .cs-side2{display:none}.cs-nav button span{display:none}.cs-brand{font-size:18px;padding:0 12px}}
+@media (max-width:760px){
+  .cs-topnav{height:50px}.cs-page{top:50px;bottom:calc(60px + env(safe-area-inset-bottom,0px));padding:14px 12px}
+  .cs-nav{position:fixed;left:0;right:0;bottom:0;height:calc(60px + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);background:#14171c;border-top:1px solid #2e343d;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;z-index:5;scrollbar-width:none}
+  .cs-nav::-webkit-scrollbar{display:none}
+  .cs-menu .cs-nav button{flex:0 0 66px;flex-direction:column;justify-content:center;gap:3px;padding:0;font-size:9px;letter-spacing:.04em;border-bottom:0;border-top:3px solid transparent}
+  .cs-menu .cs-nav button span{display:block}.cs-menu .cs-nav button.on{border-top-color:#f2a33a}.cs-nav svg{width:20px;height:20px}
+  .cs-rank,.cs-ibtn{display:none}.cs-acct{gap:6px;padding:0 8px}.cs-coinbox{padding:4px 8px;font-size:13px}
+  .cs-tabs{overflow-x:auto;scrollbar-width:none}.cs-tabs button{flex:0 0 auto;padding:10px 12px}
+  .cs-menu input,.cs-menu select{font-size:16px}
+  .cs-hero h1{font-size:48px}.cs-go{width:100%}
+  .cs-menu #pGo{position:fixed;left:12px;right:12px;bottom:calc(70px + env(safe-area-inset-bottom,0px));width:auto;z-index:6;box-shadow:0 6px 24px rgba(0,0,0,.6)}
+  .cs-page{padding-bottom:80px}
+}
+@media (pointer:coarse) and (max-height:500px) and (min-width:761px){.cs-menu #pGo{position:fixed;right:16px;bottom:14px;width:220px;z-index:6;box-shadow:0 6px 24px rgba(0,0,0,.6)}.cs-topnav{height:50px}.cs-page{top:50px}}
+.cs-acctf{flex-wrap:wrap}.cs-acctf input{flex:1 1 200px;min-width:0}
+.cs-signup{margin-top:16px;max-width:380px;padding:14px;border:1px solid #f2a33a;border-radius:4px;background:rgba(242,163,58,.08)}
 `;
 export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS + MENU_CSS; document.head.appendChild(s); }
 
@@ -285,7 +301,7 @@ function drawCase(c, crate) {
 // main menu
 // ======================================================================================================================
 export class Menu {
-  constructor(cfg, profile, h) { this.cfg = cfg; this.P = profile; this.h = h; this.tab = 'home'; this.sel = { mode: '5v5', map: 'dust', bot: 'normal', host: 'bots' }; this.lobbies = []; }
+  constructor(cfg, profile, h) { this.cfg = cfg; this.P = profile; this.h = h; this.tab = 'home'; this.sel = { mode: '5v5', map: 'dust', bot: (() => { try { return matchMedia('(pointer: coarse)').matches ? 'easy' : 'normal'; } catch (e) { return 'normal'; } })(), host: 'bots' }; this.lobbies = []; }   // phones start on Easy bots
   show() {
     injectCss();
     this.root = document.createElement('div'); this.root.className = 'cs cs-menu';
@@ -337,12 +353,14 @@ export class Menu {
     const passReady = (Array.from({ length: P.level }, (_, i) => i + 1)).filter((t) => t <= 50 && !(P.d.pass || []).includes(t)).length;
     B.innerHTML = `<div class="cs-home"><div class="cs-hero"><h1>${esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`)}</h1><div class="sub">${esc(this.cfg.tagline || '')}</div>
         <button class="cs-go" id="hGo">▶ PLAY</button>
+        ${P.cloud && !P.signedIn ? '<div class="cs-signup"><b>Make a free account</b><div class="cs-small cs-mut" style="margin:4px 0 10px">Keep your skins and coins on every device, add friends, trade. Takes 20 seconds.</div><button class="cs-btn" id="hAcct" style="width:100%">Create account / Sign in</button></div>' : ''}
         <div class="cs-panel2" style="margin-top:26px;max-width:380px"><h3>Quick match</h3><div class="bd"><div class="cs-small cs-mut" id="hSel"></div></div></div></div><div></div>
       <div class="cs-side2"><div class="cs-panel2"><h3>Featured case</h3><div class="bd" style="text-align:center;cursor:pointer" id="hCase"><canvas width="240" height="120" style="width:100%"></canvas><b>${esc(featured.name)}</b><div class="cs-small cs-mut">${esc(featured.desc)}</div></div></div>
         <div class="cs-panel2"><h3>Daily quests</h3><div class="bd">${q.map((x) => `<div style="margin-bottom:9px"><div class="cs-row cs-small"><span>${esc(x.text)}</span><span style="flex:1"></span><span class="cs-coin">${x.claimed ? '✓' : '🪙 ' + x.coins}</span></div><div class="cs-bar" style="height:4px;margin-top:4px"><i style="width:${Math.round(x.prog / x.goal * 100)}%"></i></div></div>`).join('')}</div></div>
         <div class="cs-panel2"><h3>Free battle pass</h3><div class="bd cs-small">Level ${P.level} · ${passReady ? `<b style="color:#f2a33a">${passReady} reward${passReady > 1 ? 's' : ''} to claim</b>` : 'keep playing for the next reward'}</div></div></div></div>`;
     $('#hSel', B).textContent = `${MODES[this.sel.mode].name} · ${MAPS[this.sel.map].name} · bots ${BOT_LEVELS[this.sel.bot].name}`;
     $('#hGo', B).onclick = () => { this.tab = 'play'; this.render(); };
+    const ha = $('#hAcct', B); if (ha) ha.onclick = () => { this.tab = 'profile'; this.render(); setTimeout(() => { const e = $('#aE', this.root); if (e) e.focus(); }, 50); };
     drawCase($('#hCase canvas', B), featured); $('#hCase', B).onclick = () => this.contents(featured.id);
   }
   // ---- PLAY: mode tabs, map tiles, bots, then GO ----
@@ -608,12 +626,11 @@ export class Menu {
   // ---- PROFILE ----
   tab_profile(B) {
     const P = this.P, s = P.d.stats;
-    B.innerHTML = `<div class="cs-card"><div class="cs-row"><b style="font-size:20px" id="pfN"></b><span class="cs-chip cs-lvl">Level ${P.level}</span></div>
+    B.innerHTML = `<div class="cs-card" style="margin-bottom:12px" id="pfAcct"></div><div class="cs-card"><div class="cs-row"><b style="font-size:20px" id="pfN"></b><span class="cs-chip cs-lvl">Level ${P.level}</span></div>
       <div class="cs-row" style="margin-top:10px"><input id="pfName" maxlength="20" placeholder="Your name"><button class="cs-btn alt sm" id="pfSave">Save name</button></div>
       <div class="cs-row" style="margin-top:8px"><input id="pfUser" maxlength="16" placeholder="Username (friends add you by this)"><button class="cs-btn alt sm" id="pfUserSave">Save username</button></div>
       <div class="cs-grid" style="margin-top:12px">${[['Matches', s.matches], ['Wins', s.wins], ['Kills', s.k], ['Deaths', s.d], ['K/D', (s.k / Math.max(1, s.d)).toFixed(2)], ['Headshot %', Math.round(s.hs / Math.max(1, s.k) * 100) + '%'], ['MVPs', s.mvp]]
-        .map(([n, v]) => `<div class="cs-card"><div class="cs-mut cs-small">${n}</div><b style="font-size:20px">${v}</b></div>`).join('')}</div></div>
-      <div class="cs-card" style="margin-top:12px" id="pfAcct"></div>`;
+        .map(([n, v]) => `<div class="cs-card"><div class="cs-mut cs-small">${n}</div><b style="font-size:20px">${v}</b></div>`).join('')}</div></div>`;
     $('#pfN', B).textContent = P.d.name || 'Player'; $('#pfName', B).value = P.d.name || ''; $('#pfUser', B).value = P.username || '';
     $('#pfUserSave', B).onclick = async () => { try { const u = await P.setUsername($('#pfUser', B).value); this.h.toast('Username saved: @' + u); } catch (e) { this.h.toast(e.message); } this.render(); };
     $('#pfSave', B).onclick = async () => { try { const n = await P.setName($('#pfName', B).value); this.h.toast('Name saved: ' + n + (P.tag ? '#' + P.tag : '')); } catch (e) { this.h.toast(e.message); } this.render(); };
@@ -622,7 +639,7 @@ export class Menu {
     if (P.signedIn) { A.innerHTML = `<b>Signed in</b> <span class="cs-mut cs-small">${P.online ? 'synced' : esc(P.err || 'offline')}</span><div class="cs-row" style="margin-top:8px"><button class="cs-btn alt sm" id="aSync">Sync now</button><button class="cs-btn alt sm" id="aOut">Sign out</button></div>`;
       $('#aSync', A).onclick = async () => { await P.sync(); this.render(); }; $('#aOut', A).onclick = () => { P.signOut(); this.render(); }; return; }
     A.innerHTML = `<b>Account</b><div class="cs-mut cs-small">Sync coins and items across devices, trade on the market.</div>
-      <div class="cs-row" style="margin-top:8px"><input id="aN" maxlength="20" placeholder="player name" value="${esc(P.d.name || '')}"><input id="aE" type="email" placeholder="email" autocomplete="email"><input id="aP" type="password" placeholder="password (8+)" autocomplete="current-password"></div>
+      <div class="cs-row cs-acctf" style="margin-top:8px"><input id="aN" maxlength="20" placeholder="player name" value="${esc(P.d.name || '')}" autocomplete="nickname"><input id="aE" type="email" inputmode="email" autocapitalize="off" placeholder="email" autocomplete="email"><input id="aP" type="password" placeholder="password (8+)" autocomplete="current-password"></div>
       <div class="cs-row" style="margin-top:8px"><button class="cs-btn sm" id="aIn">Sign in</button><button class="cs-btn alt sm" id="aUp">Create account</button></div><div class="cs-small cs-mut" id="aMsg" style="margin-top:6px"></div>`;
     const go = async (up) => { const e = $('#aE', A).value.trim(), p = $('#aP', A).value; const msg = $('#aMsg', A);
       try { if (up) { const nm = ($('#aN', A).value || '').replace(/[<>#]/g, '').trim().slice(0, 20); if (nm.length >= 2) { P.d.name = nm; P.changed(); } const r = await P.signUp(e, p, P.d.name); msg.textContent = r.access_token ? 'Account created.' : 'STUMF just emailed you a confirmation link. Open it and you\'re signed in.'; if (r.access_token) await P.sync(); } else await P.signIn(e, p); this.render(); } catch (err) { msg.textContent = err.message; } };
