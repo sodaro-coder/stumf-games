@@ -1,0 +1,13 @@
+{
+ "kit": "tactical3d",
+ "id": "stumf-counter-strife",
+ "title": "Counter-Strife",
+ "tagline": "Tactical bomb defusal, crude skins, cursed knives. Free.",
+ "menu": true,
+ "maxPlayers": 10,
+ "seed": 7,
+ "backend": {
+  "url": "",
+  "anonKey": ""
+ }
+}

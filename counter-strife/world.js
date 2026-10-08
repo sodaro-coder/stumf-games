@@ -1,0 +1,305 @@
+// The world: every map is a 1 m height grid (floors, platforms, ramps, walls, crates, cars) authored with a tiny
+// builder. One grid gives everything the game needs, cheaply: merged meshes (one draw call per material), player
+// collision (step up small ledges, slide along walls), bullet raycasts with wall penetration, line of sight for bots,
+// and A* paths. That's what keeps it smooth on weak machines.
+import * as THREE from '../sdk/three.module.min.js';
+import { PHYS } from './data.js';
+
+export const MATS = {  // procedural materials: base colour, pixel pattern, world size of one texture tile (m), wall-bang density
+  sand: { c: [196, 168, 118], p: null, s: 2, d: 6 }, sandwall: { c: [214, 186, 136], p: 'bricks', s: 3, d: 4 },
+  plaster: { c: [222, 206, 172], p: null, s: 3, d: 3 }, brick: { c: [150, 82, 62], p: 'bricks', s: 2, d: 5 },
+  wood: { c: [138, 98, 58], p: 'planks', s: 1, d: 1 }, crate: { c: [160, 118, 64], p: 'planks', s: 1, d: 1 },
+  metal: { c: [120, 128, 136], p: 'stripes', s: 2, d: 2.5, stripe: '#8b939b' }, concrete: { c: [150, 150, 146], p: null, s: 3, d: 6 },
+  asphalt: { c: [62, 64, 68], p: 'stripes', s: 4, d: 8, stripe: '#d8c548' }, grass: { c: [92, 140, 70], p: 'grass', s: 2, d: 6 },
+  roof: { c: [120, 60, 50], p: 'planks', s: 1.5, d: 3 }, carpet: { c: [120, 40, 46], p: null, s: 2, d: 6 }, tile: { c: [200, 200, 196], p: 'bricks', s: 1, d: 6 },
+  cred: { c: [168, 54, 44], p: 'planks', s: 1, d: 2.5 }, cblue: { c: [46, 92, 160], p: 'planks', s: 1, d: 2.5 },
+  cgreen: { c: [62, 128, 74], p: 'planks', s: 1, d: 2.5 }, corange: { c: [210, 120, 40], p: 'planks', s: 1, d: 2.5 },
+  yellow: { c: [226, 190, 80], p: null, s: 2, d: 3 }, green: { c: [110, 168, 120], p: null, s: 2, d: 3 },
+  fence: { c: [236, 232, 220], p: 'planks', s: 1, d: 1 }, lava: { c: [240, 90, 20], p: null, s: 2, d: 9, glow: true },
+  dirt: { c: [120, 92, 66], p: null, s: 2, d: 6 }, rock: { c: [110, 100, 92], p: 'bricks', s: 4, d: 8 }, bus: { c: [232, 180, 40], p: 'windows', s: 2, d: 2 },
+  potty: { c: [60, 110, 200], p: 'planks', s: 1, d: 1 }, darkwood: { c: [86, 58, 40], p: 'planks', s: 1, d: 1 },
+};
+export const MAT_LIST = Object.keys(MATS);
+const MAT_ID = Object.fromEntries(MAT_LIST.map((k, i) => [k, i]));
+
+// ---- the builder maps are written with ----------------------------------------------------------------------------
+export class MapBuilder {
+  constructor(w, d, wallH = 7, wallMat = 'sandwall', floorMat = 'sand') {
+    this.w = w; this.d = d; this.wallH = wallH;
+    this.h = new Float32Array(w * d).fill(wallH);
+    this.mat = new Uint8Array(w * d).fill(MAT_ID[wallMat]);
+    this.flag = new Uint8Array(w * d);  // 1 = lava, 2 = open (walkable area)
+    this.floorMat = floorMat; this.wallMat = wallMat;
+    this.spawns = { T: [], CT: [] }; this.sites = {}; this.zones = []; this.buy = {}; this.signs = []; this.props = []; this.duel = { T: [], CT: [] };
+  }
+  _rect(x0, z0, x1, z1, fn) {
+    for (let z = Math.max(0, z0); z < Math.min(this.d, z1); z++) for (let x = Math.max(0, x0); x < Math.min(this.w, x1); x++) fn(z * this.w + x, x, z);
+  }
+  open(x0, z0, x1, z1, h = 0, mat = this.floorMat) { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 2; }); return this; }
+  // stairs/ramp rising from h0 to h1 along +x ('x'), -x ('-x'), +z ('z') or -z ('-z')
+  ramp(x0, z0, x1, z1, h0, h1, dir, mat = this.floorMat) {
+    const n = dir.endsWith('x') ? x1 - x0 : z1 - z0;
+    this._rect(x0, z0, x1, z1, (i, x, z) => {
+      let k = dir.endsWith('x') ? x - x0 : z - z0; if (dir[0] === '-') k = n - 1 - k;
+      this.h[i] = h0 + (h1 - h0) * (k + 1) / n; this.mat[i] = MAT_ID[mat]; this.flag[i] = 2;
+    });
+    return this;
+  }
+  block(x0, z0, x1, z1, h, mat = 'crate') { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 0; }); return this; }
+  // raise by h from the floor already there (crates on a raised site)
+  stack(x0, z0, x1, z1, h, mat = 'crate') { this._rect(x0, z0, x1, z1, (i) => { this.h[i] += h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 0; }); return this; }
+  solid(x0, z0, x1, z1, mat = this.wallMat, h = this.wallH) { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 0; }); return this; }
+  lava(x0, z0, x1, z1, h = -0.3) { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID.lava; this.flag[i] = 3; }); return this; }
+  // a hollow building: walls of thickness 1 around the rect with the given gaps (doors open, windows a sill to jump over)
+  house(x0, z0, x1, z1, h, mat, floor, gaps = []) {
+    this.open(x0, z0, x1, z1, 0, floor);
+    this.block(x0, z0, x1, z0 + 1, h, mat); this.block(x0, z1 - 1, x1, z1, h, mat); this.block(x0, z0, x0 + 1, z1, h, mat); this.block(x1 - 1, z0, x1, z1, h, mat);
+    for (const [gx0, gz0, gx1, gz1, sill] of gaps) sill ? this.block(gx0, gz0, gx1, gz1, sill, mat) : this.open(gx0, gz0, gx1, gz1, 0, floor);
+    this.roofs = this.roofs || []; this.roofs.push([x0, z0, x1, z1, h]);
+    return this;
+  }
+  spawn(team, x, z, yaw = 0) { this.spawns[team].push([x, z, yaw]); return this; }
+  duelSpawn(team, x, z, yaw = 0) { this.duel[team].push([x, z, yaw]); return this; }
+  site(name, x0, z0, x1, z1) { this.sites[name] = [x0, z0, x1, z1]; return this; }
+  zone(name, x0, z0, x1, z1) { this.zones.push([name, x0, z0, x1, z1]); return this; }
+  buyzone(team, x0, z0, x1, z1) { this.buy[team] = [x0, z0, x1, z1]; return this; }
+  // a sign with text painted on a board: x,z position, y height, rot = facing (radians), w,h size in m
+  sign(x, z, y, rot, text, w = 3, h = 1, bg = '#2b2118', fg = '#f4e7c4') { this.signs.push({ x, z, y, rot, text, w, h, bg, fg }); return this; }
+  prop(type, x, z, o = {}) { this.props.push({ type, x, z, ...o }); return this; }
+}
+
+// ---- the world built from a map ----------------------------------------------------------------------------------
+export function buildWorld(E, def, scene, quality = 1) {
+  const B = def.build();
+  const { w, d, h, mat, flag } = B;
+  const idx = (x, z) => (x < 0 || z < 0 || x >= w || z >= d ? -1 : z * w + x);
+  const H = (x, z) => { const i = idx(x, z); return i < 0 ? B.wallH : h[i]; };
+
+  // --- meshes: greedy-merged tops + side faces, grouped per material, vertex colours for cheap shading/AO ---
+  const geo = MAT_LIST.map(() => ({ pos: [], uv: [], col: [], idx: [] }));
+  const quad = (m, a, b, c, dd, uvs, cols) => {
+    const g = geo[m], base = g.pos.length / 3;
+    g.pos.push(...a, ...b, ...c, ...dd); g.uv.push(...uvs); g.col.push(...cols); g.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  // tops: greedy rectangles of equal (height, material)
+  const done = new Uint8Array(w * d);
+  for (let z = 0; z < d; z++) for (let x = 0; x < w; x++) {
+    const i = z * w + x; if (done[i]) continue;
+    const hh = h[i], mm = mat[i];
+    let x1 = x + 1; while (x1 < w && !done[z * w + x1] && h[z * w + x1] === hh && mat[z * w + x1] === mm) x1++;
+    let z1 = z + 1;
+    outer: while (z1 < d) { for (let k = x; k < x1; k++) { const j = z1 * w + k; if (done[j] || h[j] !== hh || mat[j] !== mm) break outer; } z1++; }
+    for (let zz = z; zz < z1; zz++) for (let k = x; k < x1; k++) done[zz * w + k] = 1;
+    const s = 1 / MATS[MAT_LIST[mm]].s, c = 1;
+    quad(mm, [x, hh, z1], [x1, hh, z1], [x1, hh, z], [x, hh, z], [x * s, z1 * s, x1 * s, z1 * s, x1 * s, z * s, x * s, z * s], [c, c, c, c, c, c, c, c, c, c, c, c]);
+  }
+  // sides: where a cell is higher than its neighbour, merged along rows
+  const side = (dirx, dirz) => {
+    const shade = dirx ? 0.74 : 0.86;
+    const along = dirx ? d : w, across = dirx ? w : d;
+    for (let a = 0; a < across; a++) {
+      let run = null;
+      const flush = () => {
+        if (!run) return;
+        const { s0, s1, top, bot, m } = run, ts = 1 / MATS[MAT_LIST[m]].s, lo = shade * 0.62, hi = shade;
+        if (dirx) {  // face on the x side of column a, spanning z s0..s1
+          const fx = dirx > 0 ? a + 1 : a;
+          const p = dirx > 0 ? [[fx, bot, s1], [fx, bot, s0], [fx, top, s0], [fx, top, s1]] : [[fx, bot, s0], [fx, bot, s1], [fx, top, s1], [fx, top, s0]];
+          quad(m, ...p, [0, bot * ts, (s1 - s0) * ts, bot * ts, (s1 - s0) * ts, top * ts, 0, top * ts], [lo, lo, lo, lo, lo, lo, hi, hi, hi, hi, hi, hi]);
+        } else {
+          const fz = dirz > 0 ? a + 1 : a;
+          const p = dirz > 0 ? [[s0, bot, fz], [s1, bot, fz], [s1, top, fz], [s0, top, fz]] : [[s1, bot, fz], [s0, bot, fz], [s0, top, fz], [s1, top, fz]];
+          quad(m, ...p, [0, bot * ts, (s1 - s0) * ts, bot * ts, (s1 - s0) * ts, top * ts, 0, top * ts], [lo, lo, lo, lo, lo, lo, hi, hi, hi, hi, hi, hi]);
+        }
+        run = null;
+      };
+      for (let b = 0; b < along; b++) {
+        const x = dirx ? a : b, z = dirx ? b : a, i = z * w + x;
+        const nx = x + dirx, nz = z + dirz, ni = idx(nx, nz);
+        const top = h[i], bot = ni < 0 ? top : h[ni], m = mat[i];
+        if (top > bot + 1e-3) {
+          if (run && run.top === top && run.bot === bot && run.m === m && run.s1 === b) run.s1 = b + 1;
+          else { flush(); run = { s0: b, s1: b + 1, top, bot, m }; }
+        } else flush();
+      }
+      flush();
+    }
+  };
+  side(1, 0); side(-1, 0); side(0, 1); side(0, -1);
+
+  const group = new THREE.Group(); scene.add(group);
+  const texCache = {};
+  const matTex = (k) => {
+    if (texCache[k]) return texCache[k];
+    const M = MATS[k];
+    const t = new THREE.CanvasTexture(E.tex.pixel(M.c, { pattern: M.p, seed: k.length * 7 + 3, noise: 16, stripe: M.stripe, lit: 0.6 }));
+    t.magFilter = THREE.NearestFilter; t.minFilter = quality > 0.6 ? THREE.NearestMipmapLinearFilter : THREE.NearestFilter;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+    return (texCache[k] = t);
+  };
+  geo.forEach((g, m) => {
+    if (!g.pos.length) return;
+    const bg = new THREE.BufferGeometry();
+    bg.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3));
+    bg.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
+    bg.setAttribute('color', new THREE.Float32BufferAttribute(g.col, 3));
+    bg.setIndex(g.idx); bg.computeVertexNormals();
+    const k = MAT_LIST[m], M = MATS[k];
+    const mtl = M.glow ? new THREE.MeshBasicMaterial({ map: matTex(k), vertexColors: true }) : new THREE.MeshLambertMaterial({ map: matTex(k), vertexColors: true });
+    const mesh = new THREE.Mesh(bg, mtl); mesh.matrixAutoUpdate = false; group.add(mesh);
+  });
+  // roofs over buildings (look only: walls are too tall to climb)
+  for (const [x0, z0, x1, z1, rh] of B.roofs || []) {
+    const r = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + 0.6, 0.3, z1 - z0 + 0.6), new THREE.MeshLambertMaterial({ map: matTex('roof') }));
+    r.position.set((x0 + x1) / 2, rh + 0.15, (z0 + z1) / 2); group.add(r);
+  }
+
+  // --- signs (text painted onto a canvas texture) ---
+  for (const s of B.signs) {
+    const cw = 256, ch = Math.max(32, Math.round(256 * s.h / s.w));
+    const c = E.tex.canvas(cw, ch, (g) => {
+      g.fillStyle = s.bg; g.fillRect(0, 0, cw, ch); g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 6; g.strokeRect(3, 3, cw - 6, ch - 6);
+      g.fillStyle = s.fg; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const lines = String(s.text).split('\n'); let fs = Math.min(ch / (lines.length + 0.6), 44);
+      g.font = `900 ${fs}px system-ui,sans-serif`;
+      while (lines.some((l) => g.measureText(l).width > cw - 16) && fs > 9) { fs -= 1; g.font = `900 ${fs}px system-ui,sans-serif`; }
+      lines.forEach((l, k) => g.fillText(l, cw / 2, ch / 2 + (k - (lines.length - 1) / 2) * fs * 1.08));
+    });
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.h), new THREE.MeshBasicMaterial({ map: t, side: THREE.DoubleSide }));
+    m.position.set(s.x, s.y, s.z); m.rotation.y = s.rot; group.add(m);
+  }
+
+  // --- collision helpers ---
+  const R = PHYS.radius;
+  // highest floor under a circle that's within stepping reach of the feet (what you stand on)
+  const groundAt = (x, z, feet, r = R) => {
+    let g = -50;
+    for (let zz = Math.floor(z - r); zz <= Math.floor(z + r); zz++) for (let xx = Math.floor(x - r); xx <= Math.floor(x + r); xx++) {
+      const hh = H(xx, zz); if (hh <= feet + PHYS.step + 1e-3 && hh > g) g = hh;
+    }
+    return g;
+  };
+  // move a circle (feet at y) by dx,dz, sliding along walls; anything higher than feet+step blocks
+  const move = (p, dx, dz, r = R, step = PHYS.step) => {
+    const lim = p.y + step + 1e-3;
+    const tryAxis = (ax) => {
+      const nx = ax === 0 ? p.x + dx : p.x, nz = ax === 1 ? p.z + dz : p.z;
+      for (let zz = Math.floor(nz - r); zz <= Math.floor(nz + r); zz++) for (let xx = Math.floor(nx - r); xx <= Math.floor(nx + r); xx++) {
+        if (H(xx, zz) > lim) {
+          if (ax === 0) p.x = dx > 0 ? Math.min(nx, xx - r - 1e-4) : Math.max(nx, xx + 1 + r + 1e-4); else p.z = dz > 0 ? Math.min(nz, zz - r - 1e-4) : Math.max(nz, zz + 1 + r + 1e-4);
+          return false;
+        }
+      }
+      if (ax === 0) p.x = nx; else p.z = nz;
+      return true;
+    };
+    const bx = tryAxis(0), bz = tryAxis(1);
+    return bx && bz;
+  };
+  const lavaAt = (x, z) => { const i = idx(Math.floor(x), Math.floor(z)); return i >= 0 && flag[i] === 3; };
+
+  // --- raycast through the height grid (2D DDA), returns the first solid hit; pen() continues through thin walls ---
+  // o, dir: {x,y,z}; dir normalised. returns {t, x, z, m} or null
+  const ray = (o, dr, maxT, fromT = 0) => {
+    let t = fromT;
+    let x = Math.floor(o.x + dr.x * t), z = Math.floor(o.z + dr.z * t);
+    const sx = dr.x > 0 ? 1 : -1, sz = dr.z > 0 ? 1 : -1;
+    const tdx = Math.abs(dr.x) < 1e-9 ? 1e9 : Math.abs(1 / dr.x), tdz = Math.abs(dr.z) < 1e-9 ? 1e9 : Math.abs(1 / dr.z);
+    const px = o.x + dr.x * t, pz = o.z + dr.z * t;
+    let tmx = Math.abs(dr.x) < 1e-9 ? 1e9 : t + ((sx > 0 ? x + 1 - px : px - x) * tdx);
+    let tmz = Math.abs(dr.z) < 1e-9 ? 1e9 : t + ((sz > 0 ? z + 1 - pz : pz - z) * tdz);
+    for (let n = 0; n < 600; n++) {
+      const tExit = Math.min(tmx, tmz, maxT);
+      const hh = H(x, z);
+      const y0 = o.y + dr.y * t, y1 = o.y + dr.y * tExit;
+      if (y0 < hh) return { t, x, z, m: mat[idx(x, z)] ?? 0, side: true };
+      if (y1 < hh) { const th = (hh - o.y) / dr.y; return { t: th, x, z, m: mat[idx(x, z)] ?? 0, side: false }; }
+      if (tExit >= maxT) return null;
+      if (tmx < tmz) { t = tmx; tmx += tdx; x += sx; } else { t = tmz; tmz += tdz; z += sz; }
+    }
+    return null;
+  };
+  // how far the ray stays inside solid after entering at t (for wall-bangs); Infinity for floors
+  const thickness = (o, dr, t, maxLen = 3) => {
+    if (!false && Math.abs(dr.y) > 0.9) return Infinity;
+    for (let k = 0.05; k <= maxLen; k += 0.05) {
+      const tt = t + k, px = o.x + dr.x * tt, py = o.y + dr.y * tt, pz = o.z + dr.z * tt;
+      if (py >= H(Math.floor(px), Math.floor(pz))) return k;
+    }
+    return Infinity;
+  };
+  const los = (a, b) => { const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, L = Math.hypot(dx, dy, dz); if (L < 1e-3) return true; return !ray(a, { x: dx / L, y: dy / L, z: dz / L }, L); };
+
+  // --- navigation: A* over cells; edges allowed when the height step is small ---
+  const walk = new Uint8Array(w * d);
+  for (let i = 0; i < w * d; i++) walk[i] = flag[i] === 2 ? 1 : 0;
+  {  // keep only the floor bots can actually reach from the T spawn (drops crate tops, sealed rooms)
+    const seen = new Uint8Array(w * d), st = [], s0 = B.spawns.T[0] || B.duel.T[0];
+    if (s0) { const i0 = idx(Math.floor(s0[0]), Math.floor(s0[1])); if (i0 >= 0 && walk[i0]) { seen[i0] = 1; st.push(i0); } }
+    while (st.length) {
+      const c = st.pop(), cx = c % w, cz = (c / w) | 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = idx(cx + dx, cz + dz); if (n >= 0 && !seen[n] && walk[n] && Math.abs(h[n] - h[c]) <= PHYS.step + 0.02) { seen[n] = 1; st.push(n); } }
+    }
+    if (st.length === 0 && s0) for (let i = 0; i < w * d; i++) if (!seen[i]) walk[i] = 0;
+  }
+  const passable = (a, b) => walk[b] && Math.abs(h[a] - h[b]) <= PHYS.step + 0.02;
+  const N8 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
+  const gScore = new Float32Array(w * d), came = new Int32Array(w * d), stamp = new Uint32Array(w * d), closed = new Uint32Array(w * d);
+  let gen = 1;
+  const heap = { a: [], push(i, f) { const a = this.a; a.push([f, i]); let k = a.length - 1; while (k > 0) { const p = (k - 1) >> 1; if (a[p][0] <= a[k][0]) break; [a[p], a[k]] = [a[k], a[p]]; k = p; } },
+    pop() { const a = this.a, top = a[0], last = a.pop(); if (a.length) { a[0] = last; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < a.length && a[l][0] < a[m][0]) m = l; if (r < a.length && a[r][0] < a[m][0]) m = r; if (m === k) break; [a[m], a[k]] = [a[k], a[m]]; k = m; } } return top[1]; } };
+  const nearestWalk = (x, z) => {
+    const cx = Math.floor(x), cz = Math.floor(z);
+    for (let r = 0; r < 6; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) { const i = idx(cx + dx, cz + dz); if (i >= 0 && walk[i]) return i; }
+    return -1;
+  };
+  const path = (fx, fz, tx, tz, maxNodes = 9000) => {
+    const s = nearestWalk(fx, fz), goal = nearestWalk(tx, tz); if (s < 0 || goal < 0) return null;
+    gen++; heap.a.length = 0; stamp[s] = gen; gScore[s] = 0; came[s] = -1; heap.push(s, 0);
+    const gx = goal % w, gz = (goal / w) | 0; let n = 0;
+    while (heap.a.length && n++ < maxNodes) {
+      const cur = heap.pop(); if (cur === goal) break;
+      if (closed[cur] === gen) continue; closed[cur] = gen;
+      const cx = cur % w, cz = (cur / w) | 0;
+      for (const [dx, dz, c] of N8) {
+        const nx = cx + dx, nz = cz + dz, ni = idx(nx, nz); if (ni < 0 || !passable(cur, ni)) continue;
+        if (dx && dz && (!passable(cur, idx(cx + dx, cz)) || !passable(cur, idx(cx, cz + dz)))) continue;
+        const g = gScore[cur] + c + (flag[ni] === 3 ? 30 : 0);
+        if (stamp[ni] !== gen || g < gScore[ni]) { stamp[ni] = gen; gScore[ni] = g; came[ni] = cur; heap.push(ni, g + Math.hypot(nx - gx, nz - gz)); }
+      }
+    }
+    if (stamp[goal] !== gen) return null;
+    const out = []; for (let c = goal; c !== -1; c = came[c]) out.push([(c % w) + 0.5, ((c / w) | 0) + 0.5]);
+    out.reverse();
+    // string-pull: skip points while the straight walk between stays on passable ground
+    const sm = [out[0]];
+    let a = 0;
+    while (a < out.length - 1) {
+      let b = Math.min(out.length - 1, a + 12);
+      while (b > a + 1 && !walkLine(out[a], out[b])) b--;
+      sm.push(out[b]); a = b;
+    }
+    return sm;
+  };
+  const walkLine = (p, q) => {
+    const L = Math.hypot(q[0] - p[0], q[1] - p[1]), n = Math.ceil(L / 0.35);
+    let prev = idx(Math.floor(p[0]), Math.floor(p[1]));
+    for (let k = 1; k <= n; k++) {
+      const x = p[0] + (q[0] - p[0]) * k / n, z = p[1] + (q[1] - p[1]) * k / n;
+      for (const [ox, oz] of [[0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]]) { const j = idx(Math.floor(x + ox), Math.floor(z + oz)); if (j < 0 || !walk[j] || Math.abs(h[j] - h[prev]) > PHYS.step + 0.02 || flag[j] === 3) return false; }
+      prev = idx(Math.floor(x), Math.floor(z));
+    }
+    return true;
+  };
+  const randomIn = (rect, rnd = Math.random) => {
+    for (let k = 0; k < 40; k++) { const x = rect[0] + rnd() * (rect[2] - rect[0]), z = rect[1] + rnd() * (rect[3] - rect[1]), i = idx(Math.floor(x), Math.floor(z)); if (i >= 0 && walk[i]) return [x, z]; }
+    return [(rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2];
+  };
+  const zoneAt = (x, z) => { for (let k = B.zones.length - 1; k >= 0; k--) { const [n, x0, z0, x1, z1] = B.zones[k]; if (x >= x0 && x < x1 && z >= z0 && z < z1) return n; } return ''; };
+  const inRect = (r, x, z) => !!r && x >= r[0] && x < r[2] && z >= r[1] && z < r[3];
+  const siteAt = (x, z) => { for (const [n, r] of Object.entries(B.sites)) if (inRect(r, x, z)) return n; return ''; };
+
+  return { B, w, d, h, mat, flag, H, idx, group, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
+    density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex };
+}

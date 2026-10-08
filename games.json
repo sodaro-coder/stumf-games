@@ -1,26 +1,8 @@
 [
  {
-  "slug": "turbo-loop",
-  "title": "Turbo Loop",
-  "tagline": "3D arcade racing: drift, boost, AI rivals",
-  "kit": "racer3d"
- },
- {
-  "slug": "blockade",
-  "title": "Blockade",
-  "tagline": "3D co-op wave shooter",
-  "kit": "fps3d"
- },
- {
-  "slug": "neon-swarm",
-  "title": "Neon Swarm",
-  "tagline": "2D co-op arena shooter",
-  "kit": "arena2d"
- },
- {
-  "slug": "skyhop",
-  "title": "Skyhop",
-  "tagline": "2D platformer: race your friends",
-  "kit": "platformer2d"
+  "slug": "counter-strife",
+  "title": "Counter-Strife",
+  "tagline": "Tactical bomb defusal, crude skins, cursed knives. Free.",
+  "kit": "tactical3d"
  }
 ]
