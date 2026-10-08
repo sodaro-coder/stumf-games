@@ -104,9 +104,29 @@ function base(r, name, scale = 1) {
   r.base = name;
 }
 export function soldierEvent(r, kind) {   // one-shot upper-body moves: 'fire' | 'reload' | 'throw' | 'hit'
+  if (kind === 'reload') r.reloadT = 1.6;   // the left hand leaves the gun to swap the mag
   const a = r.act[kind + 'Up']; if (!a || r.dead) return;
   const speed = { fire: 1.6, reload: 1.1, throw: 2.2, hit: 1.4 }[kind] || 1;
   a.reset(); a.setLoop(THREE.LoopOnce); a.clampWhenFinished = false; a.timeScale = speed; a.setEffectiveWeight(kind === 'fire' ? 2 : 3); a.play();
+}
+// two-bone IK in world space: bend upper -> lower -> end so the end reaches target, the elbow towards pole
+const _t1 = new THREE.Vector3(), _t2 = new THREE.Vector3(), _t3 = new THREE.Vector3(), _t4 = new THREE.Vector3(), _t5 = new THREE.Vector3(), _t6 = new THREE.Vector3();
+const _k1 = new THREE.Vector3(), _k2 = new THREE.Vector3(), _ia = new THREE.Vector3(), _ib = new THREE.Vector3(), _ic = new THREE.Vector3(), _ie = new THREE.Vector3(), _id = new THREE.Vector3(), _in = new THREE.Vector3(), _iq = new THREE.Quaternion(), _iw = new THREE.Quaternion(), _ip = new THREE.Quaternion();
+function rotateWorld(b, from, to) {   // turn bone b so the world direction `from` becomes `to`
+  _iq.setFromUnitVectors(from, to); b.getWorldQuaternion(_iw); b.parent.getWorldQuaternion(_ip).invert();
+  b.quaternion.copy(_ip.multiply(_iq.multiply(_iw))); b.updateMatrixWorld(true);
+}
+function ik2(upper, lower, end, target, pole) {
+  if (!upper || !lower || !end) return;
+  upper.getWorldPosition(_ia); lower.getWorldPosition(_ib); end.getWorldPosition(_ic);
+  const la = _ia.distanceTo(_ib), lb = _ib.distanceTo(_ic);
+  _id.copy(target).sub(_ia); const dist = Math.min(Math.max(_id.length(), Math.abs(la - lb) + 1e-3), la + lb - 1e-3); _id.normalize();
+  const cosA = (la * la + dist * dist - lb * lb) / (2 * la * dist), sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
+  _in.copy(pole).sub(_ia); _in.addScaledVector(_id, -_in.dot(_id)); if (_in.lengthSq() < 1e-8) _in.set(0, -1, 0); _in.normalize();
+  _ie.copy(_ia).addScaledVector(_id, la * cosA).addScaledVector(_in, la * sinA);   // where the elbow should be
+  rotateWorld(upper, _k1.copy(_ib).sub(_ia).normalize(), _k2.copy(_ie).sub(_ia).normalize());
+  lower.getWorldPosition(_ib); end.getWorldPosition(_ic);
+  rotateWorld(lower, _k1.copy(_ic).sub(_ib).normalize(), _k2.copy(target).sub(_ib).normalize());
 }
 // rotate a bone about a world-space axis (works whatever the bone's own axes are)
 function turnWorld(b, axis, ang) {
@@ -148,14 +168,41 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     }
     if (emote) emotePose(r, emote, _v);
   }
-  // the gun in the right hand, pointing where the player aims
-  const hand = B.RightHand;
-  if (hand && r.tpGun.children.length) {
-    r.tpGun.visible = !emote && !r.dead;
-    hand.getWorldPosition(_v); r.g.worldToLocal(_v);
-    r.tpGun.position.copy(_v); r.tpGun.rotation.set(Math.max(-1.2, Math.min(1.2, pitch)), 0, 0, 'YXZ');
-    const m = r.tpGun.children[0]; if (m && m.userData.grip) m.position.copy(m.userData.grip).multiply(m.scale).negate();
+  // the gun: shouldered for rifles, held out in both hands for pistols, pointing where the player aims. The animation
+  // drives legs, hips and spine; the arms are then solved onto the gun (right hand on the grip, left on the foregrip),
+  // so every soldier really holds their weapon whatever the clip underneath is doing.
+  const hand = B.RightHand, tg = r.tpGun, gm = tg.children[0];
+  if (hand && gm) {
+    tg.visible = !emote && !r.dead;
+    const cat = (tg.userData || {}).cat || 'rifle', armed = !emote && !r.dead && B.RightArm && B.LeftArm;
+    const ap = Math.max(-1.2, Math.min(1.2, pitch));
+    if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
+      { // square the chest to the aim: the shoulder line should run along the rig's right (keep ~20 degrees of rifle stance)
+        const L = B.LeftArm.getWorldPosition(_t1), Rs = B.RightArm.getWorldPosition(_t2), sl = _t3.copy(Rs).sub(L); sl.y = 0;
+        const want = _t4.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())); want.y = 0;
+        if (sl.lengthSq() > 1e-6) { sl.normalize(); want.normalize(); let ang = Math.atan2(sl.x * want.z - sl.z * want.x, sl.dot(want)); ang = -(ang - (cat === 'pistol' ? 0 : 0.35));
+          const up = _t5.set(0, 1, 0); for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], up, ang / 3); }
+      }
+      // aim frame in the rig's own space: forward is -z, pitched up/down about the shoulders
+      const pistol = cat === 'pistol', S = B.RightArm.getWorldPosition(_v); r.g.worldToLocal(S);
+      const cp = Math.cos(ap), sp = Math.sin(ap), fwd = _fw.set(0, sp, -cp);
+      const reachF = pistol ? 0.42 : 0.2, drop = pistol ? 0.1 : 0.12, inX = pistol ? -0.13 : -0.04;
+      tg.position.set(S.x + inX, S.y - drop * cp, S.z).addScaledVector(fwd, reachF);
+      tg.rotation.set(ap, 0, 0, 'YXZ');
+      if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
+      tg.updateMatrixWorld(true);
+      const gripW = tg.localToWorld(_t1.set(0, 0, 0)), fore = gm.userData.fore;
+      const foreW = fore ? gm.localToWorld(_t2.copy(fore)) : tg.localToWorld(_t2.set(-0.035, -0.03, 0.02));
+      const R = _t3.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), D = _t4.set(0, -1, 0);
+      if (!(r.reloadT > 0)) ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, foreW, _t5.copy(B.LeftArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(R, -0.35));
+      ik2(B.RightArm, B.RightForeArm, B.RightHand, gripW, _t5.copy(B.RightArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(R, 0.45));
+    } else {   // knife, grenade, bomb: carried in the right hand as animated
+      hand.getWorldPosition(_v); r.g.worldToLocal(_v);
+      tg.position.copy(_v); tg.rotation.set(ap, 0, 0, 'YXZ');
+      if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
+    }
   }
+  if (r.reloadT > 0) r.reloadT -= dt;
   // head props follow the head bone
   if (B.Head && r.head.children.length) {
     B.Head.getWorldPosition(_v); r.g.worldToLocal(_v); r.head.position.copy(_v).add(new THREE.Vector3(0, -0.12, 0));

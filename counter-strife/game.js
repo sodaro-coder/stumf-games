@@ -280,7 +280,7 @@ export default function start({ cfg, E, N, smoke }) {
     function rigFor(id) {
       const r0 = rigs.get(id), info = st.roster.get(id) || {}, team = info.team || 'T';
       const agentId = (info.agent || {})[team] || (team === 'T' ? 'a_t_default' : 'a_ct_default');
-      const useS = charsReady() && Q >= 0.75;   // realistic animated soldier (Low and up); simple rig on Potato or while loading
+      const useS = charsReady();   // the realistic animated soldier on every quality (11k triangles); the simple rig only while it loads
       const key = agentId + team + (useS ? 'S' : '');
       if (r0 && r0.key === key) return r0;
       if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
@@ -513,6 +513,7 @@ export default function start({ cfg, E, N, smoke }) {
       const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
       audio.at(snd, m.o[0], m.o[1], m.o[2], cam, w.silenced || m.sup ? 25 : w.cat === 'knife' ? 12 : 110);
       if (m.e && w.cat !== 'knife') { tracer(m.o, m.e); if (parts) parts.emit(m.e[0], m.e[1], m.e[2], { n: 3, colors: ['#8a8070', '#ffd27a'], speed: 1.2, up: 0.5, size: 0.03, life: 0.35 }); }
+      if (m.id === specId && W_BY_ID[m.wid] && W_BY_ID[m.wid].cat !== 'knife') { specKick = Math.min(specKick + (W_BY_ID[m.wid].kick || 0.02) * 0.9, 0.09); specFlashT = 0.045; }
       const r = rigs.get(m.id); if (r) { r.flashT = 0.05; if (r.soldier && W_BY_ID[m.wid] && W_BY_ID[m.wid].cat !== 'knife') soldierEvent(r, 'fire'); }
     }
     function onBomb(b) { st.bomb = b ? { s: b.state, x: b.x, y: b.y, z: b.z, t: b.timer, site: b.site } : null; }
@@ -522,6 +523,22 @@ export default function start({ cfg, E, N, smoke }) {
     function onChat(m) { hud.chat(m.name, m.team, m.text, m.teamOnly); audio.play('radio'); if (m.text.startsWith('📻 ') && S.voice) audio.say(m.text.slice(3), 1.0); }
     function announce(key) { if (!S.voice) return; const l = line(S.voicePack, key); audio.say(l.text, l.pitch, l.rate); }
     let specTarget = null, specNext = false;
+    // spectating: you see through their eyes like a player would, their gun in their hands (attachments too), their
+    // aim smoothed the way a person's view moves, flashes and kick when they fire
+    let svm = null, svmKey = '', specYaw = 0, specPitch = 0, specKick = 0, specFlashT = 0, specBob = 0, specId = null;
+    function specViewModel(p) {
+      const wid = p.wid || 'knife', key = p.id + '|' + wid + '|' + p.team;
+      if (key === svmKey) return; svmKey = key;
+      if (svm) vmScene.remove(svm);
+      const sleeve = p.team === 'T' ? '#5e5440' : '#33445c', glove = p.team === 'T' ? '#2c2824' : '#1e2126';
+      if (wid === 'knife') svm = makeKnife(null, null, sleeve, glove);
+      else if (G_BY_ID[wid]) { svm = makeGrenade(wid, sleeve, glove, true); svm.scale.setScalar(1.25); }
+      else if (wid === 'c4') { svm = makeBomb(sleeve, glove, true); svm.scale.setScalar(0.9); }
+      else svm = makeGun(wid, null, sleeve, glove, true, rosterAtt(p.id, wid));
+      const small = (W_BY_ID[wid] || {}).cat === 'pistol' || wid === 'zeus';
+      svm.userData.base = small ? new THREE.Vector3(0.17, -0.16, -0.44) : new THREE.Vector3(0.19, -0.2, -0.46); svm.userData.ry = small ? 0.28 : 0.16; svm.scale.multiplyScalar(small ? 0.62 : 0.85);
+      vmScene.add(svm);
+    }
     function onEvent({ type, data }) {
       if (type === 'round') {
         st.round = data.n; st.score = data.score;
@@ -916,7 +933,7 @@ export default function start({ cfg, E, N, smoke }) {
       me.flash = Math.max(0, me.flash - dt);
       me.inspect = Math.max(0, me.inspect - dt); me.knifeSwing = Math.max(0, me.knifeSwing - dt);
       if (flashT > 0) { flashT -= dt; if (flashT <= 0 && vm && vm.userData.flash) vm.userData.flash.visible = false; }
-      if (!me.alive && pressed.has('M0')) specNext = true;
+      if (!me.alive && (pressed.has('M0') || E.input.touch.tapped.has('fire'))) specNext = true;
       pressed.clear(); E.input.touch.tapped.clear();   // a tap counts once, however many logic steps this frame runs
 
       // grenades in flight (visual)
@@ -933,12 +950,26 @@ export default function start({ cfg, E, N, smoke }) {
       let spectating = null;
       if (!me.alive && (st.phase !== 'warmup')) {
         const mates = [...st.players.values()].filter((p) => p.alive && p.team === me.team);
-        if (mates.length) { if (!specTarget || !mates.find((p) => p.id === specTarget)) specTarget = mates[0].id; if (specNext) { specNext = false; const i = mates.findIndex((p) => p.id === specTarget); specTarget = mates[(i + 1) % mates.length].id; } const p = st.players.get(specTarget); spectating = p; ex = p.x; ey = p.y + 1.62 - (p.crouch || 0) * 0.46; ez = p.z; viewYaw = p.yaw; viewPitch = p.pitch; }
+        if (mates.length) { if (!specTarget || !mates.find((p) => p.id === specTarget)) specTarget = mates[0].id; if (specNext) { specNext = false; const i = mates.findIndex((p) => p.id === specTarget); specTarget = mates[(i + 1) % mates.length].id; } const p = st.players.get(specTarget); spectating = p;
+          if (specId !== p.id) { specId = p.id; specYaw = p.yaw || 0; specPitch = p.pitch || 0; svmKey = ''; }
+          let dy = (p.yaw || 0) - specYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); const k = Math.min(1, dt * 14);
+          specYaw += dy * k; specPitch += ((p.pitch || 0) - specPitch) * k; specKick = Math.max(0, specKick - dt * 0.35);
+          const lo2 = leanOff({ yaw: specYaw, lean: p.lean || 0 }); ex = p.x + lo2.x; ey = p.y + eyeHeight({ crouch: p.crouch || 0, prone: p.prone || 0 }); ez = p.z + lo2.z;
+          viewYaw = specYaw; viewPitch = specPitch + specKick; viewRoll = -(p.lean || 0) * 0.2; }
         else { viewPitch = -0.5; ey = me.y + 3.5; }
       }
       viewY += (ey - viewY) * Math.min(1, dt * 18); if (Math.abs(ey - viewY) > 1.5) viewY = ey;
       const shake = camShake > 0 ? (Math.random() - 0.5) * camShake * 0.05 : 0; camShake = Math.max(0, camShake - dt * 2);
-      cam.position.set(ex, viewY + (spectating ? 0 : Math.sin(bob * 2) * 0.012), ez); cam.rotation.set(viewPitch + shake, viewYaw + shake, spectating ? 0 : viewRoll);
+      cam.position.set(ex, viewY + (spectating ? 0 : Math.sin(bob * 2) * 0.012), ez); cam.rotation.set(viewPitch + shake, viewYaw + shake, viewRoll);
+      if (!spectating) { specId = null; if (svm) svm.visible = false; }
+      else {   // the spectated player's viewmodel
+        specViewModel(spectating);
+        const r = rigs.get(spectating.id), sp = r ? Math.hypot(r.vx || 0, r.vz || 0) : 0; specBob += sp * dt * 1.9;
+        const b = svm.userData.base; svm.visible = !!spectating.alive;
+        svm.position.set(b.x + Math.sin(specBob) * 0.008 * Math.min(1, sp / 4), b.y + Math.abs(Math.cos(specBob)) * 0.006 * Math.min(1, sp / 4) - (spectating.crouch || 0) * 0.01, b.z + specKick * 1.4);
+        svm.rotation.set(specKick * 2, svm.userData.ry || 0, 0);
+        specFlashT -= dt; if (svm.userData.flash) { svm.userData.flash.visible = specFlashT > 0; if (specFlashT > 0) svm.userData.flash.rotation.z = Math.random() * 6.3; }
+      }
       const w = curWeapon();
       const zoomFov = me.scoped && w && w.zoom ? w.zoom[me.scoped - 1] : S.fov / (1 + (((ATTACH[vm && vm.userData && vm.userData.optic] || {}).zoom || 1) - 1) * me.ads);
       const vfov = 2 * Math.atan(Math.tan(zoomFov * Math.PI / 360) * 0.75) * 180 / Math.PI;  // horizontal 4:3 -> vertical
@@ -1029,7 +1060,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (sky) { sky.position.set(cam.position.x, 0, cam.position.z); if (sky.userData.drift) sky.userData.drift.x += dt * 0.0015; }
       // ---- draw ----
       animateGlow(now, dt);   // Mythic finishes and outfits: pulsing, crawling veins
-      renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if (vm && vm.visible) renderer.render(vmScene, vmCam);
+      renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
       // ---- HUD (throttled) ----
       hudT += dt; radarT += dt;
       hud.flashAmt(me.flash > 1.5 ? 1 : me.flash / 1.5);
@@ -1043,7 +1074,7 @@ export default function start({ cfg, E, N, smoke }) {
         hud.vitals(hpShown, spectating ? (spectating.armor || 0) : me.armor, me.helmet);
         hud.money(me.money, canBuy());
         const it = me.inv[me.cur];
-        const ammoTxt = me.cur === 4 ? `${esc(itemName(me.nades[me.nadeSel] || ''))}` : w && w.cat !== 'knife' && it ? `${it.ammo}<small> / ${it.reserve}</small>` : '';
+        const ammoTxt = spectating ? `${esc(itemName(spectating.wid || 'knife'))}` : me.cur === 4 ? `${esc(itemName(me.nades[me.nadeSel] || ''))}` : w && w.cat !== 'knife' && it ? `${it.ammo}<small> / ${it.reserve}</small>` : '';
         const slotHtml = [1, 2, 3, 6, 4, 5].map((s) => s === 4 ? (me.nades.length ? `<div class="slot ${me.cur === 4 ? 'on' : ''}"><b>4</b>${me.nades.map((n) => `<img src="${weaponIcon(n)}">`).join('')}</div>` : '') : me.inv[s] ? `<div class="slot ${me.cur === s ? 'on' : ''}"><b>${s === 6 ? 3 : s}</b><img src="${weaponIcon(s === 5 ? 'c4' : me.inv[s].wid)}">${esc(s === 5 ? 'C4 Bomb' : s === 6 ? 'Zap-27' : s === 3 && (loadout[me.team] || {}).knife ? (itemInfo((loadout[me.team] || {}).knife) || {}).wpn || 'Knife' : itemName(me.inv[s].wid))}</div>` : '').join('');
         hud.ammo(ammoTxt, me.alive ? slotHtml : '');
         hud.loc(W.zoneAt(me.x, me.z));
@@ -1063,7 +1094,7 @@ export default function start({ cfg, E, N, smoke }) {
         else { const d = me.alive && nearestDrop(); if (d) hint = `E: pick up ${itemName(d.wid)}`; }
         if (match && !started && session) hint = 'Lobby: start the match from the panel';
         hud.hint(hint);
-        hud.spec(spectating ? `Spectating ${(st.roster.get(spectating.id) || {}).name || ''} · click for next` : !me.alive && st.phase !== 'warmup' ? 'You are dead' : '');
+        hud.spec(spectating ? `Spectating ${(st.roster.get(spectating.id) || {}).name || ''} · ${itemName(spectating.wid) || ''} · ${mob ? 'tap' : 'click'} for next` : !me.alive && st.phase !== 'warmup' ? 'You are dead' : '');
       }
       if (radarT > 0.1) {
         radarT = 0;
