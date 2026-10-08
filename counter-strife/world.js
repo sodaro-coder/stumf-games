@@ -77,6 +77,64 @@ export class MapBuilder {
 export const LIGHT = { shTex: { value: null }, shInfo: { value: new THREE.Vector4(1, 1, 0, 0) }, macro: { value: null }, bake: { value: 0 } };
 let macroT = null;
 export const macroTex = () => { if (!macroT) { macroT = new THREE.CanvasTexture(macroCanvas(64)); macroT.wrapS = macroT.wrapT = THREE.RepeatWrapping; } return macroT; };
+// ---- the world's surface shader: a lean custom one (texture, sky + sun light, baked shadow/AO, fog, tone mapping).
+// Map surfaces cover most of the screen, so this is what decides the frame rate on weak machines: ~3 texture reads
+// and a few multiplies per pixel, versus three's general lighting shader. Bump detail is added on High only.
+Object.assign(LIGHT, { sunDir: { value: new THREE.Vector3(0.6, 0.7, 0.4).normalize() }, sunCol: { value: new THREE.Color(1, 1, 1) }, skyCol: { value: new THREE.Color(0.7, 0.75, 0.8) }, gndCol: { value: new THREE.Color(0.4, 0.35, 0.3) } });
+const FAST_VS = `varying vec2 vUv; varying vec3 vWP; varying vec3 vWN;
+#include <common>
+#include <fog_pars_vertex>
+void main() {
+  vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vWP = wp.xyz; vWN = normalize(mat3(modelMatrix) * normal);
+  vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`;
+const FAST_FS = `uniform sampler2D map; uniform sampler2D shTex; uniform sampler2D macroTex; uniform vec4 shInfo; uniform float bakeOn;
+uniform vec3 sunDir; uniform vec3 sunCol; uniform vec3 skyCol; uniform vec3 gndCol; uniform vec3 tint;
+#ifdef BUMP
+uniform sampler2D bumpMap;
+#endif
+varying vec2 vUv; varying vec3 vWP; varying vec3 vWN;
+#include <common>
+#include <fog_pars_fragment>
+void main() {
+  vec3 alb = texture2D(map, vUv).rgb * tint;
+  #ifdef MACRO
+  alb *= 0.8 + 0.4 * texture2D(macroTex, vWP.xz * 0.037 + vec2(vWP.y * 0.029, vWP.y * 0.013)).r;
+  #endif
+  vec3 N = normalize(vWN);
+  if (!gl_FrontFacing) N = -N;
+  #ifdef BUMP
+  {
+    vec3 dx = dFdx(vWP), dy = dFdy(vWP); vec2 du = dFdx(vUv), dv = dFdy(vUv);
+    float h0 = texture2D(bumpMap, vUv).r, hx = texture2D(bumpMap, vUv + du).r - h0, hy = texture2D(bumpMap, vUv + dv).r - h0;
+    vec3 r1 = cross(dy, N), r2 = cross(N, dx); float det = dot(dx, r1);
+    if (abs(det) > 1e-9) { vec3 g = (hx * r1 + hy * r2) * 1.4 / det; vec3 n2 = N - g * sign(det) * 0.5; if (dot(n2, n2) > 1e-8) N = normalize(n2); }
+  }
+  #endif
+  vec4 bk = texture2D(shTex, (vWP.xz + vWN.xz * 0.3) * shInfo.xy);
+  float shH = bk.r * 16.0 - 2.0, vis = smoothstep(shH - 0.05, shH + 0.16, vWP.y), ao = 1.0;
+  if (vWN.y > 0.5) ao = bk.g; else if (vWN.y > -0.5) ao = mix(0.45, 1.0, smoothstep(0.0, 1.4, vWP.y - (bk.b * 16.0 - 2.0)));
+  vis = mix(1.0, vis, bakeOn); ao = mix(1.0, ao, bakeOn);
+  vec3 light = mix(gndCol, skyCol, N.y * 0.5 + 0.5) * ao + sunCol * max(dot(N, sunDir), 0.0) * vis * mix(1.0, ao, 0.35);
+  gl_FragColor = vec4(alb * light, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+  #include <fog_fragment>
+}`;
+let whiteT = null;
+export function fastMat({ map = null, color = 0xffffff, bump = null, macro = true, side = THREE.FrontSide } = {}) {
+  if (!map) { if (!whiteT) { whiteT = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); whiteT.needsUpdate = true; } map = whiteT; }
+  const m = new THREE.ShaderMaterial({
+    uniforms: { ...THREE.UniformsLib.fog, map: { value: map }, bumpMap: { value: bump }, tint: { value: new THREE.Color(color) }, shTex: LIGHT.shTex, shInfo: LIGHT.shInfo, macroTex: LIGHT.macro, bakeOn: LIGHT.bake,
+      sunDir: LIGHT.sunDir, sunCol: LIGHT.sunCol, skyCol: LIGHT.skyCol, gndCol: LIGHT.gndCol },
+    vertexShader: FAST_VS, fragmentShader: FAST_FS, fog: true, side, defines: {},
+  });
+  if (bump) m.defines.BUMP = ''; if (macro) m.defines.MACRO = '';
+  if (bump) m.extensions = { derivatives: true };
+  return m;
+}
+
 // three's bump mapping divides by zero when the camera is exactly level (the resting aim in an FPS): a guarded copy
 const BUMP_SAFE = `#ifdef USE_BUMPMAP
 uniform sampler2D bumpMap;
@@ -143,9 +201,14 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   const cellTop = (xx, zz, px, pz) => { const i = idx(xx, zz); if (i < 0) return B.wallH; const r = rid[i]; return r < 0 ? h[i] : slope(r, Math.min(xx + 1, Math.max(xx, px)), Math.min(zz + 1, Math.max(zz, pz))); };
 
   // --- meshes: greedy-merged tops + side faces, one mesh per material; ramps as slopes; stone coping along wall tops ---
-  const geo = MAT_LIST.map(() => ({ pos: [], uv: [], idx: [] }));
+  // geometry is bucketed per material AND per 32 m chunk: chunks off screen are skipped, and near chunks draw first
+  // so hidden surfaces behind them are rejected cheaply (one giant mesh per material made weak GPUs shade everything)
+  const T = 32, tileOf = (x, z) => Math.max(0, Math.floor(x / T)) + Math.max(0, Math.floor(z / T)) * 64;
+  const geo = new Map();
   const quad = (m, a, b, c, dd, uvs) => {
-    const g = geo[m], base = g.pos.length / 3;
+    const key = m * 10000 + tileOf((a[0] + c[0]) / 2, (a[2] + c[2]) / 2);
+    let g = geo.get(key); if (!g) geo.set(key, (g = { m, pos: [], uv: [], idx: [] }));
+    const base = g.pos.length / 3;
     g.pos.push(...a, ...b, ...c, ...dd); g.uv.push(...uvs); g.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   };
   const tsOf = (m) => 1 / MATS[MAT_LIST[m]].s;
@@ -176,9 +239,9 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   for (let z = 0; z < d; z++) for (let x = 0; x < w; x++) {
     const i = z * w + x; if (done[i]) continue;
     const hh = hr[i], mm = mat[i];
-    let x1 = x + 1; while (x1 < w && !done[z * w + x1] && hr[z * w + x1] === hh && mat[z * w + x1] === mm) x1++;
+    let x1 = x + 1; while (x1 < w && Math.floor(x1 / T) === Math.floor(x / T) && !done[z * w + x1] && hr[z * w + x1] === hh && mat[z * w + x1] === mm) x1++;
     let z1 = z + 1;
-    outer: while (z1 < d) { for (let k = x; k < x1; k++) { const j = z1 * w + k; if (done[j] || hr[j] !== hh || mat[j] !== mm) break outer; } z1++; }
+    outer: while (z1 < d && Math.floor(z1 / T) === Math.floor(z / T)) { for (let k = x; k < x1; k++) { const j = z1 * w + k; if (done[j] || hr[j] !== hh || mat[j] !== mm) break outer; } z1++; }
     for (let zz = z; zz < z1; zz++) for (let k = x; k < x1; k++) done[zz * w + k] = 1;
     flat(mm, x, z, x1, z1, hh);
   }
@@ -207,7 +270,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
         }
         const top = hr[i], bot = ni < 0 ? top : hr[ni];
         if (top > bot + 1e-3) {
-          if (run && run.top === top && run.bot === bot && run.m === m && run.s1 === b) run.s1 = b + 1;
+          if (run && run.top === top && run.bot === bot && run.m === m && run.s1 === b && Math.floor(b / T) === Math.floor(run.s0 / T)) run.s1 = b + 1;
           else { flush(); run = { s0: b, s1: b + 1, top, bot, m }; }
         } else flush();
       }
@@ -218,7 +281,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   side(1, 0); side(-1, 0); side(0, 1); side(0, -1);
   // set dressing (windows, lintels, beams, pipes, sand drifts, rooftop clutter): extra geometry per material
   const extra = new Map();
-  if (!headless && quality >= 0.75) dressWorld({ B, hr, mat, flag, faces, matName: (m) => MAT_LIST[m], ts: (k) => 1 / ((MATS[k] || { s: 2 }).s), add: (k, g) => { if (!extra.has(k)) extra.set(k, []); extra.get(k).push(g); } });
+  if (!headless && quality >= 0.75) dressWorld({ B, hr, mat, flag, faces, matName: (m) => MAT_LIST[m], ts: (k) => 1 / ((MATS[k] || { s: 2 }).s), add: (k, g) => { g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3()), key = k + '|' + tileOf(c.x, c.z); if (!extra.has(key)) extra.set(key, []); extra.get(key).push(g); } });
 
   // --- baked light: for every 1/K m of floor, how high the sun's shadow reaches there, plus ambient occlusion ---
   // One small texture gives soft sun shadows on every floor, wall and player and darkened corners, for the price of a
@@ -244,6 +307,11 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   }
   const bakeTex = new THREE.DataTexture(bake, TW, TD, THREE.RGBAFormat, THREE.UnsignedByteType);
   bakeTex.magFilter = bakeTex.minFilter = THREE.LinearFilter; bakeTex.needsUpdate = true;
+  { // sun and sky for the surface shader (same numbers as the scene's lights)
+    const sl2 = Math.hypot(...sd); LIGHT.sunDir.value.set(sd[0] / sl2, sd[1] / sl2, sd[2] / sl2);
+    LIGHT.sunCol.value.set(B.sunColor || 0xffffff).multiplyScalar((B.sunI || 2.4) / Math.PI);
+    LIGHT.skyCol.value.set((B.amb || [])[0] || 0xffffff).multiplyScalar((B.ambI || 1.1) / Math.PI); LIGHT.gndCol.value.set((B.amb || [])[1] || 0x555555).multiplyScalar((B.ambI || 1.1) / Math.PI);
+  }
   const useLight = () => { LIGHT.shTex.value = bakeTex; LIGHT.shInfo.value.set(1 / w, 1 / d, 0, 0); LIGHT.bake.value = 1; if (!LIGHT.macro.value && !headless) LIGHT.macro.value = macroTex(); };
   useLight();
   // is the sun hitting this point? (CPU side of the same bake: the first-person arms darken in the shade)
@@ -253,31 +321,32 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   };
 
   const group = new THREE.Group(); scene.add(group);
-  const texSize = quality >= 1 ? 256 : 128, bumpOn = quality >= 1, aniso = Math.min(8, opt.aniso || 1);
+  const texSize = quality >= 1 ? 256 : 128, bumpOn = quality >= 1.5, aniso = Math.min(quality >= 1.5 ? 8 : quality >= 1 ? 4 : 1, opt.aniso || 1);
   const texCache = {};
   const matTex = (k) => {
     if (texCache[k]) return texCache[k];
-    const sf = surface(k, texSize, bumpOn), mk = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const sf = surface(k, texSize, bumpOn), mk = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (quality < 1) t.minFilter = THREE.LinearMipmapNearestFilter; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
     return (texCache[k] = { map: mk(sf.map, true), bump: sf.bump ? mk(sf.bump, false) : null });
   };
   const worldMat = (k) => {
     if (headless) return new THREE.MeshBasicMaterial();   // simulations without a browser: geometry only
     const M = MATS[k], t = matTex(k);
     if (M.glow) return new THREE.MeshBasicMaterial({ map: t.map });
-    return litPatch(new THREE.MeshLambertMaterial({ map: t.map, bumpMap: t.bump, bumpScale: t.bump ? 1.2 : 1 }), 'world');
+    return fastMat({ map: t.map, bump: t.bump, macro: quality >= 0.75 });
   };
-  geo.forEach((g, m) => {
-    if (!g.pos.length) return;
+  const matCache = new Map(), matFor = (k) => { if (!matCache.has(k)) matCache.set(k, k === 'glassdark' ? fastMat({ color: 0x1c2328, macro: false }) : worldMat(k)); return matCache.get(k); };
+  const chunks = [];
+  const addChunk = (bg, k) => { bg.computeBoundingSphere(); const mesh = new THREE.Mesh(bg, matFor(k)); mesh.matrixAutoUpdate = false; group.add(mesh); chunks.push(mesh); };
+  for (const g of geo.values()) {
     const bg = new THREE.BufferGeometry();
     bg.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3));
     bg.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
     bg.setIndex(g.idx); bg.computeVertexNormals();
-    const mesh = new THREE.Mesh(bg, worldMat(MAT_LIST[m])); mesh.matrixAutoUpdate = false; group.add(mesh);
-  });
-  for (const [k, list] of extra) {
-    const mt = k === 'glassdark' ? litPatch(new THREE.MeshLambertMaterial({ color: 0x1c2328 }), 'world') : worldMat(k);
-    const mesh = new THREE.Mesh(mergeGeos(list), mt); mesh.matrixAutoUpdate = false; group.add(mesh); list.forEach((g) => g.dispose());
+    addChunk(bg, MAT_LIST[g.m]);
   }
+  for (const [key, list] of extra) { addChunk(mergeGeos(list), key.split('|')[0]); list.forEach((g) => g.dispose()); }
+  // near chunks first (call every frame with the camera): cheap, and it lets the GPU skip pixels hidden behind them
+  const sortChunks = (cam) => { const p = cam.position; for (const c of chunks) { const s2 = c.geometry.boundingSphere; c.renderOrder = Math.floor(Math.max(0, Math.hypot(s2.center.x - p.x, s2.center.z - p.z) - s2.radius) / 4); } };
   // roofs over buildings (look only: walls are too tall to climb)
   const roofM = worldMat('roof');
   for (const [x0, z0, x1, z1, rh] of B.roofs || []) {
@@ -299,7 +368,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
       const gr = g.createLinearGradient(0, 0, cw, ch); if (gr) { gr.addColorStop(0, 'rgba(255,255,255,.06)'); gr.addColorStop(1, 'rgba(0,0,0,.18)'); g.fillStyle = gr; g.fillRect(0, 0, cw, ch); }
     });
     const t = headless ? null : new THREE.CanvasTexture(c); if (t) { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; }
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.h), litPatch(new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }), 'world'));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.h), headless ? new THREE.MeshBasicMaterial() : fastMat({ map: t, macro: false, side: THREE.DoubleSide }));
     m.position.set(s.x, s.y, s.z); m.rotation.y = s.rot; group.add(m);
     const bd = new THREE.Mesh(new THREE.BoxGeometry(s.w + 0.12, s.h + 0.12, 0.05), boardM);
     bd.position.set(s.x - Math.sin(s.rot) * 0.03, s.y, s.z - Math.cos(s.rot) * 0.03); bd.rotation.y = s.rot; group.add(bd);
@@ -443,5 +512,5 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   const siteAt = (x, z) => { for (const [n, r] of Object.entries(B.sites)) if (inRect(r, x, z)) return n; return ''; };
 
   return { B, w, d, h, mat, flag, H, idx, group, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
-    topAt, sunAt, useLight, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
+    topAt, sunAt, useLight, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
 }

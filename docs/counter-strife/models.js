@@ -16,7 +16,7 @@ const box = (w, h, d) => { const k = `${w}|${h}|${d}`; if (!boxGeo.has(k)) boxGe
 export const part = (parent, w, h, d, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(box(w, h, d), mat); m.position.set(x, y, z); parent.add(m); return m; };
 
 let HQ = true;   // Phong (shiny metal) on Medium and up; plain Lambert on Low/Potato
-export function setModelQuality(q) { HQ = q >= 0.75; }
+export function setModelQuality(q) { HQ = q >= 1; }
 
 // ---- geometry helpers ---------------------------------------------------------------------------------------------
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _UP = new THREE.Vector3(0, 1, 0);

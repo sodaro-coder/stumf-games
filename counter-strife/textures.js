@@ -198,3 +198,14 @@ export function macroCanvas(size = 64) {
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) { const v = fbm(x / size, y / size, 4, 4, 901) * 255, k = (y * size + x) * 4; im.data[k] = im.data[k + 1] = im.data[k + 2] = v; im.data[k + 3] = 255; }
   g.putImageData(im, 0, 0); return c;
 }
+
+// tiling cloud cover (alpha = cloud), for the sky dome
+export function cloudCanvas(size = 256) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'), im = g.createImageData(size, size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const f = fbm(x / size, y / size, 4, 5, 777), a = Math.max(0, Math.min(1, (f - 0.47) / 0.25)), k = (y * size + x) * 4, sh = 250 - a * 45;
+    im.data[k] = sh; im.data[k + 1] = sh; im.data[k + 2] = sh + 5; im.data[k + 3] = a * 255;
+  }
+  g.putImageData(im, 0, 0); return c;
+}

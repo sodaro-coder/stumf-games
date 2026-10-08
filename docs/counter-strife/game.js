@@ -17,17 +17,17 @@ import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, make
 
 const SET_KEY = 'cs:settings:v1';
 // sun, sky light, fog and sky for a map (shared by the match and the menu's map pictures)
-function dressScene(sc, B, shadows) {
+function dressScene(sc, B, shadows, clouds = true) {
   for (const l of sc.children.filter((c) => c.isLight)) sc.remove(l);
   const dir = B.sunDir || [0.6, 0.7, 0.4], L = Math.hypot(...dir), d = dir.map((v) => v / L), fog = B.fog || 0xaaaaaa;
   sc.background = new THREE.Color(fog); sc.fog = new THREE.Fog(fog, 70, 260);
   sc.add(new THREE.HemisphereLight((B.amb || [])[0] || 0xffffff, (B.amb || [])[1] || 0x555555, B.ambI || 1.1));
   const sun = new THREE.DirectionalLight(B.sunColor || 0xffffff, B.sunI || 2.4); sun.position.set(d[0] * 90, d[1] * 90, d[2] * 90); sc.add(sun);
   if (shadows) { sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); const c = sun.shadow.camera; c.left = c.bottom = -24; c.right = c.top = 24; c.near = 1; c.far = 220; sun.shadow.bias = -0.0008; sc.add(sun.target); }
-  const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff);
+  const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 1, fps: 0, hand: 1 };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -195,11 +195,15 @@ export default function start({ cfg, E, N, smoke }) {
     const hello = { name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
 
     // ---- renderer & scene ----
-    const hi = S.quality >= 1.5;  // High: antialiasing + real-time player shadows; lower settings stay fast on weak machines
-    setModelQuality(S.quality);
+    // graphics quality: a fixed preset, or Auto (0): start from what this device has done before (or a guess from its
+    // cores/memory), then step down whenever it can't hold ~40 fps even at reduced resolution. Remembered per device.
+    const AUTO = !S.quality, QSTEPS = [0.5, 0.75, 1, 1.5];
+    let Q = S.quality;
+    if (AUTO) { const saved = +(localStorage.getItem('cs:autoq') || 0), weak = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS/i.test(navigator.userAgent); Q = QSTEPS.includes(saved) ? saved : weak ? 0.75 : 1; }
+    const hi = Q >= 1.5;  // High: antialiasing, sharper bump detail; lower settings stay fast on weak machines
+    setModelQuality(Q);
     const renderer = new THREE.WebGLRenderer({ antialias: hi, powerPreference: 'high-performance' });
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
-    if (hi) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
     renderer.domElement.style.cssText = 'position:fixed;inset:0;width:100%;height:100%';
     document.body.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
@@ -209,8 +213,23 @@ export default function start({ cfg, E, N, smoke }) {
     const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = vmCam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); vmCam.updateProjectionMatrix(); };
     addEventListener('resize', resize); resize();
     renderer.autoClear = false;
-    let scale = Math.min(1, devicePixelRatio || 1) * S.quality;
-    const gov = E.qualityGovernor((s) => { scale = s; renderer.setPixelRatio(s); }, { start: Math.min(devicePixelRatio || 1, 1) * S.quality, max: Math.min(1.5, (devicePixelRatio || 1) * S.quality), min: 0.4 });
+    let scale = Math.min(1, devicePixelRatio || 1) * Q;
+    const govMinOf = () => (Q <= 0.5 ? 0.4 : AUTO ? 0.55 : 0.4); let govMin = govMinOf(); const mkGov = () => E.qualityGovernor((s) => { if (window.__lockPR) return; scale = s; renderer.setPixelRatio(s); }, { start: Math.min(devicePixelRatio || 1, 1) * Math.min(Q, 1), max: Math.min(1.5, (devicePixelRatio || 1) * Q), min: govMin, targetMs: 21 });
+    let gov = mkGov(), perfSum = 0, perfN = 0;
+    // Auto: still under ~40 fps at the lowest resolution step -> one preset down (the map is rebuilt lighter)
+    const autoCheck = (dt) => {
+      if (!AUTO || !W || uiOpen || dt > 0.5) return;
+      perfSum += dt; perfN++; if (perfSum < 4) return;
+      const avg = perfSum / perfN; perfSum = 0; perfN = 0;
+      const i = QSTEPS.indexOf(Q);
+      if (avg > 1 / 40 && scale <= govMin + 0.06 && i > 0) {
+        Q = QSTEPS[i - 1]; try { localStorage.setItem('cs:autoq', String(Q)); } catch (e) { /* private mode */ }
+        setModelQuality(Q); buildMap(mapId); vmKey = ''; setViewModel(); govMin = govMinOf(); gov = mkGov();
+        toast('Graphics: ' + ['Potato', 'Low', 'Medium', 'High'][i - 1] + ' (Auto) to keep it smooth');
+      } else if (avg < 1 / 75 && i < 2 && scale >= Math.min(1, devicePixelRatio || 1) * Math.min(Q, 1) - 0.01) {
+        try { localStorage.setItem('cs:autoq', String(QSTEPS[i + 1])); } catch (e) { /* private mode */ }   // headroom: next match one step up
+      }
+    };
     const fpsM = S.fps ? E.fpsMeter() : () => {};
     const hud = new Hud(S);
 
@@ -226,13 +245,12 @@ export default function start({ cfg, E, N, smoke }) {
     // ---- world ----
     function buildMap(id) {
       if (W) { scene.remove(W.group); W.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
-      mapId = id; W = buildWorld(E, MAPS[id], scene, S.quality, { aniso: renderer.capabilities.getMaxAnisotropy() });
+      mapId = id; W = buildWorld(E, MAPS[id], scene, Q, { aniso: renderer.capabilities.getMaxAnisotropy() });
       const B = W.B;
       if (sky) { scene.remove(sky); sky = null; }
-      const lit = dressScene(scene, B, hi); sunLight = lit.sun; sky = lit.sky; sunDir = lit.dir;
+      const lit = dressScene(scene, B, false, Q >= 1); sunLight = lit.sun; sky = lit.sky; sunDir = lit.dir;
       vmHemi.color.set(B.amb[0]); vmHemi.groundColor.set(B.amb[1]); vmSun.color.set(B.sunColor);
       for (const p of B.props) W.group.add(makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }));
-      if (hi) W.group.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       hud.radarBase(W);
     }
@@ -248,7 +266,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (r0 && r0.key === key) return r0;
       if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
-      const r = makePlayer(a.look, team); if (hi) r.g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      const r = makePlayer(a.look, team);
       r.blob = new THREE.Mesh(blobGeo, blobMat); r.blob.rotation.x = -Math.PI / 2; r.blob.renderOrder = 1; scene.add(r.blob); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
       if (id !== myId) {  // teammates' names float over their heads
         const c = document.createElement('canvas'); c.width = 256; c.height = 48; const g = c.getContext('2d');
@@ -806,7 +824,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (st.bomb && st.bomb.s === 'planted' && st.bomb.t != null) { bombBeep -= dt; const rate = Math.max(0.12, Math.min(1, st.bomb.t / 30)); if (bombBeep <= 0) { bombBeep = rate; audio.at('beep', st.bomb.x, st.bomb.y, st.bomb.z, cam, 50); } }
     }, (alpha, dt) => {
       if (!W) return;
-      gov(dt); fpsM(dt);
+      gov(dt); fpsM(dt); autoCheck(dt);
       // ---- camera: own eyes, or spectate a teammate ----
       let viewYaw = me.yaw, viewPitch = me.pitch + me.punch * 0.35 + camKick, ex = me.x, ey = me.y + eyeHeight(me), ez = me.z;
       let spectating = null;
@@ -876,7 +894,8 @@ export default function start({ cfg, E, N, smoke }) {
         vmSun.intensity = (W.B.sunI || 2.4) * 0.75 * vmSunK; vmHemi.intensity = (W.B.ambI || 1.1) * 0.95;
         const yw = cam.rotation.y, lx = sunDir[0], lz = sunDir[2], c = Math.cos(-yw), s2 = Math.sin(-yw); vmSun.position.set(lx * c + lz * s2, sunDir[1], -lx * s2 + lz * c);
       }
-      if (sky) sky.position.set(cam.position.x, 0, cam.position.z);
+      if (W) W.sortChunks(cam);
+      if (sky) { sky.position.set(cam.position.x, 0, cam.position.z); if (sky.userData.drift) sky.userData.drift.x += dt * 0.0015; }
       // ---- draw ----
       renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if (vm && vm.visible) renderer.render(vmScene, vmCam);
       // ---- HUD (throttled) ----
