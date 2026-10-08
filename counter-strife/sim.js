@@ -414,7 +414,7 @@ export class Match {
   snap() {
     return { ph: this.phase, tm: Math.max(0, this.timer).toFixed(1) * 1, r: this.round, sc: this.score,
       p: [...this.players.values()].map((p) => [p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(2), +p.pitch.toFixed(2), +p.crouch.toFixed(1), Math.max(0, Math.round(p.hp)), p.alive ? 1 : 0,
-        (p.inv[p.cur] || {}).wid || 'knife', p.inv[5] ? 1 : 0, p.planting ? +(p.planting / BOMB.plant).toFixed(2) : 0, Math.round(p.armor), p.helmet ? 1 : 0, p.money, +(p.lean || 0).toFixed(2), +(p.prone || 0).toFixed(1)]),
+        (p.inv[p.cur] || {}).wid || 'knife', p.inv[5] ? 1 : 0, p.planting ? +(p.planting / BOMB.plant).toFixed(2) : 0, Math.round(p.armor), p.helmet ? 1 : 0, p.money, +(p.lean || 0).toFixed(2), +(p.prone || 0).toFixed(1), p.reloading ? 1 : 0]),
       b: this.bomb ? { s: this.bomb.state, x: this.bomb.x, y: this.bomb.y, z: this.bomb.z, t: this.bomb.timer != null ? +this.bomb.timer.toFixed(1) : null, d: this.bomb.dprog ? +(this.bomb.dprog / (this.bomb.kit ? BOMB.defuseKit : BOMB.defuse)).toFixed(2) : 0, site: this.bomb.site } : null };
   }
 }

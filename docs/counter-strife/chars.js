@@ -134,7 +134,7 @@ function turnWorld(b, axis, ang) {
   b.quaternion.premultiply(_q2.setFromAxisAngle(_ax, ang)); b.updateMatrixWorld(true);
 }
 // per frame: pick the base animation from how the player moves, then aim, gun and props
-export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0 }) {
+export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0 }) {
   r.t += dt;
   if (dead) {
     if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
@@ -175,7 +175,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
   if (hand && gm) {
     tg.visible = !emote && !r.dead;
     const cat = (tg.userData || {}).cat || 'rifle', armed = !emote && !r.dead && B.RightArm && B.LeftArm;
-    const ap = Math.max(-1.2, Math.min(1.2, pitch));
+    const ap = Math.max(-1.2, Math.min(1.2, pitch)) + prone * Math.PI / 2 * 0.94;   // prone: the body lies forward, the gun still points ahead
     if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
       { // square the chest to the aim: the shoulder line should run along the rig's right (keep ~20 degrees of rifle stance)
         const L = B.LeftArm.getWorldPosition(_t1), Rs = B.RightArm.getWorldPosition(_t2), sl = _t3.copy(Rs).sub(L); sl.y = 0;
@@ -194,6 +194,10 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       const gripW = tg.localToWorld(_t1.set(0, 0, 0)), fore = gm.userData.fore;
       const foreW = fore ? gm.localToWorld(_t2.copy(fore)) : tg.localToWorld(_t2.set(-0.035, -0.03, 0.02));
       const R = _t3.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), D = _t4.set(0, -1, 0);
+      if (r.reloadT > 0 && B.Hips) {   // reload: the left hand drops to the mag pouch and brings a fresh one up to the gun
+        const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(_t6).addScaledVector(_t3.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), -0.18).add(_t4.set(0, 0.05, 0));
+        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, _t5.copy(foreW).lerp(pouch, out), _t1.copy(B.LeftArm.getWorldPosition(_t1)).add(_t4.set(0, -0.6, 0)));
+      }
       if (!(r.reloadT > 0)) ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, foreW, _t5.copy(B.LeftArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(R, -0.35));
       ik2(B.RightArm, B.RightForeArm, B.RightHand, gripW, _t5.copy(B.RightArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(R, 0.45));
     } else {   // knife, grenade, bomb: carried in the right hand as animated

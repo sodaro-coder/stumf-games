@@ -359,7 +359,7 @@ export default function start({ cfg, E, N, smoke }) {
     // ---- reload animations: tilt the gun, drop the mag, bring a fresh one up, seat it, rack it -----------------------
     const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     const _rv = new THREE.Vector3(), _rv2 = new THREE.Vector3();
-    const EYE_RELIEF = { reddot: 0.15, holo: 0.16, acog: 0.12 };   // how far the sight sits in front of your eye when aimed in (metres)
+    const EYE_RELIEF = { reddot: 0.15, holo: 0.16, acog: 0.12, iron: 0.34 };   // how far the sight sits in front of your eye when aimed in (metres)
     function reloadPose(vm, w, k) {
       const ud = vm.userData, arm = ud.leftArm, mg = ud.magGroup;
       if (k < 0 || !w) { arm.position.set(0, 0, 0); arm.rotation.set(0, 0, 0); if (mg) { mg.position.set(0, 0, 0); mg.rotation.set(0, 0, 0); mg.visible = true; } if (arm.userData.shell) arm.userData.shell.visible = false; return; }
@@ -507,7 +507,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (p.alive) { const jump = Math.hypot(x - p.x, z - p.z); if (jump < 4 || !p.seen) { p.x = x; p.y = y; p.z = z; } p.seen = true; }
         p.yaw = yaw; p.pitch = Math.max(-1.6, Math.min(1.6, pitch)); p.crouch = Math.max(0, Math.min(1, cr)); p.plant = !!(fl & 1); p.defusing = !!(fl & 2);
         p.lean = Number.isFinite(+d[8]) ? Math.max(-1, Math.min(1, +d[8])) : 0; p.prone = Number.isFinite(+d[9]) ? Math.max(0, Math.min(1, +d[9])) : 0;
-        if ([1, 2, 3, 4, 5, 6].includes(cur) && (p.inv[cur] || cur === 4)) p.cur = cur; p.onGround = !!(fl & 4); p.vx = 0; p.vz = 0;
+        if ([1, 2, 3, 4, 5, 6].includes(cur) && (p.inv[cur] || cur === 4)) p.cur = cur; p.onGround = !!(fl & 4); p.reloading = !!(fl & 8); p.vx = 0; p.vz = 0;
         return;
       }
       if (t === 'shot' && d && typeof d === 'object') {
@@ -710,11 +710,11 @@ export default function start({ cfg, E, N, smoke }) {
     function applySnap(s) {
       st.phase = s.ph; st.timer = s.tm; st.round = s.r; st.score = s.sc;
       for (const a of s.p) {
-        const [id, x, y, z, yaw, pitch, crouch, hp, alive, wid, c4, plant, armor, helmet, money, lean, prone] = a;
+        const [id, x, y, z, yaw, pitch, crouch, hp, alive, wid, c4, plant, armor, helmet, money, lean, prone, rl] = a;
         if (id === myId) { me.hp = hp; if (me.alive && !alive) me.alive = false; me.armor = armor; me.helmet = !!helmet; me.money = money; me.planting = plant; continue; }
         let p = st.players.get(id); if (!p) st.players.set(id, (p = { id, x, y, z, tx: x, ty: y, tz: z }));
         if (Math.hypot(x - p.x, z - p.z) > 4) { p.x = x; p.y = y; p.z = z; }
-        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team;
+        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.rl = !!rl; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team;
       }
       for (const id of [...st.players.keys()]) if (!s.p.some((a) => a[0] === id)) st.players.delete(id);
       if (s.b) st.bomb = { s: s.b.s, x: s.b.x, y: s.b.y, z: s.b.z, t: s.b.t, d: s.b.d, site: s.b.site }; else if (st.bomb && st.bomb.s !== 'exploded' && st.bomb.s !== 'defused') st.bomb = null;
@@ -771,7 +771,8 @@ export default function start({ cfg, E, N, smoke }) {
       const eye = eyePos(me);
       const adsOn = me.ads > 0.6, n0 = me.spray;
       const adsSpread = () => { const [st0, mv, jp] = w.inacc || [0.005, 0.03, 0.1]; return st0 * 0.25 + (me.onGround ? 0 : jp) + Math.max(0, speedOf(me) / (w.speed * U) - 0.34) * mv * 0.5; };
-      const rc0 = adsOn ? { up: 0, side: 0 } : recoilAt(w, me.spray), RH = rhK(), rc = { up: rc0.up * RH, side: rc0.side * RH }, sp = (adsOn ? adsSpread() : spreadOf(w, me, me.scoped > 0, me.spray)) * (me.flash > 1 ? 1.3 : 1);
+      const RH = rhK(), rc = { up: 0, side: 0 },   // recoil moves your view (below), so bullets always go where the crosshair is
+        sp = (adsOn ? adsSpread() : spreadOf(w, me, me.scoped > 0, me.spray)) * (me.flash > 1 ? 1.3 : 1);
       me.shotK = 1; me.shotRoll = Math.random() - 0.5;
       if (w.cat !== 'knife' && w.cat !== 'zeus' && !w.shellReload) { const fx2 = -Math.sin(me.yaw), fz2 = -Math.cos(me.yaw); ejectCasing({ x: eye.x + fx2 * 0.2, y: eye.y - 0.04, z: eye.z + fz2 * 0.2 }, Math.cos(me.yaw) * S.hand, -Math.sin(me.yaw) * S.hand, fx2, fz2, false); }
       if (parts && w.cat !== 'knife' && w.cat !== 'zeus' && Math.random() < 0.5) { const fx2 = -Math.sin(me.yaw) * Math.cos(me.pitch), fy2 = Math.sin(me.pitch), fz2 = -Math.cos(me.yaw) * Math.cos(me.pitch); parts.smoke(eye.x + fx2 * 1.0 + Math.cos(me.yaw) * 0.12 * S.hand, eye.y + fy2 * 1.0 - 0.08, eye.z + fz2 * 1.0 - Math.sin(me.yaw) * 0.12 * S.hand, { size: 0.12, life: 0.8, alpha: 0.3 }); }   // a wisp of muzzle smoke
@@ -781,7 +782,7 @@ export default function start({ cfg, E, N, smoke }) {
       const hits = []; let end = null;
       for (let k = 0; k < (w.pellets || 1); k++) {
         const r1 = (Math.random() - 0.5) * 2, r2 = (Math.random() - 0.5) * 2, spr = sp + (w.spread || 0) * (w.pellets > 1 ? 1 : 0);
-        const yaw = me.yaw + rc.side + r1 * spr, pitch = me.pitch + (adsOn ? 0 : me.punch * 0.5) + rc.up + r2 * spr;
+        const yaw = me.yaw + rc.side + r1 * spr, pitch = me.pitch + rc.up + r2 * spr;
         const d = { x: -Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: -Math.cos(yaw) * Math.cos(pitch) };
         const tr = traceShot(W, players, myId, eye, d, w);
         hits.push(...tr.hits); if (!end) end = tr.end;
@@ -789,9 +790,11 @@ export default function start({ cfg, E, N, smoke }) {
         if (tr.wallHits[0]) { decal(tr.wallHits[0], d); const hp = tr.wallHits[0], mn = W.matName(hp.m), e = impactFx(mn); if (parts) { parts.emit(hp.x - d.x * 0.05, hp.y - d.y * 0.05, hp.z - d.z * 0.05, e); if (e !== IMPACT.metal) parts.smoke(hp.x - d.x * 0.1, hp.y - d.y * 0.1, hp.z - d.z * 0.1, { n: 2, color: e.colors[0], size: e === IMPACT.sand ? 0.22 : 0.14, life: 1.1, rise: 0.15, alpha: 0.55 }); } if (e === IMPACT.metal && Math.random() < 0.35) audio.at('ricochet', hp.x, hp.y, hp.z, cam, 30); }
         for (const h of tr.hits) { const p = st.players.get(h.id); if (p && parts) parts.emit(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, { n: 6, colors: ['#8a0a0a', '#c01a1a'], speed: 1.5, up: 0.4, size: 0.04, life: 0.5 }); }
       }
-      if (adsOn) {   // aimed in: the gun climbs your actual view (pull down to control it), at a bit over half the hip-fire pattern
-        const a = recoilAt(w, n0 + 1), b = recoilAt(w, n0); me.pitch = Math.min(1.55, me.pitch + (a.up - b.up) * 0.62 * RH); me.yaw += (a.side - b.side) * 0.55 * RH; camKick = Math.min(camKick + w.kick * 0.3, 0.05);
-      } else { me.punch += w.kick * 0.6 * RH; camKick = Math.min(camKick + w.kick * 0.8, 0.12); }
+      { // the crosshair follows recoil, always: each shot climbs your actual view along the gun's pattern (pull down to
+        // control it). Hip fire kicks a little harder than aimed in.
+        const a = recoilAt(w, n0 + 1), b = recoilAt(w, n0), kv = adsOn ? 0.62 : 0.78, ks = adsOn ? 0.55 : 0.7;
+        me.pitch = Math.min(1.55, me.pitch + (a.up - b.up) * kv * RH); me.yaw += (a.side - b.side) * ks * RH; camKick = Math.min(camKick + w.kick * (adsOn ? 0.3 : 0.45), adsOn ? 0.05 : 0.08);
+      }
       const sup = (myAtt(w.id) || {}).muzzle === 'suppressor';
       if (w.cat === 'zeus') for (const h of hits) h.group = 'chest';
       if (w.cat === 'zeus') { const zr = w.range || 4.5; for (let i = hits.length - 1; i >= 0; i--) if (hits[i].dist > zr) hits.splice(i, 1); }
@@ -845,7 +848,7 @@ export default function start({ cfg, E, N, smoke }) {
     function simHost(dt) {
         lastSim = performance.now();
         const mp = match.players.get(myId);
-        if (mp) { mp.x = me.x; mp.y = me.y; mp.z = me.z; mp.yaw = me.yaw; mp.pitch = me.pitch; mp.crouch = me.crouch; mp.lean = me.lean; mp.prone = me.prone || 0; mp.onGround = me.onGround; mp.vx = me.vx; mp.vz = me.vz;
+        if (mp) { mp.x = me.x; mp.y = me.y; mp.z = me.z; mp.yaw = me.yaw; mp.pitch = me.pitch; mp.crouch = me.crouch; mp.lean = me.lean; mp.prone = me.prone || 0; mp.reloading = me.reload > 0; mp.onGround = me.onGround; mp.vx = me.vx; mp.vz = me.vz;
           mp.cur = me.cur === 4 ? 4 : me.cur; mp.plant = me.cur === 5 && me.alive && (mouseBtn[0] || kd('KeyE') || E.input.touch.buttons.has('use')); mp.defusing = me.alive && ((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && st.bomb && st.bomb.s === 'planted' && me.team === 'CT';
           for (const s of [1, 2]) if (mp.inv[s] && me.inv[s] && mp.inv[s].wid === me.inv[s].wid) { mp.inv[s].ammo = me.inv[s].ammo; mp.inv[s].reserve = me.inv[s].reserve; } }
         if (bots) bots.tick(dt);
@@ -885,7 +888,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (!match) {
         for (const p of st.players.values()) { const k = Math.min(1, dt * 14); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.z += (p.tz - p.z) * k; }
         netT += dt; ammoT += dt;
-        if (session && netT >= 1 / 30) { netT = 0; const fl = (me.cur === 5 && (mouseBtn[0] || kd('KeyE')) ? 1 : 0) | (((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && me.team === 'CT' ? 2 : 0) | (me.onGround ? 4 : 0);
+        if (session && netT >= 1 / 30) { netT = 0; const fl = (me.cur === 5 && (mouseBtn[0] || kd('KeyE')) ? 1 : 0) | (((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && me.team === 'CT' ? 2 : 0) | (me.onGround ? 4 : 0) | (me.reload > 0 ? 8 : 0);
           session.toHost('pose', [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(3), +me.pitch.toFixed(3), +me.crouch.toFixed(2), fl, me.cur, +me.lean.toFixed(2), +(me.prone || 0).toFixed(2)]); }
         if (ammoT > 1) { ammoT = 0; sendAmmo(); }
       }
@@ -895,7 +898,7 @@ export default function start({ cfg, E, N, smoke }) {
       const frozen = st.phase === 'freeze';
       let lk = { dx: mdx, dy: mdy }; mdx = mdy = 0;
       lk.dx += E.input.touch.look.dx; lk.dy += E.input.touch.look.dy; E.input.touch.look.dx = E.input.touch.look.dy = 0;
-      const adsOptic = vm && vm.userData && vm.userData.optic && vm.userData.sight && curWeapon() && !curWeapon().zoom ? vm.userData.optic : null;
+      const adsOptic = vm && vm.userData && curWeapon() && !curWeapon().zoom ? (vm.userData.optic && vm.userData.sight ? vm.userData.optic : vm.userData.iron ? 'iron' : null) : null;   // every gun aims down sights: its optic, or its iron sights
       const adsZoom = 1 + ((ATTACH[adsOptic] || {}).zoom - 1 || 0) * me.ads;
       const zoomK = (me.scoped ? (curWeapon() && curWeapon().zoom ? curWeapon().zoom[me.scoped - 1] / S.fov : 1) : 1) / adsZoom;
       const sens = S.sens * 0.022 * Math.PI / 180 * zoomK;
@@ -1055,7 +1058,8 @@ export default function start({ cfg, E, N, smoke }) {
         r.t += dt;
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
-        if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0 });
+        if (r.soldier && p.rl && !r.wasRl) soldierEvent(r, 'reload'); r.wasRl = !!p.rl;
+        if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0, prone: p.prone || 0 });
         else posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
         if (!r.soldier && r.torso && p.lean) r.torso.rotation.z -= p.lean * 0.35;
         if (r.blob) { r.blob.visible = r.g.visible; const gy = W.groundAt(p.x, p.z, p.y + 0.1); r.blob.position.set(p.x, gy + 0.02, p.z); const k = Math.max(0.2, 1 - (p.y - gy) * 0.8); r.blob.scale.setScalar(0.95 * k); }
@@ -1121,10 +1125,13 @@ export default function start({ cfg, E, N, smoke }) {
             if (stroking) { const k = Math.sin(me.inspect * 11); ud.strokeHand.position.z = -0.11 + k * 0.09; ud.strokeHand.rotation.z = k * 0.15; if ((ud.lastK || 0) * k < 0 && k > 0) audio.play('squelch', 0.6); ud.lastK = k; }
           }
         }
-        if (me.ads > 0.001 && vm.userData.sight) {   // aim down sights: bring the optic's sight line onto the view line
-          const sc = vm.userData.sc, sg = vm.userData.sight, k = me.ads;
-          vm.position.lerp(new THREE.Vector3(-sg.x * sc, -sg.y * sc, -(EYE_RELIEF[vm.userData.optic] || 0.2) - sg.z * sc + camKick * 0.6), k);
+        if (me.ads > 0.001 && (vm.userData.sight || vm.userData.iron)) {   // aim down sights: bring the sight line onto the view line
+          const sc = vm.userData.sc, sg = vm.userData.sight || vm.userData.iron, k = me.ads, pistolV = (W_BY_ID[(curWeapon() || {}).id] || {}).cat === 'pistol';
+          const relief = vm.userData.optic ? (EYE_RELIEF[vm.userData.optic] || 0.2) : pistolV ? 0.42 : EYE_RELIEF.iron;
+          vm.position.lerp(new THREE.Vector3(-sg.x * sc, -sg.y * sc, -relief - sg.z * sc + camKick * 0.6), k);
           vm.rotation.set(vm.rotation.x * (1 - k) + camKick * 0.8 * k, vm.rotation.y * (1 - k), vm.rotation.z * (1 - k));
+          const arc = Math.sin(k * Math.PI);   // R6-style: the gun rolls in and dips slightly on its way up to the eye, then settles dead level
+          vm.rotation.z += arc * 0.16 * S.hand; vm.position.y -= arc * 0.014; vm.position.x += arc * 0.01 * S.hand;
         }
       }
       if (parts) parts.tick(dt);

@@ -331,7 +331,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   };
 
   const group = new THREE.Group(); scene.add(group);
-  const texSize = quality >= 1 ? 256 : 128, bumpOn = quality >= 1.5, aniso = Math.min(quality >= 1.5 ? 8 : quality >= 1 ? 4 : 1, opt.aniso || 1);
+  const texSize = quality >= 1.5 ? 512 : quality >= 1 ? 256 : 128, bumpOn = quality >= 1, aniso = Math.min(quality >= 1.5 ? 8 : quality >= 1 ? 4 : 1, opt.aniso || 1);
   const texCache = {};
   const matTex = (k) => {
     if (texCache[k]) return texCache[k];

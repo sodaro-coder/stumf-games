@@ -380,7 +380,7 @@ function rifle(G, o) {
   if (o.stock === 'm4') G('dark', ext([[r0 - 0.245, rt - 0.002], [r0 - 0.262, rt - 0.002], [r0 - 0.279, rb - 0.077], [r0 - 0.262, rb - 0.077]], w * 0.9, 0.002));   // rubber buttpad
   if (o.stock === 'ak') G('metal', ext([[r0 - 0.3, rb - 0.08], [r0 - 0.312, rb - 0.08], [r0 - 0.316, rt - 0.03], [r0 - 0.305, rt - 0.03]], w * 0.92, 0.0015));   // steel buttplate
   if (o.stock && o.stock !== 'none' && o.stock !== 'fold') G('metal', place(new THREE.TorusGeometry(0.009, 0.0022, 6, 12), [0, rb - 0.03, -(r0 - 0.1)], [0, Math.PI / 2, 0]));   // sling swivel
-  return { grip: [-0.03, rb - 0.055], fore: [(h0 + h1) / 2 - 0.02, rb - 0.006], mount, charge: [r1 - 0.035, rt - 0.023, w / 2 + 0.02] };
+  return { iron: o.fsight !== false && !o.scope ? [h1 + 0.045, bv + 0.05] : null, grip: [-0.03, rb - 0.055], fore: [(h0 + h1) / 2 - 0.02, rb - 0.006], mount, charge: [r1 - 0.035, rt - 0.023, w / 2 + 0.02] };
 }
 // muzzle devices (looks only; the suppressor only makes the gun quieter)
 function muzzle(G, kind, bEnd, bv) {
@@ -428,7 +428,7 @@ function pistol(G, o) {
   G('dark', blk(s1 - 0.075, s1 - 0.035, st - 0.0015, st + 0.0007, w * 0.6));                 // ejection port
   G('dark', xpin(s0 + 0.06, sb - 0.012, w + 0.004, 0.0028)); G('dark', xpin(s0 + 0.03, sb - 0.022, w + 0.006, 0.0042));   // takedown pin, mag release
   if (o.mag) G('mag|dark', ext([[s0 + 0.075, sb - 0.016], [s0 + 0.095, sb - 0.016], [s0 + 0.105, sb - (o.mag + 0.02)], [s0 + 0.08, sb - (o.mag + 0.02)]], w * 0.8));
-  return { grip: [s0 + 0.03, sb - 0.06], fore: null, mount: [s0 + 0.045, st], charge: [s0 + 0.02, st, 0] };
+  return { iron: [s1 - 0.008, st + 0.008], grip: [s0 + 0.03, sb - 0.06], fore: null, mount: [s0 + 0.045, st], charge: [s0 + 0.02, st, 0] };
 }
 R('ak47', (G) => rifle(G, { recv: [-0.12, 0.25, -0.03, 0.03], w: 0.05, top: 'ak', furn: 'wood', hgType: 'ak', hg: [0.25, 0.43], blen: 0.17, muzzle: 'ak', mag: 'curve', stock: 'ak', gripMat: 'wood' }));
 R('galil', (G) => rifle(G, { recv: [-0.12, 0.25, -0.03, 0.03], w: 0.05, top: 'ak', hgType: 'ak', hg: [0.25, 0.42], blen: 0.16, muzzle: 'bird', mag: 'curve', stock: 'skel' }));
@@ -498,13 +498,27 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     }
     if (geos.wood) { const p = geos.wood.attributes.position, uv = geos.wood.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, -p.getZ(i) * 3, p.getY(i) * 3 + p.getX(i) * 3); }
     let len = 0; for (const g of Object.values(geos)) { g.computeBoundingBox(); len = Math.max(len, -g.boundingBox.min.z); }
+    if (hold.iron && !opt) {   // iron sights, R6-style: a raised sight line over the gun, a front post and (long guns) a rear aperture ring
+      const fz = -hold.iron[0]; let top = hold.iron[1];
+      for (const [k, g] of Object.entries(geos)) { if (k.startsWith('mag|')) continue; const p = g.attributes.position;
+        for (let i = 0; i < p.count; i++) if (Math.abs(p.getX(i)) < 0.012 && p.getZ(i) > fz + 0.03) top = Math.max(top, p.getY(i)); }
+      const long = !!hold.fore, line = top + (long ? 0.026 : 0.004), parts = [];
+      parts.push([blk(hold.iron[0] - 0.003, hold.iron[0] + 0.003, hold.iron[1] - 0.012, line, 0.003), null]);                       // front post
+      if (long) {
+        parts.push([blk(hold.iron[0] - 0.006, hold.iron[0] + 0.006, line - 0.012, line - 0.009, 0.026), null]);                       // post wings
+        const ur = Math.max(hold.grip[0] - 0.015, hold.iron[0] - 0.24);   // 10-15 cm in front of the eye when aimed in
+        parts.push([new THREE.TorusGeometry(0.0075, 0.0022, 6, 16).translate(0, line, -ur), null]);                                 // rear aperture
+        parts.push([blk(ur - 0.005, ur + 0.005, top - 0.004, line - 0.007, 0.007), null]);                                            // its stand
+      }
+      geos.ironpost = merge(parts); hold.iron = [hold.iron[0], line];
+    }
     cg = { geos, hold, len };
     geoCache.set(ckey, cg);
   }
   const g = new THREE.Group(), magGroup = new THREE.Group(); g.add(magGroup);
   for (const [k, geo] of Object.entries(cg.geos)) {
     if (k.startsWith('mag|')) { magGroup.add(new THREE.Mesh(geo, gm(k.slice(4)))); continue; }
-    g.add(new THREE.Mesh(geo, k === 'body' ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(k)));
+    g.add(new THREE.Mesh(geo, k === 'body' ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(k === 'ironpost' ? 'dark' : k)));
   }
   const magBox = new THREE.Box3().setFromObject(magGroup), magPos = magGroup.children.length ? magBox.getCenter(new THREE.Vector3()) : null;
   const grip = new THREE.Vector3(0, cg.hold.grip[1], -cg.hold.grip[0]), fore = cg.hold.fore ? new THREE.Vector3(0, cg.hold.fore[1], -cg.hold.fore[0]) : null;
@@ -520,7 +534,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
   }
   g.add(muzzleFlash(cg.len + (w.silenced ? 0.04 : 0.02), w.cat === 'pistol' ? 0.6 : 1));
   const ch = cg.hold.charge;
-  g.userData = { magGroup: magGroup.children.length ? magGroup : null, magPos, leftArm, leftHand, charge: ch ? new THREE.Vector3(ch[2], ch[1], -ch[0]) : null, flash: g.children[g.children.length - 1], len: cg.len, grip, fore, sight: cg.hold.sight ? new THREE.Vector3(0, cg.hold.sight[1], -cg.hold.sight[0]) : null, optic: opt };
+  g.userData = { magGroup: magGroup.children.length ? magGroup : null, magPos, leftArm, leftHand, charge: ch ? new THREE.Vector3(ch[2], ch[1], -ch[0]) : null, flash: g.children[g.children.length - 1], len: cg.len, grip, fore, sight: cg.hold.sight ? new THREE.Vector3(0, cg.hold.sight[1], -cg.hold.sight[0]) : null, optic: opt, iron: !opt && cg.hold.iron ? new THREE.Vector3(0, cg.hold.iron[1], -cg.hold.iron[0]) : null };
   return g;
 }
 let armMatC = null;

@@ -48,7 +48,7 @@ export function recoilPattern(w, i) {
 // ---- attachments -------------------------------------------------------------------------------------------------
 // slot: optic | muzzle | reticle. lvl: the gun level that unlocks it. zoom: aim-down-sights magnification.
 export const ATTACH = {
-  iron: { slot: 'optic', name: 'Iron sights', lvl: 1 },
+  iron: { slot: 'optic', name: 'Iron sights', lvl: 1, zoom: 1.1 },
   reddot: { slot: 'optic', name: 'Red Dot', lvl: 2, zoom: 1.15, reticle: 'dot' },
   holo: { slot: 'optic', name: 'Holographic', lvl: 4, zoom: 1.15, reticle: 'holo' },
   acog: { slot: 'optic', name: 'ACOG', lvl: 6, zoom: 1.4, reticle: 'chevron' },

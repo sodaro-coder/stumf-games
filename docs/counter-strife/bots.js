@@ -121,6 +121,7 @@ export class Bots {
       this.objectives(p, b, dt);
       if (think && it && it.ammo < (W_BY_ID[it.wid] || {}).mag * 0.4 && !b.reloading && it.reserve > 0) b.reloading = (W_BY_ID[it.wid] || {}).reload || 2;
     }
+    p.reloading = b.reloading > 0;
     if (b.reloading) { b.reloading -= dt; if (b.reloading <= 0) { b.reloading = 0; const ww = W_BY_ID[(p.inv[p.cur] || {}).wid]; const i2 = p.inv[p.cur]; if (ww && i2) { const take = Math.min(ww.mag - i2.ammo, i2.reserve); i2.ammo += take; i2.reserve -= take; } } }
   }
 
