@@ -308,6 +308,7 @@ const tube = (r, u0, u1, v, x = 0, seg = 10, r1 = r) => { const g = CYL(r1, r, u
 const blk = (u0, u1, v0, v1, w, x = 0) => { const g = BOX(w, v1 - v0, u1 - u0); g.translate(x, (v0 + v1) / 2, -(u0 + u1) / 2); return g; };
 const guard = (u0, u1, v0, v1, w = 0.012) => ext([[u0, v1], [u1, v1], [u1, v0 + 0.012], ['q', u1, v0, u1 - 0.015, v0], [u0 + 0.01, v0], [u0, v0 + 0.012]], w, 0.002, [[[u0 + 0.008, v1 - 0.001], [u1 - 0.008, v1 - 0.001], [u1 - 0.008, v0 + 0.008], [u0 + 0.008, v0 + 0.008]]]);
 
+const xpin = (u, v, len, r = 0.0032) => place(CYL(r, r, len, 8), [0, v, -u], [0, 0, Math.PI / 2]);   // a pin/rivet/button across the gun
 // per-weapon recipes. Parts go into material buckets: body (takes the skin), metal, dark, wood, ...
 const RECIPE = {};
 const R = (ids, fn) => { for (const id of ids.split(' ')) RECIPE[id] = fn; };
@@ -336,7 +337,11 @@ function rifle(G, o) {
   // barrel, front sight, muzzle
   const bv = o.bv ?? (hv + 0.006), bEnd = h1 + (o.blen || 0.12);
   G('metal', tube(o.br || 0.0105, h1 - 0.02, bEnd, bv));
-  if (o.fsight !== false) G('metal', ext([[h1 + 0.02, bv], [h1 + 0.05, bv], [h1 + 0.045, bv + 0.05], [h1 + 0.03, bv + 0.05]], 0.012, 0.002));
+  if (o.fsight !== false && o.top === 'ak') {   // AK front sight: a block on the barrel, a post between two protective ears
+    G('metal', blk(h1 + 0.03, h1 + 0.06, bv - 0.014, bv + 0.016, 0.024)); G('metal', blk(h1 + 0.038, h1 + 0.052, bv + 0.016, bv + 0.05, 0.004));
+    for (const x of [-0.011, 0.011]) G('metal', ext([[h1 + 0.034, bv + 0.012], [h1 + 0.056, bv + 0.012], [h1 + 0.052, bv + 0.055], [h1 + 0.04, bv + 0.055]], 0.004, 0).translate(x, 0, 0));
+  } else if (o.fsight !== false) G('metal', ext([[h1 + 0.02, bv], [h1 + 0.05, bv], [h1 + 0.045, bv + 0.05], [h1 + 0.03, bv + 0.05]], 0.012, 0.002));
+  if (o.hgType !== 'none') G('metal', blk(h1 - 0.004, h1 + 0.022, bv - 0.013, Math.max(bv + 0.014, rt - 0.006), 0.024));   // gas block
   muzzle(G, (G.att && G.att.muzzle && G.att.muzzle !== 'standard' && !o.noMuzzleAtt) ? G.att.muzzle : o.muzzle, bEnd, bv);
   // stock
   const so = o.stock;
@@ -356,6 +361,25 @@ function rifle(G, o) {
   const mount = o.scope ? null : o.handle ? [(r0 + r1) / 2 - 0.02, rt + 0.06] : [r0 + (r1 - r0) * 0.42, rt + (o.rail ? 0.011 : 0)];
   if (o.handle) { G(F, ext([[r0 + 0.02, rt], [r0 + 0.04, rt + 0.06], [r1 + 0.12, rt + 0.06], [r1 + 0.14, rt], [r1 + 0.1, rt], [r1 + 0.09, rt + 0.04], [r0 + 0.07, rt + 0.04], [r0 + 0.06, rt]], 0.028)); }
   if (o.bipod) { G('dark', tube(0.006, h1 - 0.02, h1 + 0.15, bv - 0.03, 0.02, 6)); G('dark', tube(0.006, h1 - 0.02, h1 + 0.15, bv - 0.03, -0.02, 6)); }
+  // the small parts that make it read as a real gun: pins and rivets, controls, mag floor plates and ribs, buttpads
+  for (const u of [r0 + 0.025, (r0 + r1) / 2 - 0.02, r1 - 0.025]) G('dark', xpin(u, rb + 0.011, w + 0.004));
+  G('dark', xpin(0.044, rb - 0.006, w + 0.004, 0.0025));   // trigger pin
+  if (o.top === 'ak') {
+    G('metal', ext([[r1 - 0.17, rt - 0.031], [r1 - 0.03, rt - 0.025], [r1 - 0.025, rt - 0.017], [r1 - 0.17, rt - 0.023]], 0.003, 0).translate(w / 2 + 0.0025, 0, 0));   // selector lever
+    G('metal', blk(r1 - 0.17, r1 - 0.15, rt - 0.034, rt - 0.024, 0.006, w / 2 + 0.003));
+    if (o.rear !== false) { G('metal', blk(r1 + 0.002, r1 + 0.05, rt - 0.012, rt + 0.012, w * 0.62)); G('dark', ext([[r1 + 0.008, rt + 0.012], [r1 + 0.06, rt + 0.016], [r1 + 0.06, rt + 0.02], [r1 + 0.008, rt + 0.018]], w * 0.5, 0)); }   // rear sight block + leaf
+    for (const u of [r0 + 0.05, r0 + 0.09, r1 - 0.06]) G('metal', xpin(u, rt - 0.02, w + 0.003, 0.0026));   // rivets
+  } else if (o.rail || o.stock === 'm4') {
+    G('dark', tube(0.0075, r1 - 0.075, r1 - 0.035, rt - 0.02, w / 2 + 0.006, 8));            // forward assist
+    G('dark', blk(r1 - 0.13, r1 - 0.12, rt - 0.026, rt - 0.006, 0.014, w / 2 + 0.004));      // brass deflector
+    G('dark', xpin(m0 - 0.014, rb - 0.012, w + 0.01, 0.0048));                               // mag release
+    G('dark', blk(m0 + 0.078, m0 + 0.094, rb - 0.006, rb + 0.012, 0.004, -w / 2 - 0.0025));    // bolt catch
+  }
+  if (o.mag === 'curve') { const k = 'mag|' + (o.magMat || 'metal'); G(k, ext([[m0 + 0.146, rb - 0.2], [m0 + 0.162, rb - 0.212], [m0 + 0.094, rb - 0.244], [m0 + 0.08, rb - 0.232]], w * 0.8, 0.002)); for (let i = 0; i < 4; i++) G(k, ext([[m0 + 0.012 + i * 0.012, rb - 0.03 - i * 0.04], [m0 + 0.07 + i * 0.016, rb - 0.03 - i * 0.04], [m0 + 0.07 + i * 0.016, rb - 0.034 - i * 0.04], [m0 + 0.012 + i * 0.012, rb - 0.034 - i * 0.04]], w * 0.72 + 0.003, 0)); }
+  if (o.mag === 'straight') { const k = 'mag|' + (o.magMat || 'dark'); G(k, ext([[m0 + 0.014, rb - 0.172], [m0 + 0.088, rb - 0.165], [m0 + 0.09, rb - 0.176], [m0 + 0.014, rb - 0.183]], w * 0.74, 0.002)); for (let i = 0; i < 3; i++) G(k, blk(m0 + 0.03 + i * 0.003, m0 + 0.06 + i * 0.003, rb - 0.04 - i * 0.04, rb - 0.036 - i * 0.04, w * 0.68 + 0.003)); }
+  if (o.stock === 'm4') G('dark', ext([[r0 - 0.245, rt - 0.002], [r0 - 0.262, rt - 0.002], [r0 - 0.279, rb - 0.077], [r0 - 0.262, rb - 0.077]], w * 0.9, 0.002));   // rubber buttpad
+  if (o.stock === 'ak') G('metal', ext([[r0 - 0.3, rb - 0.08], [r0 - 0.312, rb - 0.08], [r0 - 0.316, rt - 0.03], [r0 - 0.305, rt - 0.03]], w * 0.92, 0.0015));   // steel buttplate
+  if (o.stock && o.stock !== 'none' && o.stock !== 'fold') G('metal', place(new THREE.TorusGeometry(0.009, 0.0022, 6, 12), [0, rb - 0.03, -(r0 - 0.1)], [0, Math.PI / 2, 0]));   // sling swivel
   return { grip: [-0.03, rb - 0.055], fore: [(h0 + h1) / 2 - 0.02, rb - 0.006], mount, charge: [r1 - 0.035, rt - 0.023, w / 2 + 0.02] };
 }
 // muzzle devices (looks only; the suppressor only makes the gun quieter)
@@ -397,6 +421,12 @@ function pistol(G, o) {
   if (o.sil) G('dark', tube(0.017, s1 + 0.005, s1 + 0.16, st / 2 - 0.002, 0, 12));
   else if (G.att && G.att.muzzle && G.att.muzzle !== 'standard') muzzle(G, G.att.muzzle, s1 + (o.bl || 0.006), st / 2 - 0.002);
   G('mag|dark', blk(s0 + 0.008, s0 + 0.046, sb - 0.1, sb - 0.03, w * 0.7));   // the magazine inside the grip (drops out on reload)
+  G('mag|metal', blk(s0 - 0.002, s0 + 0.05, sb - 0.119, sb - 0.11, w * 0.86));   // its floor plate
+  G('grip', ext([[s0 + 0.012, sb - 0.022], [s0 + 0.052, sb - 0.024], [s0 + 0.044, sb - 0.1], [s0 + 0.004, sb - 0.102]], w * 0.95 + 0.004, 0.0015));   // textured grip panels
+  G('metal', ext([[s0 - 0.008, st - 0.016], [s0 + 0.004, st - 0.014], [s0 + 0.004, st - 0.002], [s0 - 0.01, st + 0.002]], 0.008, 0.001));   // hammer
+  G('dark', blk(s0 + 0.045, s0 + 0.08, sb - 0.004, sb + 0.005, 0.003, w / 2 + 0.0015));      // slide stop
+  G('dark', blk(s1 - 0.075, s1 - 0.035, st - 0.0015, st + 0.0007, w * 0.6));                 // ejection port
+  G('dark', xpin(s0 + 0.06, sb - 0.012, w + 0.004, 0.0028)); G('dark', xpin(s0 + 0.03, sb - 0.022, w + 0.006, 0.0042));   // takedown pin, mag release
   if (o.mag) G('mag|dark', ext([[s0 + 0.075, sb - 0.016], [s0 + 0.095, sb - 0.016], [s0 + 0.105, sb - (o.mag + 0.02)], [s0 + 0.08, sb - (o.mag + 0.02)]], w * 0.8));
   return { grip: [s0 + 0.03, sb - 0.06], fore: null, mount: [s0 + 0.045, st], charge: [s0 + 0.02, st, 0] };
 }

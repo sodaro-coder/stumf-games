@@ -181,14 +181,27 @@ function town() {
   B.open(2, 2, 24, 24, 0, 'dirt'); B.open(40, 2, 62, 24, 0, 'dirt'); B.open(2, 40, 24, 62, 0, 'dirt'); B.open(40, 40, 62, 62, 0, 'dirt');
   B.lava(29, 29, 35, 35);                                    // the crater
   B.block(28, 28, 29, 36, 0.6, 'rock'); B.block(35, 28, 36, 36, 0.6, 'rock'); B.open(28, 31, 29, 33, 0, 'asphalt'); B.open(35, 31, 36, 33, 0, 'asphalt');
-  // Bank (NW, site A): vault, counter
-  B.house(4, 4, 22, 22, 4, 'brick', 'tile', [[21, 10, 22, 14], [12, 21, 16, 22], [4, 8, 5, 11, 1.1], [8, 4, 11, 5, 1.1], [21, 17, 22, 19, 1.1]]);
-  B.block(7, 7, 13, 8, 4, 'metal'); B.block(12, 7, 13, 11, 4, 'metal'); B.open(12, 9, 13, 10, 0, 'tile');  // vault
-  B.block(14, 14, 19, 15, 1.1, 'darkwood');               // teller counter
-  // Saloon (NE, site B): bar counter, tables
-  B.house(42, 4, 60, 22, 4, 'darkwood', 'wood', [[42, 10, 43, 14], [48, 21, 52, 22], [59, 8, 60, 11, 1.1], [53, 4, 56, 5, 1.1]]);
-  B.block(46, 7, 56, 8, 1.1, 'darkwood'); B.block(55, 7, 56, 12, 1.1, 'darkwood');
-  B.block(48, 15, 49, 16, 0.8, 'wood'); B.block(53, 16, 54, 17, 0.8, 'wood');
+  // Bank (NW, site A): vault downstairs; stairs to an upstairs strip whose windows watch the west and north roads
+  B.house(4, 4, 22, 22, 7, 'brick', 'tile', [[21, 10, 22, 14], [4, 8, 5, 11, 1.1], [8, 4, 11, 5, 1.1], [21, 5, 22, 8, 1.1]]);
+  B.block(7, 7, 13, 8, 7, 'metal'); B.block(12, 7, 13, 11, 7, 'metal'); B.open(12, 9, 13, 10, 0, 'tile');  // vault
+  B.block(6, 13, 12, 14, 1.1, 'darkwood');                  // teller counter
+  B.open(5, 17, 21, 21, 3.0, 'wood');                       // upstairs
+  B.block(5, 16, 16, 17, 7, 'brick'); B.block(20, 16, 21, 17, 7, 'brick');
+  B.ramp(16, 11, 20, 17, 0, 3.0, 'z', 'darkwood');          // stairs
+  B.block(7, 21, 10, 22, 3.9, 'brick').roof(7, 21, 10, 22, 5.2, 'brick').block(13, 21, 17, 22, 3.9, 'brick').roof(13, 21, 17, 22, 5.2, 'brick')
+    .block(21, 17, 22, 20, 3.9, 'brick').roof(21, 17, 22, 20, 5.2, 'brick');   // upstairs windows
+  B.roof(21, 10, 22, 14, 2.4, 'brick').roof(4, 8, 5, 11, 2.3, 'brick').roof(8, 4, 11, 5, 2.3, 'brick').roof(21, 5, 22, 8, 2.3, 'brick');
+  // Saloon (NE, site B): bar downstairs, stairs up to the rooms and out onto a balcony over the crossroads
+  B.house(42, 4, 60, 22, 7, 'darkwood', 'wood', [[42, 10, 43, 14], [50, 4, 53, 5], [59, 8, 60, 11, 1.1]]);
+  B.block(45, 7, 53, 8, 1.1, 'darkwood'); B.block(52, 8, 53, 10, 1.1, 'darkwood');   // the bar
+  B.block(46, 12, 47, 13, 0.8, 'wood'); B.block(48, 14, 49, 15, 0.8, 'wood');       // tables
+  B.open(43, 17, 59, 21, 3.0, 'wood');                      // upstairs rooms
+  B.block(43, 16, 52, 17, 7, 'darkwood'); B.block(56, 16, 59, 17, 7, 'darkwood');
+  B.ramp(52, 11, 56, 17, 0, 3.0, 'z', 'darkwood');
+  B.open(49, 21, 53, 22, 3.0, 'wood');                      // door out to the balcony
+  B.open(44, 22, 58, 24, 3.0, 'wood'); B.block(44, 24, 58, 25, 4.0, 'darkwood');      // balcony + railing (cover)
+  B.block(59, 17, 60, 20, 3.9, 'darkwood').roof(59, 17, 60, 20, 5.2, 'darkwood');
+  B.roof(42, 10, 43, 14, 2.4, 'darkwood').roof(50, 4, 53, 5, 2.4, 'darkwood').roof(49, 21, 53, 22, 5.2, 'darkwood').roof(44, 22, 58, 25, 5.6, 'darkwood');   // porch roof over the balcony
   // Diner (SW) and Fire station (SE)
   B.house(4, 42, 22, 60, 4, 'plaster', 'tile', [[21, 48, 22, 52], [12, 42, 16, 43], [4, 50, 5, 53, 1.1]]);
   B.block(8, 46, 16, 47, 1.0, 'cred');
@@ -202,7 +215,8 @@ function town() {
   B.block(25, 12, 26, 14, 1.0, 'crate'); B.block(38, 46, 39, 48, 1.0, 'crate'); B.block(30, 40, 32, 41, 1.0, 'crate'); B.block(31, 22, 33, 23, 1.0, 'crate');
   B.zone('Bank', 4, 4, 22, 22).zone('Vault', 7, 7, 13, 11).zone('Saloon', 42, 4, 60, 22).zone('Diner', 4, 42, 22, 60).zone('Fire Station', 42, 42, 60, 60)
     .zone('Crater', 27, 27, 37, 37).zone('North Road', 24, 2, 40, 27).zone('South Road', 24, 37, 40, 62).zone('West Road', 2, 24, 27, 40).zone('East Road', 37, 24, 62, 40);
-  B.site('A', 5, 5, 21, 21).site('B', 43, 5, 59, 21);
+  B.zone('Bank Upstairs', 5, 16, 21, 21).zone('Saloon Upstairs', 43, 16, 59, 21).zone('Balcony', 44, 21, 58, 25);
+  B.site('A', 5, 5, 21, 16).site('B', 43, 5, 59, 16);
   B.buyzone('T', 24, 52, 40, 59).buyzone('CT', 24, 5, 40, 12);
   for (let k = 0; k < 5; k++) { B.spawn('T', 26 + k * 3, 55, 0); B.spawn('CT', 26 + k * 3, 8, Math.PI); }
   B.duelSpawn('T', 32, 50, 0).duelSpawn('CT', 32, 14, Math.PI);
