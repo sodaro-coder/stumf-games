@@ -1,0 +1,18 @@
+{
+  "kit": "arena2d", "id": "neon-swarm", "title": "Neon Swarm", "maxPlayers": 8, "seed": 7,
+  "palette": {"bg": "#07090f", "grid": "#121a2a", "wall": "#1d2a44", "accent": "#ff3d7f", "text": "#e9f1ff", "player": "#4ff0ff", "ally": "#7cff8a",
+              "bullet": "#fff3a0", "good": "#62ff9b", "gold": "#ffd34d"},
+  "text": {"wave": "Wave {n}", "left": "left", "down": "down: back in a moment"},
+  "game": {
+    "arena": {"w": 2200, "h": 1500, "obstacles": 26},
+    "player": {"speed": 260, "hp": 100, "respawn": 5},
+    "weapon": {"rate": 9, "speed": 900, "damage": 20, "range": 700, "spread": 0.06, "count": 1},
+    "waves": {"start": 8, "growth": 4, "hpGrowth": 0.12, "spawnGap": 0.6, "maxAlive": 60},
+    "pickupChance": 0.08,
+    "enemies": [
+      {"name": "Drone", "hp": 40, "speed": 120, "size": 14, "damage": 10, "score": 10, "color": "#ff4d6d", "from": 1},
+      {"name": "Runner", "hp": 25, "speed": 210, "size": 11, "damage": 8, "score": 15, "color": "#ffb84d", "from": 2},
+      {"name": "Brute", "hp": 220, "speed": 70, "size": 26, "damage": 25, "score": 50, "color": "#b04dff", "from": 4}
+    ]
+  }
+}

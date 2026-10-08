@@ -1,0 +1,217 @@
+// Cosmetics: weapon finishes, knives, agents (player models) and the crates they drop from. Every finish is painted
+// procedurally from a recipe (no image files): a pattern, a palette, a seed, then wear scratches by the float.
+// Odds match the classic case odds and are shown on every crate. Crates open with coins earned in-game only.
+import { WEAPONS } from './data.js';
+
+export const RARITY = [  // index = tier
+  { key: 'milspec', name: 'Mil-Spec', color: '#4b69ff', odds: 79.92, value: 30 },
+  { key: 'restricted', name: 'Restricted', color: '#8847ff', odds: 15.98, value: 120 },
+  { key: 'classified', name: 'Classified', color: '#d32ce6', odds: 3.2, value: 500 },
+  { key: 'covert', name: 'Covert', color: '#eb4b4b', odds: 0.64, value: 2000 },
+  { key: 'gold', name: '★ Rare Special', color: '#e4ae39', odds: 0.26, value: 8000 },
+];
+export const WEARS = [  // float ranges
+  { key: 'FN', name: 'Factory New', max: 0.07, mult: 1.5 }, { key: 'MW', name: 'Minimal Wear', max: 0.15, mult: 1.15 },
+  { key: 'FT', name: 'Field-Tested', max: 0.38, mult: 1 }, { key: 'WW', name: 'Well-Worn', max: 0.45, mult: 0.85 },
+  { key: 'BS', name: 'Battle-Scarred', max: 1, mult: 0.7 },
+];
+export const wearOf = (f) => WEARS.find((w) => f < w.max) || WEARS[4];
+
+// ---- knives (★): classic shapes and joke shapes. model = the shape models.js builds ----
+export const KNIVES = [
+  { id: 'k_bayonet', name: '★ Pokey Stick', model: 'bayonet' }, { id: 'k_karambit', name: '★ Curvy Boi', model: 'karambit' },
+  { id: 'k_butterfly', name: '★ Flippy Flappy', model: 'butterfly' }, { id: 'k_hotdog', name: '★ Hot Dog', model: 'hotdog', joke: true },
+  { id: 'k_dildo', name: '★ Dildo Saber', model: 'dildo', joke: true }, { id: 'k_plunger', name: '★ Toilet Plunger', model: 'plunger', joke: true },
+  { id: 'k_chicken', name: '★ Rubber Chicken', model: 'chicken', joke: true }, { id: 'k_baguette', name: '★ Le Baguette', model: 'baguette', joke: true },
+  { id: 'k_fish', name: '★ Salmon Slapper', model: 'fish', joke: true }, { id: 'k_banana', name: '★ Banana Blade', model: 'banana', joke: true },
+];
+
+// ---- agents (player models). look = the body recipe models.js builds ----
+export const AGENTS = [
+  { id: 'a_t_default', name: 'Desert Rebel', team: 'T', tier: -1, look: { body: '#7a6a4a', legs: '#4e4636', head: '#c89a74', hat: 'balaclava', hatColor: '#2c2a26' } },
+  { id: 'a_ct_default', name: 'Task Force Gary', team: 'CT', tier: -1, look: { body: '#3c4e66', legs: '#2c3442', head: '#e0b896', hat: 'helmet', hatColor: '#2a3646' } },
+  { id: 'a_t_ops', name: 'Sand Ops Specialist', team: 'T', tier: 1, look: { body: '#8a5a3a', legs: '#3a3026', head: '#b48264', hat: 'shemagh', hatColor: '#d8c6a0' } },
+  { id: 'a_ct_swat', name: 'SWAT Sergeant Kevin', team: 'CT', tier: 1, look: { body: '#1e242c', legs: '#16191e', head: '#d8a888', hat: 'helmet', hatColor: '#111', visor: true } },
+  { id: 'a_t_speedo', name: 'Speedo Steve', team: 'T', tier: 2, look: { body: '#e8b48e', legs: '#e8b48e', head: '#e8b48e', speedo: '#2246d8', hat: 'none', belly: true } },
+  { id: 'a_ct_tighty', name: 'Tighty Whitey Tim', team: 'CT', tier: 2, look: { body: '#f0c8a8', legs: '#f0c8a8', head: '#f0c8a8', speedo: '#ffffff', hat: 'cap', hatColor: '#c22' } },
+  { id: 'a_t_hotdog', name: 'Hot Dog Suit Guy', team: 'T', tier: 3, look: { body: '#c8462e', legs: '#e8b060', head: '#c8462e', hat: 'bun', hatColor: '#e8b060', mustard: true } },
+  { id: 'a_ct_poo', name: 'Mr. Poo', team: 'CT', tier: 3, look: { body: '#6b4423', legs: '#5a381c', head: '#6b4423', hat: 'swirl', hatColor: '#6b4423', eyes: true } },
+  { id: 'a_t_grandma', name: 'Grandma in Curlers', team: 'T', tier: 2, look: { body: '#e48ab4', legs: '#d8d0c0', head: '#e8c4a8', hat: 'curlers', hatColor: '#7ac8ff' } },
+  { id: 'a_ct_pigeon', name: 'Agent Pigeon', team: 'CT', tier: 3, look: { body: '#8a8f9a', legs: '#e08a5a', head: '#6a7080', hat: 'beak', hatColor: '#e0a040', eyes: true } },
+  { id: 'a_t_banana', name: 'Banana Bandit', team: 'T', tier: 1, look: { body: '#f2d33c', legs: '#d8b42a', head: '#f2d33c', hat: 'stem', hatColor: '#5a3a1a', eyes: true } },
+  { id: 'a_ct_mime', name: 'Mime Negotiator', team: 'CT', tier: 1, look: { body: '#f4f4f4', legs: '#111', head: '#ffffff', hat: 'beret', hatColor: '#111', stripes: true } },
+];
+
+// ---- emotes (everyone in the match sees them; your camera pulls back to third person while it plays) ----
+export const EMOTES = [
+  { id: 'e_wave', name: 'Hey Bestie', anim: 'wave', tier: 0 }, { id: 'e_dance', name: 'Dad Dance', anim: 'dance', tier: 1 },
+  { id: 'e_dab', name: 'Dab (2016 called)', anim: 'dab', tier: 1 }, { id: 'e_tpose', name: 'T-Pose Dominance', anim: 'tpose', tier: 2 },
+  { id: 'e_floss', name: 'Floss', anim: 'floss', tier: 2 }, { id: 'e_chicken', name: 'Chicken Dance', anim: 'chicken', tier: 2 },
+  { id: 'e_fart', name: 'Crop Duster', anim: 'fart', tier: 3 }, { id: 'e_worm', name: 'The Worm', anim: 'worm', tier: 3 },
+  { id: 'e_salute', name: 'Respectful Salute', anim: 'salute', tier: 0 }, { id: 'e_flex', name: 'Gym Bro Flex', anim: 'flex', tier: 1 },
+  { id: 'e_cry', name: 'Ugly Cry', anim: 'cry', tier: 1 }, { id: 'e_twerk', name: 'Twerk Attack', anim: 'twerk', tier: 3 },
+];
+export const EMOTE_BY_ID = Object.fromEntries(EMOTES.map((e) => [e.id, e]));
+export const DEFAULT_EMOTES = ['e_wave', 'e_salute'];
+
+// ---- finishes. paint = recipe; the same finish can exist on several weapons ----
+const F = (name, paint) => ({ name, paint });
+const SERIOUS = {
+  milspec: [F('Sand Dune', { t: 'camo', c: ['#c8b07a', '#a48a58', '#e0cc98'] }), F('Night Ops', { t: 'camo', c: ['#2a2e36', '#41464f', '#1a1c20'] }),
+    F('Forest Floor', { t: 'camo', c: ['#4a5a32', '#6a5434', '#2a3420'] }), F('Safety Orange', { t: 'solid', c: ['#e86a1a', '#1a1a1a'] }),
+    F('Urban Grid', { t: 'checker', c: ['#8a8f98', '#5a5f68'] }), F('Blue Steel', { t: 'solid', c: ['#4a6a9a', '#2a3a5a'] })],
+  restricted: [F('Tiger Tooth', { t: 'tiger', c: ['#e8a020', '#1a1208'] }), F('Hex Core', { t: 'hex', c: ['#1c2430', '#38c8ff'] }),
+    F('Circuit Board', { t: 'circuit', c: ['#0e3a24', '#5cff9a'] }), F('Red Laminate', { t: 'marble', c: ['#9a2222', '#e8c8a0'] }),
+    F('Damascus', { t: 'damascus', c: ['#8a8f98', '#3a3e46'] })],
+  classified: [F('Neon Revolt', { t: 'geo', c: ['#ff2a6a', '#1a1a1a', '#2affd2'] }), F('Galaxy Brain', { t: 'galaxy', c: ['#120a2a', '#8a5aff', '#ffffff'] }),
+    F('Hellfire', { t: 'flames', c: ['#1a0a06', '#ff5a1a', '#ffd23a'] })],
+  covert: [F('Asii-Not-Mov', { t: 'geo', c: ['#f2f2f2', '#ff7a1a', '#1a1a1a'] }), F('Wyvern Lore', { t: 'scales', c: ['#2a6a3a', '#e8c040', '#0a1a10'] }),
+    F('Fire Serpent-ish', { t: 'flames', c: ['#1a3a1a', '#e8a020', '#8a1a1a'] })],
+};
+const CRUDE = {
+  milspec: [F('Skidmark', { t: 'smear', c: ['#f4f0e8', '#6b4423'] }), F('Fart Cloud', { t: 'clouds', c: ['#b8c870', '#8a9a40'] }),
+    F('Tighty Whities', { t: 'solid', c: ['#f8f8f2', '#c8c8c0'] }), F('Granny Panties', { t: 'dots', c: ['#f4c4d4', '#ffffff'] }),
+    F('Gas Station Sushi', { t: 'marble', c: ['#e88a6a', '#f4f0e0'] })],
+  restricted: [F('Diarrhea Fade', { t: 'fade', c: ['#6b4423', '#a87a3a', '#e8c070'] }), F('BRRRRT', { t: 'text', c: ['#1a1a1a', '#ffd23a'], s: 'BRRRT' }),
+    F('Hot Dog Water', { t: 'hotdogs', c: ['#f2d8a0', '#c8462e'] }), F('Pee Yellow', { t: 'fade', c: ['#f8f4a0', '#e8d040', '#c8a020'] })],
+  classified: [F('Poop Emoji Party', { t: 'poops', c: ['#7ad0ff', '#6b4423'] }), F('Mom\'s Spaghetti', { t: 'smear', c: ['#e8d0a0', '#c8321e'] }),
+    F('Thicc Boi', { t: 'text', c: ['#ff5ab4', '#ffffff'], s: 'THICC' })],
+  covert: [F('Dong Doppler', { t: 'wave', c: ['#ff4ad2', '#7a2aff', '#2ad2ff'] }), F('Golden Shower', { t: 'fade', c: ['#fff3a0', '#e8b020', '#8a5a10'] })],
+};
+const NUKE = {
+  milspec: [F('Glow Lawn', { t: 'camo', c: ['#7aff4a', '#3a8a2a', '#1a3a10'] }), F('Hazmat', { t: 'stripes', c: ['#f2d33c', '#1a1a1a'] }),
+    F('Picket Fence', { t: 'stripes', c: ['#f4f4f0', '#c8c4b8'] })],
+  restricted: [F('Fallout Fade', { t: 'fade', c: ['#1a3a10', '#7aff4a', '#e8ff9a'] }), F('Duck & Cover', { t: 'dots', c: ['#f2d33c', '#1a1a1a'] })],
+  classified: [F('Half-Life Hex', { t: 'hex', c: ['#1a1a1a', '#7aff4a'] }), F('Mushroom Cloud', { t: 'clouds', c: ['#f4e0b0', '#c87a3a'] })],
+  covert: [F('Chernobyl Sunset', { t: 'wave', c: ['#ff7a1a', '#ff2a6a', '#3a0a3a'] })],
+};
+const KNIFE_FINISHES = [F('Vanilla', { t: 'solid', c: ['#a8adb6', '#6a6e76'] }), F('Fade', { t: 'fade', c: ['#ffd23a', '#ff4ad2', '#7a2aff'] }),
+  F('Doppler', { t: 'wave', c: ['#2a0a4a', '#d24aff', '#2ad2ff'] }), F('Tiger Tooth', { t: 'tiger', c: ['#e8a020', '#1a1208'] }),
+  F('Crimson Web', { t: 'web', c: ['#8a1a1a', '#1a0a0a'] }), F('Marble Fade', { t: 'marble', c: ['#2a6aff', '#ffd23a'] })];
+
+const pick = (list, n, seed) => { const a = list.slice(); let s = seed; const out = []; while (out.length < n && a.length) { s = (s * 9301 + 49297) % 233280; out.push(a.splice(Math.floor(s / 233280 * a.length), 1)[0]); } return out; };
+const GUNS = WEAPONS.filter((w) => w.cat !== 'knife' && w.cat !== 'zeus').map((w) => w.id);
+
+function makeCrate(id, name, desc, theme, seed, knives, price) {
+  const items = [];
+  RARITY.slice(0, 4).forEach((r, tier) => {
+    const fins = theme[r.key] || [];
+    const guns = pick(GUNS, fins.length, seed + tier * 31);
+    fins.forEach((f, k) => items.push({ id: `${id}:${guns[k]}:${f.name}`, kind: 'skin', weapon: guns[k], finish: f.name, paint: f.paint, tier }));
+  });
+  for (const k of knives) for (const f of KNIFE_FINISHES) items.push({ id: `${id}:${k}:${f.name}`, kind: 'knife', weapon: k, finish: f.name, paint: f.paint, tier: 4 });
+  return { id, name, desc, price, items };
+}
+// joke finishes that come with their own sounds (everything else sounds like the base gun)
+const FINGER_GUN = { id: 'toilet:deagle:Finger Gun', kind: 'skin', weapon: 'deagle', finish: 'Finger Gun', paint: { t: 'text', c: ['#f2c8a0', '#c8462e'], s: 'PEW' }, tier: 2 };
+export const SKIN_SOUNDS = {  // by finish name (guns) or knife model: which sound plays on fire / hit / miss
+  'Finger Gun': { fire: 'pewpew' }, 'BRRRT': { fire: 'fart' }, 'Fart Cloud': { fire: 'fart' }, 'Golden Shower': { fire: 'squirt' }, 'Hot Dog Water': { fire: 'squirt' },
+  'Thicc Boi': { fire: 'boing' }, 'Poop Emoji Party': { fire: 'fart' }, 'Dong Doppler': { fire: 'boing' },
+  dildo: { hit: 'wetslap', miss: 'doing' }, hotdog: { hit: 'squish', miss: 'whoosh' }, plunger: { hit: 'fwoop', miss: 'whoosh' }, chicken: { hit: 'squeak', miss: 'squeak' },
+  baguette: { hit: 'crunch', miss: 'whoosh' }, fish: { hit: 'flop', miss: 'whoosh' }, banana: { hit: 'squish', miss: 'boing' },
+};
+export function skinSound(skin, what) {
+  const d = skin && ITEM_BY_ID[skin.def]; if (!d) return null;
+  const k = d.kind === 'knife' ? (KNIFE_BY_ID[d.weapon] || {}).model : d.finish;
+  return (SKIN_SOUNDS[k] || {})[what] || null;
+}
+
+export const CRATES = [
+  makeCrate('sand', 'Sandstorm Case', 'Serious finishes for serious sweats.', SERIOUS, 7, ['k_bayonet', 'k_karambit', 'k_butterfly'], 250),
+  (() => { const c = makeCrate('toilet', 'Toilet Humor Case', 'Crude finishes and the dumbest knives ever made. Some skins have their own sounds.', CRUDE, 13, ['k_hotdog', 'k_dildo', 'k_plunger', 'k_chicken'], 250); c.items.push(FINGER_GUN); return c; })(),
+  makeCrate('nuke', 'Nuclear Family Case', 'Glowing, radioactive, family friendly.', NUKE, 21, ['k_baguette', 'k_fish', 'k_banana'], 300),
+  { id: 'agents', name: 'Fashion Disaster Case', desc: 'Player models nobody asked for.', price: 350,
+    items: AGENTS.filter((a) => a.tier >= 0).map((a) => ({ id: 'agents:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })) },
+];
+// ---- the free battle pass: one reward per level, earned only with XP from playing (nothing to buy, ever) ----
+const PASS_FINISHES = [F('Participation Trophy', { t: 'solid', c: ['#c8a040', '#8a6a20'] }), F('Grass Toucher', { t: 'camo', c: ['#5aa040', '#3a7a2a', '#8ad060'] }),
+  F('Mom\'s Basement', { t: 'checker', c: ['#4a3a6a', '#2a2040'] }), F('Gamer Fuel', { t: 'fade', c: ['#2aff6a', '#2a6aff', '#ff2ad2'] }),
+  F('Sweaty Palms', { t: 'smear', c: ['#e8e0c8', '#8ac8ff'] }), F('No Life', { t: 'galaxy', c: ['#0a0a1a', '#ff4a8a', '#ffffff'] }),
+  F('Touch Grass Pro', { t: 'tiger', c: ['#6ad040', '#1a3a10'] }), F('Hall of Shame', { t: 'text', c: ['#1a1a1a', '#ff4a4a'], s: 'NOOB' }),
+  F('Certified Clown', { t: 'dots', c: ['#ff4a4a', '#ffffff'] }), F('Rainbow Road Rage', { t: 'wave', c: ['#ff2a2a', '#ffd23a', '#2aff6a', '#2a8aff', '#d22aff'] })];
+const PASS_GUNS = ['glock', 'usp', 'ak47', 'm4a4', 'awp', 'deagle', 'mp9', 'mac10', 'p90', 'galil', 'famas', 'nova', 'ump', 'ssg08', 'p250', 'm4a1s', 'sg553', 'aug', 'tec9', 'fiveseven'];
+const PASS_AGENTS = ['a_t_banana', 'a_ct_mime', 'a_t_speedo', 'a_ct_tighty', 'a_t_grandma', 'a_ct_pigeon', 'a_t_hotdog', 'a_ct_poo'];
+export const PASS_TIERS = 50;
+export const PASS = (() => {
+  const items = [], tiers = [];
+  let g = 0, f = 0, a = 0, e = 0;
+  const emotes = EMOTES.filter((x) => !DEFAULT_EMOTES.includes(x.id));
+  for (let t = 1; t <= PASS_TIERS; t++) {
+    let it;
+    if (t === PASS_TIERS) it = { id: 'pass:k_dildo:Gold Plated', kind: 'knife', weapon: 'k_dildo', finish: 'Gold Plated', paint: { t: 'fade', c: ['#fff3a0', '#e8b020', '#8a5a10'] }, tier: 4 };
+    else if (t === 25) it = { id: 'pass:k_hotdog:Ballpark Special', kind: 'knife', weapon: 'k_hotdog', finish: 'Ballpark Special', paint: { t: 'hotdogs', c: ['#f2d8a0', '#c8462e'] }, tier: 4 };
+    else if (t % 5 === 0 && a < PASS_AGENTS.length) { const id = PASS_AGENTS[a++]; it = { id: 'pass:' + id, kind: 'agent', weapon: id, finish: (AGENTS.find((x) => x.id === id) || {}).name, tier: Math.min(3, 1 + Math.floor(t / 15)) }; }
+    else if (t % 3 === 0 && e < emotes.length) { const em = emotes[e++]; it = { id: 'pass:' + em.id, kind: 'emote', weapon: em.id, finish: em.name, tier: em.tier }; }
+    else { const fin = PASS_FINISHES[f++ % PASS_FINISHES.length], gun = PASS_GUNS[g++ % PASS_GUNS.length]; it = { id: `pass:${gun}:${fin.name}`, kind: 'skin', weapon: gun, finish: fin.name, paint: fin.paint, tier: Math.min(3, Math.floor(t / 12)) }; }
+    it.id = `pass${t}:` + it.id.slice(5);  // unique per tier
+    items.push(it); tiers.push({ tier: t, def: it.id });
+  }
+  return { id: 'pass', name: 'Free Battle Pass', price: 0, items, tiers, hidden: true };
+})();
+for (const em of EMOTES) if (!PASS.items.find((i) => i.weapon === em.id)) PASS.items.push({ id: 'pass:' + em.id, kind: 'emote', weapon: em.id, finish: em.name, tier: em.tier });
+export const CRATE_BY_ID = Object.fromEntries(CRATES.map((c) => [c.id, c]));
+export const ITEM_BY_ID = Object.fromEntries([...CRATES, PASS].flatMap((c) => c.items.map((i) => [i.id, i])));
+export const KNIFE_BY_ID = Object.fromEntries(KNIVES.map((k) => [k.id, k]));
+export const AGENT_BY_ID = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
+
+// the odds a crate actually uses (tiers that exist in it, renormalised): shown before opening
+export function crateOdds(crate) {
+  const tiers = [...new Set(crate.items.map((i) => i.tier))].sort();
+  const tot = tiers.reduce((s, t) => s + RARITY[t].odds, 0);
+  return tiers.map((t) => ({ tier: t, name: RARITY[t].name, color: RARITY[t].color, pct: RARITY[t].odds / tot * 100 }));
+}
+// roll one item: tier by odds, item uniformly within the tier, float 0..1 (agents have no wear), 10% StatTrak on guns/knives
+export function rollCrate(crate, rnd = Math.random) {
+  const odds = crateOdds(crate); let r = rnd() * 100, tier = odds[odds.length - 1].tier;
+  for (const o of odds) { if (r < o.pct) { tier = o.tier; break; } r -= o.pct; }
+  const pool = crate.items.filter((i) => i.tier === tier), def = pool[Math.floor(rnd() * pool.length)];
+  return newItem(def.id, def.kind === 'agent' ? 0 : rnd(), def.kind !== 'agent' && rnd() < 0.1, Math.floor(rnd() * 1000));
+}
+let uidN = 0;
+export const newItem = (def, float, st, seed) => ({ uid: Date.now().toString(36) + (uidN++).toString(36) + Math.floor(Math.random() * 1e6).toString(36), def, float: +float.toFixed(5), st: !!st, seed, kills: 0, t: Date.now() });
+export function itemInfo(it) {
+  const d = ITEM_BY_ID[it.def]; if (!d) return null;
+  const wpn = d.kind === 'skin' ? (WEAPONS.find((w) => w.id === d.weapon) || {}).name : d.kind === 'knife' ? KNIFE_BY_ID[d.weapon].name : d.kind === 'emote' ? 'Emote' : 'Agent';
+  const wear = d.kind === 'agent' || d.kind === 'emote' ? null : wearOf(it.float);
+  const value = Math.round(RARITY[d.tier].value * (wear ? wear.mult : 1) * (it.st ? 2 : 1) * (d.kind === 'agent' ? 1.5 : d.kind === 'emote' ? 0.8 : 1));
+  return { ...d, wpn, wear, value, rarity: RARITY[d.tier], label: (it.st ? 'StatTrak™ ' : '') + `${wpn} | ${d.finish}` };
+}
+
+// ---- painting: recipe -> canvas (deterministic by seed), then wear ----
+export function paintSkin(canvas, paint, seed = 1, float = 0.1) {
+  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+  let s = (seed * 2654435761) >>> 0; const r = () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const c = paint.c;
+  g.fillStyle = c[0]; g.fillRect(0, 0, W, H);
+  const blob = (x, y, rr, col) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, rr, rr * (0.5 + r()), r() * 3, 0, 7); g.fill(); };
+  switch (paint.t) {
+    case 'camo': for (let i = 0; i < 26; i++) blob(r() * W, r() * H, 4 + r() * 10, c[1 + (i % 2)] || c[1]); break;
+    case 'solid': g.fillStyle = c[1]; g.fillRect(0, H * 0.75, W, H * 0.25); break;
+    case 'checker': for (let y = 0; y < H; y += 8) for (let x = 0; x < W; x += 8) if (((x + y) / 8) % 2) { g.fillStyle = c[1]; g.fillRect(x, y, 8, 8); } break;
+    case 'stripes': g.fillStyle = c[1]; for (let x = -H; x < W; x += 12) { g.beginPath(); g.moveTo(x, H); g.lineTo(x + 6, H); g.lineTo(x + 6 + H, 0); g.lineTo(x + H, 0); g.fill(); } break;
+    case 'tiger': g.fillStyle = c[1]; for (let i = 0; i < 14; i++) { const x = r() * W; g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + (r() - 0.5) * 20, H / 2, x + (r() - 0.5) * 10, H); g.lineWidth = 2 + r() * 3; g.strokeStyle = c[1]; g.stroke(); } break;
+    case 'hex': g.strokeStyle = c[1]; g.lineWidth = 1.5; for (let y = 0; y < H + 8; y += 7) for (let x = 0; x < W + 8; x += 8) { const ox = (y / 7) % 2 ? 4 : 0; g.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; g.lineTo(x + ox + Math.cos(a) * 4, y + Math.sin(a) * 4); } g.closePath(); g.stroke(); } break;
+    case 'circuit': g.strokeStyle = c[1]; g.lineWidth = 1; for (let i = 0; i < 30; i++) { let x = r() * W, y = r() * H; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 4; k++) { if (r() < 0.5) x += (r() - 0.5) * 24; else y += (r() - 0.5) * 24; g.lineTo(x, y); } g.stroke(); g.fillStyle = c[1]; g.fillRect(x - 1, y - 1, 3, 3); } break;
+    case 'marble': for (let i = 0; i < 40; i++) { g.strokeStyle = c[1] + (r() < 0.5 ? '88' : 'cc'); g.lineWidth = 0.5 + r() * 2; g.beginPath(); let x = r() * W, y = r() * H; g.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (r() - 0.5) * 20; y += (r() - 0.5) * 10; g.lineTo(x, y); } g.stroke(); } break;
+    case 'damascus': g.strokeStyle = c[1]; for (let y = 0; y < H; y += 3) { g.beginPath(); for (let x = 0; x <= W; x += 2) g.lineTo(x, y + Math.sin(x / 6 + y / 4 + seed) * 2.5); g.stroke(); } break;
+    case 'geo': { g.fillStyle = c[1]; for (let i = 0; i < 6; i++) { const x = r() * W; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 10 + r() * 14, 0); g.lineTo(x - 6 + r() * 10, H); g.lineTo(x - 16, H); g.fill(); } g.fillStyle = c[2]; for (let i = 0; i < 5; i++) g.fillRect(r() * W, r() * H, 6 + r() * 16, 2 + r() * 3); break; }
+    case 'galaxy': { const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, c[0]); gr.addColorStop(0.5, c[1]); gr.addColorStop(1, c[0]); g.fillStyle = gr; g.fillRect(0, 0, W, H); g.fillStyle = c[2]; for (let i = 0; i < 60; i++) g.fillRect(r() * W, r() * H, r() < 0.9 ? 1 : 2, r() < 0.9 ? 1 : 2); break; }
+    case 'flames': for (let i = 0; i < 18; i++) { const x = r() * W, hh = H * (0.4 + r() * 0.6); g.fillStyle = i % 2 ? c[1] : c[2]; g.beginPath(); g.moveTo(x - 6, H); g.quadraticCurveTo(x - 4, H - hh / 2, x + (r() - 0.5) * 6, H - hh); g.quadraticCurveTo(x + 4, H - hh / 2, x + 6, H); g.fill(); } break;
+    case 'scales': g.strokeStyle = c[2]; g.fillStyle = c[1]; for (let y = 0; y < H + 6; y += 5) for (let x = 0; x < W + 6; x += 6) { g.beginPath(); g.arc(x + ((y / 5) % 2 ? 3 : 0), y, 3, 0, Math.PI); if (r() < 0.15) g.fill(); g.stroke(); } break;
+    case 'fade': case 'wave': { const gr = g.createLinearGradient(0, 0, W, paint.t === 'wave' ? H : 0); c.forEach((col, k) => gr.addColorStop(k / (c.length - 1), col)); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      if (paint.t === 'wave') { g.strokeStyle = 'rgba(255,255,255,.25)'; for (let k = 0; k < 6; k++) { g.beginPath(); for (let x = 0; x <= W; x += 2) g.lineTo(x, H * (k + 0.5) / 6 + Math.sin(x / 7 + seed + k) * 3); g.stroke(); } } break; }
+    case 'smear': g.strokeStyle = c[1]; g.lineCap = 'round'; for (let i = 0; i < 9; i++) { g.lineWidth = 2 + r() * 5; g.beginPath(); const x = r() * W, y = r() * H; g.moveTo(x, y); g.quadraticCurveTo(x + 10, y + (r() - 0.5) * 8, x + 14 + r() * 20, y + (r() - 0.5) * 6); g.stroke(); } break;
+    case 'clouds': for (let i = 0; i < 18; i++) { const x = r() * W, y = r() * H; for (let k = 0; k < 3; k++) { g.fillStyle = c[1] + 'aa'; g.beginPath(); g.arc(x + k * 4, y + (k % 2) * 2, 3 + r() * 3, 0, 7); g.fill(); } } break;
+    case 'dots': g.fillStyle = c[1]; for (let y = 3; y < H; y += 8) for (let x = 3 + ((y / 8) % 2) * 4; x < W; x += 8) { g.beginPath(); g.arc(x, y, 2, 0, 7); g.fill(); } break;
+    case 'web': g.strokeStyle = c[1]; g.lineWidth = 1; { const cx = W * r(), cy = H * r(); for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * W, cy + Math.sin(a) * W); g.stroke(); } for (let rr = 5; rr < W; rr += 6) { g.beginPath(); g.arc(cx, cy, rr, 0, 7); g.stroke(); } } break;
+    case 'text': g.fillStyle = c[1]; g.font = `900 ${Math.max(7, H / 4)}px system-ui,sans-serif`; for (let y = H / 4; y < H + 4; y += H / 4) for (let x = ((y / (H / 4)) % 2) * -10; x < W; x += g.measureText(paint.s + ' ').width) g.fillText(paint.s, x, y); break;
+    case 'hotdogs': for (let i = 0; i < 10; i++) { const x = r() * W, y = r() * H; g.fillStyle = c[0] === '#f2d8a0' ? '#d8a050' : c[0]; g.fillRect(x - 5, y - 2, 10, 4); g.fillStyle = c[1]; g.fillRect(x - 6, y - 1, 12, 2); g.fillStyle = '#f2d33c'; g.fillRect(x - 4, y - 0.5, 8, 0.8); } break;
+    case 'poops': for (let i = 0; i < 9; i++) { const x = r() * W, y = r() * H; g.fillStyle = c[1]; for (let k = 0; k < 3; k++) { g.beginPath(); g.ellipse(x, y - k * 2.5, 5 - k * 1.4, 2, 0, 0, 7); g.fill(); } g.fillStyle = '#fff'; g.fillRect(x - 2, y - 3, 1, 1); g.fillRect(x + 1, y - 3, 1, 1); } break;
+    default: break;
+  }
+  // wear: scratches and grime grow with the float
+  const n = Math.floor(float * 220);
+  for (let i = 0; i < n; i++) { g.fillStyle = r() < 0.5 ? 'rgba(200,200,200,.35)' : 'rgba(30,25,20,.35)'; g.fillRect(r() * W, r() * H, 1 + r() * 3 * float, 1); }
+  if (float > 0.38) { g.fillStyle = `rgba(60,50,40,${(float - 0.38) * 0.5})`; g.fillRect(0, 0, W, H); }
+  return canvas;
+}

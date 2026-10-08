@@ -1,0 +1,9 @@
+{
+  "kit": "racer3d", "id": "turbo-loop", "title": "Turbo Loop", "maxPlayers": 8, "seed": 11,
+  "palette": {"sky": "#8fd0ff", "grass": "#4f9a3a", "road": "#3a3a40", "stripe": "#f2f2f2", "trees": "#2e6b2a", "car": "#e8322f", "glass": "#223344",
+              "ally": "#2f7cf6", "rivals": ["#f2b705", "#8c3bd9", "#1fb37a", "#ff7a1a", "#e0e0e0"], "text": "#ffffff", "accent": "#ffcc00", "boost": "#3fd2ff"},
+  "text": {"go": "GO!", "lap": "Lap", "finish": "Finished #{p} · {t} s"},
+  "game": {"track": {"points": 9, "radius": 160, "width": 14, "trees": 260},
+           "race": {"laps": 3, "ai": 5},
+           "car": {"top": 48, "accel": 26, "brake": 40, "drag": 0.18, "steer": 1.9, "grassSlow": 0.45, "boost": 3, "boostMult": 1.35}}
+}
