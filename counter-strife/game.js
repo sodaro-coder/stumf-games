@@ -313,6 +313,40 @@ export default function start({ cfg, E, N, smoke }) {
       me.deploy = wid === 'knife' ? 0.4 : G_BY_ID[wid] ? 0.5 : (W_BY_ID[wid] || {}).cat === 'pistol' ? 0.6 : 0.9; me.scoped = 0; audio.play('deploy');
     }
 
+    // ---- reload animations: tilt the gun, drop the mag, bring a fresh one up, seat it, rack it -----------------------
+    const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const _rv = new THREE.Vector3(), _rv2 = new THREE.Vector3();
+    function reloadPose(vm, w, k) {
+      const ud = vm.userData, arm = ud.leftArm, mg = ud.magGroup;
+      if (k < 0 || !w) { arm.position.set(0, 0, 0); arm.rotation.set(0, 0, 0); if (mg) { mg.position.set(0, 0, 0); mg.rotation.set(0, 0, 0); mg.visible = true; } if (arm.userData.shell) arm.userData.shell.visible = false; return; }
+      const hand = ud.leftHand;
+      if (w.shellReload) {   // one shell per cycle: the hand dips for a shell and thumbs it into the loading port
+        const c = Math.sin(k * Math.PI), dip = Math.sin(k * Math.PI * 2);
+        vm.rotation.z += 0.35 * c; vm.rotation.x += 0.1 * c;
+        arm.position.set(0.02 * c, -0.08 * Math.max(0, dip) + 0.03 * c, 0.03 * c); if (arm.userData.shell) arm.userData.shell.visible = k > 0.15 && k < 0.6;
+        return;
+      }
+      const tilt = sm(0, 0.14, k) * (1 - sm(0.82, 1, k)), pistol = w.cat === 'pistol';
+      vm.rotation.z += (pistol ? 0.25 : 0.42) * tilt; vm.rotation.x += 0.12 * tilt; vm.position.y -= 0.025 * tilt;
+      const atMag = _rv.copy(ud.magPos).add(_rv2.set(0, -0.03, 0.02)), below = ud.magPos.clone().add(_rv2.set(0.05, -0.38, 0.12));
+      let tgt;
+      if (k < 0.12) tgt = hand.clone().lerp(atMag, sm(0, 0.12, k));
+      else if (k < 0.3) tgt = atMag.clone().lerp(below, sm(0.12, 0.3, k));
+      else if (k < 0.36) tgt = below.clone();
+      else if (k < 0.6) tgt = below.clone().lerp(atMag, sm(0.36, 0.6, k));
+      else if (k < 0.7 || !ud.charge || pistol) tgt = atMag.clone().lerp(hand, sm(0.6, 0.78, k));
+      else { const ch = ud.charge.clone(), pulled = ch.clone().add(_rv2.set(0, 0, 0.07)); tgt = k < 0.78 ? atMag.clone().lerp(ch, sm(0.7, 0.78, k)) : k < 0.86 ? ch.lerp(pulled, sm(0.78, 0.84, k)) : pulled.lerp(hand, sm(0.86, 0.98, k)); }
+      arm.position.copy(tgt).sub(hand);
+      if (mg) {   // the old mag falls away; the fresh one rides up in the hand and seats with a click
+        if (k < 0.12) mg.position.set(0, 0, 0);
+        else if (k < 0.34) { const f = sm(0.12, 0.3, k); mg.position.set(0.03 * f, -0.36 * f, 0.1 * f); mg.rotation.set(0.5 * f, 0, 0.3 * f); mg.visible = k < 0.3; }
+        else if (k < 0.6) { mg.visible = true; mg.position.copy(tgt).sub(atMag); mg.rotation.set(0.2 * (1 - sm(0.36, 0.6, k)), 0, 0); }
+        else { mg.position.set(0, 0, 0); mg.rotation.set(0, 0, 0); mg.visible = true; }
+      }
+      const jolt = Math.exp(-Math.pow((k - 0.61) / 0.02, 2)) * 0.012 + (pistol || !ud.charge ? 0 : Math.exp(-Math.pow((k - 0.85) / 0.025, 2)) * 0.02);
+      vm.position.z += jolt;
+    }
+
     // ---- effects: tracers, impacts, smokes, fires, grenades in flight, drops, bomb ----
     const fx = new THREE.Group(); scene.add(fx);
     const tracerMat = new THREE.LineBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.6 });
@@ -908,13 +942,15 @@ export default function start({ cfg, E, N, smoke }) {
       if (vm) {
         vm.visible = me.alive && !(me.scoped && w && w.zoom) && !spectating && !me.emote;
         const base = vm.userData.base, sp = speedOf(me);
-        const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 ? 0.12 : 0;
+        const animReload = !!(vm.userData.leftArm && (vm.userData.magGroup || (w && w.shellReload)));
+        const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
         vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.12 : 0));
         vm.rotation.set(rel * 2 + camKick * 2 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.6 : 0), (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
         if (vm.userData.sc == null) vm.userData.sc = vm.scale.x;
         vm.scale.setScalar(vm.userData.sc);
         if (me.inspect > 0 && me.inspectStyle) applyInspect(vm, me.inspectStyle, (2.2 - me.inspect) / 2.2);
         const ud = vm.userData;
+        if (animReload) reloadPose(vm, w, me.reload > 0 && w ? 1 - me.reload / w.reload : -1);
         if (ud.flop) {   // floppy: each joint is a damped spring kicked by turning, walking, swinging and stroking
           const F = ud.flopS || (ud.flopS = { x: 0, y: 0, vx: 0, vy: 0 }), stroking = me.inspect > 0 && me.inspectStyle === 'stroke';
           const kick = { x: -lookDY * 0.9 + Math.cos(bob * 2) * 0.6 * Math.min(1, sp / 4) + (me.knifeSwing > 0 ? 9 : 0) + (stroking ? Math.sin(me.inspect * 22) * 7 : 0), y: lookDX * 0.9 };
