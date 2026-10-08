@@ -98,6 +98,7 @@ export class Profile {
     this.d.inventory = this.d.inventory.filter((x) => x.uid !== uid); this.unequip(uid); this.changed(); return 1;
   }
   async listings() { if (!this.signedIn) return []; return this.req('/rest/v1/cs_listings?select=*&order=created.desc&limit=200', null, 'GET'); }
+  async adminCollection() { const n = await this.rpc('cs_admin_collection'); await this.sync(); return n; }
   async listItem(uid, price) { await this.rpc('cs_list', { p_uid: uid, p_price: Math.round(price) }); await this.sync(); }
   async unlistItem(uid) { await this.rpc('cs_unlist', { p_uid: uid }); await this.sync(); }
   async buyListing(id) { await this.rpc('cs_buy', { p_listing: id }); await this.sync(); }

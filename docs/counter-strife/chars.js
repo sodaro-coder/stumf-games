@@ -5,6 +5,7 @@
 // headgear rides on the head bone.
 import * as THREE from '../sdk/three.module.min.js';
 import { litPatch } from './world.js';
+import { glowMask, glowify } from './models.js';
 
 let D = null, P = null;
 export function loadChars() {
@@ -52,28 +53,30 @@ function texture(name) {
   const t = new THREE.TextureLoader().load(name); t.colorSpace = name.includes('_n_') ? THREE.NoColorSpace : THREE.SRGBColorSpace; t.flipY = false;
   D.tex.set(name, t); return t;
 }
-// one material per (team, tint, quality); tint = an agent's colour washed over the uniform
-function material(team, tint, hq) {
-  const key = `${team}|${tint || ''}|${hq}`;
+// one material per (team, tint, quality, glow); tint = an agent's colour washed over the uniform; glow = a Mythic
+// outfit's energy veins, which crawl over the uniform and pulse
+function material(team, tint, hq, glow) {
+  const key = `${team}|${tint || ''}|${hq}|${glow ? glow.glow + glow.t : ''}`;
   if (D.mats.has(key)) return D.mats.get(key);
   const res = hq ? 1024 : 512;
   const m = new THREE.MeshLambertMaterial({ map: texture(`soldier_${team === 'CT' ? 'ct' : 't'}_${res}.jpg`), normalMap: hq ? texture(`soldier_n_${res}.jpg`) : null });
-  if (tint) m.color.set(tint).lerp(new THREE.Color(1, 1, 1), 0.35);
+  if (tint) m.color.set(tint).lerp(new THREE.Color(1, 1, 1), glow ? 0.15 : 0.35);
+  if (glow) glowify(m, glowMask({ t: glow.t, glow: glow.glow }, 3), 0.9);
   litPatch(m, 'dyn'); D.mats.set(key, m); return m;
 }
 
 // clip speeds (metres per second at timeScale 1) for matching the feet to the ground speed
 const SPEED = { walk: 1.0, walkBack: 1.1, walkLeft: 1.4, walkRight: 0.75, run: 3.1, runBack: 2.7, runLeft: 2.8, runRight: 3.2, crouchWalk: 0.6 };
-const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
+const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3(), _fw = new THREE.Vector3(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
 export function makeSoldier(look, team, hq = true) {
   const L = look || {}, plainAgent = !L.speedo && !L.mustard && !L.eyes && !L.stripes && !['bun', 'swirl', 'curlers', 'beak', 'stem', 'beret', 'cap'].includes(L.hat);
-  const tint = plainAgent ? null : L.body;
+  const tint = plainAgent && !L.glow ? null : L.body;
   const g = new THREE.Group(), holder = new THREE.Group(); holder.rotation.y = Math.PI; g.add(holder);   // Mixamo faces +z; the game's players face -z
   const c = D.c, root = new THREE.Group();
   root.position.fromArray(c.root.t); root.quaternion.fromArray(c.root.q); root.scale.fromArray(c.root.s); holder.add(root);
   const bones = c.bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); o.quaternion.fromArray(b.q); o.scale.fromArray(b.s); return o; });
   c.bones.forEach((b, i) => { if (b.p >= 0) bones[b.p].add(bones[i]); else root.add(bones[i]); });
-  const mat = material(team, tint, hq);
+  const mat = material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null);
   for (const m of D.meshes) {
     const sm = new THREE.SkinnedMesh(m.g, mat); sm.frustumCulled = false; root.add(sm);
     sm.bind(new THREE.Skeleton(m.joints.map((i) => bones[i]), m.inverses), m.bind);
@@ -111,7 +114,7 @@ function turnWorld(b, axis, ang) {
   b.quaternion.premultiply(_q2.setFromAxisAngle(_ax, ang)); b.updateMatrixWorld(true);
 }
 // per frame: pick the base animation from how the player moves, then aim, gun and props
-export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null }) {
+export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0 }) {
   r.t += dt;
   if (dead) {
     if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
@@ -138,6 +141,11 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     const p = Math.max(-1.2, Math.min(1.2, pitch)) + crouch * 0.15;
     if (!emote) for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], _v, p * 0.27);
     if (B.Head) turnWorld(B.Head, _v, p * 0.15);
+    if (lean && !emote) {   // leaning (Q / E while aimed in): the spine rolls about the facing direction
+      _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
+      for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], _fw, lean * 0.2);
+      if (B.Head) turnWorld(B.Head, _fw, -lean * 0.12);
+    }
     if (emote) emotePose(r, emote, _v);
   }
   // the gun in the right hand, pointing where the player aims

@@ -1,16 +1,20 @@
 // Cosmetics: weapon finishes, knives, agents (player models) and the crates they drop from. Every finish is painted
 // procedurally from a recipe (no image files): a pattern, a palette, a seed, then wear scratches by the float.
-// Rarity: Common, Uncommon, Rare, Epic, Legendary, Funny (rarest). Odds are shown on every crate. Crates open with coins earned in-game only.
+// Rarity: Common, Uncommon, Rare, Epic, Legendary, Funny and Mythic (the two rarest, same odds). Mythic finishes and
+// outfits glow and animate, and have their own inspect. Odds are shown on every crate. Crates open with coins earned in-game only.
 import { WEAPONS } from './data.js';
 
-export const RARITY = [  // index = tier; Funny is the rarest
-  { key: 'common', name: 'Common', color: '#b0c3d9', odds: 70, value: 20 },
+export const RARITY = [  // index = tier; Funny and Mythic are the rarest
+  { key: 'common', name: 'Common', color: '#b0c3d9', odds: 69.8, value: 20 },
   { key: 'uncommon', name: 'Uncommon', color: '#5ec65e', odds: 20, value: 60 },
   { key: 'rare', name: 'Rare', color: '#4b69ff', odds: 6.5, value: 200 },
   { key: 'epic', name: 'Epic', color: '#9b47ff', odds: 2.5, value: 700 },
   { key: 'legendary', name: 'Legendary', color: '#e4ae39', odds: 0.8, value: 2500 },
   { key: 'funny', name: 'Funny', color: '#ff4fd8', odds: 0.2, value: 6000 },
+  { key: 'mythic', name: 'Mythic', color: '#ff2e4c', odds: 0.2, value: 6000 },
 ];
+export const MYTHIC = 6;
+export const isMythic = (it) => { const d = it && ITEM_BY_ID[it.def]; return !!d && d.tier === MYTHIC; };
 export const WEARS = [  // float ranges
   { key: 'FN', name: 'Factory New', max: 0.07, mult: 1.5 }, { key: 'MW', name: 'Minimal Wear', max: 0.15, mult: 1.15 },
   { key: 'FT', name: 'Field-Tested', max: 0.38, mult: 1 }, { key: 'WW', name: 'Well-Worn', max: 0.45, mult: 0.85 },
@@ -44,6 +48,11 @@ export const AGENTS = [
   { id: 'a_ct_pigeon', name: 'Agent Pigeon', team: 'CT', tier: 4, look: { body: '#8a8f9a', legs: '#e08a5a', head: '#6a7080', hat: 'beak', hatColor: '#e0a040', eyes: true } },
   { id: 'a_t_banana', name: 'Banana Bandit', team: 'T', tier: 2, look: { body: '#f2d33c', legs: '#d8b42a', head: '#f2d33c', hat: 'stem', hatColor: '#5a3a1a', eyes: true } },
   { id: 'a_ct_mime', name: 'Mime Negotiator', team: 'CT', tier: 2, look: { body: '#f4f4f4', legs: '#111', head: '#ffffff', hat: 'beret', hatColor: '#111', stripes: true } },
+  // Mythic: glowing, animated outfits (energy veins crawl over the uniform)
+  { id: 'a_t_reactor', name: 'Reactor Core Ronnie', team: 'T', tier: 6, look: { body: '#24302a', legs: '#1a201c', head: '#c89a74', hat: 'balaclava', hatColor: '#111', glow: '#5cff6a', glowT: 'circuit' } },
+  { id: 'a_ct_plasma', name: 'Plasma Daddy', team: 'CT', tier: 6, look: { body: '#1c1f30', legs: '#14161f', head: '#e0b896', hat: 'helmet', hatColor: '#151826', glow: '#2ad8ff', glowT: 'hex' } },
+  { id: 'a_t_lava', name: 'Hot Lava Larry', team: 'T', tier: 6, look: { body: '#2a1a14', legs: '#1c120e', head: '#b48264', hat: 'shemagh', hatColor: '#3a2418', glow: '#ff6a1a', glowT: 'web' } },
+  { id: 'a_ct_void', name: 'Void Boi 9000', team: 'CT', tier: 6, look: { body: '#16121f', legs: '#0f0c16', head: '#d8a888', hat: 'helmet', hatColor: '#0f0c16', visor: true, glow: '#c04aff', glowT: 'galaxy' } },
 ];
 
 // ---- emotes (everyone in the match sees them; your camera pulls back to third person while it plays) ----
@@ -92,6 +101,25 @@ const NUKE = {
 const KNIFE_FINISHES = [F('Vanilla', { t: 'solid', c: ['#a8adb6', '#6a6e76'] }), F('Fade', { t: 'fade', c: ['#ffd23a', '#ff4ad2', '#7a2aff'] }),
   F('Doppler', { t: 'wave', c: ['#2a0a4a', '#d24aff', '#2ad2ff'] }), F('Tiger Tooth', { t: 'tiger', c: ['#e8a020', '#1a1208'] }),
   F('Crimson Web', { t: 'web', c: ['#8a1a1a', '#1a0a0a'] }), F('Marble Fade', { t: 'marble', c: ['#2a6aff', '#ffd23a'] })];
+
+// Mythic gun finishes: one per case. A dark base with neon veins that glow, pulse and crawl along the gun.
+// glow = the light colour, g = the vein pattern that moves (any paint pattern, drawn bright-on-black)
+const M = (name, t, c, glow, g) => ({ name, paint: { t, c, glow, g: g || t } });
+const MYTHIC_FIN = {
+  sand: M('Nuclear Swamp Ass', 'circuit', ['#0c1410', '#1f3a24'], '#6aff5a'), toilet: M('Radioactive Shart', 'smear', ['#120d08', '#3a2a14'], '#a8ff2a', 'circuit'),
+  nuke: M('Chernobyl Nutsack', 'hex', ['#0a1408', '#18301a'], '#7aff4a'), dust2: M('Sand In My Crack', 'flames', ['#140c06', '#3a2410', '#5a3414'], '#ffb02a', 'web'),
+  neon: M('Rave Boner', 'geo', ['#0a0614', '#2a0a3a', '#0a2a3a'], '#ff2ad2', 'wave'), farm: M('Glowing Cow Pie', 'camo', ['#140e08', '#2a1c10', '#1c140a'], '#ffd23a', 'circuit'),
+  ocean: M('Bioluminescent Booty', 'wave', ['#020a14', '#06182a', '#0a2440'], '#2affe0', 'web'), gamer: M('RGB Hemorrhoids', 'circuit', ['#08080c', '#14141e'], '#2aff6a', 'circuit'),
+  space: M('Uranus Glow', 'galaxy', ['#05030f', '#1a0a3a', '#ffffff'], '#b04aff', 'galaxy'), jungle: M('Monkey Fling Neon', 'tiger', ['#0a1406', '#020402'], '#9aff2a', 'tiger'),
+  winter: M('Yellow Snow Reactor', 'marble', ['#0a1018', '#1a2a3a'], '#f8ff4a', 'web'), candy: M('Sugar Shits', 'dots', ['#140a14', '#3a1a3a'], '#ff6ad2', 'hex'),
+  military: M('Night Vision Wedgie', 'camo', ['#060a06', '#0e160e', '#0a120a'], '#4aff4a', 'circuit'), gas: M('Truck Stop Toilet Glow', 'stripes', ['#0e0a08', '#1e1610'], '#ff8a2a', 'wave'),
+  retro: M('Lava Lamp Lube', 'wave', ['#14060a', '#2a0a14', '#3a1a06'], '#ff4a8a', 'web'), spooky: M('Ecto-Snot', 'web', ['#060a08', '#0a1a10'], '#6aff9a', 'web'),
+  royal: M('Royal Flush (Literally)', 'damascus', ['#0e0a14', '#2a1a3a'], '#ffd24a', 'damascus'), toxic: M('Glowing Booger', 'smear', ['#081006', '#1a3a10'], '#a8ff2a', 'hex'),
+  office: M('Printer Ink Diarrhea', 'smear', ['#06080e', '#101830'], '#4a8aff', 'circuit'), fastfood: M('Radioactive Nugget', 'dots', ['#140c04', '#2a1a08'], '#ffb02a', 'hex'),
+  beach: M('Jellyfish Pee', 'wave', ['#04101a', '#082030', '#0a2a3a'], '#4affff', 'wave'), metal: M('Face Melter Deluxe', 'flames', ['#0a0404', '#3a0a06', '#6a1a0a'], '#ff3a1a', 'flames'),
+  dino: M('Raptor Dookie Plasma', 'scales', ['#0a0e06', '#1a2a0e', '#050805'], '#c8ff3a', 'scales'), clown: M('Clown Fart Rave', 'geo', ['#0a0a12', '#2a0a14', '#0a1a2a'], '#ff3a3a', 'wave'),
+};
+const MYTHIC_GUNS = ['ak47', 'm4a4', 'awp', 'deagle', 'm4a1s', 'usp', 'glock', 'p90'];
 
 const pick = (list, n, seed) => { const a = list.slice(); let s = seed; const out = []; while (out.length < n && a.length) { s = (s * 9301 + 49297) % 233280; out.push(a.splice(Math.floor(s / 233280 * a.length), 1)[0]); } return out; };
 const GUNS = WEAPONS.filter((w) => w.cat !== 'knife' && w.cat !== 'zeus').map((w) => w.id);
@@ -184,7 +212,7 @@ export function skinSound(skin, what) {
   return (SKIN_SOUNDS[k] || {})[what] || null;
 }
 
-export const CRATES = [
+const CRATE_LIST = [
   makeCrate('sand', 'Sandstorm Case', 'Serious finishes for serious sweats.', SERIOUS, 7, ['k_bayonet', 'k_karambit', 'k_butterfly'], 250),
   (() => { const c = makeCrate('toilet', 'Toilet Humor Case', 'Crude finishes and the dumbest knives ever made. Some skins have their own sounds.', CRUDE, 13, ['k_hotdog', 'k_dildo', 'k_plunger', 'k_chicken'], 250); c.items.push(FINGER_GUN); return c; })(),
   makeCrate('nuke', 'Nuclear Family Case', 'Glowing, radioactive, family friendly.', NUKE, 21, ['k_baguette', 'k_fish', 'k_banana'], 300),
@@ -192,6 +220,8 @@ export const CRATES = [
   { id: 'agents', name: 'Fashion Disaster Case', desc: 'Player models nobody asked for.', price: 350,
     items: AGENTS.filter((a) => a.tier >= 0).map((a) => ({ id: 'agents:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })) },
 ];
+CRATE_LIST.forEach((c, n) => { const f = MYTHIC_FIN[c.id]; if (f) { const gun = MYTHIC_GUNS[n % MYTHIC_GUNS.length]; c.items.push({ id: `${c.id}:${gun}:${f.name}`, kind: 'skin', weapon: gun, finish: f.name, paint: f.paint, tier: MYTHIC }); } });
+export const CRATES = CRATE_LIST;
 // ---- the free battle pass: one reward per level, earned only with XP from playing (nothing to buy, ever) ----
 const PASS_FINISHES = [F('Participation Trophy', { t: 'solid', c: ['#c8a040', '#8a6a20'] }), F('Grass Toucher', { t: 'camo', c: ['#5aa040', '#3a7a2a', '#8ad060'] }),
   F('Mom\'s Basement', { t: 'checker', c: ['#4a3a6a', '#2a2040'] }), F('Gamer Fuel', { t: 'fade', c: ['#2aff6a', '#2a6aff', '#ff2ad2'] }),
@@ -246,8 +276,10 @@ export function itemInfo(it) {
 }
 
 // ---- painting: recipe -> canvas (deterministic by seed), then wear ----
-export function paintSkin(canvas, paint, seed = 1, float = 0.1) {
-  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+// scale: the canvas is scale x the 64x32 design size (the game paints at 4-8x for crisp detail)
+export function paintSkin(canvas, paint, seed = 1, float = 0.1, scale = 0) {
+  const g = canvas.getContext('2d'), sc = scale || canvas.width / 64 || 1, W = canvas.width / sc, H = canvas.height / sc;
+  g.setTransform(sc, 0, 0, sc, 0, 0);
   let s = (seed * 2654435761) >>> 0; const r = () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const c = paint.c;
   g.fillStyle = c[0]; g.fillRect(0, 0, W, H);
@@ -277,9 +309,24 @@ export function paintSkin(canvas, paint, seed = 1, float = 0.1) {
     case 'poops': for (let i = 0; i < 9; i++) { const x = r() * W, y = r() * H; g.fillStyle = c[1]; for (let k = 0; k < 3; k++) { g.beginPath(); g.ellipse(x, y - k * 2.5, 5 - k * 1.4, 2, 0, 0, 7); g.fill(); } g.fillStyle = '#fff'; g.fillRect(x - 2, y - 3, 1, 1); g.fillRect(x + 1, y - 3, 1, 1); } break;
     default: break;
   }
-  // wear: scratches and grime grow with the float
-  const n = Math.floor(float * 220);
-  for (let i = 0; i < n; i++) { g.fillStyle = r() < 0.5 ? 'rgba(200,200,200,.35)' : 'rgba(30,25,20,.35)'; g.fillRect(r() * W, r() * H, 1 + r() * 3 * float, 1); }
+  const px = 1 / sc;   // one real pixel
+  if (!paint.mask) {
+    // detail: metallic flake in the bright finishes, a hairline lacquer edge on pattern shapes, brushed grain, and a
+    // clear-coat sheen (light along the top, darker underneath) so the finish reads as paint on a curved gun
+    if (['fade', 'wave', 'galaxy', 'marble', 'damascus'].includes(paint.t)) for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(255,255,255,${0.05 + r() * 0.12})`; g.fillRect(r() * W, r() * H, px * (1 + r() * 2), px * (1 + r() * 2)); }
+    for (let y = 0; y < H; y += px * 2) { g.fillStyle = `rgba(${r() < 0.5 ? '255,255,255' : '0,0,0'},${0.015 + r() * 0.02})`; g.fillRect(0, y, W, px); }
+    const sh = g.createLinearGradient(0, 0, 0, H); sh.addColorStop(0, 'rgba(255,255,255,.16)'); sh.addColorStop(0.3, 'rgba(255,255,255,.03)'); sh.addColorStop(0.62, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.22)');
+    g.fillStyle = sh; g.fillRect(0, 0, W, H);
+    // panel seams and screws, like a real receiver
+    g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = px * 1.5; for (const x of [W * 0.28, W * 0.52, W * 0.74]) { g.beginPath(); g.moveTo(x, H * 0.12); g.lineTo(x, H * 0.88); g.stroke(); }
+    g.fillStyle = 'rgba(0,0,0,.35)'; for (const [x, y] of [[0.3, 0.2], [0.3, 0.8], [0.54, 0.5], [0.76, 0.25]]) { g.beginPath(); g.arc(W * x, H * y, px * 3, 0, 7); g.fill(); }
+    g.fillStyle = 'rgba(255,255,255,.18)'; for (const [x, y] of [[0.3, 0.2], [0.3, 0.8], [0.54, 0.5], [0.76, 0.25]]) g.fillRect(W * x - px, H * y - px * 2, px * 2, px);
+  }
+  // wear: scratches, chips down to the metal and grime, all growing with the float (fine lines at full resolution)
+  const n = Math.floor(float * 220 * Math.min(4, sc));
+  for (let i = 0; i < n; i++) { g.fillStyle = r() < 0.55 ? 'rgba(210,210,215,.45)' : 'rgba(30,25,20,.4)'; const x = r() * W, y = r() * H, len = 1 + r() * 4 * float; g.save(); g.translate(x, y); g.rotate((r() - 0.5) * 0.6); g.fillRect(0, 0, len, Math.max(px, 0.5 * px * sc / 2)); g.restore(); }
+  if (float > 0.15) for (let i = 0; i < float * 40; i++) { const e = r() < 0.5 ? r() * H * 0.12 : H - r() * H * 0.12; g.fillStyle = 'rgba(150,150,155,.55)'; g.beginPath(); g.ellipse(r() * W, e, px * (2 + r() * 6), px * (1 + r() * 3), r() * 3, 0, 7); g.fill(); }   // edge chips
   if (float > 0.38) { g.fillStyle = `rgba(60,50,40,${(float - 0.38) * 0.5})`; g.fillRect(0, 0, W, H); }
+  g.setTransform(1, 0, 0, 1, 0, 0);
   return canvas;
 }

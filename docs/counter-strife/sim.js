@@ -50,10 +50,15 @@ const slab = (o, d, b, maxT) => {
   }
   return t0;
 };
+// leaning (aimed in, Q / E): the head and chest really move sideways, so you show only what you peek with
+export const LEAN = 0.38;   // metres the eye moves at full lean
+export const leanOff = (p, f = 1) => { const l = (p.lean || 0) * LEAN * f; return { x: Math.cos(p.yaw || 0) * l, z: -Math.sin(p.yaw || 0) * l }; };
+export const eyePos = (p) => { const o = leanOff(p); return { x: p.x + o.x, y: p.y + eyeHeight(p) - Math.abs(p.lean || 0) * 0.05, z: p.z + o.z }; };
 export function hitboxes(p) {
-  const k = 1 - p.crouch * 0.28, x = p.x, y = p.y, z = p.z;
-  return [['head', [x - 0.15, y + 1.5 * k, z - 0.15, x + 0.15, y + 1.86 * k, z + 0.15]], ['chest', [x - 0.24, y + 1.15 * k, z - 0.24, x + 0.24, y + 1.5 * k, z + 0.24]],
-    ['stomach', [x - 0.22, y + 0.9 * k, z - 0.22, x + 0.22, y + 1.15 * k, z + 0.22]], ['legs', [x - 0.22, y, z - 0.2, x + 0.22, y + 0.9 * k, z + 0.2]]];
+  const k = 1 - p.crouch * 0.28, y = p.y, h = leanOff(p), c = leanOff(p, 0.55), s = leanOff(p, 0.2);
+  const box = (o, r, y0, y1, rz = r) => [p.x + o.x - r, y0, p.z + o.z - rz, p.x + o.x + r, y1, p.z + o.z + rz];
+  return [['head', box(h, 0.15, y + 1.5 * k, y + 1.86 * k)], ['chest', box(c, 0.24, y + 1.15 * k, y + 1.5 * k)],
+    ['stomach', box(s, 0.22, y + 0.9 * k, y + 1.15 * k)], ['legs', box({ x: 0, z: 0 }, 0.22, y, y + 0.9 * k, 0.2)]];
 }
 // one bullet: returns { hits: [{id, group, dist, pen}], end: {x,y,z}, wallHits: [{x,y,z}] }. Thin walls are shot through.
 export function traceShot(W, players, shooterId, o, d, w, range = 8192 * U) {
@@ -401,7 +406,7 @@ export class Match {
   snap() {
     return { ph: this.phase, tm: Math.max(0, this.timer).toFixed(1) * 1, r: this.round, sc: this.score,
       p: [...this.players.values()].map((p) => [p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(2), +p.pitch.toFixed(2), +p.crouch.toFixed(1), Math.max(0, Math.round(p.hp)), p.alive ? 1 : 0,
-        (p.inv[p.cur] || {}).wid || 'knife', p.inv[5] ? 1 : 0, p.planting ? +(p.planting / BOMB.plant).toFixed(2) : 0, Math.round(p.armor), p.helmet ? 1 : 0, p.money]),
+        (p.inv[p.cur] || {}).wid || 'knife', p.inv[5] ? 1 : 0, p.planting ? +(p.planting / BOMB.plant).toFixed(2) : 0, Math.round(p.armor), p.helmet ? 1 : 0, p.money, +(p.lean || 0).toFixed(2)]),
       b: this.bomb ? { s: this.bomb.state, x: this.bomb.x, y: this.bomb.y, z: this.bomb.z, t: this.bomb.timer != null ? +this.bomb.timer.toFixed(1) : null, d: this.bomb.dprog ? +(this.bomb.dprog / (this.bomb.kit ? BOMB.defuseKit : BOMB.defuse)).toFixed(2) : 0, site: this.bomb.site } : null };
   }
 }

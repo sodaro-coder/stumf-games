@@ -61,6 +61,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('sand:k_butterfly:Tiger Tooth','sand',4,'knife'),
 ('sand:k_butterfly:Crimson Web','sand',4,'knife'),
 ('sand:k_butterfly:Marble Fade','sand',4,'knife'),
+('sand:ak47:Nuclear Swamp Ass','sand',6,'skin'),
 ('toilet:famas:Skidmark','toilet',0,'skin'),
 ('toilet:sawedoff:Fart Cloud','toilet',0,'skin'),
 ('toilet:ssg08:Tighty Whities','toilet',0,'skin'),
@@ -100,6 +101,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('toilet:k_chicken:Crimson Web','toilet',5,'knife'),
 ('toilet:k_chicken:Marble Fade','toilet',5,'knife'),
 ('toilet:deagle:Finger Gun','toilet',5,'skin'),
+('toilet:m4a4:Radioactive Shart','toilet',6,'skin'),
 ('nuke:usp:Glow Lawn','nuke',0,'skin'),
 ('nuke:r8:Hazmat','nuke',0,'skin'),
 ('nuke:mac10:Picket Fence','nuke',0,'skin'),
@@ -126,6 +128,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('nuke:k_banana:Tiger Tooth','nuke',5,'knife'),
 ('nuke:k_banana:Crimson Web','nuke',5,'knife'),
 ('nuke:k_banana:Marble Fade','nuke',5,'knife'),
+('nuke:awp:Chernobyl Nutsack','nuke',6,'skin'),
 ('dust2:deagle:Dune Buggy','dust2',0,'skin'),
 ('dust2:p250:Goat Herder','dust2',0,'skin'),
 ('dust2:ssg08:Courtyard','dust2',0,'skin'),
@@ -149,6 +152,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('dust2:k_flip:Closet Dark','dust2',4,'knife'),
 ('dust2:k_chicken:Desert Heat','dust2',5,'knife'),
 ('dust2:k_chicken:Closet Dark','dust2',5,'knife'),
+('dust2:deagle:Sand In My Crack','dust2',6,'skin'),
 ('neon:awp:Glowstick','neon',0,'skin'),
 ('neon:mp9:Rave Leftovers','neon',0,'skin'),
 ('neon:ump:Club Bathroom','neon',0,'skin'),
@@ -172,6 +176,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('neon:k_butterfly:Static','neon',4,'knife'),
 ('neon:k_dildo:Electric Fade','neon',5,'knife'),
 ('neon:k_dildo:Static','neon',5,'knife'),
+('neon:m4a1s:Rave Boner','neon',6,'skin'),
 ('farm:mag7:Hay Bale','farm',0,'skin'),
 ('farm:xm1014:Pig Pen','farm',0,'skin'),
 ('farm:g3sg1:Muddy Boots','farm',0,'skin'),
@@ -195,6 +200,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('farm:k_hunts:Manure Glaze','farm',4,'knife'),
 ('farm:k_chicken:Butter Churn','farm',5,'knife'),
 ('farm:k_chicken:Manure Glaze','farm',5,'knife'),
+('farm:usp:Glowing Cow Pie','farm',6,'skin'),
 ('ocean:r8:Tide Pool','ocean',0,'skin'),
 ('ocean:m4a4:Kelp Forest','ocean',0,'skin'),
 ('ocean:p90:Shipwreck','ocean',0,'skin'),
@@ -218,6 +224,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('ocean:k_karambit:Ink Cloud','ocean',4,'knife'),
 ('ocean:k_fish:Low Tide','ocean',5,'knife'),
 ('ocean:k_fish:Ink Cloud','ocean',5,'knife'),
+('ocean:glock:Bioluminescent Booty','ocean',6,'skin'),
 ('gamer:g3sg1:RGB Keyboard','gamer',0,'skin'),
 ('gamer:scar20:Cheeto Dust','gamer',0,'skin'),
 ('gamer:awp:Rage Quit','gamer',0,'skin'),
@@ -241,6 +248,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('gamer:k_butterfly:Touch Grass','gamer',4,'knife'),
 ('gamer:k_banana:Gamer Fuel','gamer',5,'knife'),
 ('gamer:k_banana:Touch Grass','gamer',5,'knife'),
+('gamer:p90:RGB Hemorrhoids','gamer',6,'skin'),
 ('space:m249:Moon Dust','space',0,'skin'),
 ('space:fiveseven:Space Junk','space',0,'skin'),
 ('space:nova:Launch Pad','space',0,'skin'),
@@ -264,6 +272,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('space:k_gut:Dark Matter','space',4,'knife'),
 ('space:k_dildo:Star Fade','space',5,'knife'),
 ('space:k_dildo:Dark Matter','space',5,'knife'),
+('space:ak47:Uranus Glow','space',6,'skin'),
 ('jungle:mac10:Leaf Litter','jungle',0,'skin'),
 ('jungle:ump:Swamp Gas','jungle',0,'skin'),
 ('jungle:usp:Monkey Business','jungle',0,'skin'),
@@ -287,6 +296,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('jungle:k_bayonet:Shade','jungle',4,'knife'),
 ('jungle:k_banana:Jungle Fade','jungle',5,'knife'),
 ('jungle:k_banana:Shade','jungle',5,'knife'),
+('jungle:m4a4:Monkey Fling Neon','jungle',6,'skin'),
 ('winter:scar20:Snowplow','winter',0,'skin'),
 ('winter:mag7:Slush','winter',0,'skin'),
 ('winter:xm1014:Ice Fishing','winter',0,'skin'),
@@ -310,6 +320,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('winter:k_karambit:Polar Night','winter',4,'knife'),
 ('winter:k_fish:Glacier','winter',5,'knife'),
 ('winter:k_fish:Polar Night','winter',5,'knife'),
+('winter:awp:Yellow Snow Reactor','winter',6,'skin'),
 ('candy:negev:Bubblegum','candy',0,'skin'),
 ('candy:sg553:Cotton Candy','candy',0,'skin'),
 ('candy:p2000:Gummy Bear','candy',0,'skin'),
@@ -333,6 +344,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('candy:k_gut:Licorice','candy',4,'knife'),
 ('candy:k_hotdog:Candy Fade','candy',5,'knife'),
 ('candy:k_hotdog:Licorice','candy',5,'knife'),
+('candy:deagle:Sugar Shits','candy',6,'skin'),
 ('military:mp9:Olive Drab','military',0,'skin'),
 ('military:usp:MRE','military',0,'skin'),
 ('military:m249:Boot Camp','military',0,'skin'),
@@ -356,6 +368,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('military:k_hunts:Blackout','military',4,'knife'),
 ('military:k_plunger:Gunmetal','military',5,'knife'),
 ('military:k_plunger:Blackout','military',5,'knife'),
+('military:m4a1s:Night Vision Wedgie','military',6,'skin'),
 ('gas:glock:Slushie Brain','gas',0,'skin'),
 ('gas:deagle:Scratch Ticket','gas',0,'skin'),
 ('gas:tec9:Beef Jerky','gas',0,'skin'),
@@ -379,6 +392,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('gas:k_gut:Oil Slick','gas',4,'knife'),
 ('gas:k_hotdog:Fuel Fade','gas',5,'knife'),
 ('gas:k_hotdog:Oil Slick','gas',5,'knife'),
+('gas:usp:Truck Stop Toilet Glow','gas',6,'skin'),
 ('retro:galil:Shag Carpet','retro',0,'skin'),
 ('retro:ump:Lava Lamp','retro',0,'skin'),
 ('retro:negev:Cassette','retro',0,'skin'),
@@ -402,6 +416,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('retro:k_bayonet:Rewind','retro',4,'knife'),
 ('retro:k_baguette:Sunset Fade','retro',5,'knife'),
 ('retro:k_baguette:Rewind','retro',5,'knife'),
+('retro:glock:Lava Lamp Lube','retro',6,'skin'),
 ('spooky:mp7:Pumpkin Spice','spooky',0,'skin'),
 ('spooky:negev:Cobweb','spooky',0,'skin'),
 ('spooky:tec9:Graveyard Shift','spooky',0,'skin'),
@@ -425,6 +440,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('spooky:k_butterfly:Midnight','spooky',4,'knife'),
 ('spooky:k_banana:Ghost Fade','spooky',5,'knife'),
 ('spooky:k_banana:Midnight','spooky',5,'knife'),
+('spooky:p90:Ecto-Snot','spooky',6,'skin'),
 ('royal:usp:Crumpet','royal',0,'skin'),
 ('royal:aug:Corgi','royal',0,'skin'),
 ('royal:galil:Tea Stain','royal',0,'skin'),
@@ -448,6 +464,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('royal:k_flip:Tower Dark','royal',4,'knife'),
 ('royal:k_baguette:Royal Fade','royal',5,'knife'),
 ('royal:k_baguette:Tower Dark','royal',5,'knife'),
+('royal:ak47:Royal Flush (Literally)','royal',6,'skin'),
 ('toxic:famas:Sludge','toxic',0,'skin'),
 ('toxic:p2000:Barrel Drum','toxic',0,'skin'),
 ('toxic:deagle:Hazard Tape','toxic',0,'skin'),
@@ -471,6 +488,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('toxic:k_karambit:Fume','toxic',4,'knife'),
 ('toxic:k_plunger:Slime Fade','toxic',5,'knife'),
 ('toxic:k_plunger:Fume','toxic',5,'knife'),
+('toxic:m4a4:Glowing Booger','toxic',6,'skin'),
 ('office:mp5:Cubicle','office',0,'skin'),
 ('office:r8:Stapler','office',0,'skin'),
 ('office:m4a4:Casual Friday','office',0,'skin'),
@@ -494,6 +512,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('office:k_bayonet:Burnout','office',4,'knife'),
 ('office:k_chicken:Spreadsheet Fade','office',5,'knife'),
 ('office:k_chicken:Burnout','office',5,'knife'),
+('office:awp:Printer Ink Diarrhea','office',6,'skin'),
 ('fastfood:p2000:Ketchup Packet','fastfood',0,'skin'),
 ('fastfood:nova:Soggy Fries','fastfood',0,'skin'),
 ('fastfood:r8:Grease Trap','fastfood',0,'skin'),
@@ -517,6 +536,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('fastfood:k_flip:Fryer Oil','fastfood',4,'knife'),
 ('fastfood:k_hotdog:Grease Fade','fastfood',5,'knife'),
 ('fastfood:k_hotdog:Fryer Oil','fastfood',5,'knife'),
+('fastfood:deagle:Radioactive Nugget','fastfood',6,'skin'),
 ('beach:ak47:Sandcastle','beach',0,'skin'),
 ('beach:galil:Sunburn','beach',0,'skin'),
 ('beach:m4a1s:Flip Flop','beach',0,'skin'),
@@ -540,6 +560,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('beach:k_hunts:Riptide','beach',4,'knife'),
 ('beach:k_fish:Sunset Fade','beach',5,'knife'),
 ('beach:k_fish:Riptide','beach',5,'knife'),
+('beach:m4a1s:Jellyfish Pee','beach',6,'skin'),
 ('metal:ump:Mosh Pit','metal',0,'skin'),
 ('metal:awp:Leather Jacket','metal',0,'skin'),
 ('metal:mac10:Spiked Collar','metal',0,'skin'),
@@ -563,6 +584,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('metal:k_hunts:Blackened','metal',4,'knife'),
 ('metal:k_dildo:Chrome','metal',5,'knife'),
 ('metal:k_dildo:Blackened','metal',5,'knife'),
+('metal:usp:Face Melter Deluxe','metal',6,'skin'),
 ('dino:dualies:Fossil','dino',0,'skin'),
 ('dino:tec9:Amber','dino',0,'skin'),
 ('dino:aug:Tar Pit','dino',0,'skin'),
@@ -586,6 +608,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('dino:k_bayonet:Tar','dino',4,'knife'),
 ('dino:k_chicken:Amber Fade','dino',5,'knife'),
 ('dino:k_chicken:Tar','dino',5,'knife'),
+('dino:glock:Raptor Dookie Plasma','dino',6,'skin'),
 ('clown:m4a1s:Big Shoes','clown',0,'skin'),
 ('clown:mp9:Balloon Animal','clown',0,'skin'),
 ('clown:mp5:Seltzer','clown',0,'skin'),
@@ -609,6 +632,7 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('clown:k_karambit:Greasepaint','clown',4,'knife'),
 ('clown:k_dildo:Confetti Fade','clown',5,'knife'),
 ('clown:k_dildo:Greasepaint','clown',5,'knife'),
+('clown:p90:Clown Fart Rave','clown',6,'skin'),
 ('agents:a_t_ops','agents',2,'agent'),
 ('agents:a_ct_swat','agents',2,'agent'),
 ('agents:a_t_speedo','agents',3,'agent'),
@@ -619,6 +643,10 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('agents:a_ct_pigeon','agents',4,'agent'),
 ('agents:a_t_banana','agents',2,'agent'),
 ('agents:a_ct_mime','agents',2,'agent'),
+('agents:a_t_reactor','agents',6,'agent'),
+('agents:a_ct_plasma','agents',6,'agent'),
+('agents:a_t_lava','agents',6,'agent'),
+('agents:a_ct_void','agents',6,'agent'),
 ('pass1:glock:Participation Trophy','pass',0,'skin'),
 ('pass2:usp:Grass Toucher','pass',0,'skin'),
 ('pass3:e_dance','pass',1,'emote'),
@@ -688,6 +716,8 @@ begin
     update cs_profiles set coins = greatest(coins, 10000000) where id = me;
     insert into cs_log (actor, action, detail) values (me, 'admin_seed', '{}'::jsonb);
   end if;
+  -- once: the owner's inventory reset to one of everything (re-run any time from the Admin tab)
+  if cs_is_admin() and not exists (select 1 from cs_log where action = 'admin_collection') then perform cs_admin_collection(); end if;
   return (select json_build_object('name', p.name, 'tag', p.tag, 'dep', p.dep_code, 'admin', cs_is_admin(), 'guns', coalesce(p.guns, '{}'::jsonb) - '_day', 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
     'items', coalesce((select json_agg(json_build_object('uid', i.uid, 'def', i.def, 'float', i.float, 'st', i.st, 'seed', i.seed, 'kills', i.kills,
       'created', i.created, 'listed', (select l.price from cs_listings l where l.uid = i.uid)) order by i.created desc) from cs_items i where i.owner = me), '[]'::json))
@@ -716,10 +746,10 @@ begin
   select price into pr from cs_crates where id = p_crate; if pr is null then raise exception 'no such crate'; end if;
   update cs_profiles set coins = coins - pr where id = me and coins >= pr returning coins into c;
   if c is null then raise exception 'Not enough coins'; end if;
-  select sum((array[70,20,6.5,2.5,0.8,0.2]::float8[])[s.tier + 1]) into tot from (select distinct tier from cs_catalog where crate = p_crate) s;
+  select sum((array[69.8,20,6.5,2.5,0.8,0.2,0.2]::float8[])[s.tier + 1]) into tot from (select distinct tier from cs_catalog where crate = p_crate) s;
   roll := random() * tot;
   for t in select distinct tier from cs_catalog where crate = p_crate order by tier loop
-    acc := acc + (array[70,20,6.5,2.5,0.8,0.2]::float8[])[t + 1];
+    acc := acc + (array[69.8,20,6.5,2.5,0.8,0.2,0.2]::float8[])[t + 1];
     exit when roll < acc;
   end loop;
   select def, kind into pick, k from cs_catalog where crate = p_crate and tier = t order by random() limit 1;
@@ -730,7 +760,7 @@ begin
 end $$;
 
 create or replace function cs_value(p_def text, p_float real, p_st boolean) returns int language sql stable set search_path = public as $$
-  select round((array[20,60,200,700,2500,6000])[c.tier + 1] * (case when c.kind = 'agent' then 1.5 when c.kind = 'emote' then 0.8 when p_float < 0.07 then 1.5 when p_float < 0.15 then 1.15 when p_float < 0.38 then 1
+  select round((array[20,60,200,700,2500,6000,6000])[c.tier + 1] * (case when c.kind = 'agent' then 1.5 when c.kind = 'emote' then 0.8 when p_float < 0.07 then 1.5 when p_float < 0.15 then 1.15 when p_float < 0.38 then 1
     when p_float < 0.45 then 0.85 else 0.7 end) * (case when p_st then 2 else 1 end))::int from cs_catalog c where c.def = p_def
 $$;
 
@@ -903,6 +933,21 @@ create or replace function cs_trades_list() returns json language sql stable sec
     'give_coins', t.give_coins, 'want_coins', t.want_coins, 'mine', t.from_id = auth.uid()) order by t.created desc), '[]'::json)
   from cs_trades t join cs_profiles pf on pf.id = t.from_id join cs_profiles pt on pt.id = t.to_id where t.state = 'open' and auth.uid() in (t.from_id, t.to_id)
 $$;
+-- the owner's showroom: wipe the admin's own inventory and give exactly one of every item in the game (FN, StatTrak
+-- on guns and knives). Only the admin, only their own account; logged.
+create or replace function cs_admin_collection() returns int language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); n int;
+begin
+  if not cs_is_admin() then raise exception 'admin only'; end if;
+  delete from cs_items where owner = me;
+  insert into cs_items (uid, owner, def, float, st, seed)
+    select md5(random()::text || clock_timestamp()::text || c.def), me, c.def, case when c.kind in ('agent', 'emote') then 0 else random() * 0.07 end, c.kind in ('skin', 'knife'), floor(random() * 1000)
+    from cs_catalog c;
+  get diagnostics n = row_count;
+  update cs_profiles set equipped = '{}'::jsonb where id = me;
+  insert into cs_log (actor, action, detail) values (me, 'admin_collection', json_build_object('items', n));
+  return n;
+end $$;
 -- admin (only the owner's confirmed address: see cs_is_admin)
 create or replace function cs_admin_find(p_q text) returns json language plpgsql stable security definer set search_path = public as $$
 begin
@@ -925,8 +970,8 @@ begin
   return (select json_build_object('coins', coins) from cs_profiles where id = p_id);
 end $$;
 
-revoke all on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) from public, anon;
-grant execute on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) to authenticated;
+revoke all on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_admin_collection(), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) from public, anon;
+grant execute on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_admin_collection(), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) to authenticated;
 revoke all on function cs_value(text, real, boolean) from public, anon;
 
 -- ===== gun levels and attachments ================================================================================

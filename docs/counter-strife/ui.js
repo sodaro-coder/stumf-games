@@ -150,6 +150,10 @@ const MENU_CSS = `
 .cs-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:10px}
 .cs-tile{position:relative;background:#1d2128;border:1px solid #2a3038;border-radius:2px;cursor:pointer;overflow:hidden;transition:transform .08s}
 .cs-tile:hover{transform:translateY(-2px);border-color:#4a5462}
+.cs-tile.mythic{border-color:var(--rc);animation:csMyth 2.4s ease-in-out infinite}.cs-tile.mythic .img{position:relative;overflow:hidden}
+.cs-tile.mythic .img::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.22) 50%,transparent 65%);animation:csSweep 3s linear infinite;pointer-events:none}
+@keyframes csMyth{0%,100%{box-shadow:0 0 6px 1px var(--rc)}50%{box-shadow:0 0 18px 5px var(--rc)}}@keyframes csSweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.cs-tile.mythic,.cs-tile.mythic .img::after{animation:none}}
 .cs-tile .img{height:96px;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 60%,var(--rc,#4b69ff)33 0,transparent 70%),linear-gradient(180deg,#2a3039,#1d2128)}
 .cs-tile canvas{width:100%;height:96px;display:block}
 .cs-tile .tx{padding:7px 9px 9px;border-top:1px solid #2a3038}.cs-tile .w{font:600 11px system-ui;color:#9aa4b2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -225,7 +229,7 @@ export function drawItem(canvas, item) {
 }
 const itemCard = (item, extra = '', eqTag = '') => {
   const info = itemInfo(item); if (!info) return '';
-  return `<div class="cs-tile" data-uid="${esc(item.uid)}" style="--rc:${info.rarity.color}"><div class="img"><canvas width="320" height="160" data-draw="${esc(item.uid)}"></canvas></div>
+  return `<div class="cs-tile${info.tier === 6 ? ' mythic' : ''}" data-uid="${esc(item.uid)}" style="--rc:${info.rarity.color}"><div class="img"><canvas width="320" height="160" data-draw="${esc(item.uid)}"></canvas></div>
     ${item.st ? '<span class="st">STATTRAK™</span>' : ''}${eqTag ? `<span class="eq">${esc(eqTag)}</span>` : item.listed ? '<span class="eq" style="color:#7ed957">LISTED</span>' : ''}
     <div class="tx"><div class="w">${esc(info.wpn)}${info.wear ? ' · ' + esc(info.wear.key) : ''}</div><div class="n">${esc(info.finish)}</div>${extra ? `<div class="pr">${extra}</div>` : ''}</div><div class="rb"></div></div>`;
 };
@@ -468,7 +472,7 @@ export class Menu {
       strip.style.transform = `translateX(${-x}px)`;
       const ci = Math.floor((x + reel.clientWidth / 2) / cell); if (ci !== lastCell) { lastCell = ci; this.h.sound('tick'); }
       if (k < 1) requestAnimationFrame(anim);
-      else { const inf = itemInfo(item); this.h.sound(inf.rarity.key === 'funny' || inf.rarity.key === 'legendary' || inf.rarity.key === 'epic' ? 'rare' : 'reveal');
+      else { const inf = itemInfo(item); this.h.sound(inf.rarity.key === 'mythic' || inf.rarity.key === 'funny' || inf.rarity.key === 'legendary' || inf.rarity.key === 'epic' ? 'rare' : 'reveal');
         $('#won', m).innerHTML = `<div class="cs-row"><b style="font-size:20px;color:${inf.rarity.color}">${esc(inf.label)}</b></div><div class="cs-mut cs-small">${esc(inf.rarity.name)}${inf.wear ? ' · ' + esc(inf.wear.name) + ' · float ' + item.float.toFixed(4) : ''}</div>
           <div class="cs-row" style="margin-top:10px"><button class="cs-btn" data-again>OPEN ANOTHER · 🪙 ${c.price}</button><button class="cs-btn alt" data-x>DONE</button></div>`;
         $('[data-x]', m).onclick = () => { m.remove(); this.render(); }; $('[data-again]', m).onclick = () => { m.remove(); this.openCrate(id); }; }
@@ -546,7 +550,9 @@ export class Menu {
     B.innerHTML = `<div class="cs-panel2"><h3>Admin · give coins and items</h3><div class="bd">
       <div class="cs-row"><input id="aQ" placeholder="Search players by name" style="flex:1"><button class="cs-btn" id="aFind">Search</button></div><div id="aRes" style="margin-top:10px"></div>
       <div class="cs-row" style="margin-top:12px"><input id="aCoins" type="number" placeholder="Coins (+/-)" style="width:160px"><select id="aDef" style="flex:1"><option value="">(no item)</option>${defs.map((d) => `<option value="${esc(d.id)}">[${esc(RARITY[d.tier].name)}] ${esc(itemInfo({ def: d.id, float: 0, seed: 0 }).label)}</option>`).join('')}</select><input id="aN" type="number" value="1" min="1" max="100" style="width:80px"></div>
-      <div class="cs-small cs-mut" style="margin-top:6px">Pick a player above, then Give. Every grant is logged on the server.</div></div></div>`;
+      <div class="cs-small cs-mut" style="margin-top:6px">Pick a player above, then Give. Every grant is logged on the server.</div>
+      <div class="cs-row" style="margin-top:14px"><button class="cs-btn alt" id="aAll">Reset my inventory to one of everything</button></div></div></div>`;
+    $('#aAll', B).onclick = async () => { if (!confirm('Delete everything in YOUR inventory and replace it with one of every item?')) return; try { const n = await P.adminCollection(); this.h.toast(`Inventory reset: ${n} items`); } catch (e) { this.h.toast(e.message); } };
     let target = null;
     $('#aFind', B).onclick = async () => {
       try { const list = await P.adminFind($('#aQ', B).value.trim()); const R = $('#aRes', B); R.innerHTML = '';
@@ -629,8 +635,8 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
-        <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label></div>
-      <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift walk · Ctrl (or C) crouch · Space jump · Mouse1 fire · Mouse2 scope / alt fire · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · Z X C radio · T emotes · F inspect · Esc menu</div>`;
+        <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · announced in online matches)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
+      <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift walk · Ctrl (or C) crouch · Space jump · Mouse1 fire · Mouse2 scope / aim down sights (hold) · Q / E lean while aiming · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · Z X C radio · T emotes · F inspect · Esc menu</div>`;
     B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
     drawXh($('#xPrev', B), S, 0);
     $('#vTry', B).onclick = (e) => { e.preventDefault(); this.h.announce('planted'); };

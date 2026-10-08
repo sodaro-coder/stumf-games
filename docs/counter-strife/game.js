@@ -6,16 +6,16 @@ import * as THREE from '../sdk/three.module.min.js';
 import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forTeam } from './data.js';
 import { buildWorld } from './world.js';
 import { MAPS } from './maps.js';
-import { Match, moveStep, traceShot, eyeHeight, spreadOf, recoilAt, nadeStep, speedOf } from './sim.js';
+import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf, recoilAt, nadeStep, speedOf } from './sim.js';
 import { Bots, botNames } from './bots.js';
 import { Profile } from './backend.js';
 import { Menu, Hud, injectCss, esc, weaponIcon } from './ui.js';
 import { line } from './voices.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
-import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound } from './skins.js';
+import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
 import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent } from './chars.js';
-import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality } from './models.js';
+import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
 // sun, sky light, fog and sky for a map (shared by the match and the menu's map pictures)
@@ -29,7 +29,7 @@ function dressScene(sc, B, shadows, clouds = true) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1 };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -120,6 +120,7 @@ function makeAudio(getVol) {
     crunch: (v, p) => { for (let k = 0; k < 4; k++) burst(0.03, 2500 + k * 300, v * 0.45, p, 2, 'bandpass', k * 0.03); },
     flop: (v, p) => { burst(0.12, 800, v * 0.8, p, 1.4, 'bandpass'); tone('sine', 130, 60, 0.12, v * 0.5, p); burst(0.08, 500, v * 0.4, p, 1, 'lowpass', 0.07); },
     whoosh: (v, p) => burst(0.2, 1800, v * 0.35, p, 1.5, 'bandpass'),
+    shimmer: (v, p) => { [880, 1320, 1760, 2640, 1980].forEach((f, k) => tone('sine', f, f * 1.01, 0.9 - k * 0.1, v * 0.16, p, k * 0.07)); tone('sine', 110, 55, 1.2, v * 0.35, p); burst(0.6, 6000, v * 0.12, p, 1, 'highpass', 0.05); },
   };
   // the announcer and radio voice: the browser's own text-to-speech (works offline with system voices)
   const say = (text, pitch = 0.75, rate = 1.05) => { try { if (!window.speechSynthesis || getVol() <= 0) return; const u = new SpeechSynthesisUtterance(text); u.volume = Math.min(1, getVol() * 1.3); u.pitch = pitch; u.rate = rate; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) { /* no voices */ } };
@@ -202,6 +203,9 @@ export default function start({ cfg, E, N, smoke }) {
     const gunXP = {}; let gunXPSaved = false;
     const addXp = (wid, n) => { const w = W_BY_ID[wid]; if (!w || w.cat === 'knife' || n <= 0) return; gunXP[wid] = (gunXP[wid] || 0) + n; };
     const saveGunXp = async () => { if (gunXPSaved) return []; gunXPSaved = true; try { return await profile.gunXp(gunXP); } catch (e) { return []; } };
+    // recoil help: the admin's account only (checked on the server at sign-in). It cuts recoil to about a third. In an
+    // online match everyone is told it's on, in chat, when you join: no secret advantage over friends.
+    const RH = S.recoilHelp && profile.admin ? 0.35 : 1; let rhSaid = RH === 1 || !session;
     const hello = { name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
 
     // ---- renderer & scene ----
@@ -251,7 +255,7 @@ export default function start({ cfg, E, N, smoke }) {
 
     // ---- the local player ----
     const me = { id: myId, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, crouch: 0, onGround: true, alive: false, team: 'T', hp: 100, armor: 0, helmet: false, money: 0,
-      inv: {}, nades: [], cur: 2, last: 1, nadeSel: 0, cd: 0, reload: 0, deploy: 0, spray: 0, sprayT: 0, punch: 0, scoped: 0, ads: 0, burst: false, burstLeft: 0, flash: 0, defuser: false, inspect: 0, knifeSwing: 0, stepT: 0, wasGround: true };
+      inv: {}, nades: [], cur: 2, last: 1, nadeSel: 0, cd: 0, reload: 0, deploy: 0, spray: 0, sprayT: 0, punch: 0, scoped: 0, ads: 0, burst: false, burstLeft: 0, flash: 0, defuser: false, inspect: 0, knifeSwing: 0, stepT: 0, wasGround: true, lean: 0, leanWant: 0 };
 
     // ---- world ----
     function buildMap(id) {
@@ -316,6 +320,7 @@ export default function start({ cfg, E, N, smoke }) {
     // ---- reload animations: tilt the gun, drop the mag, bring a fresh one up, seat it, rack it -----------------------
     const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     const _rv = new THREE.Vector3(), _rv2 = new THREE.Vector3();
+    const EYE_RELIEF = { reddot: 0.15, holo: 0.16, acog: 0.12 };   // how far the sight sits in front of your eye when aimed in (metres)
     function reloadPose(vm, w, k) {
       const ud = vm.userData, arm = ud.leftArm, mg = ud.magGroup;
       if (k < 0 || !w) { arm.position.set(0, 0, 0); arm.rotation.set(0, 0, 0); if (mg) { mg.position.set(0, 0, 0); mg.rotation.set(0, 0, 0); mg.visible = true; } if (arm.userData.shell) arm.userData.shell.visible = false; return; }
@@ -433,6 +438,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (![x, y, z, yaw, pitch, cr].every(Number.isFinite)) return;
         if (p.alive) { const jump = Math.hypot(x - p.x, z - p.z); if (jump < 4 || !p.seen) { p.x = x; p.y = y; p.z = z; } p.seen = true; }
         p.yaw = yaw; p.pitch = Math.max(-1.6, Math.min(1.6, pitch)); p.crouch = Math.max(0, Math.min(1, cr)); p.plant = !!(fl & 1); p.defusing = !!(fl & 2);
+        p.lean = Number.isFinite(+d[8]) ? Math.max(-1, Math.min(1, +d[8])) : 0;
         if ([1, 2, 3, 4, 5, 6].includes(cur) && (p.inv[cur] || cur === 4)) p.cur = cur; p.onGround = !!(fl & 4); p.vx = 0; p.vz = 0;
         return;
       }
@@ -619,11 +625,11 @@ export default function start({ cfg, E, N, smoke }) {
     function applySnap(s) {
       st.phase = s.ph; st.timer = s.tm; st.round = s.r; st.score = s.sc;
       for (const a of s.p) {
-        const [id, x, y, z, yaw, pitch, crouch, hp, alive, wid, c4, plant, armor, helmet, money] = a;
+        const [id, x, y, z, yaw, pitch, crouch, hp, alive, wid, c4, plant, armor, helmet, money, lean] = a;
         if (id === myId) { me.hp = hp; if (me.alive && !alive) me.alive = false; me.armor = armor; me.helmet = !!helmet; me.money = money; me.planting = plant; continue; }
         let p = st.players.get(id); if (!p) st.players.set(id, (p = { id, x, y, z, tx: x, ty: y, tz: z }));
         if (Math.hypot(x - p.x, z - p.z) > 4) { p.x = x; p.y = y; p.z = z; }
-        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team;
+        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team;
       }
       for (const id of [...st.players.keys()]) if (!s.p.some((a) => a[0] === id)) st.players.delete(id);
       if (s.b) st.bomb = { s: s.b.s, x: s.b.x, y: s.b.y, z: s.b.z, t: s.b.t, d: s.b.d, site: s.b.site }; else if (st.bomb && st.bomb.s !== 'exploded' && st.bomb.s !== 'defused') st.bomb = null;
@@ -677,13 +683,13 @@ export default function start({ cfg, E, N, smoke }) {
       if (w.cat === 'knife') return knife(alt);
       if (it.ammo <= 0) { audio.play('empty'); me.cd = 0.2; if (it.reserve > 0) startReload(); return; }
       it.ammo--; me.cd = 60 / w.rpm; if (w.prime) me.cd += w.prime * 0.5;
-      const eye = { x: me.x, y: me.y + eyeHeight(me), z: me.z };
+      const eye = eyePos(me);
       const adsOn = me.ads > 0.6, n0 = me.spray;
       const adsSpread = () => { const [st0, mv, jp] = w.inacc || [0.005, 0.03, 0.1]; return st0 * 0.25 + (me.onGround ? 0 : jp) + Math.max(0, speedOf(me) / (w.speed * U) - 0.34) * mv * 0.5; };
-      const rc = adsOn ? { up: 0, side: 0 } : recoilAt(w, me.spray), sp = (adsOn ? adsSpread() : spreadOf(w, me, me.scoped > 0, me.spray)) * (me.flash > 1 ? 1.3 : 1);
+      const rc0 = adsOn ? { up: 0, side: 0 } : recoilAt(w, me.spray), rc = { up: rc0.up * RH, side: rc0.side * RH }, sp = (adsOn ? adsSpread() : spreadOf(w, me, me.scoped > 0, me.spray)) * (me.flash > 1 ? 1.3 : 1);
       me.spray++; me.sprayT = 0.4 + 60 / w.rpm; me.lastGun = w.id; me.lastShotAt = performance.now();
       if (w.zoom && me.scoped && w.cat === 'sniper') me.unscopeAfterShot = true;
-      const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0 }));
+      const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0, yaw: p.yaw || 0, lean: p.lean || 0 }));
       const hits = []; let end = null;
       for (let k = 0; k < (w.pellets || 1); k++) {
         const r1 = (Math.random() - 0.5) * 2, r2 = (Math.random() - 0.5) * 2, spr = sp + (w.spread || 0) * (w.pellets > 1 ? 1 : 0);
@@ -696,8 +702,8 @@ export default function start({ cfg, E, N, smoke }) {
         for (const h of tr.hits) { const p = st.players.get(h.id); if (p && parts) parts.emit(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, { n: 6, colors: ['#8a0a0a', '#c01a1a'], speed: 1.5, up: 0.4, size: 0.04, life: 0.5 }); }
       }
       if (adsOn) {   // aimed in: the gun climbs your actual view (pull down to control it), at a bit over half the hip-fire pattern
-        const a = recoilAt(w, n0 + 1), b = recoilAt(w, n0); me.pitch = Math.min(1.55, me.pitch + (a.up - b.up) * 0.62); me.yaw += (a.side - b.side) * 0.55; camKick = Math.min(camKick + w.kick * 0.3, 0.05);
-      } else { me.punch += w.kick * 0.6; camKick = Math.min(camKick + w.kick * 0.8, 0.12); }
+        const a = recoilAt(w, n0 + 1), b = recoilAt(w, n0); me.pitch = Math.min(1.55, me.pitch + (a.up - b.up) * 0.62 * RH); me.yaw += (a.side - b.side) * 0.55 * RH; camKick = Math.min(camKick + w.kick * 0.3, 0.05);
+      } else { me.punch += w.kick * 0.6 * RH; camKick = Math.min(camKick + w.kick * 0.8, 0.12); }
       const sup = (myAtt(w.id) || {}).muzzle === 'suppressor';
       if (w.cat === 'zeus') for (const h of hits) h.group = 'chest';
       if (w.cat === 'zeus') { const zr = w.range || 4.5; for (let i = hits.length - 1; i >= 0; i--) if (hits[i].dist > zr) hits.splice(i, 1); }
@@ -711,7 +717,7 @@ export default function start({ cfg, E, N, smoke }) {
     function knife(heavy) {
       me.cd = heavy ? 1.1 : 0.45; me.knifeSwing = 0.25;
       const eye = { x: me.x, y: me.y + eyeHeight(me), z: me.z }, d = { x: -Math.sin(me.yaw) * Math.cos(me.pitch), y: Math.sin(me.pitch), z: -Math.cos(me.yaw) * Math.cos(me.pitch) };
-      const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0 }));
+      const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0, yaw: p.yaw || 0, lean: p.lean || 0 }));
       const tr = traceShot(W, players, myId, eye, d, W_BY_ID.knife, heavy ? 1.5 : 1.9);
       const h = tr.hits[0]; if (h) { const p = st.players.get(h.id); if (p) puff(p.x, p.y + 1.2, p.z); }
       const wall = !h && tr.wallHits.length > 0;
@@ -750,8 +756,8 @@ export default function start({ cfg, E, N, smoke }) {
     function simHost(dt) {
         lastSim = performance.now();
         const mp = match.players.get(myId);
-        if (mp) { mp.x = me.x; mp.y = me.y; mp.z = me.z; mp.yaw = me.yaw; mp.pitch = me.pitch; mp.crouch = me.crouch; mp.onGround = me.onGround; mp.vx = me.vx; mp.vz = me.vz;
-          mp.cur = me.cur === 4 ? 4 : me.cur; mp.plant = me.cur === 5 && me.alive && (mouseBtn[0] || kd('KeyE') || E.input.touch.buttons.has('use')); mp.defusing = me.alive && (kd('KeyE') || E.input.touch.buttons.has('use')) && st.bomb && st.bomb.s === 'planted' && me.team === 'CT';
+        if (mp) { mp.x = me.x; mp.y = me.y; mp.z = me.z; mp.yaw = me.yaw; mp.pitch = me.pitch; mp.crouch = me.crouch; mp.lean = me.lean; mp.onGround = me.onGround; mp.vx = me.vx; mp.vz = me.vz;
+          mp.cur = me.cur === 4 ? 4 : me.cur; mp.plant = me.cur === 5 && me.alive && (mouseBtn[0] || kd('KeyE') || E.input.touch.buttons.has('use')); mp.defusing = me.alive && ((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && st.bomb && st.bomb.s === 'planted' && me.team === 'CT';
           for (const s of [1, 2]) if (mp.inv[s] && me.inv[s] && mp.inv[s].wid === me.inv[s].wid) { mp.inv[s].ammo = me.inv[s].ammo; mp.inv[s].reserve = me.inv[s].reserve; } }
         if (bots) bots.tick(dt);
         match.tick(dt);
@@ -787,11 +793,12 @@ export default function start({ cfg, E, N, smoke }) {
       timeAlive += dt;
       // ---- host simulation (a background timer takes over while the host's tab is hidden) ----
       if (match) simHost(dt);
+      if (!rhSaid && started && (isHost || session.hostId)) { rhSaid = true; toHost('chat', { text: '🎯 I have recoil help on (admin)', team: false }); }
       if (!match) {
         for (const p of st.players.values()) { const k = Math.min(1, dt * 14); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.z += (p.tz - p.z) * k; }
         netT += dt; ammoT += dt;
-        if (session && netT >= 1 / 30) { netT = 0; const fl = (me.cur === 5 && (mouseBtn[0] || kd('KeyE')) ? 1 : 0) | ((kd('KeyE') || E.input.touch.buttons.has('use')) && me.team === 'CT' ? 2 : 0) | (me.onGround ? 4 : 0);
-          session.toHost('pose', [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(3), +me.pitch.toFixed(3), +me.crouch.toFixed(2), fl, me.cur]); }
+        if (session && netT >= 1 / 30) { netT = 0; const fl = (me.cur === 5 && (mouseBtn[0] || kd('KeyE')) ? 1 : 0) | (((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && me.team === 'CT' ? 2 : 0) | (me.onGround ? 4 : 0);
+          session.toHost('pose', [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(3), +me.pitch.toFixed(3), +me.crouch.toFixed(2), fl, me.cur, +me.lean.toFixed(2)]); }
         if (ammoT > 1) { ammoT = 0; sendAmmo(); }
       }
 
@@ -810,12 +817,15 @@ export default function start({ cfg, E, N, smoke }) {
       if (!typing && !uiOpen && !radioOpen) {
         if (me.alive) {
           for (let k = 1; k <= 5; k++) if (kp('Digit' + k)) switchTo(k);
-          if (kp('KeyQ')) switchTo(me.last || 1);
+          const leaning = me.ads > 0.5;   // aimed in with an optic (never snipers): Q / E lean left / right, toggled like R6
+          if (leaning && kp('KeyQ')) me.leanWant = me.leanWant === -1 ? 0 : -1;
+          else if (leaning && kp('KeyE')) me.leanWant = me.leanWant === 1 ? 0 : 1;
+          else if (kp('KeyQ')) switchTo(me.last || 1);
           if (kp('WheelDown') || kp('WheelUp')) { const order = [1, 2, 3, 4, 5].filter((s) => s === 4 ? me.nades.length : me.inv[s]); const i = order.indexOf(me.cur); switchTo(order[(i + (kp('WheelDown') ? 1 : order.length - 1)) % order.length]); }
           if (kp('KeyR') || E.input.touch.tapped.has('reload')) startReload();
-          if (kp('KeyF')) { me.inspect = 2.2; const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)); if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
+          if (kp('KeyF')) { me.inspect = 2.2; const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)) || (isMythic(held) ? 'mythic' : null); if (me.inspectStyle === 'mythic') { flareGlow(1); me.inspectGlow = ((itemInfo(held) || {}).paint || {}).glow || '#ff2e4c'; } if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
           if (kp('KeyG')) { if (me.cur === 5 && me.inv[5]) { toHost('dropc4', 1); } else if (me.cur === 1 || me.cur === 2) { sendAmmo(); toHost('drop', me.cur); } }
-          if (kp('KeyE') || E.input.touch.tapped.has('use')) { const d = nearestDrop(); if (d && !(st.bomb && st.bomb.s === 'planted' && me.team === 'CT' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2)) { sendAmmo(); toHost('pickup', d.id); } }
+          if (!leaning && (kp('KeyE') || E.input.touch.tapped.has('use'))) { const d = nearestDrop(); if (d && !(st.bomb && st.bomb.s === 'planted' && me.team === 'CT' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2)) { sendAmmo(); toHost('pickup', d.id); } }
           const w = curWeapon();
           if (kp('M2') || E.input.touch.tapped.has('alt')) {
             if (w && w.zoom) { me.scoped = (me.scoped + 1) % (w.zoom.length + 1); audio.play('tick'); }
@@ -842,7 +852,12 @@ export default function start({ cfg, E, N, smoke }) {
       }
       showSb = kd('Tab');
       // movement (frozen in freeze time)
-      { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || E.input.touch.buttons.has('alt')); me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0; }
+      { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || E.input.touch.buttons.has('alt')); me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0;
+        // lean: only while aimed in; never through a wall (the eye stops short of whatever is beside you)
+        if (me.ads < 0.3 || !me.alive) me.leanWant = 0;
+        let want = me.leanWant;
+        if (want && W) { const sgn = Math.sign(want), o = { x: me.x, y: me.y + eyeHeight(me), z: me.z }, dr = { x: Math.cos(me.yaw) * sgn, y: 0, z: -Math.sin(me.yaw) * sgn }, hit = W.ray(o, dr, LEAN + 0.2, 0); if (hit) want = sgn * Math.max(0, Math.min(1, (hit.t - 0.2) / LEAN)); }
+        me.lean += (want - me.lean) * Math.min(1, dt * 9); if (Math.abs(me.lean) < 0.002) me.lean = 0; }
       const w0 = curWeapon(), wspeed = (w0 ? (me.scoped && w0.scopedSpeed ? w0.scopedSpeed : w0.speed) : 245) * U * (1 - 0.2 * me.ads);
       const mv = typing || uiOpen === 'pause' ? { x: 0, y: 0 } : (() => { let x = (kd('KeyD') ? 1 : 0) - (kd('KeyA') ? 1 : 0), y = (kd('KeyW') ? 1 : 0) - (kd('KeyS') ? 1 : 0); if (E.input.touch.active && (E.input.touch.move.x || E.input.touch.move.y)) { x = E.input.touch.move.x; y = E.input.touch.move.y; } return { x, y }; })();
       if (me.emote) { me.emote.t += dt; if (me.emote.t > me.emote.dur || !me.alive || mv.x || mv.y || mouseBtn[0] || kd('Space')) me.emote = null; }
@@ -885,7 +900,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (!W) return;
       gov(dt); fpsM(dt); autoCheck(dt);
       // ---- camera: own eyes, or spectate a teammate ----
-      let viewYaw = me.yaw, viewPitch = me.pitch + me.punch * 0.35 + camKick, ex = me.x, ey = me.y + eyeHeight(me), ez = me.z;
+      const lo = leanOff(me); let viewYaw = me.yaw, viewPitch = me.pitch + me.punch * 0.35 + camKick, ex = me.x + lo.x, ey = me.y + eyeHeight(me) - Math.abs(me.lean) * 0.05, ez = me.z + lo.z, viewRoll = -me.lean * 0.2;
       let spectating = null;
       if (!me.alive && (st.phase !== 'warmup')) {
         const mates = [...st.players.values()].filter((p) => p.alive && p.team === me.team);
@@ -894,7 +909,7 @@ export default function start({ cfg, E, N, smoke }) {
       }
       viewY += (ey - viewY) * Math.min(1, dt * 18); if (Math.abs(ey - viewY) > 1.5) viewY = ey;
       const shake = camShake > 0 ? (Math.random() - 0.5) * camShake * 0.05 : 0; camShake = Math.max(0, camShake - dt * 2);
-      cam.position.set(ex, viewY + (spectating ? 0 : Math.sin(bob * 2) * 0.012), ez); cam.rotation.set(viewPitch + shake, viewYaw + shake, 0);
+      cam.position.set(ex, viewY + (spectating ? 0 : Math.sin(bob * 2) * 0.012), ez); cam.rotation.set(viewPitch + shake, viewYaw + shake, spectating ? 0 : viewRoll);
       const w = curWeapon();
       const zoomFov = me.scoped && w && w.zoom ? w.zoom[me.scoped - 1] : S.fov / (1 + (((ATTACH[vm && vm.userData && vm.userData.optic] || {}).zoom || 1) - 1) * me.ads);
       const vfov = 2 * Math.atan(Math.tan(zoomFov * Math.PI / 360) * 0.75) * 180 / Math.PI;  // horizontal 4:3 -> vertical
@@ -914,8 +929,9 @@ export default function start({ cfg, E, N, smoke }) {
         r.t += dt;
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
-        if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote });
+        if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0 });
         else posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
+        if (!r.soldier && r.torso && p.lean) r.torso.rotation.z -= p.lean * 0.35;
         if (r.blob) { r.blob.visible = r.g.visible; const gy = W.groundAt(p.x, p.z, p.y + 0.1); r.blob.position.set(p.x, gy + 0.02, p.z); const k = Math.max(0.2, 1 - (p.y - gy) * 0.8); r.blob.scale.setScalar(0.95 * k); }
         { const gf = r.tpGun.children[0]; if (gf && gf.userData.flash) { r.flashT = (r.flashT || 0) - dt; gf.userData.flash.visible = r.flashT > 0; if (r.flashT > 0) gf.userData.flash.rotation.z = Math.random() * 6.3; } }
         if (r.dieT && r.fall && !r.soldier) { const k = Math.min(1, r.dieT * 3); r.g.position.x += r.fall.x * 0.5 * k; r.g.position.z += r.fall.z * 0.5 * k; r.g.rotation.z = r.fall.side * 0.35 * k; r.g.rotation.y = Math.atan2(-r.fall.x, -r.fall.z) + Math.PI; }
@@ -940,7 +956,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (bombObj.visible) { bombObj.position.set(b.x, b.y + 0.02, b.z); bombObj.userData.led.visible = b.s !== 'planted' || (now * (1 + (40 - (b.t || 40)) / 8)) % 1 < 0.5; }
       // ---- view model ----
       if (vm) {
-        vm.visible = me.alive && !(me.scoped && w && w.zoom) && !spectating && !me.emote;
+        vm.visible = me.alive && !(me.scoped && w && w.zoom) && !spectating && !me.emote && !(me.ads > 0.9 && vm.userData.optic === 'acog');   // a 4x scope: you look through the glass, not at the gun
         const base = vm.userData.base, sp = speedOf(me);
         const animReload = !!(vm.userData.leftArm && (vm.userData.magGroup || (w && w.shellReload)));
         const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
@@ -949,6 +965,10 @@ export default function start({ cfg, E, N, smoke }) {
         if (vm.userData.sc == null) vm.userData.sc = vm.scale.x;
         vm.scale.setScalar(vm.userData.sc);
         if (me.inspect > 0 && me.inspectStyle) applyInspect(vm, me.inspectStyle, (2.2 - me.inspect) / 2.2);
+        if (me.inspect > 0 && me.inspectStyle === 'mythic' && parts && Math.random() < dt * 22) {   // Mythic: sparks fly off the gun
+          const f = 0.55 + Math.random() * 0.3, sx = (Math.random() - 0.3) * 0.3, cy = Math.cos(me.yaw), sy = Math.sin(me.yaw);
+          parts.emit(cam.position.x - sy * f + cy * sx, cam.position.y - 0.18 + Math.random() * 0.1, cam.position.z - cy * f - sy * sx, { n: 3, colors: [me.inspectGlow, '#ffffff'], speed: 0.6, up: 0.5, size: 0.012, life: 0.5 });
+        }
         const ud = vm.userData;
         if (animReload) reloadPose(vm, w, me.reload > 0 && w ? 1 - me.reload / w.reload : -1);
         if (ud.flop) {   // floppy: each joint is a damped spring kicked by turning, walking, swinging and stroking
@@ -963,7 +983,7 @@ export default function start({ cfg, E, N, smoke }) {
         }
         if (me.ads > 0.001 && vm.userData.sight) {   // aim down sights: bring the optic's sight line onto the view line
           const sc = vm.userData.sc, sg = vm.userData.sight, k = me.ads;
-          vm.position.lerp(new THREE.Vector3(-sg.x * sc, -sg.y * sc, -0.36 - sg.z * sc + camKick * 0.6), k);
+          vm.position.lerp(new THREE.Vector3(-sg.x * sc, -sg.y * sc, -(EYE_RELIEF[vm.userData.optic] || 0.2) - sg.z * sc + camKick * 0.6), k);
           vm.rotation.set(vm.rotation.x * (1 - k) + camKick * 0.8 * k, vm.rotation.y * (1 - k), vm.rotation.z * (1 - k));
         }
       }
@@ -977,6 +997,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (W) W.sortChunks(cam);
       if (sky) { sky.position.set(cam.position.x, 0, cam.position.z); if (sky.userData.drift) sky.userData.drift.x += dt * 0.0015; }
       // ---- draw ----
+      animateGlow(now, dt);   // Mythic finishes and outfits: pulsing, crawling veins
       renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if (vm && vm.visible) renderer.render(vmScene, vmCam);
       // ---- HUD (throttled) ----
       hudT += dt; radarT += dt;

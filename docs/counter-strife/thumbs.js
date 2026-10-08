@@ -2,7 +2,7 @@
 // painted finish (side view, like an inventory icon), agents standing. One small offscreen renderer, results cached
 // as images, rendered a few per frame so menus never stutter. Falls back to flat drawings without WebGL.
 import * as THREE from '../sdk/three.module.min.js';
-import { makeGun, makeKnife, makePlayer, posePlayer, skinTexture, setTpGun } from './models.js';
+import { makeGun, makeKnife, makePlayer, posePlayer, skinTexture, setTpGun, animateGlow } from './models.js';
 import { itemInfo, AGENT_BY_ID, ITEM_BY_ID } from './skins.js';
 import { loadChars, charsReady, makeSoldier, poseSoldier } from './chars.js';
 
@@ -102,7 +102,7 @@ export function stage(canvas, look) {
     else if (rig) { posePlayer(rig, { t, pitch: Math.sin(t * 0.7) * 0.05 }); rig.torso.position.y += Math.sin(t * 1.6) * 0.008; rig.g.rotation.y = 0.5 + Math.sin(t * 0.25) * 0.12; }
     const a = Math.sin(t * 0.08) * 0.15;
     cam3.position.set(Math.sin(a) * 5.2, 1.55, Math.cos(a) * 5.2); cam3.lookAt(0.15, 1.05, 0);
-    r3.render(sc, cam3);
+    animateGlow(t, dt); r3.render(sc, cam3);
   };
   raf = requestAnimationFrame(frame);
   return { set, stop() { stopped = true; cancelAnimationFrame(raf); r3.dispose(); try { r3.forceContextLoss(); } catch (e) { /* gone */ } } };

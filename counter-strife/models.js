@@ -61,11 +61,14 @@ const shade = (hex, k) => { const c = new THREE.Color(hex); c.multiplyScalar(k);
 
 // ---- players ------------------------------------------------------------------------------------------------------
 let rigMatC = null;
-const rigMat = () => rigMatC || (rigMatC = litPatch(new THREE.MeshLambertMaterial({ vertexColors: true }), 'dyn'));
+const rigMat = (glow) => {
+  if (glow) { const k = 'rig|' + glow.glow + glow.t; if (!glowMasks.has(k)) glowMasks.set(k, glowify(litPatch(new THREE.MeshLambertMaterial({ vertexColors: true }), 'dyn'), glowMask(glow, 3), 0.9)); return glowMasks.get(k); }   // Mythic outfits glow on every quality
+  return rigMatC || (rigMatC = litPatch(new THREE.MeshLambertMaterial({ vertexColors: true }), 'dyn'));
+};
 const UA = 0.29, FA = 0.27;  // upper arm, forearm (to the middle of the hand)
 // a rig: group at the feet. hip -> thighs -> shins; torso -> shoulders -> elbows; neck -> head; aim -> the gun
 export function makePlayer(look, team) {
-  const L = look, g = new THREE.Group(), M = rigMat(), ct = team === 'CT';
+  const L = look, g = new THREE.Group(), M = rigMat(L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null), ct = team === 'CT';
   const skin = L.head, naked = !!L.speedo, jacket = L.body, pants = L.legs;
   const glove = naked ? skin : '#29292b', boot = naked ? skin : '#2e2822', gear = ct ? shade(jacket, 0.7) : '#4b4936', strap = ct ? '#1d2027' : '#3a3528';
   const bone = (parent, x, y, z) => { const b = new THREE.Group(); b.position.set(x, y, z); parent.add(b); return b; };
@@ -245,20 +248,50 @@ export function skinTexture(item, info) {
   if (skinTexCache.has(k)) return skinTexCache.get(k);
   let t = null;
   if (item && info && info.paint) {
-    const c = document.createElement('canvas'); c.width = 64; c.height = 32;
-    paintSkin(c, info.paint, item.seed, item.float);
-    const big = document.createElement('canvas'); big.width = 256; big.height = 128;
-    const g = big.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, 256, 128);
-    const im = g.getImageData(0, 0, 256, 128);   // a fine grain on top so the paint reads as a coating, not a blur
+    const sc = HQ ? 8 : 4, big = document.createElement('canvas'); big.width = 64 * sc; big.height = 32 * sc;   // painted at full resolution: crisp edges, fine scratches
+    paintSkin(big, info.paint, item.seed, item.float, sc);
+    const g = big.getContext('2d'), im = g.getImageData(0, 0, big.width, big.height);   // a fine grain on top so the paint reads as a coating
     let s = (item.seed | 0) * 7919 + 1; for (let i = 0; i < im.data.length; i += 4) { s = (s * 1103515245 + 12345) & 0x7fffffff; const n = ((s >> 16) & 15) - 7; im.data[i] += n; im.data[i + 1] += n; im.data[i + 2] += n; }
     g.putImageData(im, 0, 0);
-    t = new THREE.CanvasTexture(big); t.colorSpace = THREE.SRGBColorSpace;
+    t = new THREE.CanvasTexture(big); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    if (info.paint.glow) t.userData.glow = glowMask(info.paint);
   }
   skinTexCache.set(k, t);
   return t;
 }
+// ---- Mythic glow: a bright-on-black copy of the vein pattern, used as the light the finish gives off. It scrolls
+// (mirrored, so there is no seam) and pulses, so the veins look alive. One mask per pattern + colour, shared.
+const glowMasks = new Map(), GLOW_MATS = new Set();
+export function glowMask(paint, repeat = 1) {
+  const key = `${paint.g || paint.t}|${paint.glow}|${repeat}`;
+  if (glowMasks.has(key)) return glowMasks.get(key);
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const t0 = paint.g || paint.t, band = t0 === 'fade' || t0 === 'wave';
+  paintSkin(c, { t: t0, c: band ? ['#000000', paint.glow, '#000000'] : ['#000000', paint.glow, paint.glow], s: paint.s, mask: true }, 7, 0, 4);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; t.repeat.set(repeat, repeat);
+  glowMasks.set(key, t); return t;
+}
+export function glowify(m, mask, strength = 1) {   // turn a material into a glowing, animated one
+  m.emissive = new THREE.Color(1, 1, 1); m.emissiveMap = mask; m.emissiveIntensity = strength; m.userData.glowK = strength; m.userData.glowMask = mask;
+  GLOW_MATS.add(m); return m;
+}
+let glowBoost = 0;
+export const flareGlow = (s = 1) => { glowBoost = Math.max(glowBoost, s); };   // a Mythic inspect: the veins flare up
+export function animateGlow(t, dt) {   // call once a frame
+  glowBoost = Math.max(0, glowBoost - dt * 0.6);
+  const pulse = 0.72 + 0.28 * Math.sin(t * 2.6) + glowBoost * 1.6, seen = new Set();
+  for (const m of GLOW_MATS) {
+    m.emissiveIntensity = (m.userData.glowK || 1) * pulse;
+    const mk = m.userData.glowMask; if (mk && !seen.has(mk)) { seen.add(mk); mk.offset.x = (t * 0.07) % 2; mk.offset.y = Math.sin(t * 0.4) * 0.15; }
+  }
+}
 const paintMats = new Map();
-const paintMat = (tex) => { if (!paintMats.has(tex)) paintMats.set(tex, HQ ? new THREE.MeshPhongMaterial({ map: tex, shininess: 35, specular: '#555' }) : new THREE.MeshLambertMaterial({ map: tex })); return paintMats.get(tex); };
+const paintMat = (tex) => {
+  if (paintMats.has(tex)) return paintMats.get(tex);
+  const m = HQ ? new THREE.MeshPhongMaterial({ map: tex, shininess: tex.userData.glow ? 80 : 45, specular: tex.userData.glow ? '#888' : '#5a5a5a' }) : new THREE.MeshLambertMaterial({ map: tex });
+  if (tex.userData.glow) glowify(m, tex.userData.glow, 1);
+  paintMats.set(tex, m); return m;
+};
 
 // ---- gun geometry: side profiles (u = forward, v = up, metres) extruded to thickness, plus barrels and parts ---------
 function ext(pts, depth, bevel = 0.0035, holes = null) {

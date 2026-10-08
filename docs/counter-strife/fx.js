@@ -91,11 +91,12 @@ export function funnyKey(skin) {
   return d.kind === 'knife' ? ((KNIFE_BY_ID[d.weapon] || {}).joke ? KNIFE_BY_ID[d.weapon].model : null) : (SKIN_STYLE[d.finish] ? d.finish : null);
 }
 export const inspectStyle = (key) => KNIFE_STYLE[key] || SKIN_STYLE[key] || null;
-export const INSPECT_SOUND = { stroke: 'squelch', jiggle: 'boing', squeeze: 'squeak', plunge: 'fwoop', twirl: 'whoosh', flop: 'flop', spin: 'pewpew', shake: 'fart' };
+export const INSPECT_SOUND = { mythic: 'shimmer', stroke: 'squelch', jiggle: 'boing', squeeze: 'squeak', plunge: 'fwoop', twirl: 'whoosh', flop: 'flop', spin: 'pewpew', shake: 'fart' };
 // apply the funny inspect on top of the normal pose (k = 0..1 through the animation)
 export function applyInspect(vm, style, k) {
   const s = Math.sin(k * Math.PI);
   switch (style) {
+    case 'mythic': vm.position.y += s * 0.035; vm.position.z += s * 0.03; vm.rotation.y += s * 0.35; vm.rotation.z += Math.sin(k * Math.PI * 3) * 0.08 * s; break;   // a slow showcase while the veins flare and spark
     case 'stroke': vm.rotation.y += s * 0.55; vm.rotation.x += s * 0.25; vm.position.x -= s * 0.06; vm.position.y += s * 0.05; break;   // hold it up to admire; the hand does the rest
     case 'jiggle': vm.rotation.z += Math.sin(k * 40) * 0.35 * s; vm.scale.y *= 1 + Math.sin(k * 30) * 0.15 * s; vm.position.y += s * 0.05; break;
     case 'squeeze': vm.scale.x *= 1 + Math.sin(k * 18) * 0.25 * s; vm.scale.y *= 1 - Math.sin(k * 18) * 0.2 * s; vm.position.y += s * 0.05; break;
