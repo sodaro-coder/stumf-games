@@ -84,18 +84,19 @@ export function skyDome(scene, horizon, zenith, sunDir = [0.6, 0.7, 0.4], sunCol
 }
 
 // ---- joke weapons: what's special about the one you hold / killed with ----
-const KNIFE_STYLE = { dildo: 'jiggle', hotdog: 'squeeze', plunger: 'plunge', chicken: 'squeeze', baguette: 'twirl', fish: 'flop', banana: 'twirl' };
+const KNIFE_STYLE = { dildo: 'stroke', hotdog: 'squeeze', plunger: 'plunge', chicken: 'squeeze', baguette: 'twirl', fish: 'flop', banana: 'twirl' };
 const SKIN_STYLE = { 'Finger Gun': 'spin', 'BRRRT': 'shake', 'Fart Cloud': 'shake', 'Poop Emoji Party': 'shake', 'Thicc Boi': 'jiggle', 'Dong Doppler': 'jiggle', 'Golden Shower': 'spin', 'Hot Dog Water': 'squeeze' };
 export function funnyKey(skin) {
   const d = skin && ITEM_BY_ID[skin.def]; if (!d) return null;
   return d.kind === 'knife' ? ((KNIFE_BY_ID[d.weapon] || {}).joke ? KNIFE_BY_ID[d.weapon].model : null) : (SKIN_STYLE[d.finish] ? d.finish : null);
 }
 export const inspectStyle = (key) => KNIFE_STYLE[key] || SKIN_STYLE[key] || null;
-export const INSPECT_SOUND = { jiggle: 'boing', squeeze: 'squeak', plunge: 'fwoop', twirl: 'whoosh', flop: 'flop', spin: 'pewpew', shake: 'fart' };
+export const INSPECT_SOUND = { stroke: 'squelch', jiggle: 'boing', squeeze: 'squeak', plunge: 'fwoop', twirl: 'whoosh', flop: 'flop', spin: 'pewpew', shake: 'fart' };
 // apply the funny inspect on top of the normal pose (k = 0..1 through the animation)
 export function applyInspect(vm, style, k) {
   const s = Math.sin(k * Math.PI);
   switch (style) {
+    case 'stroke': vm.rotation.y += s * 0.55; vm.rotation.x += s * 0.25; vm.position.x -= s * 0.06; vm.position.y += s * 0.05; break;   // hold it up to admire; the hand does the rest
     case 'jiggle': vm.rotation.z += Math.sin(k * 40) * 0.35 * s; vm.scale.y *= 1 + Math.sin(k * 30) * 0.15 * s; vm.position.y += s * 0.05; break;
     case 'squeeze': vm.scale.x *= 1 + Math.sin(k * 18) * 0.25 * s; vm.scale.y *= 1 - Math.sin(k * 18) * 0.2 * s; vm.position.y += s * 0.05; break;
     case 'plunge': vm.position.z += Math.sin(k * 22) * 0.08 * s; vm.position.y += s * 0.04; break;

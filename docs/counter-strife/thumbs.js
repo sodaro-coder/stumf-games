@@ -4,6 +4,7 @@
 import * as THREE from '../sdk/three.module.min.js';
 import { makeGun, makeKnife, makePlayer, posePlayer, skinTexture, setTpGun } from './models.js';
 import { itemInfo, AGENT_BY_ID, ITEM_BY_ID } from './skins.js';
+import { loadChars, charsReady, makeSoldier, poseSoldier } from './chars.js';
 
 let R = null, scene = null, cam = null, failed = false;
 const cache = new Map(), queue = [];
@@ -27,7 +28,7 @@ function objectFor(item) {
     const r = makePlayer(a.look, a.team); posePlayer(r, { t: 0.4 }); setTpGun(r, a.team === 'T' ? 'ak47' : 'm4a4');
     r.g.rotation.y = Math.PI + 0.45; return { o: r.g, agent: true };
   }
-  const tex = info.paint ? skinTexture(item, info) : null;
+  const tex = info.paint && !(info.kind === 'knife' && /:Vanilla$/.test(item.def)) ? skinTexture(item, info) : null;
   const g = info.kind === 'knife' ? makeKnife(info.weapon, tex, undefined, undefined, false) : makeGun(info.weapon, tex, undefined, undefined, false);
   g.rotation.set(0.12, -Math.PI / 2, 0.05);  // muzzle to the right, a touch of angle
   return { o: g };
@@ -84,13 +85,21 @@ export function stage(canvas, look) {
   }
   const cam3 = new THREE.PerspectiveCamera(32, 1, 0.1, 60);
   let rig = null, t = 0, raf = 0, stopped = false, last = performance.now();
-  const set = (lk, team, wid) => { if (rig) sc.remove(rig.g); rig = makePlayer(lk, team); setTpGun(rig, wid || (team === 'CT' ? 'm4a4' : 'ak47')); rig.g.position.set(0.9, 0, 0); rig.g.rotation.y = 0.5; sc.add(rig.g); };
+  let cur = look;
+  const set = (lk, team, wid) => {
+    cur = { look: lk, team, wid };
+    if (rig) sc.remove(rig.g);
+    rig = charsReady() ? makeSoldier(lk, team, true) : makePlayer(lk, team);   // the realistic soldier once it has loaded
+    setTpGun(rig, wid || (team === 'CT' ? 'm4a4' : 'ak47')); rig.g.position.set(0.9, 0, 0); rig.g.rotation.y = 0.5; sc.add(rig.g);
+  };
   set(look.look, look.team, look.wid);
+  if (!charsReady()) loadChars().then(() => { if (!stopped && charsReady()) set(cur.look, cur.team, cur.wid); });
   const frame = (now) => {
     if (stopped) return; raf = requestAnimationFrame(frame);
     if (now - last < 33) return; const dt = (now - last) / 1000; last = now; t += dt;   // 30 fps is plenty here
     const w = canvas.clientWidth, h = canvas.clientHeight; if (canvas.width !== w || canvas.height !== h) { r3.setSize(w, h, false); cam3.aspect = w / Math.max(1, h); cam3.updateProjectionMatrix(); }
-    if (rig) { posePlayer(rig, { t, pitch: Math.sin(t * 0.7) * 0.05 }); rig.torso.position.y += Math.sin(t * 1.6) * 0.008; rig.g.rotation.y = 0.5 + Math.sin(t * 0.25) * 0.12; }
+    if (rig && rig.soldier) { rig.g.rotation.y = 0.5 + Math.sin(t * 0.25) * 0.12; poseSoldier(rig, { dt, yaw: rig.g.rotation.y, pitch: Math.sin(t * 0.7) * 0.05 }); }
+    else if (rig) { posePlayer(rig, { t, pitch: Math.sin(t * 0.7) * 0.05 }); rig.torso.position.y += Math.sin(t * 1.6) * 0.008; rig.g.rotation.y = 0.5 + Math.sin(t * 0.25) * 0.12; }
     const a = Math.sin(t * 0.08) * 0.15;
     cam3.position.set(Math.sin(a) * 5.2, 1.55, Math.cos(a) * 5.2); cam3.lookAt(0.15, 1.05, 0);
     r3.render(sc, cam3);

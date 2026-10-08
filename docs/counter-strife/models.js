@@ -477,7 +477,7 @@ export function makeKnife(knifeId, tex, sleeve = '#3c4e66', glove = '#2a2a2a', h
   const paintKey = tex ? 'body' : null;
   switch (model) {
     case 'hotdog': G('bun', place(CAP(0.042, 0.3, 10), [0, -0.012, -0.15], [Math.PI / 2, 0, 0], [1.3, 1, 0.75])); G(paintKey || 'sausage', place(CAP(0.026, 0.36, 10), [0, 0.022, -0.15], [Math.PI / 2, 0, 0])); for (let i = 0; i < 6; i++) G('mustard', place(BOX(0.04, 0.006, 0.012), [i % 2 ? 0.008 : -0.008, 0.048, -0.02 - i * 0.05], [0, i % 2 ? 0.6 : -0.6, 0])); break;
-    case 'dildo': G(paintKey || 'pink', place(CAP(0.028, 0.28, 12), [0, 0.02, -0.17], [Math.PI / 2, 0, 0])); G(paintKey || 'pink', place(SPH(0.036, 12, 9), [0, 0.022, -0.33], [0, 0, 0], [1, 1, 1.1])); G(paintKey || 'pink2', place(SPH(0.034, 10, 8), [-0.026, 0.0, 0.0])); G(paintKey || 'pink2', place(SPH(0.034, 10, 8), [0.026, 0.0, 0.0])); break;
+    case 'dildo': break;   // built below as a jointed, springy shaft
     case 'plunger': G('woodk', place(CYL(0.012, 0.012, 0.5, 8), [0, 0, -0.12], [Math.PI / 2, 0, 0])); G(paintKey || 'red', place(SPH(0.075, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), [0, 0, -0.38], [-Math.PI / 2, 0, 0], [1, 0.8, 1])); break;
     case 'chicken': G(paintKey || 'yellowk', place(SPH(0.05, 12, 9), [0, 0.02, -0.14], [0, 0, 0], [1, 1.1, 2.3])); G(paintKey || 'yellowk', place(CYL(0.018, 0.022, 0.12, 8), [0, 0.07, -0.28], [0.6, 0, 0])); G(paintKey || 'yellowk', place(SPH(0.03, 10, 8), [0, 0.11, -0.32])); G('orange', place(new THREE.ConeGeometry(0.012, 0.04, 6), [0, 0.105, -0.355], [-Math.PI / 2, 0, 0])); G('red', place(BOX(0.006, 0.03, 0.04), [0, 0.14, -0.32])); break;
     case 'baguette': G(paintKey || 'bread', place(CAP(0.034, 0.52, 10), [0, 0.02, -0.2], [Math.PI / 2 + 0.05, 0, 0], [1, 1, 0.85])); for (let i = 0; i < 5; i++) G('crust', place(BOX(0.05, 0.006, 0.014), [0, 0.052, -0.04 - i * 0.09], [0, 0.7, 0])); break;
@@ -496,8 +496,26 @@ export function makeKnife(knifeId, tex, sleeve = '#3c4e66', glove = '#2a2a2a', h
     g.add(new THREE.Mesh(geo, mt));
   }
   const grip = new THREE.Vector3(0, 0, 0.06);
+  let flop = null, strokeHand = null;
+  if (model === 'dildo') {   // a chain of soft segments on springs (game.js swings them), balls at the base, glossy
+    const mt = tex ? paintMat(tex) : (HQ ? new THREE.MeshPhongMaterial({ color: '#ff4ad2', shininess: 90, specular: '#ffd0f0' }) : lam('#ff4ad2'));
+    const base = new THREE.Group(); base.position.set(0, 0.02, -0.03); g.add(base);
+    base.add(new THREE.Mesh(place(SPH(0.034, 12, 9), [-0.026, -0.02, 0.03]), mt), new THREE.Mesh(place(SPH(0.034, 12, 9), [0.026, -0.02, 0.03]), mt));
+    flop = []; let parent = base; const N = 5, seg = 0.066;
+    for (let i = 0; i < N; i++) {
+      const j = new THREE.Group(); j.position.z = i ? -seg : 0; parent.add(j);
+      const r0 = 0.03 - i * 0.0015;
+      j.add(new THREE.Mesh(place(CAP(r0, seg, 12), [0, 0, -seg / 2], [Math.PI / 2, 0, 0]), mt));   // capsules overlap at the joints: one smooth shaft
+      if (i === N - 1) j.add(new THREE.Mesh(place(SPH(0.036, 14, 10), [0, 0, -seg - 0.012], [0, 0, 0], [1, 1, 1.25]), mt), new THREE.Mesh(place(CYL(0.037, 0.037, 0.012, 14), [0, 0, -seg + 0.006], [Math.PI / 2, 0, 0]), mt));
+      flop.push(j); parent = j;
+    }
+    if (hands) {   // the stroking hand for the inspect, hidden until then
+      const P = []; vmArm(P, [0, 0, 0], [-0.35, -0.7, 0.62], sleeve, glove, 0.32);
+      strokeHand = new THREE.Mesh(merge(P), armMat()); strokeHand.visible = false; strokeHand.position.set(-0.004, 0.02, -0.08); g.add(strokeHand);
+    }
+  }
   if (hands) { const parts = []; vmArm(parts, [0, -0.005, 0.05], [0.35, -0.5, 0.78], sleeve, glove, 0.6); g.add(new THREE.Mesh(merge(parts), armMat())); }
-  g.userData = { flash: null, len: 0.3, grip, fore: null };
+  g.userData = { flash: null, len: 0.3, grip, fore: null, flop, strokeHand };
   return g;
 }
 

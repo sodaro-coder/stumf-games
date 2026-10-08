@@ -14,6 +14,7 @@ import { line } from './voices.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
+import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent } from './chars.js';
 import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
@@ -106,8 +107,9 @@ function makeAudio(getVol) {
     tick: (v) => tone('square', 2400, 2400, 0.012, v * 0.15, 0), reveal: (v) => [660, 880].forEach((f, k) => tone('triangle', f, f, 0.2, v * 0.3, 0, k * 0.1)),
     rare: (v) => [523, 659, 784, 1046, 1318].forEach((f, k) => tone('triangle', f, f, 0.3, v * 0.35, 0, k * 0.09)), radio: (v) => { burst(0.08, 3000, v * 0.2, 0, 3, 'bandpass'); tone('square', 1200, 1200, 0.03, v * 0.15, 0); },
     // ---- the joke skins ----
-    wetslap: (v, p) => { burst(0.09, 1300, v * 0.9, p, 1.6, 'bandpass'); tone('sine', 170, 70, 0.1, v * 0.55, p); burst(0.07, 900, v * 0.5, p, 1.2, 'bandpass', 0.045); burst(0.05, 2400, v * 0.25, p, 2, 'bandpass', 0.09); },
-    doing: (v, p) => { tone('sine', 180, 260, 0.8, v * 0.5, p, 0, 0, 22); tone('triangle', 360, 520, 0.6, v * 0.15, p, 0.02, 0, 22); },
+    wetslap: (v, p) => { burst(0.11, 1100, v * 1.0, p, 1.8, 'bandpass'); tone('sine', 190, 55, 0.14, v * 0.7, p); burst(0.09, 700, v * 0.6, p, 1.4, 'bandpass', 0.04); burst(0.16, 2600, v * 0.35, p, 3, 'bandpass', 0.06); tone('sine', 420, 140, 0.09, v * 0.25, p, 0.05, 0, 40); burst(0.06, 4200, v * 0.2, p, 4, 'bandpass', 0.12); },
+    doing: (v, p) => { tone('sine', 140, 300, 0.9, v * 0.55, p, 0, 0, 26); tone('triangle', 280, 600, 0.7, v * 0.18, p, 0.02, 0, 26); burst(0.07, 900, v * 0.35, p, 1.6, 'bandpass'); },
+    squelch: (v, p) => { burst(0.13, 800 + Math.random() * 500, v * 0.7, p, 2.2, 'bandpass'); burst(0.1, 2600, v * 0.3, p, 3.5, 'bandpass', 0.05); tone('sine', 260, 90, 0.11, v * 0.3, p, 0.02, 0, 30); },
     pewpew: (v, p) => { tone('square', 1500, 280, 0.13, v * 0.35, p); tone('sine', 1500, 280, 0.13, v * 0.3, p); tone('square', 1600, 300, 0.14, v * 0.35, p, 0.17); tone('sine', 1600, 300, 0.14, v * 0.3, p, 0.17); },
     fart: (v, p) => { const f = 70 + Math.random() * 50; tone('sawtooth', f * 1.3, f, 0.5, v * 0.45, p, 0, 0, 28); burst(0.45, 300, v * 0.35, p, 2, 'lowpass'); },
     squirt: (v, p) => { burst(0.35, 3200, v * 0.55, p, 1.5, 'bandpass'); burst(0.25, 5000, v * 0.3, p, 1, 'highpass', 0.05); },
@@ -210,6 +212,7 @@ export default function start({ cfg, E, N, smoke }) {
     if (AUTO) { const saved = +(localStorage.getItem('cs:autoq') || 0), weak = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS/i.test(navigator.userAgent); Q = QSTEPS.includes(saved) ? saved : weak ? 0.75 : 1; }
     const hi = Q >= 1.5;  // High: antialiasing, sharper bump detail; lower settings stay fast on weak machines
     setModelQuality(Q);
+    if (Q >= 0.75) loadChars();
     const renderer = new THREE.WebGLRenderer({ antialias: hi, powerPreference: 'high-performance' });
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
     renderer.domElement.style.cssText = 'position:fixed;inset:0;width:100%;height:100%';
@@ -270,11 +273,12 @@ export default function start({ cfg, E, N, smoke }) {
     function rigFor(id) {
       const r0 = rigs.get(id), info = st.roster.get(id) || {}, team = info.team || 'T';
       const agentId = (info.agent || {})[team] || (team === 'T' ? 'a_t_default' : 'a_ct_default');
-      const key = agentId + team;
+      const useS = charsReady() && Q >= 0.75;   // realistic animated soldier (Low and up); simple rig on Potato or while loading
+      const key = agentId + team + (useS ? 'S' : '');
       if (r0 && r0.key === key) return r0;
       if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
-      const r = makePlayer(a.look, team);
+      const r = useS ? makeSoldier(a.look, team, Q >= 1) : makePlayer(a.look, team);
       r.blob = new THREE.Mesh(blobGeo, blobMat); r.blob.rotation.x = -Math.PI / 2; r.blob.renderOrder = 1; scene.add(r.blob); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
       if (id !== myId) {  // teammates' names float over their heads
         const c = document.createElement('canvas'); c.width = 256; c.height = 48; const g = c.getContext('2d');
@@ -299,7 +303,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (vm) vmScene.remove(vm);
       const sleeve = team === 'T' ? '#5e5440' : '#33445c', glove = team === 'T' ? '#2c2824' : '#1e2126';
       if (!wid) { vm = null; return; }
-      if (wid === 'knife') { const ki = knife ? itemInfo({ ...knife }) : null; vm = makeKnife(ki ? ki.weapon : null, knife && ki ? skinTexture(knife, ki) : null, sleeve, glove); }
+      if (wid === 'knife') { const ki = knife ? itemInfo({ ...knife }) : null; vm = makeKnife(ki ? ki.weapon : null, knife && ki && !/:Vanilla$/.test(knife.def) ? skinTexture(knife, ki) : null, sleeve, glove); }   // Vanilla keeps the knife's own colours
       else if (G_BY_ID[wid]) { vm = makeGrenade(wid, sleeve, glove, true); vm.scale.setScalar(1.25); }
       else if (wid === 'c4') { vm = makeBomb(sleeve, glove, true); vm.scale.setScalar(0.9); }
       else { const sk = it.skin, si = sk ? itemInfo(sk) : null; vm = makeGun(wid, sk && si ? skinTexture(sk, si) : null, sleeve, glove, true, att); }
@@ -458,18 +462,18 @@ export default function start({ cfg, E, N, smoke }) {
       if (m.hp <= 0) me.alive = false;
     }
     const dmgFrom = new Map(), dmgTo = new Map();
-    function onHitConfirm(m) { if (me.lastGun && performance.now() - (me.lastShotAt || 0) < 600) addXp(me.lastGun, (m.dmg | 0) * XP_RULES.dmg); audio.play(m.group === 'head' ? 'head' : 'hit'); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); }
+    function onHitConfirm(m) { { const r = rigs.get(m.id); if (r && r.soldier) soldierEvent(r, 'hit'); } if (me.lastGun && performance.now() - (me.lastShotAt || 0) < 600) addXp(me.lastGun, (m.dmg | 0) * XP_RULES.dmg); audio.play(m.group === 'head' ? 'head' : 'hit'); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); }
     function onFire(m) {
       if (m.id === myId) return;
       const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
       audio.at(snd, m.o[0], m.o[1], m.o[2], cam, w.silenced || m.sup ? 25 : w.cat === 'knife' ? 12 : 110);
       if (m.e && w.cat !== 'knife') { tracer(m.o, m.e); if (parts) parts.emit(m.e[0], m.e[1], m.e[2], { n: 3, colors: ['#8a8070', '#ffd27a'], speed: 1.2, up: 0.5, size: 0.03, life: 0.35 }); }
-      const r = rigs.get(m.id); if (r) r.flashT = 0.05;
+      const r = rigs.get(m.id); if (r) { r.flashT = 0.05; if (r.soldier && W_BY_ID[m.wid] && W_BY_ID[m.wid].cat !== 'knife') soldierEvent(r, 'fire'); }
     }
     function onBomb(b) { st.bomb = b ? { s: b.state, x: b.x, y: b.y, z: b.z, t: b.timer, site: b.site } : null; }
     function onDrops(d) { st.drops = d || []; syncDrops(); }
     function onFx(list) { st.effects = list || []; syncEffects(); }
-    function onNade(n) { const m = makeGrenade(n.type); m.position.set(n.x, n.y, n.z); fx.add(m); flying.set(n.id, { n: { ...n }, m }); audio.at('bounce', n.x, n.y, n.z, cam, 20); }
+    function onNade(n) { { const r = rigs.get(n.owner); if (r && r.soldier) soldierEvent(r, 'throw'); } const m = makeGrenade(n.type); m.position.set(n.x, n.y, n.z); fx.add(m); flying.set(n.id, { n: { ...n }, m }); audio.at('bounce', n.x, n.y, n.z, cam, 20); }
     function onChat(m) { hud.chat(m.name, m.team, m.text, m.teamOnly); audio.play('radio'); if (m.text.startsWith('📻 ') && S.voice) audio.say(m.text.slice(3), 1.0); }
     function announce(key) { if (!S.voice) return; const l = line(S.voicePack, key); audio.say(l.text, l.pitch, l.rate); }
     let specTarget = null, specNext = false;
@@ -742,7 +746,7 @@ export default function start({ cfg, E, N, smoke }) {
       } catch (e) { hiddenTick = null; }
     }
     // ---- loop ----
-    let netT = 0, hudT = 0, radarT = 0, flashT = 0, camKick = 0, camShake = 0, viewY = 0, bob = 0, ammoT = 0, sbT = 0, timeAlive = 0;
+    let lookDX = 0, lookDY = 0, netT = 0, hudT = 0, radarT = 0, flashT = 0, camKick = 0, camShake = 0, viewY = 0, bob = 0, ammoT = 0, sbT = 0, timeAlive = 0;
     let radioOpen = null;
     const loopH = E.loop((dt) => {
       if (!W) return;
@@ -767,6 +771,7 @@ export default function start({ cfg, E, N, smoke }) {
       const zoomK = (me.scoped ? (curWeapon() && curWeapon().zoom ? curWeapon().zoom[me.scoped - 1] / S.fov : 1) : 1) / adsZoom;
       const sens = S.sens * 0.022 * Math.PI / 180 * zoomK;
       if (!uiOpen && me.alive) { me.yaw -= lk.dx * sens; me.pitch = Math.max(-1.55, Math.min(1.55, me.pitch - lk.dy * sens)); }
+      lookDX = Math.max(-40, Math.min(40, lk.dx * sens * 60)); lookDY = Math.max(-40, Math.min(40, lk.dy * sens * 60));
       if (radioOpen) { for (let k = 1; k <= 6; k++) if (kp('Digit' + k)) { hud.radioPick(k - 1); radioOpen = null; } if (kp('Digit0') || kp('Escape')) { hud.radio(null); hud.emoteWheel(null); radioOpen = null; } }
       if (!typing && !uiOpen && !radioOpen) {
         if (me.alive) {
@@ -866,17 +871,20 @@ export default function start({ cfg, E, N, smoke }) {
         const r = rigFor(p.id); r.g.visible = p.alive || (r.dieT != null && r.dieT < 3);
         if (!p.alive && r.dieT == null) r.dieT = 0.001;
         if (p.alive) r.dieT = null; else r.dieT += dt;
-        const sp = Math.hypot(p.x - r.x, p.z - r.z) / Math.max(dt, 1e-3); r.x = p.x; r.z = p.z;
+        const sp = Math.hypot(p.x - r.x, p.z - r.z) / Math.max(dt, 1e-3), kv = Math.min(1, dt * 10);
+        r.vx = (r.vx || 0) + ((p.x - r.x) / Math.max(dt, 1e-3) - (r.vx || 0)) * kv; r.vz = (r.vz || 0) + ((p.z - r.z) / Math.max(dt, 1e-3) - (r.vz || 0)) * kv; r.vy = (r.vy || 0) + ((p.y - (r.y || p.y)) / Math.max(dt, 1e-3) - (r.vy || 0)) * kv;
+        r.x = p.x; r.z = p.z; r.y = p.y;
         r.g.position.set(p.x, p.y, p.z); r.g.rotation.y = p.yaw;
         setTpGun(r, p.wid || 'knife', rosterAtt(p.id, p.wid));
         if (r.tag) r.tag.visible = p.alive && p.team === me.team && !(spectating && p.id === spectating.id);
         r.t += dt;
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
-        posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
+        if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote });
+        else posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
         if (r.blob) { r.blob.visible = r.g.visible; const gy = W.groundAt(p.x, p.z, p.y + 0.1); r.blob.position.set(p.x, gy + 0.02, p.z); const k = Math.max(0.2, 1 - (p.y - gy) * 0.8); r.blob.scale.setScalar(0.95 * k); }
         { const gf = r.tpGun.children[0]; if (gf && gf.userData.flash) { r.flashT = (r.flashT || 0) - dt; gf.userData.flash.visible = r.flashT > 0; if (r.flashT > 0) gf.userData.flash.rotation.z = Math.random() * 6.3; } }
-        if (r.dieT && r.fall) { const k = Math.min(1, r.dieT * 3); r.g.position.x += r.fall.x * 0.5 * k; r.g.position.z += r.fall.z * 0.5 * k; r.g.rotation.z = r.fall.side * 0.35 * k; r.g.rotation.y = Math.atan2(-r.fall.x, -r.fall.z) + Math.PI; }
+        if (r.dieT && r.fall && !r.soldier) { const k = Math.min(1, r.dieT * 3); r.g.position.x += r.fall.x * 0.5 * k; r.g.position.z += r.fall.z * 0.5 * k; r.g.rotation.z = r.fall.side * 0.35 * k; r.g.rotation.y = Math.atan2(-r.fall.x, -r.fall.z) + Math.PI; }
         if (spectating && p.id === spectating.id) { r.g.visible = false; if (r.blob) r.blob.visible = false; }
       }
       // own body while emoting: camera swings out in front, you see yourself
@@ -885,7 +893,7 @@ export default function start({ cfg, E, N, smoke }) {
         selfRig.g.visible = !!me.emote && me.alive; if (selfRig.blob) selfRig.blob.visible = selfRig.g.visible;
         if (me.emote) {
           selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw;
-          posePlayer(selfRig, { t: selfRig.t, emote: me.emote });
+          if (selfRig.soldier) poseSoldier(selfRig, { dt, yaw: me.yaw, emote: me.emote }); else posePlayer(selfRig, { t: selfRig.t, emote: me.emote });
           const k = Math.min(1, me.emote.t * 2.5, (me.emote.dur - me.emote.t) * 2.5), ang = me.yaw + Math.PI + 0.5;
           let dist = 3.2 * k;
           const o = { x: me.x, y: me.y + 1.5, z: me.z }, d = { x: -Math.sin(ang), y: 0.18, z: -Math.cos(ang) }, L = Math.hypot(d.x, d.y, d.z); d.x /= L; d.y /= L; d.z /= L;
@@ -906,6 +914,17 @@ export default function start({ cfg, E, N, smoke }) {
         if (vm.userData.sc == null) vm.userData.sc = vm.scale.x;
         vm.scale.setScalar(vm.userData.sc);
         if (me.inspect > 0 && me.inspectStyle) applyInspect(vm, me.inspectStyle, (2.2 - me.inspect) / 2.2);
+        const ud = vm.userData;
+        if (ud.flop) {   // floppy: each joint is a damped spring kicked by turning, walking, swinging and stroking
+          const F = ud.flopS || (ud.flopS = { x: 0, y: 0, vx: 0, vy: 0 }), stroking = me.inspect > 0 && me.inspectStyle === 'stroke';
+          const kick = { x: -lookDY * 0.9 + Math.cos(bob * 2) * 0.6 * Math.min(1, sp / 4) + (me.knifeSwing > 0 ? 9 : 0) + (stroking ? Math.sin(me.inspect * 22) * 7 : 0), y: lookDX * 0.9 };
+          for (const a of ['x', 'y']) { F['v' + a] += (kick[a] - 55 * F[a] - 3.2 * F['v' + a]) * dt; F[a] += F['v' + a] * dt; F[a] = Math.max(-0.7, Math.min(0.7, F[a])); }
+          ud.flop.forEach((j, i) => { j.rotation.x = F.x * (0.25 + i * 0.12) - 0.04 * i; j.rotation.y = F.y * (0.25 + i * 0.12); });
+          if (ud.strokeHand) {
+            ud.strokeHand.visible = stroking;
+            if (stroking) { const k = Math.sin(me.inspect * 11); ud.strokeHand.position.z = -0.11 + k * 0.09; ud.strokeHand.rotation.z = k * 0.15; if ((ud.lastK || 0) * k < 0 && k > 0) audio.play('squelch', 0.6); ud.lastK = k; }
+          }
+        }
         if (me.ads > 0.001 && vm.userData.sight) {   // aim down sights: bring the optic's sight line onto the view line
           const sc = vm.userData.sc, sg = vm.userData.sight, k = me.ads;
           vm.position.lerp(new THREE.Vector3(-sg.x * sc, -sg.y * sc, -0.36 - sg.z * sc + camKick * 0.6), k);
