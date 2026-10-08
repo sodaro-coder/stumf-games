@@ -5,7 +5,7 @@
 // headgear rides on the head bone.
 import * as THREE from '../sdk/three.module.min.js';
 import { litPatch } from './world.js';
-import { glowMask, glowify } from './models.js';
+import { glowMask, glowify, gunSurface } from './models.js';
 
 let D = null, P = null;
 export function loadChars() {
@@ -69,7 +69,7 @@ function material(team, tint, hq, glow) {
 const SPEED = { walk: 1.0, walkBack: 1.1, walkLeft: 1.4, walkRight: 0.75, run: 3.1, runBack: 2.7, runLeft: 2.8, runRight: 3.2, crouchWalk: 0.6 };
 const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3(), _fw = new THREE.Vector3(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
 export function makeSoldier(look, team, hq = true) {
-  const L = look || {}, plainAgent = !L.speedo && !L.mustard && !L.eyes && !L.stripes && !['bun', 'swirl', 'curlers', 'beak', 'stem', 'beret', 'cap'].includes(L.hat);
+  const L = look || {}, plainAgent = !L.speedo && !L.mustard && !L.eyes && !L.stripes && !['bun', 'swirl', 'curlers', 'beak', 'stem', 'beret', 'cap', 'mullet', 'headset', 'toque', 'bob', 'cone'].includes(L.hat);
   const tint = plainAgent && !L.glow ? null : L.body;
   const g = new THREE.Group(), holder = new THREE.Group(); holder.rotation.y = Math.PI; g.add(holder);   // Mixamo faces +z; the game's players face -z
   const c = D.c, root = new THREE.Group();
@@ -77,11 +77,12 @@ export function makeSoldier(look, team, hq = true) {
   const bones = c.bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); o.quaternion.fromArray(b.q); o.scale.fromArray(b.s); return o; });
   c.bones.forEach((b, i) => { if (b.p >= 0) bones[b.p].add(bones[i]); else root.add(bones[i]); });
   const mat = material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null);
-  for (const m of D.meshes) {
+  if (L.model !== 'log') for (const m of D.meshes) {
     const sm = new THREE.SkinnedMesh(m.g, mat); sm.frustumCulled = false; root.add(sm);
     sm.bind(new THREE.Skeleton(m.joints.map((i) => bones[i]), m.inverses), m.bind);
   }
   const byName = Object.fromEntries(bones.map((b) => [b.name.replace('mixamorig', ''), b]));
+  if (L.model === 'log') { g.updateMatrixWorld(true); logBody(byName, hq); }
   const mixer = new THREE.AnimationMixer(root), act = {};
   for (const [k, clip] of Object.entries(D.clips)) { const a = mixer.clipAction(clip); a.setLoop(clip.loop ? THREE.LoopRepeat : THREE.LoopOnce); if (!clip.loop) a.clampWhenFinished = true; act[k] = a; }
   act.idle.play();
@@ -142,7 +143,12 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     if (r.dead) { r.dead = false; r.act.die.stop(); r.base = ''; base(r, 'idle'); }
     const sp = Math.hypot(vx, vz), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const f = -(vx * sy) - vz * cy, side = vx * cy - vz * sy;   // speed along where they face, and to their right
-    if (emote) base(r, ['dance', 'floss', 'chicken', 'twerk'].includes(emote.anim) ? 'dance' : 'idle', emote.anim === 'twerk' ? 1.6 : emote.anim === 'chicken' ? 1.3 : 1);
+    if (r.rootS) r.root.scale.copy(r.rootS); else r.rootS = r.root.scale.clone();   // emotes may squash the whole body: reset first
+    if (emote) {
+      const a = emote.anim, BASE = { dance: 'dance', floss: 'dance', chicken: 'dance', griddy: 'run', twerk: 'crouch', sit: 'crouch', zombie: 'walk', tbag: Math.floor(r.t * 5) % 2 ? 'crouch' : 'idle', lmao: 'crouch' };
+      base(r, BASE[a] || 'idle', a === 'chicken' ? 1.3 : a === 'griddy' ? 1.7 : a === 'zombie' ? 0.45 : 1);
+      if (a === 'tbag') { const ac = r.act[r.base]; if (ac) ac.time = 0.5; }
+    }
     else if (Math.abs(vy) > 2.2) base(r, 'jump');
     else if (crouch > 0.5) { if (sp > 0.3) base(r, 'crouchWalk', Math.min(1.6, sp / SPEED.crouchWalk)); else base(r, 'crouch'); }
     else if (sp < 0.35) base(r, 'idle');
@@ -225,8 +231,69 @@ function emotePose(r, e, right) {
     case 'cry': turnWorld(B.LeftArm, right, -1.9); turnWorld(B.RightArm, right, -1.9); turnWorld(B.LeftForeArm, right, -1.6); turnWorld(B.RightForeArm, right, -1.6); turnWorld(B.Head, right, 0.5 + s(t * 14) * 0.08); break;
     case 'fart': turnWorld(B.Spine, right, 0.6); turnWorld(B.Head, right, -0.4); break;
     case 'worm': turnWorld(B.Hips, right, -1.35 - s(t * 7) * 0.2); break;
+    case 'twerk': {   // on purpose like a cheap phone-filter twerk: choppy 7 fps, the whole body squashing, random glitch twitches
+      const q = Math.floor(t * 7) / 7, b = s(q * 31);
+      turnWorld(B.Spine, right, 0.95); turnWorld(B.Spine1, right, 0.25); turnWorld(B.Hips, right, -0.3 + b * 0.38); turnWorld(B.Hips, up, s(q * 13) * 0.25);
+      turnWorld(B.LeftArm, right, -1.1); turnWorld(B.RightArm, right, -1.1); turnWorld(B.LeftForeArm, right, -0.4); turnWorld(B.RightForeArm, right, -0.4);
+      r.root.scale.set(r.rootS.x * (1 - b * 0.07), r.rootS.y * (1 + b * 0.13), r.rootS.z * (1 - b * 0.07));
+      if ((t % 1.7) < 0.14) turnWorld(B.Head, up, Math.PI);   // the filter glitches: head spins round for a frame or two
+      if ((t % 2.3) < 0.1) r.root.scale.multiplyScalar(1.25);
+      break;
+    }
+    case 'griddy': turnWorld(B.LeftArm, right, -1.2 + s(t * 11) * 0.7); turnWorld(B.RightArm, right, -1.2 - s(t * 11) * 0.7); turnWorld(B.Spine, right, 0.35); turnWorld(B.Head, right, s(t * 22) * 0.12); break;
+    case 'headbang': turnWorld(B.Spine2, right, 0.25 + s(t * 15) * 0.3); turnWorld(B.Head, right, 0.3 + s(t * 15) * 0.5); turnWorld(B.RightArm, fwd, -2.2); turnWorld(B.RightForeArm, up, 1.4); break;   // devil horns up
+    case 'heli': turnWorld(B.LeftArm, fwd, 1.4); turnWorld(B.RightArm, fwd, -1.4); turnWorld(B.Spine, up, (t * 14) % (Math.PI * 2)); break;
+    case 'clap': { const c2 = Math.max(0, s(t * 2.6)); turnWorld(B.LeftArm, right, -1.3); turnWorld(B.RightArm, right, -1.3); turnWorld(B.LeftArm, up, -0.6 + c2 * 0.55); turnWorld(B.RightArm, up, 0.6 - c2 * 0.55); break; }
+    case 'zombie': turnWorld(B.LeftArm, right, -1.5); turnWorld(B.RightArm, right, -1.5); turnWorld(B.Head, fwd, 0.5 + s(t * 2) * 0.15); turnWorld(B.Spine, fwd, s(t * 3) * 0.12); break;
+    case 'sit': turnWorld(B.Hips, right, 0.5); turnWorld(B.Spine, right, -0.3); turnWorld(B.LeftArm, right, -0.7); turnWorld(B.RightArm, right, -0.7); turnWorld(B.Head, up, s(t * 0.8) * 0.4); break;
+    case 'lmao': turnWorld(B.Hips, fwd, (t * 5) % (Math.PI * 2)); turnWorld(B.Spine, right, 0.8); turnWorld(B.LeftArm, right, -1.6); turnWorld(B.RightArm, right, -1.6); turnWorld(B.Head, right, s(t * 18) * 0.2); break;
     default: break;
   }
+}
+
+// the Log Boi: an original brainrot character riding the soldier's skeleton. A bark-covered log for a body with a
+// wide-eyed face, stick arms and legs, and a baseball bat slung on its back. Parts hang off the bones, so every
+// animation (walk, run, crouch, die, emotes) moves it, janky stick limbs and all.
+let logMats = null;
+function logBody(B, hq) {
+  if (!logMats) {
+    const bark = hq ? new THREE.MeshStandardMaterial({ color: '#7a5030', roughness: 0.9, metalness: 0 }) : new THREE.MeshLambertMaterial({ color: '#7a5030' });
+    if (hq) gunSurface(bark, 'gwood', { tile: 4, albedo: 1.4, normal: 1.6 });
+    const end = new THREE.MeshLambertMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); x.fillStyle = '#d8b07a'; x.fillRect(0, 0, 128, 128);
+      for (let r = 6; r < 64; r += 5 + Math.random() * 3) { x.strokeStyle = `rgba(120,80,40,${0.25 + Math.random() * 0.3})`; x.lineWidth = 1.5; x.beginPath(); x.arc(64 + Math.random() * 2, 64 + Math.random() * 2, r, 0, 7); x.stroke(); }
+      x.strokeStyle = '#6a4424'; x.lineWidth = 6; x.beginPath(); x.arc(64, 64, 61, 0, 7); x.stroke(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })() });
+    logMats = { bark, end, white: new THREE.MeshLambertMaterial({ color: '#f6f2ea' }), black: new THREE.MeshBasicMaterial({ color: '#0a0806' }), stick: bark, bat: hq ? new THREE.MeshStandardMaterial({ color: '#c8a070', roughness: 0.45 }) : new THREE.MeshLambertMaterial({ color: '#c8a070' }) };
+    for (const m of [logMats.end, logMats.white]) litPatch(m, 'dyn');
+    if (!hq) litPatch(logMats.bark, 'dyn');
+  }
+  const M = logMats, wp = (b) => b.getWorldPosition(new THREE.Vector3());
+  const add = (bone, mesh) => { if (bone) bone.attach(mesh); };
+  const between = (a, b, r, mat, ext = 0) => {   // a stick from bone a to bone b (world space at rest), hung on a
+    if (!a || !b) return; const pa = wp(a), pb = wp(b), d = pb.clone().sub(pa), L = d.length() + ext;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.9, L, 8), mat); m.position.copy(pa).addScaledVector(d.normalize(), L / 2 - ext / 2); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d); add(a, m);
+  };
+  // the log: from the hips to well above the head, ends showing growth rings
+  const hip = wp(B.Hips), top = wp(B.Head).add(new THREE.Vector3(0, 0.28, 0)), H = top.y - hip.y + 0.12;
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.215, H, 18, 1, true), M.bark); body.position.set(hip.x, hip.y - 0.12 + H / 2, hip.z); add(B.Spine, body);
+  for (const [y, rx] of [[hip.y - 0.12 + H, -Math.PI / 2], [hip.y - 0.12, Math.PI / 2]]) { const e = new THREE.Mesh(new THREE.CircleGeometry(0.2, 18), M.end); e.position.set(hip.x, y, hip.z); e.rotation.x = rx; add(B.Spine, e); }
+  for (let k = 0; k < 3; k++) { const kn = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), M.bark); kn.scale.set(1, 0.6, 0.5); kn.position.set(hip.x + (k - 1) * 0.12, hip.y + 0.2 + k * 0.22, hip.z + 0.19 * (k === 1 ? -1 : 1)); add(B.Spine, kn); }   // knots
+  // the face, on the front (players face -z)
+  const hd = wp(B.Head), fz = -0.2;
+  for (const sd of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.058, 14, 10), M.white); eye.scale.set(1, 1.25, 0.6); eye.position.set(hd.x + sd * 0.075, hd.y + 0.08, hd.z + fz); add(B.Spine2 || B.Spine, eye);
+    const pu = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), M.black); pu.position.set(hd.x + sd * 0.07, hd.y + 0.075, hd.z + fz - 0.035); add(B.Spine2 || B.Spine, pu);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.016, 0.02), M.black); brow.position.set(hd.x + sd * 0.075, hd.y + 0.17, hd.z + fz - 0.01); brow.rotation.z = sd * 0.35; add(B.Spine2 || B.Spine, brow);
+  }
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 6, 14, Math.PI), M.black); mouth.position.set(hd.x, hd.y - 0.06, hd.z + fz - 0.005); mouth.rotation.z = Math.PI; add(B.Spine2 || B.Spine, mouth);
+  // stick limbs and stubby hands/feet
+  for (const s of ['Left', 'Right']) {
+    between(B[s + 'Arm'], B[s + 'ForeArm'], 0.026, M.stick, 0.02); between(B[s + 'ForeArm'], B[s + 'Hand'], 0.022, M.stick, 0.02);
+    between(B[s + 'UpLeg'], B[s + 'Leg'], 0.034, M.stick, 0.02); between(B[s + 'Leg'], B[s + 'Foot'], 0.03, M.stick, 0.02);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), M.stick); hand.position.copy(wp(B[s + 'Hand'])); add(B[s + 'Hand'], hand);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.16), M.stick); foot.position.copy(wp(B[s + 'Foot'])).add(new THREE.Vector3(0, -0.03, -0.04)); add(B[s + 'Foot'], foot);
+  }
+  // the bat, slung across the back
+  const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.016, 0.8, 12), M.bat); bat.position.set(hd.x - 0.05, hd.y - 0.35, hd.z + 0.25); bat.rotation.z = 0.7; add(B.Spine1 || B.Spine, bat);
 }
 
 // joke agents keep their signature headgear, worn over the soldier's helmet (local origin = the head bone)
@@ -245,6 +312,11 @@ function hat(head, L) {
     case 'curlers': for (let k = 0; k < 5; k++) add(new THREE.CylinderGeometry(0.026, 0.026, 0.1, 8), c, -0.09 + k * 0.045, 0.3, 0.01 - (k % 2) * 0.04, Math.PI / 2); break;
     case 'beak': add(new THREE.ConeGeometry(0.045, 0.16, 8), c, 0, 0.13, -0.17, -Math.PI / 2); break;
     case 'stem': add(new THREE.CylinderGeometry(0.016, 0.022, 0.12, 6), c, 0.01, 0.33, 0, 0, 0, -0.2); break;
+    case 'mullet': add(new THREE.SphereGeometry(0.13, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.2, 0.01); add(new THREE.BoxGeometry(0.2, 0.2, 0.06), c, 0, 0.05, 0.12); break;   // business up front, party in the back
+    case 'headset': add(new THREE.TorusGeometry(0.135, 0.014, 6, 16, Math.PI), c, 0, 0.18, 0); for (const sd of [-1, 1]) add(new THREE.CylinderGeometry(0.05, 0.05, 0.035, 12), c, sd * 0.135, 0.13, 0, 0, 0, Math.PI / 2); add(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 6), c, -0.11, 0.08, -0.08, 0.9, 0, 0); break;
+    case 'toque': add(new THREE.CylinderGeometry(0.115, 0.1, 0.12, 14), c, 0, 0.3, 0); add(new THREE.SphereGeometry(0.14, 14, 9), c, 0, 0.4, 0, 0, 0, 0, 1, 0.6, 1); break;   // tall chef's hat
+    case 'bob': add(new THREE.SphereGeometry(0.15, 14, 10), c, 0, 0.16, 0.025, 0, 0, 0, 1.05, 1, 1.05); add(new THREE.BoxGeometry(0.2, 0.05, 0.06), c, 0.03, 0.24, -0.11, 0, 0, -0.25); break;   // can I speak to your manager
+    case 'cone': add(new THREE.ConeGeometry(0.11, 0.32, 14), c, 0, 0.38, 0); add(new THREE.CylinderGeometry(0.08, 0.09, 0.03, 14), '#ffffff', 0, 0.36, 0); add(new THREE.BoxGeometry(0.26, 0.02, 0.26), c, 0, 0.22, 0); break;
     case 'beret': add(new THREE.SphereGeometry(0.14, 14, 8), c, 0.02, 0.29, 0, 0, 0, 0.18, 1.12, 0.32, 1.1); break;
     case 'cap': add(new THREE.SphereGeometry(0.135, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.45), c, 0, 0.22, 0); add(new THREE.CylinderGeometry(0.1, 0.1, 0.014, 14), c, 0, 0.26, -0.11, 0, 0, 0, 1.05, 1, 1.1); break;
     default: break;

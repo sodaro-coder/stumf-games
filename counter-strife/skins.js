@@ -52,6 +52,13 @@ export const AGENTS = [
   { id: 'a_t_reactor', name: 'Reactor Core Ronnie', team: 'T', tier: 6, look: { body: '#24302a', legs: '#1a201c', head: '#c89a74', hat: 'balaclava', hatColor: '#111', glow: '#5cff6a', glowT: 'circuit' } },
   { id: 'a_ct_plasma', name: 'Plasma Daddy', team: 'CT', tier: 6, look: { body: '#1c1f30', legs: '#14161f', head: '#e0b896', hat: 'helmet', hatColor: '#151826', glow: '#2ad8ff', glowT: 'hex' } },
   { id: 'a_t_lava', name: 'Hot Lava Larry', team: 'T', tier: 6, look: { body: '#2a1a14', legs: '#1c120e', head: '#b48264', hat: 'shemagh', hatColor: '#3a2418', glow: '#ff6a1a', glowT: 'web' } },
+  // more fashion disasters
+  { id: 'a_t_log', name: 'Tung Tung Log Boi', team: 'T', tier: 6, look: { model: 'log', body: '#8a5a34', legs: '#6a4426', head: '#8a5a34', hat: 'none' } },   // an original wooden-log brainrot guy with a bat
+  { id: 'a_t_florida', name: 'Florida Man', team: 'T', tier: 3, look: { body: '#e8e2d0', legs: '#3a5a8a', head: '#e0a080', hat: 'mullet', hatColor: '#8a5a2a' } },
+  { id: 'a_t_gamer', name: 'Mountain Dew Gamer', team: 'T', tier: 2, look: { body: '#3a8a2a', legs: '#1a1a1a', head: '#f0d0b0', hat: 'headset', hatColor: '#111' } },
+  { id: 'a_ct_chef', name: 'Angry Chef', team: 'CT', tier: 3, look: { body: '#f4f4f0', legs: '#222', head: '#e8b898', hat: 'toque', hatColor: '#ffffff' } },
+  { id: 'a_ct_karen', name: 'Manager Karen', team: 'CT', tier: 4, look: { body: '#c8a0c8', legs: '#4a4a5a', head: '#f0c8a8', hat: 'bob', hatColor: '#e8d080' } },
+  { id: 'a_ct_cone', name: 'Traffic Cone Carl', team: 'CT', tier: 2, look: { body: '#ff7a1a', legs: '#2a2a2a', head: '#e0b896', hat: 'cone', hatColor: '#ff6a10', stripes: true } },
   { id: 'a_ct_void', name: 'Void Boi 9000', team: 'CT', tier: 6, look: { body: '#16121f', legs: '#0f0c16', head: '#d8a888', hat: 'helmet', hatColor: '#0f0c16', visor: true, glow: '#c04aff', glowT: 'galaxy' } },
 ];
 
@@ -63,6 +70,10 @@ export const EMOTES = [
   { id: 'e_tpose', name: 'T-Pose on Ur Body', anim: 'tpose', tier: 2 }, { id: 'e_floss', name: 'Floss', anim: 'floss', tier: 2 },
   { id: 'e_chicken', name: 'Chicken Nugget Dance', anim: 'chicken', tier: 3 }, { id: 'e_worm', name: 'Butt Scoot', anim: 'worm', tier: 4 },
   { id: 'e_fart', name: 'Crop Duster', anim: 'fart', tier: 5 }, { id: 'e_twerk', name: 'Cheek Clapper', anim: 'twerk', tier: 5 },
+  { id: 'e_griddy', name: 'Hit the Griddy', anim: 'griddy', tier: 3 }, { id: 'e_headbang', name: 'Headbanger', anim: 'headbang', tier: 1 },
+  { id: 'e_heli', name: 'Helicopter Arms', anim: 'heli', tier: 2 }, { id: 'e_clap', name: 'Slow Clap', anim: 'clap', tier: 1 },
+  { id: 'e_zombie', name: 'Brain Dead Zombie', anim: 'zombie', tier: 2 }, { id: 'e_tbag', name: 'Tea Bag Express', anim: 'tbag', tier: 4 },
+  { id: 'e_sit', name: 'Sit Down Scrub', anim: 'sit', tier: 3 }, { id: 'e_lmao', name: 'LMAO Rolling', anim: 'lmao', tier: 4 },
 ];
 export const EMOTE_BY_ID = Object.fromEntries(EMOTES.map((e) => [e.id, e]));
 export const DEFAULT_EMOTES = ['e_wave', 'e_salute'];
@@ -106,6 +117,7 @@ const KNIFE_FINISHES = [F('Vanilla', { t: 'solid', c: ['#a8adb6', '#6a6e76'] }),
 // glow = the light colour, g = the vein pattern that moves (any paint pattern, drawn bright-on-black)
 const M = (name, t, c, glow, g) => ({ name, paint: { t, c, glow, g: g || t } });
 const MYTHIC_FIN = {
+  brainrot: M('Infinite Aura Overload', 'galaxy', ['#0a0614', '#2a0a3a', '#ffffff'], '#ff3ad2', 'circuit'),
   sand: M('Nuclear Swamp Ass', 'circuit', ['#0c1410', '#1f3a24'], '#6aff5a'), toilet: M('Radioactive Shart', 'smear', ['#120d08', '#3a2a14'], '#a8ff2a', 'circuit'),
   nuke: M('Chernobyl Nutsack', 'hex', ['#0a1408', '#18301a'], '#7aff4a'), dust2: M('Sand In My Crack', 'flames', ['#140c06', '#3a2410', '#5a3414'], '#ffb02a', 'web'),
   neon: M('Rave Boner', 'geo', ['#0a0614', '#2a0a3a', '#0a2a3a'], '#ff2ad2', 'wave'), farm: M('Glowing Cow Pie', 'camo', ['#140e08', '#2a1c10', '#1c140a'], '#ffd23a', 'circuit'),
@@ -197,6 +209,9 @@ const THEMES = [
     ['Fossil', 'Amber', 'Tar Pit', 'Egg Shell', 'Ferns', 'Raptor Claw', 'Meteor Strike', 'Volcano', 'Pterodactyl', 'T-Rex Arms', 'Extinction Event', 'Bone Dry', 'Apex Fossil', 'Jurassic Spark', 'Dino Nuggets', 'Amber Fade', 'Tar'], ['k_gut', 'k_bayonet'], 'k_chicken'],
   ['clown', 'Clown Car Case', 'Honk honk, ur a clown.', ['#ff4a4a', '#f2d33c', '#2a8aff', '#ffffff'],
     ['Big Shoes', 'Balloon Animal', 'Seltzer', 'Juggler', 'Rubber Nose', 'Face Paint', 'Pie In The Face', 'Unicycle', 'Circus Peanut', 'Clown Car', 'Creepy Smile', 'Big Top', 'Honk Honk', 'Ringmaster', 'Certified Clown', 'Confetti Fade', 'Greasepaint'], ['k_butterfly', 'k_karambit'], 'k_dildo'],
+  ['brainrot', 'Brainrot Case', 'Certified Ohio content. Your aura is in the negatives.', ['#ff3ad2', '#3affd2', '#ffd23a', '#1a0a2a'],
+    ['Skibidi Flush', 'NPC Energy', 'Fanum Tax', 'Mewing Streak', 'Only In Ohio', 'Aura Farmer', 'Delulu', 'Mogged', 'Cap Detector', 'Rizz Lord', 'Sigma Grindset', 'Gyatt Damn', 'Final Boss Of Ohio', 'Negative Aura', 'Brainrot Supreme', 'Bussin', 'Lowkey Cooked'],
+    ['k_karambit', 'k_butterfly'], 'k_banana'],
 ];
 // joke finishes that come with their own sounds (everything else sounds like the base gun)
 const FINGER_GUN = { id: 'toilet:deagle:Finger Gun', kind: 'skin', weapon: 'deagle', finish: 'Finger Gun', paint: { t: 'text', c: ['#f2c8a0', '#c8462e'], s: 'PEW' }, tier: 5 };
@@ -218,7 +233,8 @@ const CRATE_LIST = [
   makeCrate('nuke', 'Nuclear Family Case', 'Glowing, radioactive, family friendly.', NUKE, 21, ['k_baguette', 'k_fish', 'k_banana'], 300),
   ...THEMES.map((t, n) => themedCrate(n, ...t, 250 + (n % 4) * 25)),
   { id: 'agents', name: 'Fashion Disaster Case', desc: 'Outfits that smell like they look.', price: 350,
-    items: AGENTS.filter((a) => a.tier >= 0).map((a) => ({ id: 'agents:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })) },
+    items: [...AGENTS.filter((a) => a.tier >= 0).map((a) => ({ id: 'agents:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })),
+      ...EMOTES.filter((e) => !DEFAULT_EMOTES.includes(e.id)).map((e) => ({ id: 'agents:' + e.id, kind: 'emote', weapon: e.id, finish: e.name, tier: e.tier }))] },
 ];
 CRATE_LIST.forEach((c, n) => { const f = MYTHIC_FIN[c.id]; if (f) { const gun = MYTHIC_GUNS[n % MYTHIC_GUNS.length]; c.items.push({ id: `${c.id}:${gun}:${f.name}`, kind: 'skin', weapon: gun, finish: f.name, paint: f.paint, tier: MYTHIC }); } });
 export const CRATES = CRATE_LIST;
@@ -231,10 +247,11 @@ const PASS_FINISHES = [F('Participation Trophy', { t: 'solid', c: ['#c8a040', '#
 const PASS_GUNS = ['glock', 'usp', 'ak47', 'm4a4', 'awp', 'deagle', 'mp9', 'mac10', 'p90', 'galil', 'famas', 'nova', 'ump', 'ssg08', 'p250', 'm4a1s', 'sg553', 'aug', 'tec9', 'fiveseven'];
 const PASS_AGENTS = ['a_t_banana', 'a_ct_mime', 'a_t_speedo', 'a_ct_tighty', 'a_t_grandma', 'a_ct_pigeon', 'a_t_hotdog', 'a_ct_poo'];
 export const PASS_TIERS = 50;
+const PASS_EMOTES = ['e_dance', 'e_dab', 'e_cry', 'e_flex', 'e_tpose', 'e_floss', 'e_chicken', 'e_worm', 'e_fart', 'e_twerk'];
 export const PASS = (() => {
   const items = [], tiers = [];
   let g = 0, f = 0, a = 0, e = 0;
-  const emotes = EMOTES.filter((x) => !DEFAULT_EMOTES.includes(x.id));
+  const emotes = EMOTES.filter((x) => !DEFAULT_EMOTES.includes(x.id) && PASS_EMOTES.includes(x.id));   // the pass's own emotes, fixed: new emotes drop from cases instead (pass ids never shift)
   for (let t = 1; t <= PASS_TIERS; t++) {
     let it;
     if (t === PASS_TIERS) it = { id: 'pass:k_dildo:Gold Plated', kind: 'knife', weapon: 'k_dildo', finish: 'Gold Plated', paint: { t: 'fade', c: ['#fff3a0', '#e8b020', '#8a5a10'] }, tier: 5 };
