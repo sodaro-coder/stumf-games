@@ -232,9 +232,133 @@ function town() {
   return B;
 }
 
+// ---- Crust: the tiny desert oil yard. An oil tower in the middle you fight over, a tin shack, pipes, containers --------
+function crust() {
+  const B = new MapBuilder(48, 48, 6, 'metal', 'sand');
+  B.open(2, 2, 46, 46, 0, 'sand');
+  B.open(14, 18, 34, 30, 0, 'dirt');
+  // the tower: a deck at 3 m (rails all round), a crow's nest at 5 m, ramps up the east side and a steep ladder west
+  B.open(20, 20, 28, 28, 3.0, 'metal');
+  B.ramp(28, 22, 34, 25, 0, 3.0, '-x', 'metal');
+  B.ramp(14, 23, 20, 25, 0, 3.0, 'x', 'metal');
+  B.open(23, 20, 27, 23, 5.0, 'metal'); B.ramp(23, 23, 27, 27, 5.0, 3.0, 'z', 'metal');
+  B.block(20, 19, 28, 20, 4.0, 'metal').block(20, 28, 28, 29, 4.0, 'metal').block(19, 19, 20, 23, 4.0, 'metal').block(19, 25, 20, 29, 4.0, 'metal')
+    .block(28, 19, 29, 22, 4.0, 'metal').block(28, 25, 29, 29, 4.0, 'metal');           // rails (gaps where the ramps land)
+  B.block(23, 19, 27, 20, 6.0, 'metal');                                                  // crow's nest rail
+  B.roof(22, 20, 28, 24, 7.2, 'metal');                                                   // tin roof over the top
+  // the shack (A) and the container yard (B)
+  B.house(18, 3, 30, 11, 3.2, 'metal', 'wood', [[18, 6, 19, 9], [29, 6, 30, 9], [23, 10, 26, 11], [20, 3, 23, 4, 1.1], [26, 3, 29, 4, 1.1]]);
+  B.block(20, 5, 23, 6, 1.0, 'darkwood').block(25, 8, 28, 9, 0.9, 'crate');
+  B.roof(18, 6, 19, 9, 2.3, 'metal').roof(29, 6, 30, 9, 2.3, 'metal').roof(23, 10, 26, 11, 2.3, 'metal');
+  B.block(18, 39, 24, 42, 2.6, 'cgreen').block(26, 41, 30, 44, 2.6, 'corange').block(18, 39, 24, 42, 5.2, 'cgreen');
+  B.block(27, 36, 29, 38, 1.1, 'crate').block(16, 44, 18, 46, 1.1, 'crate');
+  // pipes, sand piles, junk
+  B.block(4, 15, 14, 16, 1.0, 'metal').block(34, 31, 44, 32, 1.0, 'metal').block(10, 30, 11, 38, 1.0, 'metal').block(36, 12, 37, 20, 1.0, 'metal');
+  B.ramp(36, 38, 42, 41, 0, 1.0, 'x', 'sand'); B.open(42, 38, 45, 41, 1.0, 'sand');
+  B.block(6, 6, 8, 8, 1.1, 'crate').block(40, 6, 44, 8, 2.6, 'cred').block(32, 14, 34, 16, 1.1, 'crate').block(12, 34, 14, 36, 1.1, 'crate');
+  B.zone('West Yard', 2, 2, 14, 46).zone('East Yard', 34, 2, 46, 46).zone('Pipes', 2, 28, 14, 40).zone('Shack', 18, 3, 30, 11).zone('Containers', 16, 36, 32, 46)
+    .zone('Under the Tower', 14, 18, 34, 30).zone('Tower', 19, 19, 29, 29).zone("Crow's Nest", 23, 20, 27, 23);
+  B.site('A', 19, 4, 29, 10).site('B', 16, 36, 32, 45);
+  B.buyzone('T', 2, 14, 9, 34).buyzone('CT', 39, 14, 46, 34);
+  for (let k = 0; k < 5; k++) { B.spawn('T', 5, 16 + k * 4, -Math.PI / 2); B.spawn('CT', 43, 16 + k * 4, Math.PI / 2); }
+  B.duelSpawn('T', 8, 24, -Math.PI / 2).duelSpawn('CT', 40, 24, Math.PI / 2);
+  B.sign(24, 3.05, 2.2, 0, 'CRUST OIL CO.\n0 days without a fart', 4, 1.2, '#2a1f14', '#f2d36b');
+  B.sign(30.05, 26, 3.2, Math.PI / 2, 'NO CLIMBING\n(everyone climbs)', 3, 1, '#fff', '#b01818');
+  B.sign(29.95, 7.5, 2.2, -Math.PI / 2, 'OUTHOUSE →\n(it\'s the whole shack)', 3, 1, '#3a2a1a', '#ffd98a');
+  B.prop('barrel', 33, 9, {}).prop('barrel', 15, 33, {}).prop('barrel', 35, 35, {}).prop('lamp', 16, 18, {}).prop('lamp', 32, 30, {});
+  B.sky = 0x86a8cc; B.fog = 0xd6c4a0; B.sunColor = 0xffe6c0; B.amb = [0xc4d0e0, 0x8a7050]; B.sunDir = [0.5, 0.62, 0.6]; B.sunI = 2.6; B.ambI = 1.1;
+  return B;
+}
+
+// ---- Hijacked: Yacht Rock. A rich guy's superyacht: stern lounge and drained pool, the deckhouse with the bar, the
+// bridge up top, a hot tub on the bow. Fall off and the sharks get you.
+function yacht() {
+  const B = new MapBuilder(80, 30, 7, 'fence', 'wood');
+  B.water(0, 0, 80, 30);
+  B.open(6, 7, 72, 23, 2.0, 'wood'); B.open(72, 10, 76, 20, 2.0, 'wood'); B.open(76, 13, 78, 17, 2.0, 'wood');   // hull, tapering to the bow
+  // rails: every deck cell that touches the water becomes a white rail
+  const W = B.w, edge = [];
+  for (let z = 1; z < B.d - 1; z++) for (let x = 1; x < W - 1; x++) { const i = z * W + x; if (B.flag[i] === 2 && [i - 1, i + 1, i - W, i + W].some((j) => B.flag[j] === 3)) edge.push([x, z]); }
+  for (const [x, z] of edge) B.block(x, z, x + 1, z + 1, 3.1, 'fence');
+  // deckhouse (A): the bar inside, doors fore and aft, windows down both sides
+  B.house(26, 10, 46, 20, 5.2, 'fence', 'carpet', [[26, 13, 27, 17], [45, 13, 46, 17], [30, 10, 34, 11, 3.1], [38, 10, 42, 11, 3.1], [30, 19, 34, 20, 3.1], [38, 19, 42, 20, 3.1]], 2.0);
+  B.block(30, 12, 36, 13, 3.1, 'darkwood').block(38, 16, 43, 17, 2.6, 'carpet');
+  for (const [a, b2, c, d] of [[26, 13, 27, 17], [45, 13, 46, 17]]) B.roof(a, b2, c, d, 4.4, 'fence');
+  for (const [a, b2, c, d] of [[30, 10, 34, 11], [38, 10, 42, 11], [30, 19, 34, 20], [38, 19, 42, 20]]) B.roof(a, b2, c, d, 4.3, 'fence');
+  // the bridge, up two flights of stairs
+  B.open(48, 11, 56, 19, 5.0, 'wood');
+  B.block(48, 10, 56, 11, 6.0, 'fence').block(47, 11, 48, 19, 6.0, 'fence').block(56, 11, 57, 13, 6.0, 'fence').block(56, 17, 57, 19, 6.0, 'fence');
+  B.block(52, 12, 55, 13, 6.0, 'darkwood');                                                // the helm
+  B.ramp(50, 19, 56, 21, 2.0, 5.0, '-x', 'wood'); B.ramp(50, 9, 56, 11, 2.0, 5.0, '-x', 'wood');
+  B.roof(48, 11, 57, 19, 8.0, 'fence');
+  // stern: drained pool (sunken cover), bar, loungers
+  B.open(10, 12, 16, 18, 1.0, 'tile'); B.ramp(16, 13, 18, 17, 1.0, 2.0, 'x', 'tile');
+  B.block(18, 8, 22, 9, 3.1, 'darkwood').block(8, 20, 12, 21, 2.5, 'carpet').block(20, 20, 24, 21, 2.5, 'carpet');
+  // bow: hot tub (cover), deck boxes
+  B.block(62, 13, 66, 17, 2.8, 'tile').block(63, 14, 65, 16, 2.6, 'cblue');
+  B.block(58, 9, 60, 11, 3.0, 'crate').block(68, 18, 70, 20, 3.0, 'crate').block(58, 19, 60, 21, 3.0, 'crate');
+  B.zone('Stern', 6, 7, 24, 23).zone('Pool', 10, 12, 18, 18).zone('Port Side', 24, 7, 58, 10).zone('Starboard Side', 24, 20, 58, 23)
+    .zone('Deckhouse', 26, 10, 46, 20).zone('Bridge', 47, 10, 57, 21).zone('Bow', 58, 7, 72, 23).zone('Hot Tub', 61, 12, 67, 18).zone('Bow Tip', 72, 10, 78, 20);
+  B.site('A', 27, 11, 45, 19).site('B', 58, 8, 71, 22);
+  B.buyzone('T', 6, 8, 16, 22).buyzone('CT', 70, 10, 78, 20);
+  for (let k = 0; k < 5; k++) { B.spawn('T', 9, 10 + k * 2.5, -Math.PI / 2); B.spawn('CT', 73.5, 11 + k * 2, Math.PI / 2); }
+  B.duelSpawn('T', 22, 15, -Math.PI / 2).duelSpawn('CT', 60, 15, Math.PI / 2);
+  B.sign(36, 10.05, 3.6, Math.PI, 'SUGAR DADDY II\nno shirt, no shoes, no problem', 5, 1.1, '#f4f0e8', '#1a3a6a');
+  B.sign(46.05, 15, 4.6, Math.PI / 2, 'CAPTAIN ONLY\n(the captain is a dog)', 3, 1, '#1a3a6a', '#fff');
+  B.sign(62, 12.95, 3.4, 0, 'HOT TUB\n0% chlorine 100% pee', 3, 0.9, '#2a6aff', '#fff');
+  B.prop('lamp', 25, 8, {}).prop('lamp', 25, 22, {}).prop('palm', 9, 21, {}).prop('duck', 13, 15, {});
+  B.sky = 0x5aa0e8; B.fog = 0xbcd8f0; B.sunColor = 0xfff4e0; B.amb = [0xcfe4fa, 0x4a7a9a]; B.sunDir = [0.55, 0.7, -0.4]; B.sunI = 2.7; B.ambI = 1.2;
+  return B;
+}
+
+// ---- Shooting Strange: the army firing range. Shooting lanes with pop-up targets down the middle, the range tower,
+// trailers and sandbag bunkers, the command building and the motor pool garage.
+function range() {
+  const B = new MapBuilder(72, 52, 6, 'concrete', 'dirt');
+  B.open(2, 2, 70, 50, 0, 'dirt');
+  B.open(18, 19, 58, 33, 0, 'grass');                                                     // the lanes
+  for (const z of [22, 25, 28, 31]) { B.block(22, z, 34, z + 1, 1.2, 'concrete'); B.block(38, z, 50, z + 1, 1.2, 'concrete'); }   // lane dividers (gaps to cross)
+  B.block(58, 17, 60, 35, 2.6, 'dirt');                                                   // the berm the targets stand in front of
+  B.block(14, 19, 18, 20, 1.0, 'darkwood').block(14, 32, 18, 33, 1.0, 'darkwood').block(15, 23, 17, 24, 0.9, 'wood').block(15, 28, 17, 29, 0.9, 'wood');
+  B.roof(13, 18, 18, 34, 3.0, 'roof');                                                    // firing-line shelter
+  // range tower (west): stairs up to a glassed lookout over the lanes
+  B.house(4, 21, 11, 31, 6.5, 'plaster', 'concrete', [[4, 24, 5, 27], [6, 21, 9, 22, 1.1]]);
+  B.open(8, 22, 10, 30, 3.0, 'concrete'); B.ramp(5, 27, 8, 30, 0, 3.0, 'x', 'darkwood'); B.block(7, 22, 8, 27, 6.5, 'plaster');
+  B.block(10, 22, 11, 25, 4.0, 'plaster').roof(10, 22, 11, 25, 5.4, 'plaster').block(10, 27, 11, 30, 4.0, 'plaster').roof(10, 27, 11, 30, 5.4, 'plaster');
+  B.roof(4, 24, 5, 27, 2.3, 'plaster').roof(6, 21, 9, 22, 2.3, 'plaster');
+  // command building (A) and motor pool (B)
+  B.house(48, 4, 66, 14, 3.6, 'plaster', 'tile', [[48, 7, 49, 11], [55, 13, 59, 14], [65, 7, 66, 10], [51, 4, 54, 5, 1.1], [60, 4, 63, 5, 1.1]]);
+  B.block(51, 7, 56, 8, 1.0, 'darkwood').block(59, 8, 62, 11, 0.9, 'darkwood');
+  B.roof(48, 7, 49, 11, 2.4, 'plaster').roof(55, 13, 59, 14, 2.4, 'plaster').roof(65, 7, 66, 10, 2.4, 'plaster');
+  B.house(48, 38, 66, 48, 4.5, 'metal', 'concrete', [[52, 38, 60, 39], [48, 42, 49, 45], [65, 41, 66, 44]]);
+  B.block(54, 41, 60, 45, 2.2, 'cgreen').block(50, 45, 52, 47, 1.1, 'crate');            // army truck
+  B.roof(52, 38, 60, 39, 3.6, 'metal');
+  // trailers, bunkers, crates
+  B.block(22, 6, 28, 9, 2.6, 'plaster').block(22, 43, 28, 46, 2.6, 'plaster');
+  B.block(30, 8, 36, 9, 1.2, 'concrete').block(30, 42, 36, 43, 1.2, 'concrete').block(40, 12, 41, 16, 1.2, 'concrete').block(40, 36, 41, 40, 1.2, 'concrete');
+  B.block(16, 10, 18, 12, 1.1, 'crate').block(16, 40, 18, 42, 1.1, 'crate').block(44, 24, 46, 28, 1.1, 'crate').block(62, 22, 64, 24, 1.1, 'crate').block(62, 28, 64, 30, 1.1, 'crate');
+  B.zone('Spawn West', 2, 2, 14, 50).zone('North Trailers', 18, 2, 46, 17).zone('South Trailers', 18, 35, 46, 50).zone('Firing Line', 13, 18, 18, 34)
+    .zone('Lanes', 18, 19, 58, 33).zone('Berm', 58, 17, 62, 35).zone('Range Tower', 4, 21, 11, 31).zone('Command', 48, 4, 66, 14).zone('Motor Pool', 48, 38, 66, 48).zone('CT Yard', 62, 15, 70, 37);
+  B.site('A', 49, 5, 65, 13).site('B', 49, 39, 65, 47);
+  B.buyzone('T', 2, 2, 12, 18).buyzone('CT', 64, 16, 70, 36);
+  for (let k = 0; k < 5; k++) { B.spawn('T', 5 + (k % 3) * 2.5, 6 + Math.floor(k / 3) * 5, -Math.PI / 2); B.spawn('CT', 67, 18 + k * 4, Math.PI / 2); }
+  B.duelSpawn('T', 16, 26, -Math.PI / 2).duelSpawn('CT', 62, 26, Math.PI / 2);
+  B.sign(36, 33.05, 1.4, 0, 'LANE 69\nnice', 2.2, 0.8, '#1d3b24', '#f3e9b0');
+  B.sign(57, 4.05, 2.6, 0, 'RANGE COMMAND\nknock first, I\'m on the toilet', 4, 1.1, '#2a3a2a', '#fff');
+  B.sign(56, 38.05, 3.8, 0, 'MOTOR POOL\nno farting in the tanks', 4, 1, '#3a3a2a', '#ffd23a');
+  B.sign(11.05, 26, 4.8, Math.PI / 2, 'RANGE IS HOT\n(so is my mom)', 3, 1, '#b01818', '#fff');
+  for (const z of [20.5, 23.5, 26.5, 29.5, 32]) B.prop('dummy', 56, z, {});
+  B.prop('tree', 4, 44, {}).prop('tree', 68, 6, {}).prop('tree', 30, 48, {}).prop('lamp', 46, 20, {}).prop('lamp', 46, 32, {}).prop('barrel', 20, 14, {}).prop('barrel', 47, 36, {});
+  B.sky = 0x6a9ad8; B.fog = 0xc8d4c0; B.sunColor = 0xfff0d8; B.amb = [0xc8daf0, 0x6a6a4a]; B.sunDir = [-0.5, 0.68, 0.5]; B.sunI = 2.5; B.ambI = 1.15;
+  return B;
+}
+
 export const MAPS = {
   dust: { id: 'dust', name: 'Dust Two: Abbottabad', short: 'Abbottabad', parody: 'the classic desert bomb map', build: dust, modes: ['1v1', '2v2', '3v3', '5v5'] },
   nuke: { id: 'nuke', name: 'Nuke Town 2069', short: 'Nuke Town', parody: 'the little nuclear test town', build: nuke, modes: ['1v1', '2v2', '3v3', '5v5'] },
   ship: { id: 'ship', name: 'Shitment', short: 'Shitment', parody: 'the tiny container yard', build: ship, modes: ['1v1', '2v2', '3v3', '5v5'] },
   town: { id: 'town', name: 'Burnt Town', short: 'Burnt Town', parody: 'the zombie crossroads town', build: town, modes: ['1v1', '2v2', '3v3', '5v5'] },
+  crust: { id: 'crust', name: 'Crust', short: 'Crust', parody: 'the tiny desert oil yard', build: crust, modes: ['1v1', '2v2', '3v3', '5v5'] },
+  yacht: { id: 'yacht', name: 'Hijacked: Yacht Rock', short: 'Yacht Rock', parody: 'the hijacked superyacht', build: yacht, modes: ['1v1', '2v2', '3v3', '5v5'] },
+  range: { id: 'range', name: 'Shooting Strange', short: 'Shooting Strange', parody: 'the army firing range', build: range, modes: ['1v1', '2v2', '3v3', '5v5'] },
 };

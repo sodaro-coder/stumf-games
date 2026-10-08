@@ -19,7 +19,7 @@ export const MATS = {  // surfaces (painted in textures.js): base colour (radar,
   yellow: { c: [226, 190, 80], s: 3, d: 3, trim: 1 }, green: { c: [110, 168, 120], s: 3, d: 3, trim: 1 },
   fence: { c: [236, 232, 220], s: 2, d: 1 }, lava: { c: [240, 90, 20], s: 4, d: 9, glow: true },
   dirt: { c: [120, 92, 66], s: 3, d: 6 }, rock: { c: [110, 100, 92], s: 4, d: 8, trim: 1 }, bus: { c: [232, 180, 40], s: 3, d: 2 },
-  potty: { c: [60, 110, 200], s: 1, d: 1 }, darkwood: { c: [86, 58, 40], s: 2, d: 1 },
+  water: { c: [38, 96, 128], s: 6, d: 9 }, potty: { c: [60, 110, 200], s: 1, d: 1 }, darkwood: { c: [86, 58, 40], s: 2, d: 1 },
   trim: { c: [222, 204, 166], s: 2, d: 6 }, sill: { c: [158, 140, 112], s: 2, d: 6 },
 };
 export const MAT_LIST = Object.keys(MATS);
@@ -54,12 +54,14 @@ export class MapBuilder {
   // raise by h from the floor already there (crates on a raised site)
   stack(x0, z0, x1, z1, h, mat = 'crate') { this._rect(x0, z0, x1, z1, (i) => { this.h[i] += h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 0; }); return this; }
   solid(x0, z0, x1, z1, mat = this.wallMat, h = this.wallH) { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 0; }); return this; }
+  // deep water off the edge of a boat: deadly like lava (sharks)
+  water(x0, z0, x1, z1, h = -0.8) { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID.water; this.flag[i] = 3; }); return this; }
   lava(x0, z0, x1, z1, h = -0.3) { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID.lava; this.flag[i] = 3; }); return this; }
   // a hollow building: walls of thickness 1 around the rect with the given gaps (doors open, windows a sill to jump over)
-  house(x0, z0, x1, z1, h, mat, floor, gaps = []) {
-    this.open(x0, z0, x1, z1, 0, floor);
+  house(x0, z0, x1, z1, h, mat, floor, gaps = [], fh = 0) {   // fh: floor height (a deckhouse on a boat); h and sills are absolute
+    this.open(x0, z0, x1, z1, fh, floor);
     this.block(x0, z0, x1, z0 + 1, h, mat); this.block(x0, z1 - 1, x1, z1, h, mat); this.block(x0, z0, x0 + 1, z1, h, mat); this.block(x1 - 1, z0, x1, z1, h, mat);
-    for (const [gx0, gz0, gx1, gz1, sill] of gaps) sill ? this.block(gx0, gz0, gx1, gz1, sill, mat) : this.open(gx0, gz0, gx1, gz1, 0, floor);
+    for (const [gx0, gz0, gx1, gz1, sill] of gaps) sill ? this.block(gx0, gz0, gx1, gz1, sill, mat) : this.open(gx0, gz0, gx1, gz1, fh, floor);
     this.roofs = this.roofs || []; this.roofs.push([x0, z0, x1, z1, h]);
     return this;
   }
