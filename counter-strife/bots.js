@@ -221,7 +221,7 @@ export class Bots {
     this.m.throwNade(p, type, ex, { x: dx / D * h, y: h, z: dz / D * h });
     return true;
   }
-  heard(x, z, by) { for (const p of this.m.players.values()) if (p.bot && p.alive && by && by.team !== p.team && Math.hypot(p.x - x, p.z - z) < 30) { const b = this.B(p); b.heard = { x, z }; if (!b.target) { const want = Math.atan2(-(x - p.x), -(z - p.z)); p.yaw += angDiff(p.yaw, want) * 0.6; } } }
+  heard(x, z, by, range = 30) { for (const p of this.m.players.values()) if (p.bot && p.alive && by && by.team !== p.team && Math.hypot(p.x - x, p.z - z) < range) { const b = this.B(p); b.heard = { x, z }; if (!b.target) { const want = Math.atan2(-(x - p.x), -(z - p.z)); p.yaw += angDiff(p.yaw, want) * 0.6; } } }
   flashed(id, secs) { const b = this.brain.get(id); if (b) b.blind = Math.max(b.blind, secs); }
 }
 export { speedOf, PHYS, BOMB };

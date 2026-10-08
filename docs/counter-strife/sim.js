@@ -141,7 +141,7 @@ export class Match {
       }
     }
   }
-  broadcastRoster() { this.send('roster', [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife }))); }
+  broadcastRoster() { this.send('roster', [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: ((p.loadout || {})[p.team] || {}).att || null }))); }
 
   // ---- inventory ----
   defaultPistol(team, p) { return team === 'T' ? 'glock' : (p && p.loadout && p.loadout.CT && p.loadout.CT.ctPistol === 'p2000' ? 'p2000' : 'usp'); }

@@ -7,6 +7,7 @@ import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_I
 import { MAPS } from './maps.js';
 import { thumb, stage } from './thumbs.js';
 import { VOICE_PACKS } from './voices.js';
+import { ATTACH, slotsFor, optionsFor, gunLevel, xpForLevel, GUN_MAX } from './guns.js';
 import { topUp as sdkTopUp } from '../sdk/topup.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -88,6 +89,12 @@ const CSS = `
 .cs-hud .dmgdir{position:absolute;left:50%;top:50%;width:180px;height:180px;margin:-90px;border-radius:50%;border-top:6px solid rgba(255,40,40,.8);opacity:0;transition:opacity .5s}
 .cs-xh{position:absolute;left:50%;top:50%;width:0;height:0}.cs-xh i{position:absolute;background:var(--xc,#5f5);box-shadow:0 0 0 1px rgba(0,0,0,var(--xo,.6))}
 .cs-scope{position:fixed;inset:0;z-index:19;pointer-events:none;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 34vh,#000 34.2vh)}
+.cs-scope.ret:before,.cs-scope.ret:after{display:none}
+.cs-ads{position:fixed;inset:0;z-index:18;pointer-events:none;display:none}
+.cs-ads .dot{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#ff2a2a;box-shadow:0 0 6px 2px rgba(255,40,40,.7)}
+.cs-ads .holo{position:absolute;left:50%;top:50%;width:10vh;height:10vh;transform:translate(-50%,-50%);filter:drop-shadow(0 0 3px rgba(255,50,50,.8))}
+.cs-ads.acog{background:radial-gradient(circle at 50% 50%,transparent 0,transparent 31vh,rgba(0,0,0,.55) 33vh,rgba(0,0,0,.94) 35vh)}
+.cs-ads .chev{position:absolute;left:50%;top:50%;width:34vh;height:34vh;transform:translate(-50%,-50%)}
 .cs-scope:before,.cs-scope:after{content:"";position:absolute;background:#000}.cs-scope:before{left:0;right:0;top:50%;height:1px}.cs-scope:after{top:0;bottom:0;left:50%;width:1px}
 .cs-flash{position:fixed;inset:0;z-index:25;background:#fff;pointer-events:none;opacity:0}
 .cs-hurt{position:fixed;inset:0;z-index:18;pointer-events:none;background:radial-gradient(transparent 55%,rgba(200,0,0,.55));opacity:0;transition:opacity .25s}
@@ -231,10 +238,26 @@ function paintAll(root, items) {
   });
 }
 const ICON = {  // nav icons (simple inline SVG paths)
+  guns: 'M11 2h2v4h-2zM11 18h2v4h-2zM2 11h4v2H2zM18 11h4v2h-4zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z',
   home: 'M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z', play: 'M7 4l13 8-13 8z', pass: 'M5 3h14v18l-7-4-7 4z', inv: 'M4 7h16v13H4zM8 7V4h8v3', crates: 'M3 8l9-5 9 5v8l-9 5-9-5zM12 13v8M3 8l9 5 9-5',
   market: 'M4 9l2-5h12l2 5zM5 9h14v11H5zM9 14h6', quests: 'M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z', friends: 'M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1 21c0-4 3-7 7-7s7 3 7 7zM17 11a3 3 0 1 0 0-6M16 14c4 0 7 3 7 7h-6', admin: 'M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6z', profile: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22c1-5 5-8 9-8s8 3 9 8z', settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 2h4l1 3 3 1 3-1 2 3-2 3 1 2-1 2 2 3-2 3-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-3 2-3-1-2 1-2-2-3 2-3 3 1 3-1z',
 };
 const svg = (k) => `<svg viewBox="0 0 24 24"><path d="${ICON[k]}"/></svg>`;
+// sniper scope reticles (drawn over the scope view) and the aim-down-sights optics' reticles
+const RS = (inner) => `<svg viewBox="-100 -100 200 200" style="position:absolute;left:50%;top:50%;width:68vh;height:68vh;transform:translate(-50%,-50%)">${inner}</svg>`;
+const RETICLES = {
+  duplex: RS('<path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="3"/><path d="M-22 0H22M0 -22V22" stroke="#000" stroke-width="0.8"/>'),
+  mildot: RS('<path d="M-100 0H100M0 -100V100" stroke="#000" stroke-width="0.8"/>' + [-60, -45, -30, -15, 15, 30, 45, 60].map((k) => `<circle cx="${k}" cy="0" r="1.8"/><circle cx="0" cy="${k}" r="1.8"/>`).join('')),
+  dotret: RS('<path d="M-100 0H-30M30 0H100M0 -100V-30M0 30V100" stroke="#000" stroke-width="2"/><circle r="2.4" fill="#ff2a2a"/>'),
+  circle: RS('<circle r="22" fill="none" stroke="#000" stroke-width="1.2"/><path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="1"/><circle r="1" />'),
+  chevret: RS('<path d="M-9 9L0 0L9 9" fill="none" stroke="#ff3a2a" stroke-width="1.6"/><path d="M0 14V100M-100 0H-40M40 0H100" stroke="#000" stroke-width="1.2"/>'),
+  hotdog: RS('<ellipse rx="16" ry="5" fill="#d8a050"/><ellipse rx="18" ry="3" fill="#b8402a"/><path d="M-14 -1Q-10 -4 -6 -1T2 -1T10 -1" stroke="#f2d33c" fill="none" stroke-width="1.2"/><path d="M-100 0H-24M24 0H100M0 -100V-12M0 12V100" stroke="#000" stroke-width="1"/>'),
+};
+const ADS_RET = {
+  reddot: '<div class="dot"></div>',
+  holo: '<svg viewBox="-20 -20 40 40" class="holo"><circle r="13" fill="none" stroke="#ff3030" stroke-width="1.3"/><circle r="1.6" fill="#ff3030"/><path d="M0 -13V-9M0 13V9M-13 0H-9M13 0H9" stroke="#ff3030" stroke-width="1.3"/></svg>',
+  acog: '<svg viewBox="-20 -20 40 40" class="chev"><path d="M-3.5 3L0 -0.5L3.5 3" fill="none" stroke="#ff3a2a" stroke-width="1"/><path d="M0 3.5V14M-12 0H-6M6 0H12" stroke="#111" stroke-width="0.6"/></svg>',
+};
 // a case drawn from its pull set's colours (a box with a stripe and the case's name)
 function drawCase(c, crate) {
   const g = c.getContext('2d'), W = c.width, H = c.height, cols = [...new Set(crate.items.filter((i) => i.paint).map((i) => i.paint.c[0]))].slice(0, 3);
@@ -258,7 +281,7 @@ export class Menu {
     this.root = document.createElement('div'); this.root.className = 'cs cs-menu';
     const title = esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`);
     this.root.innerHTML = `<canvas class="cs-stage"></canvas><div class="cs-vig"></div>
-      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${[['home', 'Home'], ['play', 'Play'], ['inv', 'Inventory'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])]
+      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${[['home', 'Home'], ['play', 'Play'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])]
         .map(([k, n]) => `<button data-tab="${k}">${svg(k)}<span>${n}</span></button>`).join('')}</nav>
         <div class="cs-acct"><button class="cs-coinbox" id="mTop" style="cursor:pointer;color:#7ed957">＋ TOP UP</button><span class="cs-coinbox" id="mCoins"></span><div class="cs-rank"><b id="mLvlN">1</b><div><div style="font:700 11px system-ui;color:#c8d0da" id="mName"></div><div class="xp"><i id="mXp"></i></div></div></div>
         <button class="cs-ibtn" id="mFull" title="Fullscreen (also makes Ctrl-crouch safe)">⛶</button></div></div>
@@ -544,6 +567,32 @@ export class Menu {
       <div class="cs-mut cs-small">New daily quests every day (UTC). Matches against bots count, at half the coins.</div>`;
     B.querySelectorAll('[data-claim]').forEach((b) => (b.onclick = async () => { const n = await P.claimQuest(b.dataset.claim); this.h.toast(n ? `+${n} coins` : 'Daily coin limit reached'); this.render(); }));
   }
+  // ---- GUNSMITH: gun levels and attachments ----
+  tab_guns(B) {
+    const P = this.P, list = WEAPONS.filter((w) => slotsFor(w.id).length);
+    const sel = W_BY_ID[this.gunSel] && slotsFor(this.gunSel).length ? this.gunSel : 'ak47';
+    const lvlOf = (wid) => gunLevel(P.gun(wid).xp);
+    const bar = (wid) => { const xp = P.gun(wid).xp, l = gunLevel(xp); if (l >= GUN_MAX) return 100; const a = xpForLevel(l), b = xpForLevel(l + 1); return Math.round((xp - a) / (b - a) * 100); };
+    const cats = [['rifle', 'Rifles'], ['sniper', 'Snipers'], ['smg', 'SMGs'], ['heavy', 'Heavy'], ['pistol', 'Pistols']];
+    const g = P.gun(sel), L = lvlOf(sel), slotName = { optic: 'Optic', muzzle: 'Muzzle', reticle: 'Scope reticle' };
+    B.innerHTML = `<div style="display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:14px">
+      <div class="cs-panel2" style="max-height:70vh;overflow:auto"><div class="bd">${cats.map(([c, n]) => `<div class="cs-h" style="margin-top:6px">${n}</div>` + list.filter((w) => w.cat === c).map((w) => `
+        <div class="cs-card" data-gun="${w.id}" style="margin-bottom:6px;cursor:pointer;${w.id === sel ? 'outline:2px solid var(--acc,#e8a33a)' : ''}"><div class="cs-row"><img src="${weaponIcon(w.id)}" style="height:18px;opacity:.9"><b class="cs-small">${esc(w.name)}</b><span style="flex:1"></span><span class="cs-small">${lvlOf(w.id) >= GUN_MAX ? '★ ' : ''}Lv ${lvlOf(w.id)}</span></div>
+        <div class="cs-bar" style="margin-top:6px"><i style="width:${bar(w.id)}%"></i></div></div>`).join('')).join('')}</div></div>
+      <div class="cs-panel2"><div class="bd">
+        <div class="cs-row"><img src="${weaponIcon(sel)}" style="height:42px"><div><h2 style="margin:0">${esc(W_BY_ID[sel].name)}</h2>
+        <div class="cs-mut">Level ${L}${L >= GUN_MAX ? ' · <b style="color:#ffd23a">★ PRESTIGE</b>' : ` · ${g.xp} / ${xpForLevel(L + 1)} XP to level ${L + 1}`}</div></div></div>
+        ${slotsFor(sel).map((slot) => `<div class="cs-h" style="margin-top:14px">${slotName[slot]}</div><div class="cs-row" style="flex-wrap:wrap;gap:8px">${optionsFor(sel, slot).map((o) => {
+          const locked = L < o.lvl, on = g.att[slot] === o.id;
+          return `<button class="cs-btn ${on ? '' : 'alt'} sm" data-att="${slot}:${o.id}" ${locked ? 'disabled' : ''} title="${locked ? 'Unlocks at level ' + o.lvl : ''}">${esc(o.name)}${locked ? ` <span class="cs-mut">· Lv ${o.lvl}</span>` : ''}</button>`;
+        }).join('')}</div>`).join('')}
+        <div class="cs-small cs-mut" style="margin-top:16px;line-height:1.5">Level a gun by playing with it: every point of damage, every kill (headshots more) and every round won while holding it.
+          Attachments never change how a gun performs: an optic lets you <b>hold right click to aim down sights</b> (bullets go where the dot is; recoil moves your view, so pull down), muzzles are looks only,
+          and the <b>Level 10 suppressor</b> only makes the gun quieter. Snipers choose their scope's reticle.</div>
+      </div></div></div>`;
+    B.querySelectorAll('[data-gun]').forEach((e) => (e.onclick = () => { this.gunSel = e.dataset.gun; this.h.sound('tick'); this.render(); }));
+    B.querySelectorAll('[data-att]').forEach((e) => (e.onclick = async () => { const [slot, id] = e.dataset.att.split(':'); try { await P.gunEquip(sel, slot, id); this.h.sound('buy'); } catch (err) { this.h.toast(err.message); } this.render(); }));
+  }
   // ---- PROFILE ----
   tab_profile(B) {
     const P = this.P, s = P.d.stats;
@@ -611,13 +660,14 @@ export class Hud {
       <div class="br"><div class="slots"></div><div class="ammo"></div></div><div class="cs-xh"></div>`;
     document.body.appendChild(this.el);
     this.scope = document.createElement('div'); this.scope.className = 'cs-scope'; document.body.appendChild(this.scope);
+    this.ads = document.createElement('div'); this.ads.className = 'cs-ads'; document.body.appendChild(this.ads);
     this.flash = document.createElement('div'); this.flash.className = 'cs-flash'; document.body.appendChild(this.flash);
     this.hurtEl = document.createElement('div'); this.hurtEl.className = 'cs-hurt'; document.body.appendChild(this.hurtEl);
     this.radar = $('canvas.radar', this.el); this.rg = this.radar.getContext('2d');
     this.q = (s) => $(s, this.el);
     this.last = {};
   }
-  destroy() { for (const e of [this.el, this.scope, this.flash, this.hurtEl, this.panel, this.radioEl, this.chatIn]) if (e) e.remove(); }
+  destroy() { for (const e of [this.el, this.scope, this.ads, this.flash, this.hurtEl, this.panel, this.radioEl, this.chatIn]) if (e) e.remove(); }
   set(k, sel, v, prop = 'textContent') { if (this.last[k] === v) return; this.last[k] = v; const e = this.q(sel); if (e) e[prop] = v; }
   vitals(hp, armor, helmet) {
     this.set('hp', '#hHp span:last-child', String(Math.max(0, Math.round(hp)))); this.q('#hHp').classList.toggle('low', hp <= 20);
@@ -633,7 +683,15 @@ export class Hud {
     this.set('tT', '#hT', icons(teams.T, 'var(--tt)'), 'innerHTML'); this.set('tCT', '#hCT', icons(teams.CT, 'var(--ct)'), 'innerHTML');
   }
   xh(spread, show) { const b = this.q('.cs-xh'); b.style.display = show ? '' : 'none'; const k = Math.round(spread); if (this.last.xs === k && this.last.xS === this.S) return; this.last.xs = k; drawXh(b, this.S, k); }
-  setScope(on) { this.scope.style.display = on ? 'block' : 'none'; }
+  setScope(on, ret = 'duplex') {
+    this.scope.style.display = on ? 'block' : 'none';
+    if (on && this.scopeRet !== ret) { this.scopeRet = ret; this.scope.className = 'cs-scope ret'; this.scope.innerHTML = RETICLES[ret] || RETICLES.duplex; }
+  }
+  // aiming down sights through an optic: the reticle sits at screen centre (the sight line is the view line)
+  setAds(kind) {
+    if (this.adsKind === kind) return; this.adsKind = kind;
+    this.ads.style.display = kind ? 'block' : 'none'; this.ads.innerHTML = kind ? (ADS_RET[kind] || '') : ''; this.ads.className = 'cs-ads ' + (kind || '');
+  }
   feed(e, mineId) {
     const box = this.q('.feed'), row = document.createElement('div'); row.className = 'kf' + (e.kid === mineId || e.vid === mineId ? ' mine' : '');
     const n = (t, team) => { const s = document.createElement('span'); s.textContent = t; s.style.color = team === 'CT' ? 'var(--ct)' : 'var(--tt)'; return s; };
