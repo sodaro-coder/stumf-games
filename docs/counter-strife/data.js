@@ -120,10 +120,10 @@ export const PHYS = {
 
 // bot difficulty, picked by the host
 export const BOT_LEVELS = {
-  easy: { name: 'Easy', react: 0.75, aimErr: 0.09, turn: 3.5, head: 0.05, spray: 0.4, burst: 4 },
-  normal: { name: 'Normal', react: 0.45, aimErr: 0.05, turn: 6, head: 0.14, spray: 0.65, burst: 6 },
-  hard: { name: 'Hard', react: 0.28, aimErr: 0.028, turn: 9, head: 0.28, spray: 0.85, burst: 8 },
-  expert: { name: 'Expert', react: 0.17, aimErr: 0.015, turn: 14, head: 0.45, spray: 0.95, burst: 10 },
+  easy: { name: 'Easy', react: 0.75, aimErr: 0.09, turn: 3.5, head: 0.03, spray: 0.4, burst: 4 },
+  normal: { name: 'Normal', react: 0.45, aimErr: 0.05, turn: 6, head: 0.08, spray: 0.65, burst: 6 },
+  hard: { name: 'Hard', react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },
+  expert: { name: 'Expert', react: 0.17, aimErr: 0.015, turn: 14, head: 0.3, spray: 0.95, burst: 10 },
 };
 
 export const RADIO = {

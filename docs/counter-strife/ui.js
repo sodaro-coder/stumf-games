@@ -163,10 +163,11 @@ export class Menu {
     this.root.innerHTML = `<nav class="cs-side">${[['play', '▶', 'PLAY'], ['pass', '🎖', 'PASS'], ['inv', '🎒', 'INVENTORY'], ['crates', '📦', 'CRATES'], ['market', '🏪', 'MARKET'], ['quests', '★', 'QUESTS'], ['profile', '👤', 'PROFILE'], ['settings', '⚙', 'SETTINGS']]
       .map(([k, i, n]) => `<button data-tab="${k}"><b>${i}</b>${n}</button>`).join('')}</nav>
       <div class="cs-main"><div class="cs-top"><div class="cs-logo">${esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`)}</div><span class="cs-mut cs-small">Global Offensive Smell</span><div class="sp"></div>
-      <span class="cs-chip cs-lvl" id="mLvl"></span><span class="cs-chip cs-coin" id="mCoins"></span><span class="cs-chip" id="mAcct"></span></div><div class="cs-body" id="mBody"></div></div>`;
+      <span class="cs-chip cs-lvl" id="mLvl"></span><span class="cs-chip cs-coin" id="mCoins"></span><span class="cs-chip" id="mAcct"></span><button class="cs-chip" id="mFull" title="Fullscreen (also lets Ctrl-crouch work safely)">⛶</button></div><div class="cs-body" id="mBody"></div></div>`;
     document.body.appendChild(this.root);
     this.root.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { this.tab = b.dataset.tab; this.render(); }));
     this.off = this.P.on(() => this.top());
+    $('#mFull', this.root).onclick = () => { const d = document.documentElement; if (document.fullscreenElement) document.exitFullscreen(); else if (d.requestFullscreen) d.requestFullscreen().then(() => navigator.keyboard && navigator.keyboard.lock && navigator.keyboard.lock().catch(() => {})).catch(() => {}); };
     this.render();
     this.P.daily().then((n) => n && this.h.toast(`Daily bonus: +${n} coins`));
   }
@@ -383,10 +384,11 @@ export class Menu {
         <div class="cs-card" style="display:grid;place-items:center;min-height:90px;background:#3a4a3a"><div style="position:relative;width:1px;height:1px" id="xPrev"></div></div></div>
       <div class="cs-h">Graphics</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Quality</div><select data-k="quality"><option value="0.5">Potato (fastest)</option><option value="0.75">Low</option><option value="1">Medium</option><option value="1.5">High</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Show FPS</div><select data-k="fps"><option value="0">Off</option><option value="1">On</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label></div>
-      <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift walk · Ctrl crouch · Space jump · Mouse1 fire · Mouse2 scope / alt fire · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · Z X C radio · T emotes · F inspect · Esc menu</div>`;
-    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
+      <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift walk · Ctrl (or C) crouch · Space jump · Mouse1 fire · Mouse2 scope / alt fire · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · Z X C radio · T emotes · F inspect · Esc menu</div>`;
+    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
     drawXh($('#xPrev', B), S, 0);
   }
 }

@@ -103,6 +103,7 @@ export class Bots {
       const onTarget = Math.abs(ey) < 0.06 + 0.4 / Math.max(d, 1);
       if (b.react <= 0 && onTarget && b.cd <= 0 && it) {
         if (w.cat === 'knife') { if (d < 1.6) { m.shot(p, 'knife', [{ id: tgt.id, group: 'chest', pen: 1 }], eye); b.cd = 0.5; } }
+        else if (p.nades.includes('he') && d > 8 && d < 26 && b.heRound !== m.round && Math.random() < 0.02) { b.heRound = m.round; this.throwAt(p, 'he', tgt.x, tgt.z); b.cd = 0.8; }
         else if (it.ammo > 0) {
           this.fire(p, b, w, it, eye, L);
         } else if (!b.reloading) { b.reloading = w.reload; }
@@ -155,6 +156,8 @@ export class Bots {
         return this.walkTo(p, b, b.goal, dt);
       }
       if (!b.goal || b.goalFor !== 'site') { b.goal = W.randomIn(site); b.goalFor = 'site'; }
+      const sc = [(site[0] + site[2]) / 2, (site[1] + site[3]) / 2], ds = Math.hypot(sc[0] - p.x, sc[1] - p.z);
+      if (b.utilRound !== m.round && ds < 24 && ds > 9) { b.utilRound = m.round; for (const t of ['smoke', 'flash', 'molotov']) if (p.nades.includes(t) && Math.random() < 0.7) { this.throwAt(p, t, sc[0] + (Math.random() - 0.5) * 6, sc[1] + (Math.random() - 0.5) * 6); break; } }
       return this.walkTo(p, b, b.goal, dt);
     }
     // CT
@@ -193,6 +196,14 @@ export class Bots {
     b.stuck = moved < 0.5 * dt ? b.stuck + dt : Math.max(0, b.stuck - dt);
   }
 
+  // lob a grenade so it lands near (tx, tz): 45° throw, speed from the distance
+  throwAt(p, type, tx, tz) {
+    const i = p.nades.indexOf(type); if (i < 0) return false;
+    const dx = tx - p.x, dz = tz - p.z, D = Math.max(2, Math.hypot(dx, dz)), g = 20.3, v = Math.min(19, Math.sqrt(g * D * 0.9)), h = v / Math.SQRT2;
+    const ex = { x: p.x + dx / D * 0.4, y: p.y + 1.5, z: p.z + dz / D * 0.4 };
+    this.m.throwNade(p, type, ex, { x: dx / D * h, y: h, z: dz / D * h });
+    return true;
+  }
   heard(x, z, by) { for (const p of this.m.players.values()) if (p.bot && p.alive && by && by.team !== p.team && Math.hypot(p.x - x, p.z - z) < 30) { const b = this.B(p); b.heard = { x, z }; if (!b.target) { const want = Math.atan2(-(x - p.x), -(z - p.z)); p.yaw += angDiff(p.yaw, want) * 0.6; } } }
   flashed(id, secs) { const b = this.brain.get(id); if (b) b.blind = Math.max(b.blind, secs); }
 }

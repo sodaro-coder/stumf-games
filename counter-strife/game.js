@@ -1,4 +1,4 @@
-// Counter-Strife (tactical kit): menus, then a match. The host's browser runs the Match + Bots (solo play is a host
+// KYS:GO (tactical kit): menus, then a match. The host's browser runs the Match + Bots (solo play is a host
 // with no peers); everyone simulates their own movement and shooting locally and the host settles damage, money,
 // rounds and the bomb, then sends 20 snapshots a second. Rendering is one merged mesh per material plus simple
 // box-built players, so it holds 60 fps on weak integrated graphics.
@@ -11,10 +11,10 @@ import { Bots, botNames } from './bots.js';
 import { Profile } from './backend.js';
 import { Menu, Hud, injectCss, esc } from './ui.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound } from './skins.js';
-import { makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic } from './models.js';
+import { setTpGun, makePlayer, posePlayer, makeGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
-const DEF_SET = { voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 1, fps: 0, hand: 1 };
+const DEF_SET = { crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 1, fps: 0, hand: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -205,6 +205,13 @@ export default function start({ cfg, E, N, smoke }) {
       if (r0) scene.remove(r0.g);
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
       const r = makePlayer(a.look, team); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
+      if (id !== myId) {  // teammates' names float over their heads
+        const c = document.createElement('canvas'); c.width = 256; c.height = 48; const g = c.getContext('2d');
+        g.font = 'bold 28px system-ui,sans-serif'; g.textAlign = 'center'; g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.8)'; g.fillStyle = team === 'CT' ? '#9cc4ff' : '#ffd27a';
+        const nm = String(info.name || '').slice(0, 18); g.strokeText(nm, 128, 34); g.fillText(nm, 128, 34);
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+        sp.scale.set(1.3, 0.25, 1); sp.position.y = 2.15; sp.renderOrder = 5; r.g.add(sp); r.tag = sp;
+      }
       return r;
     }
 
@@ -224,7 +231,8 @@ export default function start({ cfg, E, N, smoke }) {
       else if (G_BY_ID[wid]) { vm = makeGrenade(wid); vm.scale.setScalar(1.6); }
       else if (wid === 'c4') { vm = makeBomb(); vm.scale.setScalar(0.9); }
       else { const sk = it.skin, si = sk ? itemInfo(sk) : null; vm = makeGun(wid, sk && si ? skinTexture(sk, si) : null, sleeve); }
-      vm.userData.base = new THREE.Vector3(0.19 * S.hand, -0.2, -0.46); vm.userData.ry = 0.16 * S.hand; vm.scale.multiplyScalar(0.85);
+      const small = (W_BY_ID[wid] || {}).cat === 'pistol' || wid === 'zeus';
+      vm.userData.base = small ? new THREE.Vector3(0.17 * S.hand, -0.16, -0.44) : new THREE.Vector3(0.19 * S.hand, -0.2, -0.46); vm.userData.ry = (small ? 0.28 : 0.16) * S.hand; vm.scale.multiplyScalar(small ? 0.62 : 0.85);
       vm.position.copy(vm.userData.base); vmScene.add(vm);
       me.deploy = wid === 'knife' ? 0.4 : G_BY_ID[wid] ? 0.5 : (W_BY_ID[wid] || {}).cat === 'pistol' ? 0.6 : 0.9; me.scoped = 0; audio.play('deploy');
     }
@@ -284,7 +292,7 @@ export default function start({ cfg, E, N, smoke }) {
     const onLock = () => { locked = document.pointerLockElement === renderer.domElement; if (!locked && !uiOpen && !ended && !smoke) openPause(); };
     document.addEventListener('pointerlockchange', onLock);
     const lock = () => { try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock(['ControlLeft', 'KeyW', 'Tab']).catch(() => {}); };
-    E.touchControls(['fire', 'jump', 'reload', 'use', 'alt']);
+    E.touchControls(['fire', 'jump', 'reload', 'use', 'alt', 'crouch', 'buy']);
     const kd = (c) => keys.has(c), kp = (c) => pressed.has(c);
 
     // ---- networking ----
@@ -368,14 +376,15 @@ export default function start({ cfg, E, N, smoke }) {
       if (hud.panelRender && hud.panel && hud.panel.dataset.k === 'buy') hud.panelRender();
       setViewModel();
     }
-    function onSpawn(m) { me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
+    function onSpawn(m) { dmgFrom.clear(); dmgTo.clear(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
     function onHurt(m) {
-      me.hp = m.hp; me.armor = m.armor; audio.play('hurt');
+      me.hp = m.hp; me.armor = m.armor; audio.play('hurt'); if (m.by) dmgFrom.set(m.by, (dmgFrom.get(m.by) || 0) + (m.dmg | 0));
       const ang = m.from ? angDiff(me.yaw, Math.atan2(-(m.from[0] - me.x), -(m.from[1] - me.z))) : null;
       hud.hurt(ang != null ? -ang : null); me.punch += 0.03;
       if (m.hp <= 0) me.alive = false;
     }
-    function onHitConfirm(m) { audio.play(m.group === 'head' ? 'head' : 'hit'); stats.dmg += m.dmg | 0; }
+    const dmgFrom = new Map(), dmgTo = new Map();
+    function onHitConfirm(m) { audio.play(m.group === 'head' ? 'head' : 'hit'); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); }
     function onFire(m) {
       if (m.id === myId) return;
       const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
@@ -407,7 +416,11 @@ export default function start({ cfg, E, N, smoke }) {
       if (type === 'kill') {
         hud.feed(data, myId);
         if (data.kid === myId && data.vteam !== me.team) { stats.k++; if (data.head) stats.hs++; const w = W_BY_ID[data.weapon]; if (w && w.cat === 'pistol') stats.pistol++; if (w && w.cat === 'smg') stats.smg++; if (data.weapon === 'knife') stats.knife++; if (G_BY_ID[data.weapon]) stats.nade++; bumpStatTrak(data.weapon); }
-        if (data.vid === myId) { stats.d++; me.alive = false; hud.banner('You died', data.killer ? `Killed by ${data.killer}` : '', 2500); }
+        if (data.vid === myId) {
+          stats.d++; me.alive = false;
+          const k = data.kid ? st.players.get(data.kid) : null, took = data.kid ? (dmgFrom.get(data.kid) || 0) : 0, gave = data.kid ? (dmgTo.get(data.kid) || 0) : 0;
+          hud.banner('You died', data.killer ? `${data.killer} · ${itemName(data.weapon)}${data.head ? ' · headshot' : ''}${k ? ` · they had ${Math.max(0, k.hp | 0)} HP` : ''} · you dealt ${gave}, took ${took}` : '', 4000);
+        }
         if (data.assist === myName) stats.a++;
         const r = rigs.get(data.vid); if (r) r.dieT = 0.001;
       }
@@ -692,11 +705,11 @@ export default function start({ cfg, E, N, smoke }) {
           }
           if (me.burstLeft > 0 && me.cd <= 0) { me.burstLeft--; fire(false); }
         }
-        if (kp('KeyB')) openBuy();
+        if (kp('KeyB') || E.input.touch.tapped.has('buy')) openBuy();
         if (kp('KeyY')) hud.chatInput(false, (t) => toHost('chat', { text: t, team: false }));
         if (kp('KeyU')) hud.chatInput(true, (t) => toHost('chat', { text: t, team: true }));
         if (kp('KeyT') && me.alive) { radioOpen = 'emote'; hud.emoteWheel(profile.wheel().map((id) => EMOTE_BY_ID[id]).filter(Boolean), (e) => toHost('emote', e.id)); }
-        for (const k of ['z', 'x', 'c']) if (kp('Key' + k.toUpperCase()) && !kd('ControlLeft')) { radioOpen = k; hud.radio(k, me.team, (t) => toHost('chat', { text: '📻 ' + t, team: true })); }
+        for (const k of S.crouchKey === 'c' ? ['z', 'x'] : ['z', 'x', 'c']) if (kp('Key' + k.toUpperCase()) && !kd('ControlLeft')) { radioOpen = k; hud.radio(k, me.team, (t) => toHost('chat', { text: '📻 ' + t, team: true })); }
       } else if (uiOpen === 'buy') {
         if (kp('KeyB') || kp('Escape')) closeBuy();
         if (!canBuy()) closeBuy();
@@ -707,7 +720,7 @@ export default function start({ cfg, E, N, smoke }) {
       const mv = typing || uiOpen === 'pause' ? { x: 0, y: 0 } : (() => { let x = (kd('KeyD') ? 1 : 0) - (kd('KeyA') ? 1 : 0), y = (kd('KeyW') ? 1 : 0) - (kd('KeyS') ? 1 : 0); if (E.input.touch.active && (E.input.touch.move.x || E.input.touch.move.y)) { x = E.input.touch.move.x; y = E.input.touch.move.y; } return { x, y }; })();
       if (me.emote) { me.emote.t += dt; if (me.emote.t > me.emote.dur || !me.alive || mv.x || mv.y || mouseBtn[0] || kd('Space')) me.emote = null; }
       if (me.alive) {
-        const inp = { f: frozen ? 0 : mv.y, s: frozen ? 0 : mv.x, jump: !frozen && !typing && (kd('Space') || E.input.touch.buttons.has('jump')), crouch: !typing && (kd('ControlLeft') || kd('ControlRight')), walk: !typing && (kd('ShiftLeft') || kd('ShiftRight')) };
+        const inp = { f: frozen ? 0 : mv.y, s: frozen ? 0 : mv.x, jump: !frozen && !typing && (kd('Space') || E.input.touch.buttons.has('jump')), crouch: !typing && (S.crouchKey === 'c' ? kd('KeyC') : (kd('ControlLeft') || kd('ControlRight'))) || E.input.touch.buttons.has('crouch'), walk: !typing && (kd('ShiftLeft') || kd('ShiftRight')) };
         const wasG = me.onGround;
         moveStep(W, me, inp, dt, wspeed);
         if (!wasG && me.onGround && me.wasAir > 0.25) audio.play('land', 0.5);
@@ -767,6 +780,8 @@ export default function start({ cfg, E, N, smoke }) {
         if (p.alive) r.dieT = null; else r.dieT += dt;
         const sp = Math.hypot(p.x - r.x, p.z - r.z) / Math.max(dt, 1e-3); r.x = p.x; r.z = p.z;
         r.g.position.set(p.x, p.y, p.z); r.g.rotation.y = p.yaw;
+        setTpGun(r, p.wid || 'knife');
+        if (r.tag) r.tag.visible = p.alive && p.team === me.team && !(spectating && p.id === spectating.id);
         r.t += dt;
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }

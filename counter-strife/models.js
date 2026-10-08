@@ -49,8 +49,18 @@ export function makePlayer(look, team) {
   }
   // third-person gun in the right hand
   const tpGun = new THREE.Group(); tpGun.position.set(0, -0.5, 0); armR.add(tpGun);
-  part(tpGun, 0.06, 0.08, 0.55, lam('#222'), 0, 0, -0.18);
-  return { g, hip, legL, legR, torso, armL, armR, neck, tpGun };
+  return { g, hip, legL, legR, torso, armL, armR, neck, tpGun, tpKey: '' };
+}
+// the gun in a player's hands, sized by what they hold (so you can tell an AWP from a pistol at a glance)
+const TP = { pistol: [0.05, 0.1, 0.22], smg: [0.06, 0.11, 0.4], heavy: [0.07, 0.1, 0.7], rifle: [0.06, 0.1, 0.7], sniper: [0.06, 0.1, 0.9], knife: [0.02, 0.04, 0.22], zeus: [0.05, 0.08, 0.18] };
+export function setTpGun(r, wid) {
+  if (r.tpKey === wid) return; r.tpKey = wid;
+  for (const c of [...r.tpGun.children]) r.tpGun.remove(c);
+  const w = W_BY_ID[wid], cat = w ? w.cat : wid === 'c4' ? 'c4' : 'knife';
+  if (cat === 'c4') { part(r.tpGun, 0.2, 0.08, 0.14, lam('#5a4a32'), 0, 0, -0.08); return; }
+  const [a, b, c] = TP[cat] || TP.rifle;
+  part(r.tpGun, a, b, c, lam(cat === 'knife' ? '#a8adb6' : '#26282c'), 0, 0, -c / 2 + 0.08);
+  if (cat === 'sniper') part(r.tpGun, 0.05, 0.05, 0.2, lam('#111'), 0, 0.08, -0.15);
 }
 // animate the rig: walk cycle, crouch, aim pitch
 export function posePlayer(r, { speed = 0, t = 0, crouch = 0, pitch = 0, dead = 0, emote = null }) {
@@ -104,7 +114,7 @@ const SHAPE = { pistol: [0.2, 0.05, 0, 0.1, 0.1], smg: [0.32, 0.12, 0.14, 0.18, 
   sniper: [0.52, 0.42, 0.26, 0.12, 0.12], zeus: [0.18, 0.06, 0, 0.04, 0.1] };
 export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a') {
   const w = W_BY_ID[id] || { cat: 'pistol' }, g = new THREE.Group();
-  const paint = tex ? new THREE.MeshLambertMaterial({ map: tex }) : lam(w.cat === 'zeus' ? '#e8d040' : w.cat === 'rifle' && w.team === 'T' ? '#6a4a2e' : '#454a52');
+  const paint = tex ? new THREE.MeshLambertMaterial({ map: tex }) : lam(w.cat === 'zeus' ? '#e8d040' : w.cat === 'rifle' && w.team === 'T' ? '#6a4a2e' : w.cat === 'pistol' ? '#5a5f68' : '#454a52');
   const dark = lam('#24272c'), metal = lam('#6a6e76');
   const [rl, bl, sl, mh, hh] = SHAPE[w.cat] || SHAPE.rifle;
   part(g, 0.08, hh, rl, paint, 0, 0, 0);                                     // receiver
@@ -140,8 +150,8 @@ export function makeKnife(knifeId, tex, sleeve = '#3c4e66', glove = '#2a2a2a') {
     case 'bayonet': P(0.02, 0.05, 0.3, blade, 0, 0.03, -0.2); P(0.08, 0.02, 0.02, metal(), 0, 0.02, -0.04); P(0.035, 0.05, 0.13, handle, 0, 0.02, 0.04); break;
     default: P(0.02, 0.045, 0.22, blade, 0, 0.03, -0.14); P(0.035, 0.05, 0.12, handle, 0, 0.02, 0.04); break;
   }
-  part(g, 0.09, 0.09, 0.1, lam(glove), 0, -0.02, 0.06);
-  part(g, 0.1, 0.1, 0.36, lam(sleeve), 0.02, -0.06, 0.28);
+  part(g, 0.065, 0.065, 0.08, lam(glove), 0, -0.01, 0.07);
+  part(g, 0.075, 0.075, 0.3, lam(sleeve), 0.015, -0.05, 0.26);
   g.userData = { flash: null, len: 0.3 };
   return g;
 }
