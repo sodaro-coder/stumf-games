@@ -234,18 +234,26 @@ export default function start({ cfg, E, N, smoke }) {
     // highlights), a vignette and fine film grain. Low and Potato skip it and draw straight to the screen.
     const post = { rt: null, w: 0, h: 0 };
     post.mat = new THREE.ShaderMaterial({
-      uniforms: { tex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 } },
+      uniforms: { tex: { value: null }, vmTex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 }, ads: { value: 0 } },
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-      fragmentShader: `uniform sampler2D tex; uniform vec2 res; uniform float time; uniform float exposure; varying vec2 vUv;
+      fragmentShader: `uniform sampler2D tex; uniform sampler2D vmTex; uniform vec2 res; uniform float time; uniform float exposure; uniform float ads; varying vec2 vUv;
+        vec3 comp(vec2 p) { vec4 v = texture2D(vmTex, p); return texture2D(tex, p).rgb * (1.0 - v.a) + v.rgb; }   // world + the gun layer (premultiplied)
         vec3 aces(vec3 c) { const mat3 i = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
           const mat3 o = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
           c = i * c; vec3 a = c * (c + 0.0245786) - 0.000090537, b = c * (0.983729 * c + 0.4329510) + 0.238081; return clamp(o * (a / b), 0.0, 1.0); }
         vec3 srgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
         void main() {
-          vec3 c = texture2D(tex, vUv).rgb, bl = vec3(0.0);
-          for (int k = 0; k < 8; k++) { float a = float(k) * 0.785398; vec2 o = vec2(cos(a), sin(a)) / res;
-            bl += max(texture2D(tex, vUv + o * 5.0).rgb - 0.9, 0.0) + max(texture2D(tex, vUv + o * 12.0).rgb - 0.9, 0.0) * 0.6; }
-          c += bl * 0.045;
+          vec4 g = texture2D(vmTex, vUv);
+          if (ads > 0.01) {   // aimed in: the gun body goes soft (depth of field) around a sharp sight picture, like R6
+            float r = ads * smoothstep(0.05, 0.28, length((vUv - 0.5) * vec2(res.x / res.y, 1.0)));
+            if (r > 0.01) { vec4 b = vec4(0.0); float j = fract(sin(dot(vUv * res, vec2(39.3468, 11.135))) * 43758.5453) * 6.2832;
+              for (int k = 0; k < 12; k++) { float a = float(k) * 0.5236 + j; b += texture2D(vmTex, vUv + vec2(cos(a), sin(a)) / res * (1.5 + r * (2.0 + float(k) * 0.9))); } g = mix(g, b / 12.0, min(1.0, r * 1.6)); }
+          }
+          vec3 c = texture2D(tex, vUv).rgb * (1.0 - g.a) + g.rgb, bl = vec3(0.0);
+          float rot = fract(sin(dot(vUv * res, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;   // per-pixel rotation: a soft halo, not a ring of dots
+          for (int k = 0; k < 10; k++) { float a = float(k) * 0.6283 + rot; vec2 o = vec2(cos(a), sin(a)) / res; float rr = 2.0 + float(k) * 1.3;
+            bl += max(comp(vUv + o * rr) - 0.9, 0.0) * (1.0 - float(k) * 0.07); }
+          c += bl * 0.06;
           c = aces(c * exposure / 0.6);
           c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);                                   // contrast
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = mix(vec3(l), c, 1.08);   // a touch more colour
@@ -261,7 +269,11 @@ export default function start({ cfg, E, N, smoke }) {
     const postOn = () => Q >= 1 && renderer.capabilities.isWebGL2;
     const postTarget = () => {
       const v = renderer.getDrawingBufferSize(new THREE.Vector2()), w = Math.max(1, v.x | 0), h = Math.max(1, v.y | 0);
-      if (!post.rt || post.w !== w || post.h !== h) { if (post.rt) post.rt.dispose(); post.rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: hi ? 4 : 0 }); post.w = w; post.h = h; post.mat.uniforms.res.value.set(w, h); }
+      if (!post.rt || post.w !== w || post.h !== h) {
+        if (post.rt) { post.rt.dispose(); post.vt.dispose(); }
+        post.rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: hi ? 4 : 0 }); post.vt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: hi ? 4 : 0 });
+        post.w = w; post.h = h; post.mat.uniforms.res.value.set(w, h);
+      }
       return post.rt;
     };
     const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = vmCam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); vmCam.updateProjectionMatrix(); };
@@ -1148,14 +1160,17 @@ export default function start({ cfg, E, N, smoke }) {
       animateGlow(now, dt);   // Mythic finishes and outfits: pulsing, crawling veins
       if (postOn()) {
         const rt = postTarget(); renderer.setRenderTarget(rt);
-        renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
-        renderer.setRenderTarget(null); post.mat.uniforms.tex.value = rt.texture; post.mat.uniforms.time.value = (post.mat.uniforms.time.value + dt) % 100; renderer.render(post.scene, post.cam);
+        renderer.clear(); renderer.render(scene, cam);
+        renderer.setRenderTarget(post.vt); const cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha(); renderer.setClearColor(0x000000, 0); renderer.clear();
+        if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
+        renderer.setClearColor(cc, ca);
+        renderer.setRenderTarget(null); post.mat.uniforms.tex.value = rt.texture; post.mat.uniforms.vmTex.value = post.vt.texture; post.mat.uniforms.ads.value = vm && vm.visible ? me.ads : 0; post.mat.uniforms.time.value = (post.mat.uniforms.time.value + dt) % 100; renderer.render(post.scene, post.cam);
       } else { renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam); }
       // ---- HUD (throttled) ----
       hudT += dt; radarT += dt;
       hud.flashAmt(me.flash > 1.5 ? 1 : me.flash / 1.5);
       hud.setScope(me.alive && me.scoped > 0 && w && w.zoom, (w && myAtt(w.id) && myAtt(w.id).reticle) || 'duplex');
-      hud.setAds(me.alive && me.ads > 0.85 && vm && vm.userData ? vm.userData.optic : null);
+      hud.setAds(me.alive && me.ads > 0.85 && vm && vm.userData && vm.userData.optic === 'acog' ? 'acog' : null);   // red dot and holo reticles live in the glass now; only the 4x scope uses the overlay
       const spreadPx = (w ? spreadOf(w, me, me.scoped > 0, me.spray) : 0) * 600;
       hud.xh(spreadPx, me.alive && !(me.scoped && w && w.zoom) && !uiOpen && me.ads < 0.3);
       if (hudT > 0.066) {

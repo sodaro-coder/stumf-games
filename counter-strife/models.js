@@ -235,7 +235,14 @@ function gm(key) {
   if (gmat.has(k)) return gmat.get(k);
   const D = { metal: ['#3b3e44', 70, '#6a6e76'], dark: ['#1f2125', 18, '#2a2a2a'], steel: ['#9aa0aa', 90, '#d8dce4'], blade: ['#c8ccd2', 110, '#ffffff'], wood: ['#a8703e', 20, '#3a2a1a'],
     green: ['#4c5a3a', 20, '#333'], tan: ['#a8946a', 15, '#333'], olive: ['#5a6040', 18, '#333'], yellow: ['#e2c840', 30, '#444'], grip: ['#26221f', 6, '#111'], lens: ['#1a3040', 120, '#9ad0ff'], brass: ['#b89040', 80, '#ffe0a0'] }[key] || ['#888', 20, '#333'];
-  if (key === 'glass') { const g = new THREE.MeshBasicMaterial({ color: '#a8d8ff', transparent: true, opacity: 0.14, depthWrite: false }); gmat.set(k, g); return g; }
+  if (key === 'reticle') { const r = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.1, 0.07), side: THREE.DoubleSide, toneMapped: false, fog: false }); gmat.set(k, r); return r; }   // illuminated: bright enough to bloom
+  if (key === 'glass') {   // coated optic glass: barely tinted head-on, a blue-violet coating sheen toward the edges and at angles
+    const g = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      vertexShader: 'varying vec3 vN; varying vec3 vP; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vP = mv.xyz; vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * mv; }',
+      fragmentShader: `varying vec3 vN; varying vec3 vP; void main() { float f = pow(1.0 - abs(dot(normalize(-vP), normalize(vN))), 2.0);
+        vec3 c = mix(vec3(0.55, 0.72, 0.95), vec3(0.62, 0.42, 0.95), f); gl_FragColor = vec4(c, 0.07 + 0.4 * f); }` });
+    gmat.set(k, g); return g;
+  }
   const o = { color: D[0], vertexColors: false };
   if (key === 'optic') { o.color = '#1d1f23'; o.side = THREE.DoubleSide; }
   if (key === 'wood') { const t = new THREE.CanvasTexture(surface('darkwood', 128, false).map); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; o.map = t; o.color = '#e0b080'; }
@@ -399,10 +406,14 @@ function muzzle(G, kind, bEnd, bv) {
 function optic(G, kind, mount) {
   const [u, v] = mount;
   G('dark', blk(u - 0.035, u + 0.035, v, v + 0.012, 0.032));
-  if (kind === 'reddot') { G('optic', CYL(0.019, 0.019, 0.044, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.036, -u)); G('dark', blk(u - 0.02, u + 0.02, v + 0.012, v + 0.02, 0.026)); G('glass', CYL(0.017, 0.017, 0.002, 14).rotateX(-Math.PI / 2).translate(0, v + 0.036, -(u + 0.018))); return [u, v + 0.036]; }
+  if (kind === 'reddot') { G('reticle', new THREE.CircleGeometry(0.0013, 18).translate(0, v + 0.036, -(u + 0.0165))); G('optic', CYL(0.019, 0.019, 0.044, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.036, -u)); G('dark', blk(u - 0.02, u + 0.02, v + 0.012, v + 0.02, 0.026)); G('glass', CYL(0.017, 0.017, 0.002, 14).rotateX(-Math.PI / 2).translate(0, v + 0.036, -(u + 0.018))); return [u, v + 0.036]; }
   if (kind === 'holo') {
     G('optic', blk(u - 0.035, u + 0.035, v + 0.012, v + 0.062, 0.006, 0.026)); G('optic', blk(u - 0.035, u + 0.035, v + 0.012, v + 0.062, 0.006, -0.026));
-    G('optic', blk(u - 0.035, u + 0.035, v + 0.056, v + 0.064, 0.058)); G('glass', blk(u + 0.02, u + 0.022, v + 0.014, v + 0.056, 0.046)); return [u, v + 0.036];
+    G('optic', blk(u - 0.035, u + 0.035, v + 0.056, v + 0.064, 0.058)); G('glass', blk(u + 0.02, u + 0.022, v + 0.014, v + 0.056, 0.046));
+    const z = -(u + 0.0195), y = v + 0.036;   // the holographic reticle: a 65 MOA ring, a 1 MOA dot and four ticks
+    G('reticle', new THREE.RingGeometry(0.0076, 0.0084, 40).translate(0, y, z)); G('reticle', new THREE.CircleGeometry(0.0006, 12).translate(0, y, z));
+    for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) G('reticle', new THREE.PlaneGeometry(dx ? 0.0022 : 0.0007, dy ? 0.0022 : 0.0007).translate(dx * 0.0069, y + dy * 0.0069, z));
+    return [u, y];
   }
   if (kind === 'acog') {
     G('optic', CYL(0.021, 0.021, 0.09, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.042, -u)); G('optic', CYL(0.026, 0.021, 0.03, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.042, -(u + 0.06)));
