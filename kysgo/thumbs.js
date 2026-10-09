@@ -220,7 +220,7 @@ export function stage(canvas, look) {
   const env = studioEnv(r3); sc.environment = env.texture;
   sc.add(new THREE.HemisphereLight(0xc8d8f0, 0x8a7458, 0.9));
   const sunD = [-0.55, 0.62, 0.56], sun = new THREE.DirectionalLight(0xfff1e0, 2.3); sun.position.set(sunD[0] * 20, sunD[1] * 20, sunD[2] * 20);
-  sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 50 }); sun.shadow.bias = -0.0006; sun.shadow.radius = 3; sc.add(sun);
+  sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 50 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = 3; sc.add(sun);
   const rim = new THREE.DirectionalLight(0xbcd0ff, 1.0); rim.position.set(4, 3, -5); sc.add(rim);
   const sky = skyDome(sc, haze, 0x6f9fd8, sunD, 0xfff1e0, false, { name: 'day', size: 2048 });
   const bg = new THREE.Group(); sc.add(bg);   // everything behind the agent: drawn out of focus

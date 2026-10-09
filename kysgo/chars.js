@@ -119,6 +119,65 @@ function dye(m, cs) {
   return m;
 }
 
+// ---- the realistic agent: a human body in real clothes (charbuild.py) for every ordinary agent ----------------------
+// Joke and Mythic costumes keep the armoured soldier; agents in a uniform, a balaclava, a helmet or a shemagh are the
+// human: shirt, plate carrier, cargo trousers, balaclava, gloves and boots, each in a scanned fabric (Poly Haven),
+// coloured from the agent's look.
+const HUMAN_HATS = new Set(['balaclava', 'helmet', 'shemagh', 'none', undefined]);
+export const isHuman = (L) => !!L && !L.glow && !L.model && !L.speedo && !L.bikini && !L.stripes && !L.mustard && !L.belly && !L.eyes && L.body !== L.head && HUMAN_HATS.has(L.hat);
+const CLOTH = { human_shirt: 'linen', human_pants: 'twill', human_vest: 'cordura', human_belt: 'cordura', human_bala: 'knit', human_glove: 'leather', human_boot: 'leather', human_shemagh: 'linen', human_helmet: 'cordura' };
+const HEADGEAR = { human_helmet: (L) => L.hat === 'helmet', human_shemagh: (L) => L.hat === 'shemagh', human_visor: (L) => !!L.visor };
+function clothTex(name) {
+  const k = 'cloth:' + name; if (D.tex.has(k)) return D.tex.get(k);
+  const t = new THREE.TextureLoader().load(`cloth_${name}.jpg`); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.NoColorSpace; t.anisotropy = 4;
+  D.tex.set(k, t); return t;
+}
+function humanColors(L, team) {
+  const ct = team === 'CT';
+  return {
+    human_shirt: L.body || (ct ? '#3c4e66' : '#7a6a4a'), human_pants: L.legs || (ct ? '#2c3442' : '#4e4636'),
+    human_vest: ct ? '#2a3038' : '#5e5944', human_belt: '#23211d', human_bala: L.hat === 'balaclava' ? (L.hatColor || '#22231f') : (ct ? '#1c2028' : '#2a2822'),
+    human_glove: '#1d1c1a', human_boot: ct ? '#1e1e20' : '#3a2e24', human_skin: L.head || '#c89a74', human_eye: '#e6e0d6', human_iris: '#3a2416',
+    human_helmet: L.hat === 'helmet' ? (L.hatColor || '#2a3646') : (ct ? '#2a3646' : '#5e5944'), human_shemagh: L.hatColor || '#d8c6a0', human_visor: '#0c0e12',
+  };
+}
+function humanMat(part, L, team, hq) {
+  const col = humanColors(L, team)[part] || '#888', cloth = CLOTH[part], plaid = (part === 'human_shirt' && team !== 'CT') || part === 'human_shemagh' ? 1 : 0;
+  const key = `h|${part}|${col}|${hq}|${plaid}`;
+  if (D.mats.has(key)) return D.mats.get(key);
+  const rough = part === 'human_eye' || part === 'human_iris' || part === 'human_visor' ? 0.15 : part === 'human_skin' ? 0.55 : part === 'human_boot' ? 0.6 : part === 'human_helmet' ? 0.6 : 0.95;
+  const m = new THREE.MeshStandardMaterial({ color: col, roughness: rough, metalness: part === 'human_visor' ? 0.4 : 0 });
+  litPatch(m, 'dyn');
+  if (cloth && hq) {
+    const lit = m.onBeforeCompile, det = clothTex(cloth), nrm = clothTex(cloth + 'n');
+    const tile = { linen: 1 / 45, twill: 1 / 40, cordura: 1 / 34, knit: 1 / 26, leather: 1 / 36 }[cloth];   // cm per repeat (the scans are ~0.3-0.5 m across)
+    m.onBeforeCompile = (sh, r) => {
+      lit(sh, r);
+      Object.assign(sh.uniforms, { detTex: { value: det }, nrmTex: { value: nrm }, tileK: { value: tile }, plaidOn: { value: plaid }, soleOn: { value: part === 'human_boot' ? 1 : 0 } });
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRestP;\nvarying vec3 vRestN;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRestP = position; vRestN = normal;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vRestP; varying vec3 vRestN; uniform sampler2D detTex; uniform sampler2D nrmTex; uniform float tileK; uniform float plaidOn; uniform float soleOn;
+vec4 tri3(sampler2D t, vec3 p, vec3 w) { return texture2D(t, p.yz * tileK) * w.x + texture2D(t, p.xz * tileK) * w.y + texture2D(t, p.xy * tileK) * w.z; }`)
+        .replace('#include <map_fragment>', `#include <map_fragment>
+	vec3 tw = pow(abs(normalize(vRestN)), vec3(4.0)); tw /= (tw.x + tw.y + tw.z);
+	float hDet = tri3(detTex, vRestP, tw).r;
+	vec3 tN = tri3(nrmTex, vRestP, tw).rgb;
+	diffuseColor.rgb *= 0.8 + hDet * 0.4;
+	if (plaidOn > 0.5) {   // a worn flannel check
+		vec2 g = fract(vec2(vRestP.x + vRestP.y * 0.3, vRestP.z) / 8.5);
+		float band = smoothstep(0.62, 0.66, g.x) * smoothstep(0.98, 0.94, g.x) + smoothstep(0.62, 0.66, g.y) * smoothstep(0.98, 0.94, g.y);
+		float thin = smoothstep(0.03, 0.0, abs(g.x - 0.3)) + smoothstep(0.03, 0.0, abs(g.y - 0.3));
+		diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55, clamp(band, 0.0, 1.0) * 0.8) + vec3(0.06, 0.05, 0.035) * thin;
+	}
+	if (soleOn > 0.5 && vRestP.z < 2.8) diffuseColor.rgb *= 0.3;   // rubber sole`)
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = clamp(roughnessFactor * mix(0.75, 1.15, tN.b), 0.05, 1.0);');
+    };
+    m.customProgramCacheKey = () => 'human-cloth';
+  }
+  D.mats.set(key, m); return m;
+}
+
 // clip speeds (metres per second at timeScale 1) for matching the feet to the ground speed
 const SPEED = { walk: 1.0, walkBack: 1.1, walkLeft: 1.4, walkRight: 0.75, run: 3.1, runBack: 2.7, runLeft: 2.8, runRight: 3.2, crouchWalk: 0.6 };
 const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3(), _fw = new THREE.Vector3(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
@@ -131,10 +190,16 @@ export function makeSoldier(look, team, hq = true) {
   root.position.fromArray(c.root.t); root.quaternion.fromArray(c.root.q); root.scale.fromArray(c.root.s); holder.add(root);
   const bones = c.bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); o.quaternion.fromArray(b.q); o.scale.fromArray(b.s); return o; });
   c.bones.forEach((b, i) => { if (b.p >= 0) bones[b.p].add(bones[i]); else root.add(bones[i]); });
-  const mat = material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null, costumeOf(L));
+  const human = isHuman(L) && D.meshes.some((m) => m.name.startsWith('human_'));
+  const mat = human ? null : material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null, costumeOf(L));
+  let humanHelm = null;
   if (L.model !== 'log') for (const m of D.meshes) {
-    const sm = new THREE.SkinnedMesh(m.g, mat); sm.frustumCulled = false; root.add(sm);
+    if (m.name.startsWith('human_') !== human) continue;
+    const wear = HEADGEAR[m.name] ? HEADGEAR[m.name](L) : true;
+    if (!wear && m.name !== 'human_helmet') continue;   // the helmet is kept (hidden) so a bought one can show
+    const sm = new THREE.SkinnedMesh(m.g, human ? humanMat(m.name, L, team, hq) : mat); sm.frustumCulled = false; root.add(sm);
     sm.bind(new THREE.Skeleton(m.joints.map((i) => bones[i]), m.inverses), m.bind);
+    if (m.name === 'human_helmet') { humanHelm = sm; sm.visible = wear; sm.userData.worn = wear; }
   }
   const byName = Object.fromEntries(bones.map((b) => [b.name.replace('mixamorig', ''), b]));
   if (L.model === 'log') { g.updateMatrixWorld(true); logBody(byName, hq); }
@@ -143,13 +208,13 @@ export function makeSoldier(look, team, hq = true) {
   act.idle.play();
   const tpGun = new THREE.Group(); g.add(tpGun);
   const head = new THREE.Group(); g.add(head);
-  hat(head, L);
+  if (!human) hat(head, L);   // the human's headgear is fitted to its head (charbuild.py)
   // the gear you bought, worn on top of the uniform: a plate carrier with its pouches, a ballistic helmet
   const chest = new THREE.Group(); chest.visible = false; g.add(chest);
   const vest = gearMesh(vestParts(team)); chest.add(vest);
   const bomb = L.bombvest ? gearMesh(bombVestParts()) : null; if (bomb) { chest.add(bomb); chest.visible = true; }
   const helm = gearMesh(helmetParts(team)); helm.visible = false; head.add(helm);
-  const r = { soldier: true, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, vest, bomb, tpKey: '', over: null, t: 0, dieDone: false };
+  const r = { soldier: true, human, humanHelm, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, vest, bomb, tpKey: '', over: null, t: 0, dieDone: false };
   // where the head and hand sit relative to their bones at rest: lets props follow the animated bones
   g.updateMatrixWorld(true);
   r.headCorr = byName.Head.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
@@ -229,6 +294,15 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     if (!emote) for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], _v, p * 0.27);
     if (B.Head) turnWorld(B.Head, _v, p * 0.15);
     if (rest && !emote) { if (B.Spine2) turnWorld(B.Spine2, _v, 0.03); if (B.Head) turnWorld(B.Head, _v, 0.03); }   // at rest: stand tall, chin up
+    if (r.human && B.Head) turnWorld(B.Head, _v, -0.16);   // the human's head sits higher on the neck than the soldier's: level its gaze
+    if (rest && !emote) {   // at rest: stand up straight (the clip leans into its aim) and look ahead, not down the rifle line
+      for (const [n, k] of [['Spine', 0.5], ['Spine1', 0.6], ['Spine2', 0.7], ['Neck', 0.7], ['Head', 0.85]]) {
+        const b = B[n]; if (!b) continue;
+        const d = _t1.set(0, 1, 0).applyQuaternion(b.getWorldQuaternion(_q2)).normalize();
+        rotateWorld(b, _t2.copy(d), _t3.copy(d).lerp(_t4.set(0, 1, 0), k).normalize());
+      }
+      if (B.Neck && B.Head) { _fw.set(0, 1, 0); turnWorld(B.Neck, _fw, -0.32); turnWorld(B.Head, _fw, -0.38); }
+    }
     if (lean && !emote) {   // leaning (Q / E while aimed in): the spine rolls about the facing direction
       _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
       for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], _fw, lean * 0.2);
@@ -313,7 +387,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     B.Spine2.getWorldQuaternion(_q).multiply(r.chestCorr); r.g.getWorldQuaternion(_q2).invert(); r.chest.quaternion.copy(_q2.multiply(_q));
   }
   if (B.Head && r.head.children.length) {
-    B.Head.getWorldPosition(_v); r.g.worldToLocal(_v); r.head.position.copy(_v).add(new THREE.Vector3(0, -0.12, 0));
+    B.Head.getWorldPosition(_v); r.g.worldToLocal(_v); r.head.position.copy(_v).add(_t1.set(0, -0.12, 0));
     B.Head.getWorldQuaternion(_q).multiply(r.headCorr); r.g.getWorldQuaternion(_q2).invert(); r.head.quaternion.copy(_q2.multiply(_q));
   }
 }
@@ -420,7 +494,7 @@ function hat(head, L) {
     case 'cone': add(new THREE.ConeGeometry(0.11, 0.32, 14), c, 0, 0.38, 0); add(new THREE.CylinderGeometry(0.08, 0.09, 0.03, 14), '#ffffff', 0, 0.36, 0); add(new THREE.BoxGeometry(0.26, 0.02, 0.26), c, 0, 0.22, 0); break;
     case 'beret': add(new THREE.SphereGeometry(0.14, 14, 8), c, 0.02, 0.29, 0, 0, 0, 0.18, 1.12, 0.32, 1.1); break;
     case 'shemagh': if (L.plain) break; add(new THREE.SphereGeometry(0.15, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, 0.17, 0.005, 0, 0, 0, 1.04, 1, 1.06); add(new THREE.BoxGeometry(0.25, 0.085, 0.07), c, 0, 0.075, -0.115); add(new THREE.BoxGeometry(0.13, 0.2, 0.03), c, 0.02, 0.0, 0.13, 0.25, 0, 0.1); break;   // head wrap, face cloth, tail down the back
-    case 'helmet': if (L.plain) break; add(new THREE.SphereGeometry(0.155, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.17, 0.01, 0, 0, 0, 1.06, 0.92, 1.12); add(new THREE.CylinderGeometry(0.165, 0.17, 0.03, 16), c, 0, 0.17, 0.01, 0, 0, 0, 1, 1, 1.08);
+    case 'helmet': if (L.plain && !L.human) break; add(new THREE.SphereGeometry(0.155, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.17, 0.01, 0, 0, 0, 1.06, 0.92, 1.12); add(new THREE.CylinderGeometry(0.165, 0.17, 0.03, 16), c, 0, 0.17, 0.01, 0, 0, 0, 1, 1, 1.08);
       if (L.visor) add(new THREE.BoxGeometry(0.23, 0.07, 0.025), '#0e1014', 0, 0.13, -0.16, 0.12); break;
     case 'cap': add(new THREE.SphereGeometry(0.135, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.45), c, 0, 0.22, 0); add(new THREE.CylinderGeometry(0.1, 0.1, 0.014, 14), c, 0, 0.26, -0.11, 0, 0, 0, 1.05, 1, 1.1); break;
     default: break;
@@ -448,7 +522,9 @@ function betaTag() {
 }
 
 // ---- bought gear: kevlar (a plate carrier) and a helmet, shown only while the player has them ----
-export function setGear(r, armor, helmet) { if (!r || !r.chest) return; r.vest.visible = armor > 0; r.chest.visible = armor > 0 || !!r.bomb; r.helm.visible = !!helmet && armor > 0; }
+export function setGear(r, armor, helmet) { if (!r || !r.chest) return; r.vest.visible = armor > 0 && !r.human;   // the human has its own plate carrier
+   r.chest.visible = armor > 0 || !!r.bomb; r.helm.visible = !!helmet && armor > 0 && !r.human;
+  if (r.humanHelm) r.humanHelm.visible = r.humanHelm.userData.worn || (!!helmet && armor > 0); }
 let gearMat = null;
 function rbox(w, h, d, rad = 0.012) {   // a box with rounded edges (pads and plates aren't sharp)
   const sh = new THREE.Shape(), x = w / 2 - rad, y = h / 2 - rad;
