@@ -67,6 +67,7 @@ export class Bots {
   step(p, dt, think) {
     const m = this.m, W = m.W, b = this.B(p), L = this.lvl();
     if (!p.alive) { p.plant = false; p.defusing = false; return; }
+    if (p.scripted || p.walkTo) return;   // story bosses and actors move themselves
     if (m.phase === 'freeze') { this.buy(p); p.vx = p.vz = 0; return; }
     if (m.phase === 'end' || m.phase === 'over') { this.walkTo(p, b, null, dt); return; }
     b.blind = Math.max(0, b.blind - dt); b.cd -= dt;
@@ -80,7 +81,7 @@ export class Bots {
         const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
         const off = Math.abs(angDiff(p.yaw, Math.atan2(-dx, -dz)));
         const fov = off < 1.15 || d < 4 || (b.heard && Math.hypot(b.heard.x - q.x, b.heard.z - q.z) < 6) || (b.hitBy && b.hitBy.id === q.id);
-        if (fov && d < 90 && d < bd && this.visible(p, q)) { best = q; bd = d; b.bestOff = off; }
+        if (fov && d < (m.sightRange || 90) && d < bd && this.visible(p, q) && !q.spectator && !q.npc) { best = q; bd = d; b.bestOff = off; }
       }
       if (best && (!b.target || b.target !== best.id)) {   // reacting takes longer for someone at the edge of your view
         b.target = best.id; b.react = L.react * (0.7 + Math.random() * 0.6) + (b.seen > 0 ? 0 : 0.1) + Math.max(0, (b.bestOff || 0) - 0.4) * 0.35; b.spray = 0; b.settle = 0;

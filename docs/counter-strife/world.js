@@ -22,6 +22,7 @@ export const MATS = {  // surfaces (painted in textures.js): base colour (radar,
   dirt: { c: [120, 92, 66], s: 3, d: 6 }, rock: { c: [110, 100, 92], s: 4, d: 8, trim: 1 }, bus: { c: [232, 180, 40], s: 3, d: 2 },
   water: { c: [38, 96, 128], s: 6, d: 9 }, potty: { c: [60, 110, 200], s: 1, d: 1 }, darkwood: { c: [86, 58, 40], s: 2, d: 1 },
   trim: { c: [222, 204, 166], s: 2, d: 6 }, sill: { c: [158, 140, 112], s: 2, d: 6 },
+  snow: { c: [236, 240, 246], s: 3, d: 6 },   // story only (new materials go last: map hashes and PVS data key on these indices)
 };
 export const MAT_LIST = Object.keys(MATS);
 const MAT_ID = Object.fromEntries(MAT_LIST.map((k, i) => [k, i]));
@@ -75,6 +76,7 @@ export class MapBuilder {
   buyzone(team, x0, z0, x1, z1) { this.buy[team] = [x0, z0, x1, z1]; return this; }
   // a sign with text painted on a board: x,z position, y height, rot = facing (radians), w,h size in m
   sign(x, z, y, rot, text, w = 3, h = 1, bg = '#2b2118', fg = '#f4e7c4') { this.signs.push({ x, z, y, rot, text, w, h, bg, fg }); return this; }
+  mark(name, x, y, z, rot = 0) { this.marks = this.marks || {}; this.marks[name] = [x, y, z, rot]; return this; }   // a named spot for story cameras and effects
   prop(type, x, z, o = {}) { this.props.push({ type, x, z, ...o }); return this; }
 }
 

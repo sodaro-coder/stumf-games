@@ -15,7 +15,8 @@ import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf,
 import { Bots, botNames } from './bots.js';
 import { StoryMatch } from './story_sim.js';
 import { storyClient } from './story_client.js';
-import { MISSIONS, CHAPTERS, CHARACTERS, SQUAD, BOSS } from './story.js';
+import { makeMusic } from './music.js';
+import { MISSIONS, CHAPTERS, CHARACTERS, SQUAD, BOSS, STORY_LOOKS } from './story.js';
 // the boss in a match: a giant in a basketball jersey and a gold cap
 const BOSS_LOOK = { body: BOSS.model.jersey, legs: BOSS.model.trim, head: '#a8805e', hat: 'cap', hatColor: BOSS.model.trim };
 import { Profile } from './backend.js';
@@ -37,7 +38,7 @@ const saveStory = (s) => { try { localStorage.setItem(STORY_KEY, JSON.stringify(
 function dressScene(sc, B, shadows, clouds = true) {
   for (const l of sc.children.filter((c) => c.isLight)) sc.remove(l);
   const dir = B.sunDir || [0.6, 0.7, 0.4], L = Math.hypot(...dir), d = dir.map((v) => v / L), fog = B.fog || 0xaaaaaa;
-  sc.background = new THREE.Color(fog); sc.fog = new THREE.Fog(fog, 70, 260);
+  sc.background = new THREE.Color(fog); sc.fog = new THREE.Fog(fog, B.fogNear || 70, B.fogFar || 260);
   sc.add(new THREE.HemisphereLight((B.amb || [])[0] || 0xffffff, (B.amb || [])[1] || 0x555555, B.ambI || 1.1));
   const sun = new THREE.DirectionalLight(B.sunColor || 0xffffff, B.sunI || 2.4); sun.position.set(d[0] * 90, d[1] * 90, d[2] * 90); sc.add(sun);
   if (shadows) { sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); const c = sun.shadow.camera; c.left = c.bottom = -24; c.right = c.top = 24; c.near = 1; c.far = 220; sun.shadow.bias = -0.0008; sc.add(sun.target); }
@@ -74,9 +75,9 @@ const STEP_SND = { metal: [1800, 0.07, 'clank'], cred: [1500, 0.06, 'clank'], cb
   wood: [600, 0.06, 'knock'], crate: [650, 0.06, 'knock'], darkwood: [550, 0.06, 'knock'], fence: [700, 0.05, 'knock'], roof: [600, 0.05, 'knock'],
   sand: [900, 0.07, 'soft'], dirt: [700, 0.07, 'soft'], grass: [800, 0.08, 'soft'], carpet: [500, 0.05, 'soft'] };
 function makeAudio(getVol) {
-  let ctx = null, master = null, verb = null;
+  let ctx = null, master = null, verb = null, mlp = null;
   const ensure = () => {
-    if (!ctx) { const A = window.AudioContext || window.webkitAudioContext; if (!A) return null; ctx = new A(); master = ctx.createGain(); master.connect(ctx.destination);
+    if (!ctx) { const A = window.AudioContext || window.webkitAudioContext; if (!A) return null; ctx = new A(); master = ctx.createGain(); mlp = ctx.createBiquadFilter(); mlp.type = 'lowpass'; mlp.frequency.value = 20000; master.connect(mlp); mlp.connect(ctx.destination);   // mlp: the world goes muffled (dying, memories)
       // a cheap echo for far shots: a feedback delay through a lowpass
       verb = ctx.createDelay(1); verb.delayTime.value = 0.13; const fb = ctx.createGain(); fb.gain.value = 0.35; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
       verb.connect(lp); lp.connect(fb); fb.connect(verb); lp.connect(master); }
@@ -112,6 +113,14 @@ function makeAudio(getVol) {
     [o, o2, l].forEach((x) => { x.start(t); x.stop(t + 1.15); });
   };
   const SND = {
+    // story sounds
+    glass: (v, p) => { burst(0.25, 5200, v * 0.5, p, 2, 'highpass'); for (let k = 0; k < 5; k++) tone('triangle', 2400 + k * 700, 1800 + k * 600, 0.12, v * 0.08, p, k * 0.03); },
+    punch: (v, p) => { burst(0.12, 300, v * 0.9, p, 0.8); tone('sine', 110, 50, 0.16, v * 0.6, p); },
+    heartbeat: (v) => { tone('sine', 70, 40, 0.18, v * 0.7, 0); tone('sine', 66, 38, 0.16, v * 0.5, 0, 0.26); },
+    pickup: (v, p) => { tone('triangle', 660, 990, 0.09, v * 0.25, p); tone('triangle', 990, 1320, 0.1, v * 0.2, p, 0.07); },
+    heal: (v) => { for (let k = 0; k < 4; k++) tone('sine', 523 * Math.pow(1.26, k), 523 * Math.pow(1.26, k), 0.5, v * 0.12, 0, k * 0.07); burst(0.4, 3000, v * 0.12, 0, 0.6, 'bandpass'); },
+    unlock: (v) => { for (let k = 0; k < 5; k++) tone('triangle', 392 * Math.pow(1.19, k), 392 * Math.pow(1.19, k), 0.4, v * 0.14, 0, k * 0.09); },
+    wind: (v) => burst(1.6, 700, v * 0.25, 0, 0.5, 'bandpass'),
     step: (v, p, m) => { const [f, d, k] = STEP_SND[m] || [1100, 0.05, 'hard']; burst(d, f, v * (k === 'soft' ? 0.35 : 0.45), p, k === 'clank' ? 6 : 1.2, k === 'clank' ? 'bandpass' : 'lowpass'); if (k === 'clank') tone('triangle', f * 1.3, f, 0.08, v * 0.12, p); if (k === 'knock') tone('sine', 180, 120, 0.06, v * 0.25, p); },
     land: (v, p) => { burst(0.1, 500, v * 0.55, p); tone('sine', 120, 60, 0.1, v * 0.3, p); },
     knife: (v, p) => burst(0.13, 5200, v * 0.4, p, 2, 'highpass'), stab: (v, p) => { burst(0.08, 2400, v * 0.6, p, 1); tone('sine', 300, 120, 0.08, v * 0.3, p); },
@@ -169,6 +178,8 @@ function makeAudio(getVol) {
       far = 0;
     },
     say,
+    ctx: () => ensure(), bus: () => (ensure(), master),
+    muffle(k) { if (!ensure()) return; mlp.frequency.setTargetAtTime(20000 * Math.pow(0.012, Math.max(0, Math.min(1, k))), ctx.currentTime, 0.35); },   // 0 clear .. 1 underwater
     selfTest() { if (!ensure()) return ['no audio']; const bad = []; for (const [k, f] of Object.entries(SND)) { try { f(0.001, 0, 'metal'); } catch (e) { bad.push(k + ': ' + e.message); } } for (const [k, r] of Object.entries(GUN_SND)) if (r) { try { gun(r, 0.001, 0); } catch (e) { bad.push(k + ': ' + e.message); } } return bad; },
   };
 }
@@ -387,7 +398,17 @@ export default function start({ cfg, E, N, smoke }) {
     // level of a chapter ends on the chapter hub: the same party picks characters and loadouts and readies up; the host
     // starts the next chapter. Every checkpoint is saved on the host, so a crash or a quit resumes from there.
     let SC = null;
-    const storyUI = () => SC || (hud.el.classList.add('story'), SC = storyClient({ scene, myId, audio, isHost, onSkip: () => toHost('skipVote', 1) }));
+    const storyUI = () => { if (!SC) { hud.el.classList.add('story'); SC = storyClient({ scene, myId, audio, isHost, onSkip: () => toHost('skipVote', 1), canvas: renderer.domElement, music: makeMusic(audio), onDirect: storyDirect }); SC.setCamera(cam); if (W) SC.setWorld(W); } return SC; };
+    // a scene's staging for this player's own character (the host moves the AI ones): stand here, walk there, slow down
+    let slowT = 0, slowK = 1;
+    function storyDirect(o, zoneAt) {
+      const mine = myChar(), at = (z) => zoneAt(z);
+      if (o.place && o.place[0] === mine) { const p = at(o.place[1]); if (p) { me.x = p.x; me.z = p.z; me.y = W.groundAt(p.x, p.z, 10); me.vx = me.vz = 0; } }
+      if (o.walk && o.walk[0] === mine) { const p = at(o.walk[1]); if (p) me.walkTo = [p.x, p.z]; }
+      if (o.slowmo) { slowK = o.slowmo[0]; slowT = o.slowmo[1]; }
+      if (o.smoke) { const who = o.smoke === mine ? me : [...st.players.values()].find((q) => (st.roster.get(q.id) || {}).char === o.smoke); if (who && parts) for (let k = 0; k < 6; k++) setTimeout(() => parts.smoke(who.x - Math.sin(who.yaw || 0) * 0.3, who.y + 1.75, who.z - Math.cos(who.yaw || 0) * 0.3, { n: 2, color: '#cfcfcf', size: 0.12, life: 2.2, rise: 0.35, alpha: 0.5 }), k * 450); }
+    }
+    const mineStory = () => (SC && SC.mine) || {};
     const CAMP_KEY = 'cs:story:camp', CLAIM_KEY = 'cs:story:claimed';
     const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } };
     const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } };
@@ -559,6 +580,7 @@ export default function start({ cfg, E, N, smoke }) {
       for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); }
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       hud.radarBase(W);
+      if (SC) SC.setWorld(W);
     }
 
     // ---- remote players (rigs) ----
@@ -569,14 +591,15 @@ export default function start({ cfg, E, N, smoke }) {
       const r0 = rigs.get(id), info = st.roster.get(id) || {}, team = info.team || 'T';
       const agentId = (info.agent || {})[team] || (team === 'T' ? 'a_t_default' : 'a_ct_default');
       const useS = charsReady();   // the realistic animated soldier on every quality (11k triangles); the simple rig only while it loads
-      const role = info.boss ? 'boss' : info.char && CHARACTERS[info.char] ? info.char : '';   // story mode: squad characters and the boss
-      const key = agentId + team + (useS ? 'S' : '') + role;
+      const role = info.look && STORY_LOOKS[info.look] ? 'look:' + info.look : info.boss === 'ballin' || info.boss === true ? 'boss' : info.char && CHARACTERS[info.char] ? info.char : '';   // story mode: squad characters, story people, the boss
+      const rs = info.scale || (role === 'boss' ? BOSS.model.scale : 1);
+      const key = agentId + team + (useS ? 'S' : '') + role + rs;
       if (r0 && r0.key === key) return r0;
       if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
-      const look = role === 'boss' ? BOSS_LOOK : role ? CHARACTERS[role].look : a.look;
+      const look = role.startsWith('look:') ? STORY_LOOKS[info.look] : role === 'boss' ? BOSS_LOOK : role ? CHARACTERS[role].look : a.look;
       const r = useS ? makeSoldier(look, team, P.hqModels) : makePlayer(look, team);
-      if (role === 'boss') r.g.scale.setScalar(BOSS.model.scale);
+      if (rs !== 1) r.g.scale.setScalar(rs);
       markCaster(r.g);   // drawn into the dynamic player-shadow map (Medium and up)
       r.blob = new THREE.Mesh(blobGeo, blobMat); r.blob.rotation.x = -Math.PI / 2; r.blob.renderOrder = 1; scene.add(r.blob); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
       if (id !== myId) {  // teammates' names float over their heads
@@ -915,6 +938,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (fxd && vp2) { if (parts) parts.emit(vp2.x, vp2.y + 1.2, vp2.z, { n: fxd.n, colors: fxd.colors, speed: fxd.speed, up: 1, size: 0.06, life: 1.4, g: fxd.g ?? 1 }); if (fxd.text) textPop(scene, vp2.x, vp2.y + 2.2, vp2.z, fxd.text, fxd.textColor); audio.at(fxd.sound, vp2.x, vp2.y, vp2.z, cam, 40); }
       }
       if (type === 'planted') { hud.banner('The bomb has been planted', `Site ${data.site}`, 3000); audio.play('planted'); announce('planted'); if (data.by === myName) stats.plant++; }
+      if (type === 'sound' && data.s !== 'defused' && data.s) audio.at(data.s, data.x || me.x, me.y + 1, data.z || me.z, cam, 45);
       if (type === 'sound' && data.s === 'defused') { audio.play('defused'); announce('defused'); hud.banner('The bomb has been defused', '', 3000); const b = match ? match.bomb : null; if (b && b.defuser === myId) stats.defuse++; if (!match && st.bomb && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2) stats.defuse++; }
       if (type === 'explode') { audio.at('explode', data.x, data.y, data.z, cam, 200); me.flash = Math.max(me.flash, Math.hypot(data.x - me.x, data.z - me.z) < data.r * 1.5 ? 1.2 : 0.4); camShake = 1.2; }
       if (type === 'nadefx') {
@@ -934,6 +958,8 @@ export default function start({ cfg, E, N, smoke }) {
       if (['cut', 'cutSkip', 'skipVotes', 'talk', 'story', 'obj', 'bark', 'focus'].includes(type)) storyUI().onEvent(type, data);
       if (type === 'storyEnd') levelEnd(data);
       if (type === 'checkpoint' && isHost) saveCamp(data.mission, data.obj);
+      if (['heal', 'unlock'].includes(type)) storyUI().onEvent(type, data);
+      if (type === 'toast' && data && data.text) toast(String(data.text).slice(0, 120));
       if (type === 'done') {}
     }
     function flashBy(d) {
@@ -1004,7 +1030,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (id === myId) { me.hp = hp; if (me.alive && !alive) me.alive = false; me.armor = armor; me.helmet = !!helmet; me.money = money; me.planting = plant; continue; }
         let p = st.players.get(id); if (!p) st.players.set(id, (p = { id, x, y, z, tx: x, ty: y, tz: z }));
         if (Math.hypot(x - p.x, z - p.z) > 4) { p.x = x; p.y = y; p.z = z; }
-        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.rl = !!rl; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team; p.scale = (st.roster.get(id) || {}).boss ? BOSS.model.scale : 1;
+        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.rl = !!rl; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team; p.scale = (st.roster.get(id) || {}).scale || 1;
       }
       for (const id of [...st.players.keys()]) if (!s.p.some((a) => a[0] === id)) st.players.delete(id);
       if (s.b) st.bomb = { s: s.b.s, x: s.b.x, y: s.b.y, z: s.b.z, t: s.b.t, d: s.b.d, site: s.b.site }; else if (st.bomb && st.bomb.s !== 'exploded' && st.bomb.s !== 'defused') st.bomb = null;
@@ -1140,6 +1166,7 @@ export default function start({ cfg, E, N, smoke }) {
 
     // the host's simulation step: the local player's state into the Match, bots, rules, the render mirror, snapshots
     let lastSim = performance.now();
+    let hostRosterVer = -1;
     function simHost(dt) {
         lastSim = performance.now();
         const mp = match.players.get(myId);
@@ -1158,7 +1185,7 @@ export default function start({ cfg, E, N, smoke }) {
           Object.assign(q, { x: p.x, y: p.y, z: p.z, tx: p.x, ty: p.y, tz: p.z, yaw: p.yaw, pitch: p.pitch, crouch: p.crouch, hp: p.hp, alive: p.alive, wid: (p.inv[p.cur] || {}).wid || 'knife', c4: !!p.inv[5], planting: p.planting ? p.planting / BOMB.plant : 0, team: p.team, money: p.money, scale: p.scale || 1 });
         }
         for (const id of [...st.players.keys()]) if (!match.players.has(id)) st.players.delete(id);
-        if (st.roster.size !== match.players.size || (match.boss && !(st.roster.get(match.boss.id) || {}).boss) || [...match.players.values()].some((p) => (st.roster.get(p.id) || {}).team !== p.team)) setRoster([...match.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: ((p.loadout || {})[p.team] || {}).att || null, char: p.squad ? p.char : null, boss: !!p.boss })));
+        if (st.roster.size !== match.players.size || (match.rosterVer || 0) !== hostRosterVer || [...match.players.values()].some((p) => (st.roster.get(p.id) || {}).team !== p.team)) { hostRosterVer = match.rosterVer || 0; setRoster([...match.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: ((p.loadout || {})[p.team] || {}).att || null, char: p.squad ? p.char : null, boss: p.boss ? p.bossKey || 'ballin' : null, look: p.lookAs || null, scale: p.scale || 1 }))); }
         netT += dt;
         if (session && netT >= 0.05) { netT = 0; session.send('snap', match.snap()); }
     }
@@ -1176,6 +1203,7 @@ export default function start({ cfg, E, N, smoke }) {
     let lookDX = 0, lookDY = 0, netT = 0, hudT = 0, radarT = 0, flashT = 0, camKick = 0, camShake = 0, viewY = 0, bob = 0, ammoT = 0, sbT = 0, timeAlive = 0;
     let radioOpen = null;
     const loopH = E.loop((dt) => {
+      if (slowT > 0) { slowT -= dt; dt *= slowK; }   // the story's slow-motion beats
       if (!W) return;
       timeAlive += dt;
       // ---- host simulation (a background timer takes over while the host's tab is hidden) ----
@@ -1272,12 +1300,13 @@ export default function start({ cfg, E, N, smoke }) {
         let want = me.leanWant;
         if (want && W) { const sgn = Math.sign(want), o = { x: me.x, y: me.y + eyeHeight(me), z: me.z }, dr = { x: Math.cos(me.yaw) * sgn, y: 0, z: -Math.sin(me.yaw) * sgn }, hit = W.ray(o, dr, LEAN + 0.2, 0); if (hit) want = sgn * Math.max(0, Math.min(1, (hit.t - 0.2) / LEAN)); }
         me.lean += (want - me.lean) * Math.min(1, dt * 9); if (Math.abs(me.lean) < 0.002) me.lean = 0; }
-      const w0 = curWeapon(), wspeed = (w0 ? (me.scoped && w0.scopedSpeed ? w0.scopedSpeed : w0.speed) : 245) * U * (1 - 0.2 * me.ads);
+      const w0 = curWeapon(), wspeed = (w0 ? (me.scoped && w0.scopedSpeed ? w0.scopedSpeed : w0.speed) : 245) * U * (1 - 0.2 * me.ads) * (mineStory().speed || 1);
       const mv = typing || uiOpen === 'pause' ? { x: 0, y: 0 } : (() => { let x = (kd('KeyD') ? 1 : 0) - (kd('KeyA') ? 1 : 0), y = (kd('KeyW') ? 1 : 0) - (kd('KeyS') ? 1 : 0); if (E.input.touch.active && (E.input.touch.move.x || E.input.touch.move.y)) { x = E.input.touch.move.x; y = E.input.touch.move.y; } return { x, y }; })();
       if (me.emote) { me.emote.t += dt; if (me.emote.t > me.emote.dur || !me.alive || mv.x || mv.y || mouseBtn[0] || kd('Space')) me.emote = null; }
       if (me.alive) {
         const inp = { f: frozen ? 0 : mv.y, s: frozen ? 0 : mv.x, jump: !frozen && !typing && (kd('Space') || E.input.touch.buttons.has('jump')), crouch: !typing && !me.proneWant && (S.crouchKey === 'c' ? kd('KeyC') : (kd('ControlLeft') || kd('ControlRight'))) || E.input.touch.buttons.has('crouch'), prone: !!me.proneWant, sprint: !typing && (kd('ShiftLeft') || kd('ShiftRight') || E.input.touch.buttons.has('sprint')) && me.ads < 0.3 };
         if (inp.jump && me.proneWant) { me.proneWant = false; inp.jump = false; }   // jump gets you up
+        if (me.walkTo) { const dx = me.walkTo[0] - me.x, dz = me.walkTo[1] - me.z; if (Math.hypot(dx, dz) < 0.4 || !(SC && SC.cutscene)) me.walkTo = null; else { me.yaw = Math.atan2(-dx, -dz); inp.f = 1; inp.s = 0; inp.walk = true; } }   // a scene walking you somewhere
         const wasG = me.onGround;
         moveStep(W, me, inp, dt, wspeed);
         if (!wasG && me.onGround && me.wasAir > 0.25) { audio.play('land', 0.5); me.landK = Math.min(1.2, me.wasAir * 1.6); }
@@ -1315,7 +1344,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (!W) return;
       gov(dt); fpsM(dt); autoCheck(dt);
       // ---- camera: own eyes, or spectate a teammate ----
-      const lo = leanOff(me); let viewYaw = me.yaw, viewPitch = me.pitch + me.punch * 0.35 + camKick, ex = me.x + lo.x, ey = me.y + eyeHeight(me) - Math.abs(me.lean) * 0.05, ez = me.z + lo.z, viewRoll = -me.lean * 0.2;
+      const lo = leanOff(me); let viewYaw = me.yaw, viewPitch = me.pitch + me.punch * 0.35 + camKick, ex = me.x + lo.x, ey = me.y + eyeHeight(me) * (mineStory().scale || 1) - Math.abs(me.lean) * 0.05, ez = me.z + lo.z, viewRoll = -me.lean * 0.2;
       let spectating = null;
       if (!me.alive && (st.phase !== 'warmup')) {
         const mates = [...st.players.values()].filter((p) => p.alive && p.team === me.team);
@@ -1371,10 +1400,11 @@ export default function start({ cfg, E, N, smoke }) {
       // own body while emoting: camera swings out in front, you see yourself
       // story cutscenes: the director's camera, and your own body in the shot like everyone else's
       const cine = SC && SC.cutscene && W ? SC.shot(now, (id) => { if (id === myId) return me.alive ? { x: me.x, y: me.y, z: me.z, yaw: me.yaw } : null; const p = st.players.get(id); return p && p.alive ? { x: p.x, y: p.y, z: p.z, yaw: p.yaw, scale: p.scale || 1 } : null; }) : null;
-      const selfRig = me.emote || cine || rigs.has(myId) ? rigFor(myId) : null;
+      const povShot = cine && cine.pov;
+      const selfRig = me.emote || (cine && !povShot) || rigs.has(myId) ? rigFor(myId) : null;
       if (selfRig) {
-        selfRig.g.visible = (!!me.emote || !!cine) && me.alive; if (selfRig.blob) selfRig.blob.visible = selfRig.g.visible;
-        if (cine && !me.emote && me.alive) { selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw; setTpGun(selfRig, (curWeapon() || {}).id || 'knife', null); if (selfRig.soldier) poseSoldier(selfRig, { dt, vx: 0, vz: 0, vy: 0, yaw: me.yaw, crouch: 0, pitch: 0 }); else posePlayer(selfRig, { speed: 0, t: selfRig.t, crouch: 0, pitch: 0 }); }
+        selfRig.g.visible = (!!me.emote || (!!cine && !povShot)) && me.alive; if (selfRig.blob) selfRig.blob.visible = selfRig.g.visible;
+        if (cine && !povShot && !me.emote && me.alive) { selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw; setTpGun(selfRig, (curWeapon() || {}).id || 'knife', null); if (selfRig.soldier) poseSoldier(selfRig, { dt, vx: 0, vz: 0, vy: 0, yaw: me.yaw, crouch: 0, pitch: 0 }); else posePlayer(selfRig, { speed: 0, t: selfRig.t, crouch: 0, pitch: 0 }); }
         if (me.emote) {
           selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw;
           if (selfRig.soldier) poseSoldier(selfRig, { dt, yaw: me.yaw, emote: me.emote }); else posePlayer(selfRig, { t: selfRig.t, emote: me.emote });
@@ -1385,7 +1415,11 @@ export default function start({ cfg, E, N, smoke }) {
           cam.position.set(o.x + d.x * dist, o.y + d.y * dist, o.z + d.z * dist); cam.lookAt(me.x, me.y + 1.2, me.z);
         }
       }
-      if (cine) {   // keep the camera out of walls: pull it in towards whoever it's looking at
+      if (povShot) {   // through your own eyes: a child in a hallway, a man on the ground
+        const sc2 = mineStory().scale || 1, h = cine.down ? 0.28 : eyeHeight(me) * sc2, sh = cine.shake || 0;
+        cam.position.set(me.x + (Math.random() - 0.5) * sh, me.y + h + (Math.random() - 0.5) * sh, me.z + (Math.random() - 0.5) * sh); cam.up.set(cine.down ? 0.25 : 0, 1, 0); cam.lookAt(cine.look); cam.up.set(0, 1, 0);
+        if (Math.abs(cam.fov - 62) > 0.01) { cam.fov = 62; cam.updateProjectionMatrix(); }
+      } else if (cine) {   // keep the camera out of walls: pull it in towards whoever it's looking at
         const lk2 = cine.look, dx = cine.pos.x - lk2.x, dy = cine.pos.y - lk2.y, dz = cine.pos.z - lk2.z, L = Math.hypot(dx, dy, dz) || 1;
         const hit = W.ray({ x: lk2.x, y: lk2.y, z: lk2.z }, { x: dx / L, y: dy / L, z: dz / L }, L), k = hit ? Math.max(0.15, (hit.t - 0.25) / L) : 1;
         cam.position.set(lk2.x + dx * k, lk2.y + dy * k, lk2.z + dz * k); cam.up.set(0, 1, 0); cam.lookAt(lk2.x, lk2.y, lk2.z);

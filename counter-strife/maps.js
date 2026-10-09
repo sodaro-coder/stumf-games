@@ -472,6 +472,99 @@ function stadium() {
   return B;
 }
 
+// ---- 14 Mustard Street: the house Frank Wiener grew up in (a memory: warm light, too quiet) -----------------------------
+function wienerHouse() {
+  const B = new MapBuilder(42, 40, 5, 'brick', 'grass');
+  B.open(2, 2, 40, 38, 0, 'grass');
+  B.house(4, 10, 30, 28, 3.0, 'plaster', 'wood', [[29, 18, 30, 21], [8, 10, 10, 11]]);   // front door (east) onto the porch, back door (north) to the yard
+  const wall = (x0, z0, x1, z1) => B.block(x0, z0, x1, z1, 3.0, 'plaster');
+  wall(4, 18, 8, 19); wall(10, 18, 18, 19); wall(20, 18, 30, 19);                       // kitchen and living room / hallway (doors at x 8-10 and 18-20)
+  wall(13, 10, 14, 18);                                                                 // kitchen | living room
+  wall(4, 21, 8, 22); wall(10, 21, 16, 22); wall(18, 21, 24, 22); wall(26, 21, 30, 22); // hallway / bedrooms (doors 8-10, 16-18, 24-26)
+  wall(13, 22, 14, 28); wall(21, 22, 22, 28);
+  B.block(6, 13, 10, 15, 0.8, 'darkwood');                                              // the kitchen table, bottles on it
+  B.block(10, 11, 13, 12, 0.95, 'trim').block(5, 11, 8, 12, 0.95, 'trim');             // counters (the knife block on the right one)
+  B.block(16, 11, 21, 13, 0.6, 'carpet').block(26, 11, 29, 12, 1.0, 'darkwood');        // the couch, a cabinet
+  B.block(5, 25, 8, 27, 0.55, 'cblue').block(10, 26, 12, 27, 0.4, 'crate');              // Danny's bed, his toy box
+  B.block(15, 25, 20, 27, 0.6, 'cred');                                                 // their parents' bed
+  B.block(27, 18, 28, 18.5, 1.8, 'cred');                                               // her coat on the hook
+  B.roof(4, 10, 30, 28, 3.0, 'roof').roof(29, 18, 30, 21, 2.3, 'plaster').roof(8, 10, 10, 11, 2.3, 'plaster');
+  B.open(30, 15, 38, 24, 0.25, 'wood');                                                 // the porch
+  B.block(11, 4, 13, 5, 0.25, 'rock');                                                  // her grave, in the yard
+  B.zone('Kitchen', 4, 10, 13, 18).zone('Living Room', 14, 10, 30, 18).zone('Hallway', 4, 19, 30, 21).zone('Danny\'s Room', 4, 22, 13, 28).zone('Master Bedroom', 14, 22, 21, 28)
+    .zone('Bathroom', 22, 22, 30, 28).zone('Porch', 30, 15, 38, 24).zone('Grave', 8, 3, 16, 8).zone('Yard', 2, 2, 40, 9).zone('Coat Hooks', 25, 19, 29, 21).zone('Knife Block', 10, 12, 13, 13)
+    .zone('Danny\'s Door', 8, 20, 10, 22).zone('Shadow Wall', 10, 19, 13, 21);
+  B.mark('Shadow Wall', 11.5, 1.5, 21.95, Math.PI).mark('Kitchen Wall', 4.05, 1.6, 14, Math.PI / 2).mark('Grave', 12, 0.8, 5.2, 0);
+  B.site('A', 4, 22, 13, 28).site('B', 14, 10, 30, 18);
+  B.buyzone('T', 14, 22, 21, 28).buyzone('CT', 14, 10, 30, 18);
+  for (let k = 0; k < 4; k++) { B.spawn('CT', 18 + k * 2, 15, Math.PI / 2); B.spawn('T', 16 + k, 24, 0); }
+  B.duelSpawn('T', 17, 24, 0).duelSpawn('CT', 20, 15, Math.PI);
+  B.sign(12, 5.05, 0.8, 0, 'MARGARET WIENER\n1961 - 1997\nloved her boys', 1.4, 0.8, '#8c8c88', '#262626');
+  B.sign(4.05, 15, 2.0, Math.PI / 2, 'FRANKIE + DANNY\n(height chart)', 1.6, 0.8, '#efe6d0', '#5a3a2a');
+  B.sign(29.95, 14, 2.2, -Math.PI / 2, '14 MUSTARD ST', 1.8, 0.5, '#2a2a2a', '#e8c070');
+  B.prop('tv', 24, 13, {}).prop('lamp', 34, 20, {}).prop('tree', 36, 6, {}).prop('tree', 3, 34, {}).prop('barrel', 18, 6, {});
+  B.sky = 0x1c1626; B.fog = 0x2a2030; B.sunColor = 0xffb070; B.amb = [0xffb878, 0x3a2418]; B.sunDir = [0.5, 0.5, 0.3]; B.sunI = 1.2; B.ambI = 1.15; B.fogNear = 20; B.fogFar = 90;
+  return B;
+}
+
+// ---- Big Lou's place: Ricky picked the wrong house -----------------------------------------------------------------
+function mansion() {
+  const B = new MapBuilder(72, 58, 6, 'brick', 'grass');
+  B.open(2, 2, 70, 56, 0, 'grass');
+  B.open(2, 46, 70, 56, 0, 'asphalt');                                                   // the street
+  B.house(10, 4, 62, 32, 4.0, 'plaster', 'tile', [[16, 4, 19, 5, 1.0], [52, 31, 58, 32]]); // a window round the back (Ricky's way in), the garage door out front
+  const wall = (x0, z0, x1, z1) => B.block(x0, z0, x1, z1, 4.0, 'plaster');
+  wall(10, 16, 16, 17); wall(19, 16, 26, 17);                                           // study | gallery (door 16-19)
+  wall(26, 4, 27, 22); wall(26, 25, 27, 32);                                            // gallery | foyer & ballroom (door z 22-25)
+  wall(27, 20, 33, 21); wall(36, 20, 46, 21);                                           // ballroom | foyer (door x 33-36)
+  wall(46, 4, 47, 8); wall(46, 11, 47, 32);                                             // ballroom | kitchen & garage (door z 8-11)
+  wall(47, 16, 51, 17); wall(54, 16, 62, 17);                                           // kitchen | garage (door x 51-54)
+  B.block(12, 7, 16, 9, 0.8, 'darkwood').block(20, 6, 24, 8, 1.1, 'darkwood');           // study desk, bookcase
+  B.block(14, 22, 18, 23, 1.2, 'metal');                                                // the display case
+  B.block(31, 8, 34, 11, 0.8, 'darkwood').block(38, 8, 41, 11, 0.8, 'darkwood').block(31, 14, 34, 17, 0.8, 'darkwood').block(38, 14, 41, 17, 0.8, 'darkwood');   // ballroom tables
+  B.block(50, 8, 58, 10, 0.95, 'trim').block(56, 12, 61, 14, 0.95, 'trim');              // kitchen island, counter
+  B.block(49, 19, 53, 25, 1.4, 'cblue').block(56, 19, 60, 25, 1.4, 'cred');              // two of the seven cars
+  B.block(30, 36, 40, 38, 1.0, 'green').block(48, 36, 58, 38, 1.0, 'green').block(14, 38, 24, 40, 1.0, 'green');   // garden hedges
+  B.block(2, 44, 30, 45, 2.2, 'brick').block(40, 44, 70, 45, 2.2, 'brick');              // the wall along the street, gate at 30-40
+  B.roof(10, 4, 62, 32, 4.0, 'roof').roof(52, 31, 58, 32, 3.0, 'plaster').roof(16, 4, 19, 5, 3.2, 'plaster');
+  B.zone('Study', 10, 4, 26, 16).zone('Gallery', 10, 17, 26, 32).zone('Display Case', 13, 21, 19, 25).zone('Foyer', 27, 21, 46, 32).zone('Ballroom', 27, 4, 46, 20)
+    .zone('Kitchen', 47, 4, 62, 16).zone('Garage', 47, 17, 62, 32).zone('Garden', 2, 32, 70, 44).zone('Front Gate', 30, 42, 40, 47).zone('Street', 2, 46, 70, 56).zone('Street End', 2, 47, 10, 55);
+  B.site('A', 27, 4, 46, 20).site('B', 47, 17, 62, 32);
+  B.buyzone('T', 47, 4, 62, 16).buyzone('CT', 10, 4, 26, 16);
+  for (let k = 0; k < 4; k++) { B.spawn('CT', 13 + k * 2, 12, Math.PI); B.spawn('T', 34 + k * 3, 26, 0); }
+  B.spawn('T', 55, 6, 0).spawn('T', 54, 28, 0).spawn('T', 60, 40, 0);
+  B.duelSpawn('T', 40, 12, Math.PI / 2).duelSpawn('CT', 14, 10, -Math.PI / 2);
+  B.sign(36.5, 32.05, 3.4, 0, 'THE MARRONE RESIDENCE\nno solicitors (seriously)', 5, 1.2, '#1c1c20', '#d8b060');
+  B.sign(16, 21.95, 2.4, Math.PI, 'NOT FOR SALE', 2.4, 0.6, '#1c1c20', '#d8b060');
+  B.prop('lamp', 30, 46, {}).prop('lamp', 40, 46, {}).prop('lamp', 10, 50, {}).prop('lamp', 60, 50, {}).prop('tree', 6, 36, {}).prop('tree', 66, 38, {}).prop('palm', 26, 34, {}).prop('palm', 44, 34, {}).prop('tv', 36, 28, {});
+  B.sky = 0x0a0e1e; B.fog = 0x10142a; B.sunColor = 0x9aaeff; B.amb = [0x46507a, 0x16121a]; B.sunDir = [0.4, 0.7, 0.3]; B.sunI = 1.1; B.ambI = 1.0; B.fogNear = 30; B.fogFar = 150;
+  return B;
+}
+
+// ---- the outpost in the blizzard (Igor, twelve winters ago) ---------------------------------------------------------
+function outpost() {
+  const B = new MapBuilder(92, 82, 6, 'rock', 'snow');
+  B.open(2, 2, 90, 80, 0, 'snow');
+  B.ramp(36, 2, 56, 10, 1.6, 0.4, 'z', 'snow');                                          // the ridge Igor starts on
+  for (const [x, z, w, d] of [[22, 14, 4, 3], [76, 30, 3, 5], [40, 30, 5, 3], [10, 48, 4, 4], [70, 70, 5, 3], [30, 60, 3, 4], [84, 12, 3, 3]]) B.block(x, z, x + w, z + d, 1.6, 'rock');   // boulders
+  B.house(62, 10, 72, 20, 3.0, 'darkwood', 'wood', [[62, 14, 63, 16]]); B.roof(62, 10, 72, 20, 3.0, 'roof').roof(62, 14, 63, 16, 2.2, 'darkwood');   // the eastern post
+  B.house(20, 32, 32, 42, 3.0, 'metal', 'concrete', [[25, 41, 28, 42]]); B.roof(20, 32, 32, 42, 3.0, 'metal').roof(25, 41, 28, 42, 2.2, 'metal');     // the radio station
+  B.block(33, 34, 34, 35, 9, 'metal');                                                   // the mast
+  B.house(52, 54, 66, 64, 2.8, 'concrete', 'concrete', [[52, 58, 53, 61], [58, 63, 61, 64]]); B.roof(52, 54, 66, 64, 2.8, 'concrete').roof(52, 58, 53, 61, 2.2, 'concrete').roof(58, 63, 61, 64, 2.2, 'concrete');   // the bunker
+  B.block(64, 21, 67, 23, 1.1, 'crate').block(18, 43, 21, 45, 1.1, 'crate').block(48, 58, 51, 60, 1.2, 'cgreen');   // supply crates, a truck
+  B.zone('Ridge', 36, 2, 56, 10).zone('Eastern Post', 62, 10, 72, 20).zone('Radio Station', 20, 32, 32, 42).zone('Command Bunker', 52, 54, 66, 64).zone('Treeline', 2, 66, 16, 80)
+    .zone('Valley', 20, 12, 60, 50).zone('Road', 40, 60, 52, 80);
+  B.site('A', 62, 10, 72, 20).site('B', 52, 54, 66, 64);
+  B.buyzone('T', 70, 70, 88, 80).buyzone('CT', 38, 2, 54, 8);
+  for (let k = 0; k < 4; k++) { B.spawn('CT', 42 + k * 2, 5, Math.PI); B.spawn('T', 74 + k * 3, 74, 0); }
+  B.spawn('T', 8, 30, 0).spawn('T', 86, 44, 0).spawn('T', 44, 78, 0);
+  B.duelSpawn('T', 46, 40, 0).duelSpawn('CT', 46, 8, Math.PI);
+  for (const [x, z] of [[4, 68], [8, 72], [12, 76], [5, 76], [14, 68], [10, 70], [86, 60], [80, 64], [88, 70], [18, 22], [70, 40], [36, 70]]) B.prop('tree', x, z, {});
+  B.sign(66.95, 15, 2.2, Math.PI / 2, 'POST 7', 1.4, 0.5, '#3a3a2a', '#e8e8e0');
+  B.sky = 0xc8ccd4; B.fog = 0xdfe4ea; B.sunColor = 0xe8eef8; B.amb = [0xd8e0ec, 0x8a90a0]; B.sunDir = [0.2, 0.8, 0.3]; B.sunI = 1.3; B.ambI = 1.45; B.fogNear = 6; B.fogFar = 62;
+  return B;
+}
+
 export const MAPS = {
   dust: { id: 'dust', name: 'Dust Two: Abbottabad', short: 'Abbottabad', parody: 'the classic desert bomb map', build: dust, modes: ['1v1', '2v2', '3v3', '5v5'] },
   nuke: { id: 'nuke', name: 'Nuke Town 2069', short: 'Nuke Town', parody: 'the little nuclear test town', build: nuke, modes: ['1v1', '2v2', '3v3', '5v5'] },
@@ -485,4 +578,7 @@ export const MAPS = {
   barracks_night: { id: 'barracks_night', name: 'Fort Brisket (night)', short: 'Fort Brisket', parody: 'story mode', build: () => barracks(true), modes: [], story: true },
   hospital: { id: 'hospital', name: 'St. Mercy Hospital', short: 'St. Mercy', parody: 'story mode', build: hospital, modes: [], story: true },
   stadium: { id: 'stadium', name: 'Ballin\' Arena', short: 'Ballin\' Arena', parody: 'story mode', build: stadium, modes: [], story: true },
+  wiener_house: { id: 'wiener_house', name: '14 Mustard Street', short: 'Mustard Street', parody: 'story mode', build: wienerHouse, modes: [], story: true },
+  mansion: { id: 'mansion', name: 'The Marrone Residence', short: 'Big Lou\'s', parody: 'story mode', build: mansion, modes: [], story: true },
+  outpost: { id: 'outpost', name: 'Post 7', short: 'Post 7', parody: 'story mode', build: outpost, modes: [], story: true },
 };

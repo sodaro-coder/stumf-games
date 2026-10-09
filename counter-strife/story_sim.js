@@ -2,9 +2,9 @@
 // (real players first, AI squadmates fill the four characters) is CT; the Ballin' Brotherhood is T, spawned in waves
 // by the mission's objectives. Everything is host-authoritative like a normal match, so co-op uses the same netcode:
 // the host broadcasts the story state (objective, markers, timers, boss) as an event and clients draw it.
-import { Match } from './sim.js';
+import { Match, moveStep } from './sim.js';
 import { W_BY_ID, MODES } from './data.js';
-import { CHARACTERS, SQUAD, STORY_DIFF, ARSENAL, MISSIONS, BOSS, BARKS, SPEAKERS } from './story.js';
+import { CHARACTERS, SQUAD, STORY_DIFF, ARSENAL, MISSIONS, BOSS, BOSSES, BARKS, SPEAKERS } from './story.js';
 
 const ENEMY_GUNS = [['glock', 'mac10'], ['mac10', 'galil'], ['galil', 'ak47', 'mp9'], ['ak47', 'galil', 'p90'], ['ak47', 'm4a4', 'p90'], ['ak47', 'm4a4', 'ssg08'], ['ak47', 'awp', 'm4a1s']];
 const ENEMY_NAMES = ['Brother Dribbles', 'Crossover Carl', 'Airball Ahmed', 'Benchwarmer Bob', 'Free Throw Frank', 'Layup Larry', 'Turnover Tony', 'Brick Brian', 'Double Dribble Dave', 'Technical Foul Ted', 'Shot Clock Steve', 'Rebound Ron'];
@@ -24,7 +24,16 @@ export class StoryMatch extends Match {
     this.abilityT = new Map(); this.nadeUsed = new Set(); this.focusT = new Map(); this.kills = 0;
     this.startObj = Math.max(0, story.obj | 0); this.runId = story.runId || ''; this.absent = new Set(this.mission.absent || []);
     this.sceneT = 0; this.skipVotes = new Set(); this.paused = false; this.talkQ = 0;
+    this.featured = this.mission.featured || null; this.featuredId = null;   // a character's own story: one player plays, the squad watches
+    this.sightRange = this.mission.botSight || 0; this.vision = this.mission.vision || ''; this.music = this.mission.music || ''; this.dirs = []; this.sceneClock = 0; this.slowT = 0; this.slowK = 1; this.tele = []; this.healed = 0;
   }
+  // permanent unlocks follow campaign progress, so they survive deaths, checkpoints, restarts and saves by construction
+  unlocked(c) {
+    const A = (CHARACTERS[c] || {}).ability; if (!A) return false; if (!A.unlock) return true;
+    const ui = MISSIONS.findIndex((m) => m.id === A.unlock.mission); if (ui < 0) return true;
+    return this.mi > ui || (this.mi === ui && (this.unlockedNow.has(c) || this.obj > (A.unlock.obj | 0)));   // granted inside its level by a scene, or already past that point
+  }
+  get unlockedNow() { return this._un || (this._un = new Set()); }
   get squadChars() { return SQUAD.filter((c) => !this.absent.has(c)); }
   // ---- the squad ----
   add(id, info) {
@@ -40,6 +49,7 @@ export class StoryMatch extends Match {
         for (const q of [...this.players.values()]) if (q !== p && q.bot && q.squad && q.char === p.char) this.players.delete(q.id);
       }
       p.squad = true; p.name = p.bot ? CHARACTERS[p.char].name : `${info.name || 'Player'} (${CHARACTERS[p.char].short})`;
+      if (this.featuredId && !p.bot && p.id !== this.featuredId) { p.spectator = true; p.alive = false; }   // joined during someone's story: watch it
       p.maxHp = p.bot ? 100 : Math.round(100 * this.diff.hpMult);   // real players: 1.5x health
       this.broadcastRoster();
     }
@@ -47,6 +57,7 @@ export class StoryMatch extends Match {
   }
   // AI squadmates for every character no human plays
   fillSquad() {
+    if (this.featured && !this.mission.allies) return;
     const have = new Set([...this.players.values()].filter((p) => p.squad).map((p) => p.char));
     for (const c of this.squadChars) if (!have.has(c)) this.add('mate_' + c, { name: CHARACTERS[c].name, bot: true, team: 'CT', char: c });
   }
@@ -58,8 +69,16 @@ export class StoryMatch extends Match {
     if (C.sidearm) p.inv[2] = { wid: 'glock', ammo: GLOCK_SWITCH.mag, reserve: GLOCK_SWITCH.reserve, sw: true, fresh: true };
     else { const pid = tier >= 4 ? 'deagle' : tier >= 2 ? 'fiveseven' : 'p2000', pw = W_BY_ID[pid]; p.inv[2] = { wid: pid, ammo: pw.mag, reserve: pw.reserve, skin: this.skinFor(p, pid), fresh: true }; }
     p.nades = ['he', 'flash']; p.armor = 100; p.helmet = true; p.cur = 1; p.money = 0;
+    const L = (this.mission.loadout || {})[p.char];   // a level's own kit: a kitchen knife, the Switch and nothing else, a hospital gown...
+    if (L) {
+      p.inv = L.noKnife ? {} : { 3: { wid: 'knife' } }; p.nades = []; p.cur = L.noKnife ? 0 : 3;
+      for (const w of L.guns || []) { if (w === 'glock_sw') { p.inv[2] = { wid: 'glock', ammo: GLOCK_SWITCH.mag, reserve: GLOCK_SWITCH.reserve, sw: true, fresh: true }; p.cur = 2; } else { const ww = W_BY_ID[w]; if (ww) { const sl = ww.cat === 'pistol' ? 2 : 1; p.inv[sl] = { wid: w, ammo: ww.mag, reserve: ww.reserve * 2, fresh: true }; p.cur = Math.min(p.cur, sl); } } }
+      p.nades = (L.nades || []).slice(); p.armor = L.armor ? 100 : 0; p.helmet = !!L.armor;
+    }
+    for (const k of ['scale', 'look', 'speed']) { const v = (this.mission[k] || {})[p.char]; if (k === 'scale') p.scale = v || 1; if (k === 'look') p.lookAs = v || null; if (k === 'speed') p.speedMul = v || 1; }
     this.sendInv(p);
   }
+  give2(p, w) { if (!p) return; if (w === 'knife') { p.inv[3] = { wid: 'knife' }; p.cur = 3; } else if (w === 'glock_sw') p.inv[2] = { wid: 'glock', ammo: GLOCK_SWITCH.mag, reserve: GLOCK_SWITCH.reserve, sw: true, fresh: true }; else if (W_BY_ID[w]) { const ww = W_BY_ID[w], sl = ww.cat === 'pistol' ? 2 : 1; p.inv[sl] = { wid: w, ammo: ww.mag, reserve: ww.reserve * 2, fresh: true }; p.cur = sl; } else if (['he', 'flash', 'smoke', 'molotov'].includes(w)) p.nades.push(w); this.sendInv(p); }
   spawn(p) {
     if (p.team === 'T' && p.spawnAt) {   // enemies appear where their wave says
       p.x = p.spawnAt[0]; p.z = p.spawnAt[1]; p.y = this.W.groundAt(p.x, p.z, 10); p.yaw = p.spawnAt[2] || 0; p.pitch = 0; p.vx = p.vy = p.vz = 0; p.crouch = 0; p.alive = true; p.hp = p.maxHp || 100;
@@ -67,19 +86,32 @@ export class StoryMatch extends Match {
     }
     super.spawn(p);
     if (p.squad) p.hp = p.maxHp || 100;
+    if (p.spectator) { p.alive = false; p.hp = 0; }
   }
   canBuy() { return false; }
   // a player who drops out: their character carries on as an AI squadmate (they can come back and take it over)
   remove(id) { const p = this.players.get(id); const was = p && p.squad && !p.bot; super.remove(id); this.skipVotes.delete(id); if (was && this.phase !== 'warmup') { this.fillSquad(); for (const q of this.players.values()) if (q.squad && q.bot && !q.inv[1]) { this.spawn(q); this.loadout(q); const h = this.humans()[0]; if (h) { q.x = h.x + 1; q.z = h.z + 1; q.y = this.W.groundAt(q.x, q.z, h.y + 1); } } } }
   // the roster also says who plays which character and which one is the boss (clients dress the models from it)
-  broadcastRoster() { this.send('roster', [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: null, char: p.squad ? p.char : null, boss: !!p.boss }))); }
+  broadcastRoster() { this.rosterVer = (this.rosterVer || 0) + 1; this.send('roster', [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: null, char: p.squad ? p.char : null, boss: p.boss ? p.bossKey || 'ballin' : null, look: p.lookAs || null, scale: p.scale || 1 }))); }
   // the switch Glock fires far faster than a stock one: let its shots past the fire-rate check
   shot(p, wid, hits, origin) { if (wid === 'glock' && p.inv[2] && p.inv[2].sw) p.lastShot = 0; super.shot(p, wid, hits, origin); }
   // ---- flow: one long "round": a cutscene, then the objectives in order; everyone down = retry the objective ----
   start() {
+    if (this.featured) {   // the human who plays this character plays it; if nobody does, the host takes it for this level
+      const hs = [...this.players.values()].filter((p) => p.squad && !p.bot);
+      let f = hs.find((p) => p.char === this.featured) || hs.find((p) => p.id === this.hostId) || hs[0];
+      if (f) { if (f.char !== this.featured) { f.homeChar = f.char; f.char = this.featured; } this.featuredId = f.id; f.spectator = false; }
+      for (const q of [...this.players.values()]) if (q.squad && q !== f) { if (q.bot) this.players.delete(q.id); else q.spectator = true; }
+      if (f) f.name = f.name.replace(/\(.*\)$/, `(${CHARACTERS[this.featured].short})`);
+    }
     this.fillSquad();
+    for (const a of this.mission.actors || []) {   // people the story needs who aren't fighting: Danny, the doctor
+      const q = this.add('actor_' + a.id, { name: a.name || a.id, bot: true, team: 'CT' }); q.squad = false; q.actorId = a.id; q.passive = true; q.lookAs = a.look; q.scale = a.scale || 1; q.npc = true;
+      const pt = this.zonePt(a.zone, 91); q.spawnAt = null; q.x = pt[0]; q.z = pt[1]; q.y = this.W.groundAt(pt[0], pt[1], 10); q.alive = true; q.hp = 9999; q.maxHp = 9999; q.inv = {}; q.cur = 0; q.scripted = true;
+    }
     this.round = 1; this.phase = 'freeze'; this.timer = 9999;
     for (const p of this.players.values()) if (p.squad) { this.spawn(p); this.loadout(p); }
+    this.broadcastRoster();
     this.cutT = this.startObj > 0 ? 0.5 : this.cut('in');
     this.event('round', { n: 1, phase: 'freeze', score: this.score });
     this.push(true);
@@ -88,7 +120,7 @@ export class StoryMatch extends Match {
   endRound() { /* missions end through objectives */ }
   checkWin() {
     if (this.phase !== 'live' || this.result) return;
-    const squad = [...this.players.values()].filter((p) => p.squad);
+    const squad = [...this.players.values()].filter((p) => p.squad && !p.spectator);
     if (squad.some((p) => !p.bot) && !squad.some((p) => !p.bot && p.alive) && !this.failT) {   // every real player down
       this.failT = 4; this.event('banner', { text: 'SQUAD DOWN', sub: 'back to the last checkpoint…' });
     }
@@ -98,14 +130,37 @@ export class StoryMatch extends Match {
     if (!raw.length) return 0;
     return this.scene(raw, which === 'in' ? `${this.mission.chapterName}: ${this.mission.name}` : '', which);
   }
-  lines(raw) { return raw.map(([who, text]) => ({ who, name: who === 'boss' ? BOSS.name : (CHARACTERS[who] || {}).name || SPEAKERS[who] || who, text })); }
+  lines(raw) { return raw.map(([who, text, o]) => ({ who, name: who === 'boss' ? (this.boss && BOSSES[this.boss.bossKey] ? BOSSES[this.boss.bossKey].name : BOSS.name) : (CHARACTERS[who] || {}).name || SPEAKERS[who] || who, text, o: o || null })); }
   // a scene everyone watches together (the host keeps the clock; the clients pace the lines the same way)
   scene(raw, title = '', which = 'scene') {
     const lines = this.lines(raw); this.skipVotes.clear();
     this.event('cut', { lines, title, which });
-    const t = Math.min(90, 1.5 + lines.reduce((s, l) => s + 1.6 + l.text.length * 0.045, 0));
+    let acc = 0; this.dirs = lines.map((l) => { const d = { t: acc, o: l.o, who: l.who }; acc += 1.6 + l.text.length * 0.045 + ((l.o && l.o.hold) || 0); return d; }).filter((d) => d.o); this.sceneClock = 0;
+    const t = Math.min(120, 1.5 + acc);
     if (which === 'scene') this.sceneT = t;
     return t;
+  }
+  // stage directions inside a scene, run by the host at the moment their line plays (clients do the camera, the screen
+  // and the sound themselves from the same lines)
+  direct(dt) {
+    this.sceneClock += dt;
+    while (this.dirs.length && this.dirs[0].t <= this.sceneClock) this.doDir(this.dirs.shift().o);
+  }
+  doDir(o) {
+    if (o.vision != null) { this.vision = o.vision; this.push(true); }
+    if (o.music != null) { this.music = o.music; this.push(true); }
+    if (o.slowmo) { this.slowK = o.slowmo[0]; this.slowT = o.slowmo[1]; }
+    if (o.capture) {   // the ambush: everyone but the featured character is taken
+      for (const q of [...this.players.values()]) if (q.squad && q.char !== o.capture) { if (q.bot) this.players.delete(q.id); else { q.spectator = true; q.alive = false; } }
+      this.broadcastRoster(); this.push(true);
+    }
+    if (o.down) { const q = [...this.players.values()].find((p) => p.squad && p.char === o.down && p.alive); if (q) { q.hp = 1; q.downed = true; } }
+    if (o.unlock) { this.unlockedNow.add(o.unlock); this.event('unlock', { char: o.unlock }); this.push(true); }
+    if (o.give) { const q = [...this.players.values()].find((p) => p.squad && p.alive && p.char === o.give[0]); this.give2(q, o.give[1]); }
+    if (o.fullhp) for (const q of this.players.values()) if (q.squad && q.alive) { q.hp = q.maxHp || 100; q.downed = false; if (q.local) this.onLocal('hurt', { id: q.id, hp: q.hp, armor: q.armor, heal: true }); else if (!q.bot) this.send('hurt', { id: q.id, hp: q.hp, armor: q.armor, heal: true }, q.id); }
+    if (o.bossEnd && this.boss) { const b = this.boss; this.players.delete(b.id); this.enemies.delete(b.id); this.boss = null; this.tele = []; this.event('boss', null); this.broadcastRoster(); if (this.state) this.state.have = 1; }
+    if (o.walk) for (const q of this.players.values()) if (q.bot && ((q.squad && o.walk[0] === q.char) || q.actorId === o.walk[0])) q.walkTo = Array.isArray(o.walk[1]) ? o.walk[1] : this.zonePt(o.walk[1], 77);
+    if (o.place) for (const q of this.players.values()) if ((q.squad && o.place[0] === q.char) || q.actorId === o.place[0]) { const pt = this.zonePt(o.place[1], 78); q.x = pt[0]; q.z = pt[1]; q.y = this.W.groundAt(pt[0], pt[1], 10); q.seen = false; }
   }
   // lines over gameplay: nobody stops
   talk(raw) { if (raw && raw.length) this.event('talk', { lines: this.lines(raw) }); }
@@ -135,7 +190,9 @@ export class StoryMatch extends Match {
   }
   enemy(at, opts = {}) {
     const id = 'en' + this.eid++, tier = Math.min(6, this.mission.tier | 0), guns = ENEMY_GUNS[tier];
-    const p = this.add(id, { name: opts.name || ENEMY_NAMES[this.eid % ENEMY_NAMES.length], bot: true, team: 'T' });
+    const names = this.mission.enemyNames || ENEMY_NAMES;
+    const p = this.add(id, { name: opts.name || names[this.eid % names.length], bot: true, team: 'T' });
+    p.lookAs = opts.look || this.mission.enemyLook || null;
     p.maxHp = Math.round((opts.hp || 100) * this.diff.enemyHp); p.spawnAt = [at[0], at[1], 0];
     this.spawn(p);
     const wid = opts.wid || guns[Math.floor(this.rng() * guns.length)], w = W_BY_ID[wid];
@@ -207,7 +264,25 @@ export class StoryMatch extends Match {
         this.npc.squad = false; this.npc.passive = true; this.npc.maxHp = 200; this.npc.spawnAt = null; this.npc.x = s.x + 1; this.npc.z = s.z + 1; this.npc.y = s.y; this.npc.alive = true; this.npc.hp = 200; this.npc.inv = { 3: { wid: 'knife' } }; this.npc.cur = 3;
         const pt = this.zonePt(place, i); this.markers.push({ id: 'goal', x: pt[0], z: pt[1], kind: 'goal', label: 'Extraction' }); this.waveT = 5; break;
       }
-      case 'boss': this.spawnBoss(this.zonePt(o.zone || 'boss', i)); break;
+      case 'boss': this.spawnBoss(this.zonePt(o.zone || 'boss', i), o.boss || 'ballin'); break;
+      case 'rescue': {   // a captured squadmate: get to them and hold USE; they're back in the fight (a real player gets control back)
+        const q = this.zonePt(o.zone || 'cell' + i, i); st.pt = q; st.need = 2.2; st.who = o.who; st.limit = o.time || 0;
+        this.markers.push({ id: 'cell', x: q[0], z: q[1], kind: 'revive', label: (CHARACTERS[o.who] || {}).short || 'Rescue', prog: 0 });
+        const n = Math.round((o.guards || 4) * this.diff.enemyCount); for (let k = 0; k < n; k++) { let g = null; for (let j = 0; j < 8 && (!g || this.humans().some((h) => Math.hypot(h.x - g[0], h.z - g[1]) < 9)); j++) g = this.W.randomIn([q[0] - 8, q[1] - 8, q[0] + 8, q[1] + 8]); this.enemy(g, { guard: g, look: this.mission.enemyLook }); }
+        break;
+      }
+      case 'intel': {   // Igor's swap: several files at one desk, one is the right one to replace (the clue says which)
+        const q = this.zonePt(o.zone, i); st.pt = q; st.answer = o.answer; st.need = 1;
+        (o.options || []).forEach((lab, k) => this.markers.push({ id: 'i' + k, x: q[0] + (k - (o.options.length - 1) / 2) * 1.6, z: q[1], kind: 'terminal', label: lab, opt: lab, prog: 0 }));
+        const n = o.guards | 0, H = this.humans();
+        for (let k = 0; k < n; k++) { let g = null; for (let j = 0; j < 10 && (!g || H.some((h) => Math.hypot(h.x - g[0], h.z - g[1]) < 12)); j++) g = this.W.randomIn([q[0] - 12, q[1] - 12, q[0] + 12, q[1] + 12]); const e = this.enemy(g, { guard: g, look: o.look || this.mission.enemyLook }); e.passive = true; e.yaw = this.rng() * 6.28; st.guards = (st.guards || []).concat(e.id); }
+        st.spotted = false; st.lookT = 0; st.sight = o.sight || this.mission.sight || 16; break;
+      }
+      case 'ability': {   // the tutorial: use it for real, on people who need it
+        st.need = 1; st.who = o.who; this.healed = 0;
+        for (const q of this.players.values()) if (q.squad && q.alive && q.char !== o.who) { q.hp = Math.round((q.maxHp || 100) * 0.35); if (q.local) this.onLocal('hurt', { id: q.id, hp: q.hp, armor: q.armor }); else if (!q.bot) this.send('hurt', { id: q.id, hp: q.hp, armor: q.armor }, q.id); }
+        break;
+      }
       case 'explore': {   // walk and talk: every point plays its lines when somebody gets there
         (o.points || []).forEach((pt, k) => { const q = this.zonePt(pt.zone || 'talk' + k, i * 10 + k); this.markers.push({ id: 'p' + k, x: q[0], z: q[1], kind: 'talk', label: pt.label || '', say: pt.say }); });
         st.need = this.markers.length; break;
@@ -234,6 +309,7 @@ export class StoryMatch extends Match {
       }
       default: break;
     }
+    if (o.music != null) this.music = o.music; if (o.vision != null) this.vision = o.vision;
     if (i > 0) this.event('checkpoint', { mission: this.mi, obj: i, runId: this.runId });   // the host saves here: a wipe or a reload resumes from this objective
     this.event('obj', { i, n: this.mission.objectives.length, hint: o.hint, kind: o.kind });
     if (o.scene && !this.replay) this.scene(o.scene); else if (this.replay) this.replay = false;
@@ -261,14 +337,21 @@ export class StoryMatch extends Match {
   // ---- abilities (asked for by players; AI squadmates use theirs when it makes sense) ----
   ability(p) {
     if (!p || !p.alive || !p.squad || this.phase !== 'live') return;
-    const A = CHARACTERS[p.char].ability; if (!A) return;
+    const A = (CHARACTERS[p.char] || {}).ability; if (!A) return;
+    if (!this.unlocked(p.char)) { const m = { type: 'toast', data: { text: `${A.name} is locked until ${(CHARACTERS[p.char] || {}).short}'s story unlocks it` } }; if (p.local) this.onLocal('ev', m); else if (!p.bot) this.send('ev', m, p.id); return; }
     const now = this.clock || 0;
-    if (A.id === 'mess_kit') {
+    if (A.id === 'mess_kit') {   // Combat Medic: every squadmate in reach back to full health
       if ((this.abilityT.get(p.id) || 0) > now) return;
-      for (const q of this.players.values()) if (q.alive && (q.squad || q === this.npc) && Math.hypot(q.x - p.x, q.z - p.z) <= A.radius) { q.hp = Math.min((q.maxHp || 100) + A.overheal, Math.round(q.hp + q.hp * A.heal)); if (q.local) this.onLocal('hurt', { id: q.id, hp: q.hp, armor: q.armor, heal: true }); else if (!q.bot) this.send('hurt', { id: q.id, hp: q.hp, armor: q.armor, heal: true }, q.id); }
-      this.abilityT.set(p.id, now + A.cd); this.bark(p, 'ability');
+      let n = 0;
+      for (const q of this.players.values()) if (q.alive && (q.squad || q === this.npc) && Math.hypot(q.x - p.x, q.z - p.z) <= A.radius) {
+        if (q !== p && q.hp < (q.maxHp || 100)) n++;
+        q.hp = q.maxHp || 100; if (q.local) this.onLocal('hurt', { id: q.id, hp: q.hp, armor: q.armor, heal: true }); else if (!q.bot) this.send('hurt', { id: q.id, hp: q.hp, armor: q.armor, heal: true }, q.id);
+      }
+      this.healed += n; this.abilityT.set(p.id, now + A.cd); this.bark(p, 'ability'); this.event('heal', { id: p.id, x: p.x, y: p.y, z: p.z, r: A.radius, n });
     } else if (A.id === 'cancer_nade') {
-      if (this.nadeUsed.has(p.id + '|' + this.obj)) return; this.nadeUsed.add(p.id + '|' + this.obj);
+      const boss = this.state && this.state.kind === 'boss';
+      if (boss) { if ((this.abilityT.get(p.id) || 0) > now) return; this.abilityT.set(p.id, now + 9); }   // against the Reaper it comes back every 9 s
+      else { if (this.nadeUsed.has(p.id + '|' + this.obj)) return; this.nadeUsed.add(p.id + '|' + this.obj); }
       p.nades.push('smoke');   // the canister is extra: it never costs the player a grenade slot
       const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
       this.throwNade(p, 'smoke', { x: p.x, y: p.y + 1.5, z: p.z }, { x: fx * 11, y: 4, z: fz * 11 });
@@ -301,6 +384,12 @@ export class StoryMatch extends Match {
       if (group === 'head' && !v.bot) amount *= this.diff.hsTaken / 4;
     }
     if (v === this.boss && group === 'head' && this.boss.beam && this.boss.beam.charge) { this.boss.beam.stagger = (this.boss.beam.stagger || 0) + amount; }
+    if (v === this.boss && v.bossKey && v.bossKey !== 'ballin') {   // the father and the Reaper: hits land properly only in an opening
+      const B = BOSSES[v.bossKey]; amount *= v.vuln > 0 ? B.vulnMul : B.armorMul;
+      if (v.bossKey === 'reaper' && v.hp - amount <= 0) { amount = 0; this.reaperEnd(); }
+      if (v.bossKey === 'reaper' && !v.fell && v.hp - amount <= v.maxHp * 0.25) { amount = Math.max(0, v.hp - v.maxHp * 0.25); this.reaperFall(); }
+    }
+    if (v.squad && v.downed && this.sceneT > 0) return;   // nobody dies during a scene
     super.damage(v, by, amount, weapon, group, wallbang, silent);
     if (v.hp <= 0 && v.team === 'T') this.kills++;
   }
@@ -309,11 +398,18 @@ export class StoryMatch extends Match {
     if (v.squad && v.bot) v.reviveAt = (this.clock || 0) + this.diff.revive;   // AI squadmates get back up
     if (v === this.npc) { this.event('banner', { text: 'ESCORT DOWN', sub: 'back to the last checkpoint…' }); this.failT = 3; }
     if (this.state && this.state.who === v.id && (v.carrying || v.downed) && this.phase === 'live') { this.event('banner', { text: `${(CHARACTERS[v.char] || {}).short || 'They'} went down`, sub: 'back to the last checkpoint…' }); this.failT = 3; }
-    if (by && by.squad && !by.bot && this.rng() < 0.18) this.bark(by, 'kill');
-    if (v === this.boss) { this.boss = null; this.event('boss', null); this.state.have = 1; }
+    if (by && by.squad && !by.bot && !this.featured && this.rng() < 0.18) this.bark(by, 'kill');
+    if (v === this.boss) { this.boss = null; this.tele = []; this.event('boss', null); if (this.state) this.state.have = 1; const B = BOSSES[v.bossKey]; if (B && B.after) this.scene(B.after); }
   }
   // ---- the boss: Osama bin Ballin ----
-  spawnBoss(at) {
+  spawnBoss(at, key = 'ballin') {
+    if (key !== 'ballin') {   // one-on-one bosses: scripted movement and attacks, no gun
+      const B = BOSSES[key], hp = Math.round(B.hp * this.diff.bossHp);
+      const b = this.enemy(at, { name: B.name, hp: hp / this.diff.enemyHp, wid: 'glock', look: B.look });
+      b.inv = { 3: { wid: 'knife' } }; b.cur = 3; b.nades = [];
+      b.boss = true; b.bossKey = key; b.scripted = true; b.passive = true; b.scale = B.scale; b.maxHp = hp; b.hp = hp; b.armor = 0; b.vuln = 0; b.act = null; b.cdT = 2; b.phase = 0; this.boss = b;
+      this.broadcastRoster(); this.event('boss', { id: b.id, name: B.name, hp, max: hp }); return;
+    }
     const n = Math.max(1, this.humans().length), hp = Math.round(BOSS.hp * this.diff.bossHp * (1 + 0.35 * (n - 1)));
     const b = this.enemy(at, { name: BOSS.name, hp: hp / this.diff.enemyHp, wid: 'negev' });
     b.boss = true; b.scale = BOSS.model.scale; b.maxHp = hp; b.hp = hp; b.armor = 100; this.boss = b; this.broadcastRoster(); b.cd = { dunk: 6, rocket_ball: 3, triple_ball: 8, fart_bomb: 14, minions: 10, goy_beam: 8 };
@@ -321,6 +417,8 @@ export class StoryMatch extends Match {
   }
   bossTick(dt) {
     const b = this.boss; if (!b || !b.alive) return;
+    if (b.bossKey === 'father') return this.fatherTick(b, dt);
+    if (b.bossKey === 'reaper') return this.reaperTick(b, dt);
     const frac = b.hp / b.maxHp, ph = BOSS.phases.filter((p) => frac <= p.at).pop() || BOSS.phases[0], A = BOSS.attacks, speed = ph.speed || 1;
     for (const k of Object.keys(b.cd)) b.cd[k] -= dt * speed;
     const targets = this.humans().concat([...this.players.values()].filter((p) => p.squad && p.bot && p.alive)); if (!targets.length) return;
@@ -357,6 +455,98 @@ export class StoryMatch extends Match {
     else if (ph.attacks.includes('rocket_ball') && b.cd.rocket_ball <= 0) { b.cd.rocket_ball = A.rocket_ball.cd; ball(far); }
     if (ph.attacks.includes('fart_bomb') && b.cd.fart_bomb <= 0) { b.cd.fart_bomb = A.fart_bomb.cd; this.effects.push({ type: 'poison', x: b.x, y: b.y, z: b.z, r: A.fart_bomb.radius, t: A.fart_bomb.dur, dps: A.fart_bomb.dps, owner: b.id, hurtsSquad: true }); this.send('fx', this.effects); this.onLocal('fx', this.effects); this.event('bark', { who: 'boss', name: 'Ballin', text: 'Gas station is OPEN.' }); }
   }
+  // a rescued squadmate is back: a real player gets their character and control back where the cell was; otherwise the AI one
+  freeChar(c, at) {
+    let q = [...this.players.values()].find((p) => p.squad && !p.bot && p.spectator && (p.homeChar || p.char) === c);
+    if (q) { q.spectator = false; if (q.homeChar) { q.char = q.homeChar; q.homeChar = null; } if (q.char === this.featured) q.char = c; }
+    else { this.add('mate_' + c, { name: CHARACTERS[c].name, bot: true, team: 'CT', char: c }); q = this.players.get('mate_' + c); }
+    if (!q) return;
+    this.spawn(q); this.loadout(q); q.hp = Math.round((q.maxHp || 100) * 0.5);
+    q.x = at.x + 0.6; q.z = at.z + 0.6; q.y = this.W.groundAt(q.x, q.z, 10);
+    if (q.local) this.onLocal('spawn', { x: q.x, y: q.y, z: q.z, yaw: q.yaw }); else if (!q.bot) this.send('spawn', { x: q.x, y: q.y, z: q.z, yaw: q.yaw }, q.id);
+    if (q.local) this.onLocal('hurt', { id: q.id, hp: q.hp, armor: q.armor }); else if (!q.bot) this.send('hurt', { id: q.id, hp: q.hp, armor: q.armor }, q.id);
+    this.broadcastRoster(); this.push(true);
+  }
+  // ---- one-on-one bosses: shared helpers ----
+  bossFoe(b) { let best = null, bd = Infinity; for (const p of this.players.values()) if (p.squad && p.alive && !p.spectator) { const d = Math.hypot(p.x - b.x, p.z - b.z); if (d < bd) { bd = d; best = p; } } return best; }
+  bossMove(b, tx, tz, speed, dt) {   // walk toward a point through the real collision (no wall-clipping)
+    const want = Math.atan2(-(tx - b.x), -(tz - b.z)); let d = want - b.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); b.yaw += d * Math.min(1, dt * 6);
+    moveStep(this.W, b, { f: Math.cos(d) > 0.3 ? 1 : 0.3, s: 0 }, dt, speed);
+  }
+  bossHit(b, shape, dmg, why) {   // everything inside the telegraphed shape takes the hit; returns whether anyone did
+    let hit = false;
+    for (const p of this.players.values()) {
+      if (!p.squad || !p.alive || p.spectator) continue;
+      const dx = p.x - shape.x, dz = p.z - shape.z, d = Math.hypot(dx, dz);
+      let inside = false;
+      if (shape.k === 'circle') inside = d < shape.r;
+      else if (shape.k === 'arc') { let a = Math.atan2(dx, dz) - Math.atan2(shape.dx, shape.dz); a = Math.atan2(Math.sin(a), Math.cos(a)); inside = d < shape.r && Math.abs(a) < shape.a / 2; }
+      else if (shape.k === 'line') { const along = dx * shape.dx + dz * shape.dz, across = Math.abs(dx * shape.dz - dz * shape.dx); inside = along > -0.5 && along < shape.r && across < shape.w; }
+      if (inside) { hit = true; this.damage(p, b, typeof dmg === 'function' ? dmg(p) : dmg, why, 'chest', false); }
+    }
+    return hit;
+  }
+  // ---- Frank's father: big, drunk, fast when he commits, helpless when he misses ----
+  fatherTick(b, dt) {
+    const B = BOSSES.father, foe = this.bossFoe(b); if (!foe) return;
+    const frac = b.hp / b.maxHp, ph = frac < 0.3 ? 2 : frac < 0.65 ? 1 : 0, sp = [1, 1.18, 1.32][ph];
+    if (ph !== b.phase) { b.phase = ph; const l = B.phaseLines[ph]; if (l) this.talk([l]); }
+    b.vuln = Math.max(0, b.vuln - dt); b.cdT -= dt * sp;
+    const d = Math.hypot(foe.x - b.x, foe.z - b.z), dx = (foe.x - b.x) / (d || 1), dz = (foe.z - b.z) / (d || 1);
+    const a = b.act;
+    if (b.vuln > 0) { b.vx = b.vz = 0; this.tele = []; return; }   // stumbling: free hits
+    if (!a) {
+      if (b.cdT <= 0 && d < 2.8) { b.act = { k: 'swing', t: 0.75 / sp, sh: { k: 'arc', x: b.x, z: b.z, dx, dz, r: 3.0, a: 1.9 } }; b.cdT = 1.6; b.yaw = Math.atan2(-dx, -dz); }
+      else if (b.cdT <= 0 && d > 6 && this.rng() < 0.6) { b.act = { k: 'charge', t: 0.9 / sp, sh: { k: 'line', x: b.x, z: b.z, dx, dz, r: Math.min(14, d + 3), w: 1.1 } }; b.cdT = 2.6; b.yaw = Math.atan2(-dx, -dz); }
+      else if (b.cdT <= 0 && d > 4) { b.cdT = 2.2; this.balls.push({ x: b.x, y: b.y + 2.4, z: b.z, vx: dx * Math.min(14, 5 + d * 0.7), vy: 5.5, vz: dz * Math.min(14, 5 + d * 0.7), bounces: 1, age: 0, dmg: B.bottle * this.diff.enemyDmg, r: 1.6, kind: 'bottle' }); this.event('sound', { s: 'bounce', x: b.x, z: b.z }); }
+      else this.bossMove(b, foe.x, foe.z, 3.2 * sp, dt);
+      this.tele = a ? [a.sh] : [];
+    }
+    if (b.act) {
+      const A = b.act; A.t -= dt; this.tele = [{ ...A.sh, t: Math.max(0, A.t), warn: A.k !== 'run' }];
+      if (A.t <= 0 && A.k === 'swing') { const hit = this.bossHit(b, A.sh, B.swing, 'fists'); b.act = null; this.tele = []; if (!hit) { b.vuln = 1.8; this.talk([['boss', B.miss[Math.floor(this.rng() * B.miss.length)]]]); } }
+      else if (A.t <= 0 && A.k === 'charge') { b.act = { k: 'run', t: 0.75, sh: A.sh, hit: false }; }
+      else if (A.k === 'run') {
+        const sx = b.x, sz = b.z; moveStep(this.W, b, { f: 1, s: 0 }, dt, 13); b.yaw = Math.atan2(-A.sh.dx, -A.sh.dz);
+        if (!A.hit) { const near = [...this.players.values()].find((p) => p.squad && p.alive && !p.spectator && Math.hypot(p.x - b.x, p.z - b.z) < 1.3); if (near) { A.hit = true; this.damage(near, b, B.charge, 'charge', 'chest', false); } }
+        const moved = Math.hypot(b.x - sx, b.z - sz);
+        if (A.t <= 0 || moved < 0.02) { b.act = null; this.tele = []; b.vuln = A.hit ? 0.6 : 2.6; if (!A.hit) this.talk([['boss', B.wall[Math.floor(this.rng() * B.wall.length)]]]); }   // into a wall: dazed
+      }
+    }
+  }
+  // ---- the Reaper: slow, certain, and only open after it swings ----
+  reaperTick(b, dt) {
+    const B = BOSSES.reaper, foe = this.bossFoe(b); if (!foe) return;
+    const frac = b.hp / b.maxHp, ph = b.fell ? 2 : frac < 0.6 ? 1 : 0;
+    if (ph !== b.phase) { b.phase = ph; this.vision = ['dread', 'dread_dark', 'dread_last'][ph]; this.music = ['dread', 'dread', 'defiant'][ph]; const l = B.phaseLines[ph]; if (l) this.talk(l); this.push(true); }
+    if (this.sceneT > 0) return;
+    const sp = [1, 1.2, 1.45][ph]; b.vuln = Math.max(0, b.vuln - dt); b.cdT -= dt * sp;
+    const d = Math.hypot(foe.x - b.x, foe.z - b.z), dx = (foe.x - b.x) / (d || 1), dz = (foe.z - b.z) / (d || 1);
+    if (!b.act) {
+      if (b.cdT <= 0 && d < 4.2) { b.act = { k: 'reap', t: 1.1 / sp, sh: { k: 'arc', x: b.x, z: b.z, dx, dz, r: 4.6, a: 2.8 } }; b.cdT = 1.4; b.yaw = Math.atan2(-dx, -dz); }
+      else if (b.cdT <= 0 && this.rng() < 0.5) { b.act = { k: 'grasp', t: 1.3 / sp, sh: { k: 'circle', x: foe.x, z: foe.z, r: 2.3 } }; b.cdT = 2.0; }   // hands from the floor where you stand: keep moving
+      else if (b.cdT <= 0 && ph >= 1 && this.rng() < 0.35) {   // it is simply behind you now
+        const bx = foe.x + Math.sin(foe.yaw) * 2.4, bz = foe.z + Math.cos(foe.yaw) * 2.4; if (this.W.groundAt(bx, bz, foe.y + 1) < foe.y + 0.8) { b.x = bx; b.z = bz; b.y = this.W.groundAt(bx, bz, foe.y + 1); }
+        b.cdT = 1.0; this.event('sound', { s: 'smoke', x: b.x, z: b.z });
+      } else if (b.vuln <= 0) this.bossMove(b, foe.x, foe.z, 2.1 * sp, dt);
+      this.tele = [];
+    } else {
+      const A = b.act; A.t -= dt; this.tele = [{ ...A.sh, t: Math.max(0, A.t), warn: true }];
+      if (A.t <= 0) {
+        if (A.k === 'reap') { this.bossHit(b, A.sh, (p) => (p.maxHp || 100) * B.reapFrac, 'scythe'); b.vuln = 2.2; }   // after a swing it is open
+        if (A.k === 'grasp') { this.bossHit(b, A.sh, B.grasp, 'hands'); b.vuln = ph === 2 ? 1.2 : 0.8; }
+        b.act = null; this.tele = [];
+      }
+    }
+  }
+  reaperFall() {   // the Reaper wins, for a moment
+    const b = this.boss; if (!b || b.fell) return; b.fell = true; b.act = null; this.tele = []; b.vuln = 0;
+    this.scene(BOSSES.reaper.fall);
+  }
+  reaperEnd() {   // the last blow: it does not die. It lowers the scythe.
+    const b = this.boss; if (!b || b.ending) return; b.ending = true; b.act = null; this.tele = []; b.vuln = 0;
+    this.scene(BOSSES.reaper.end);
+  }
   ballTick(dt) {
     for (let i = this.balls.length - 1; i >= 0; i--) {
       const n = this.balls[i]; n.age += dt; n.vy -= 12 * dt; n.x += n.vx * dt; n.y += n.vy * dt; n.z += n.vz * dt;
@@ -365,7 +555,7 @@ export class StoryMatch extends Match {
       if (n.bounces >= 2 || n.age > 4) {
         this.balls.splice(i, 1);
         for (const p of this.players.values()) if (p.alive && p.team !== 'T') { const d = Math.hypot(p.x - n.x, p.y - n.y, p.z - n.z); if (d < n.r) this.damage(p, this.boss, n.dmg * (1 - d / n.r * 0.6), 'rocket_ball', 'chest', false); }
-        this.event('explode', { x: n.x, y: n.y, z: n.z, r: n.r });
+        if (n.kind === 'bottle') this.event('sound', { s: 'glass', x: n.x, z: n.z }); else this.event('explode', { x: n.x, y: n.y, z: n.z, r: n.r });
       }
     }
   }
@@ -374,7 +564,10 @@ export class StoryMatch extends Match {
     this.clock = (this.clock || 0) + dt;
     if (this.cutT > 0) { this.cutT -= dt; if (this.cutT <= 0 && this.phase === 'freeze') { this.phase = 'live'; this.timer = 99999; this.event('round', { n: 1, phase: 'live', score: this.score }); this.begin(this.startObj); } }
     if (this.phase === 'freeze' && this.cutT <= 0 && this.obj < 0) { this.phase = 'live'; this.timer = 99999; this.event('round', { n: 1, phase: 'live', score: this.score }); this.begin(this.startObj); }
-    if (this.sceneT > 0) { this.sceneT -= dt; this.paused = true; for (const p of this.players.values()) if (p.bot) { p.vx = p.vz = 0; } this.clockPush(); return; }
+    if (this.slowT > 0) { this.slowT -= dt; dt *= this.slowK; }
+    if (this.cutT > 0 || this.sceneT > 0 || this.dirs.length) this.direct(dt);
+    for (const q of this.players.values()) if (q.walkTo) { const d = Math.hypot(q.walkTo[0] - q.x, q.walkTo[1] - q.z); if (d < 0.4) q.walkTo = null; else { q.yaw = Math.atan2(-(q.walkTo[0] - q.x), -(q.walkTo[1] - q.z)); moveStep(this.W, q, { f: 1, s: 0, walk: true }, dt, 2.2); } }
+    if (this.sceneT > 0) { this.sceneT -= dt; this.paused = true; for (const p of this.players.values()) if (p.bot && !p.walkTo) { p.vx = p.vz = 0; } this.clockPush(); return; }
     this.paused = this.cutT > 0 && this.phase === 'freeze';
     super.tick(dt);
     if (this.result) { this.endT -= dt; if (this.endT <= 0 && this.phase !== 'done') { this.phase = 'done'; this.event('storyEnd', { win: true, mission: this.mi, diff: this.diffKey, kills: this.kills, chapterEnd: !!this.mission.last, runId: this.runId }); this.event('done', {}); } return; }
@@ -444,6 +637,38 @@ export class StoryMatch extends Match {
       }
       case 'escort': { this.waveT -= dt; if (this.waveT <= 0) { this.waveT = 16; if (this.enemies.size < 10) this.wave(2); } done = !!this.npc && this.npc.alive && Math.hypot(this.npc.x - this.markers[0].x, this.npc.z - this.markers[0].z) < 4.5; if (done) { this.players.delete(this.npc.id); this.npc = null; this.broadcastRoster(); } break; }
       case 'boss': this.bossTick(dt); this.ballTick(dt); done = !this.boss && st.have > 0; break;
+      case 'rescue': {
+        const m = this.markers[0], user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 2);
+        if (user) st.have = Math.min(st.need, st.have + dt); else st.have = Math.max(0, st.have - dt * 0.5);
+        m.prog = st.have / st.need; if (st.limit && st.t > st.limit && !this.failT) { this.event('banner', { text: 'TOO LATE', sub: 'back to the last checkpoint…' }); this.failT = 3; }
+        this.push(); done = st.have >= st.need;
+        if (done) this.freeChar(st.who, m);
+        break;
+      }
+      case 'intel': {
+        if (!st.spotted && (st.lookT -= dt) <= 0) {   // the blizzard: guards only see a few metres
+          st.lookT = 0.25;
+          for (const id of st.guards || []) { const e = this.players.get(id); if (!e || !e.alive || !e.passive) continue;
+            for (const h of H) { const ddx = h.x - e.x, ddz = h.z - e.z, d = Math.hypot(ddx, ddz); let off = Math.atan2(-ddx, -ddz) - e.yaw; off = Math.atan2(Math.sin(off), Math.cos(off));
+              if (d < 1.4 || (d < st.sight && Math.abs(off) < 1.1 && this.W.los({ x: e.x, y: e.y + 1.6, z: e.z }, { x: h.x, y: h.y + 1.2, z: h.z }))) { this.alarm2(); break; }
+              if (d < st.sight * 1.6 && Math.abs(off) < 1.1) { e.yaw += off * 0.5; if (!e.sus) { e.sus = true; this.event('sound', { s: 'radio', x: e.x, z: e.z }); this.event('bark', { who: 'enemy', name: 'Guard', text: '...hello? Who\'s there?' }); } } else e.sus = false; }   // a guard turning toward a noise: the warning
+            if (st.spotted) break;
+            e.yaw += Math.sin((this.clock || 0) * 0.5 + (hash(id) % 9)) * 0.1;   // they turn their heads in the wind
+          }
+        }
+        for (const m of this.markers) {
+          if (m.done) continue;
+          const user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 1.4);
+          if (!user) { m.prog = Math.max(0, m.prog - dt); continue; }
+          m.prog = Math.min(1, m.prog + dt / 1.8);
+          if (m.prog >= 1) {
+            if (m.opt === st.answer) { m.done = true; st.have = 1; this.event('sound', { s: 'pickup', x: m.x, z: m.z }); }
+            else { m.prog = 0; this.event('banner', { text: 'WRONG FILE', sub: 'it doesn\'t match the clue' }); this.alarm2(); }
+          }
+        }
+        this.push(); done = st.have >= st.need; break;
+      }
+      case 'ability': done = this.healed > 0; break;
       case 'explore': for (const m of this.markers) if (!m.done && near(m, 3.2)) { m.done = true; st.have++; this.talk(m.say); this.push(true); } done = st.have >= st.need; break;
       case 'stealth': {
         if (!st.spotted && (st.lookT -= dt) <= 0) {   // a guard spots anyone in front of them, in the open, within 16 m
@@ -480,7 +705,10 @@ export class StoryMatch extends Match {
       }
       default: done = true;
     }
-    if (done) { this.event('banner', { text: 'OBJECTIVE COMPLETE', sub: o.hint }); this.talk(o.done); this.begin(this.obj + 1); return; }
+    if (done) {
+      if (o.give) { const q = [...this.players.values()].find((p) => p.squad && p.alive && p.char === o.give[0]); this.give2(q, o.give[1]); }
+      this.event('banner', { text: 'OBJECTIVE COMPLETE', sub: o.hint }); this.talk(o.done); this.begin(this.obj + 1); return;
+    }
     if (this.clock - this.lastSend > 0.5) this.push();
   }
   clockPush() { if ((this.clock || 0) - this.lastSend > 1) this.push(true); }
@@ -494,10 +722,12 @@ export class StoryMatch extends Match {
       mission: this.mi, obj: this.obj, n: this.mission.objectives.length, hint: o ? o.hint : '', kind: o ? o.kind : '', have: st ? Math.floor(st.have) : 0, need: st ? Math.round(st.need) : 0,
       next: st && st.puzzle ? st.next : 0,
       markers: this.markers.map((m) => ({ id: m.id, x: +m.x.toFixed(2), z: +m.z.toFixed(2), kind: m.kind, label: m.label, done: !!m.done, prog: +(m.prog || 0).toFixed(2) })),
-      boss: b ? { id: b.id, hp: Math.max(0, Math.round(b.hp)), max: b.maxHp } : null,
+      boss: b ? { id: b.id, hp: Math.max(0, Math.round(b.hp)), max: b.maxHp, name: b.bossKey && BOSSES[b.bossKey] ? BOSSES[b.bossKey].name : BOSS.name } : null,
       beam: bm ? { x: bm.x, z: bm.z, dx: bm.dx, dz: bm.dz, len: BOSS.attacks.goy_beam.length, w: BOSS.attacks.goy_beam.width, warn: !!bm.charge, t: +bm.t.toFixed(2) } : null,
       balls: this.balls.map((n) => [+n.x.toFixed(1), +n.y.toFixed(1), +n.z.toFixed(1)]),
-      chars: [...this.players.values()].filter((p) => p.squad).map((p) => ({ id: p.id, char: p.char, hp: Math.round(p.hp), max: p.maxHp, alive: p.alive, bot: p.bot, cd: Math.max(0, Math.round((this.abilityT.get(p.id) || 0) - (this.clock || 0))), nade: !this.nadeUsed.has(p.id + '|' + this.obj) })),
+      chars: [...this.players.values()].filter((p) => p.squad && !p.spectator).map((p) => ({ id: p.id, char: p.char, hp: Math.round(p.hp), max: p.maxHp, alive: p.alive, bot: p.bot, cd: Math.max(0, Math.round((this.abilityT.get(p.id) || 0) - (this.clock || 0))), nade: !this.nadeUsed.has(p.id + '|' + this.obj) || (this.state && this.state.kind === 'boss'), lock: !this.unlocked(p.char), speed: p.speedMul || 1, scale: p.scale || 1, down: !!p.downed })),
+      featured: this.featured ? { char: this.featured, id: this.featuredId } : null, actors: [...this.players.values()].filter((p) => p.actorId).map((p) => ({ id: p.id, who: p.actorId })), vision: this.vision, music: this.music,
+      tele: this.tele.map((t) => ({ k: t.k, x: +t.x.toFixed(2), z: +t.z.toFixed(2), r: t.r, a: t.a || 0, w: t.w || 0, dx: t.dx || 0, dz: t.dz || 0, t: +(t.t || 0).toFixed(2), warn: !!t.warn })), vuln: this.boss ? this.boss.vuln > 0 : false,
       result: this.result,
     });
   }
