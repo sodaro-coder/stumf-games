@@ -167,7 +167,20 @@ function makeAudio(getVol) {
     shimmer: (v, p) => { [880, 1320, 1760, 2640, 1980].forEach((f, k) => tone('sine', f, f * 1.01, 0.9 - k * 0.1, v * 0.16, p, k * 0.07)); tone('sine', 110, 55, 1.2, v * 0.35, p); burst(0.6, 6000, v * 0.12, p, 1, 'highpass', 0.05); },
   };
   // the announcer and radio voice: the browser's own text-to-speech (works offline with system voices)
-  const say = (text, pitch = 0.75, rate = 1.05) => { try { if (!window.speechSynthesis || getVol() <= 0) return; const u = new SpeechSynthesisUtterance(text); u.volume = Math.min(1, getVol() * 1.3); u.pitch = pitch; u.rate = rate; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) { /* no voices */ } };
+  // Each speaker keeps one English system voice (picked by name, so the squad sound different from each other and from
+  // the announcer). A story line ('scene') cuts off whatever was playing; the announcer and radio only speak when no
+  // scene line is talking, and queue behind each other instead of cutting each other off.
+  let voices = [], sceneTalk = 0;
+  const loadVoices = () => { try { const all = speechSynthesis.getVoices(); const en = all.filter((v) => /^en[-_]/i.test(v.lang) || /^en$/i.test(v.lang)); voices = en.length ? en : all; } catch (e) { voices = []; } };
+  try { if (window.speechSynthesis) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; setInterval(() => { try { if (speechSynthesis.speaking && speechSynthesis.paused) speechSynthesis.resume(); } catch (e) { /* gone */ } }, 4000); } } catch (e) { /* no speech */ }
+  const voiceFor = (who) => { if (!voices.length) loadVoices(); if (!voices.length) return null; let h = 7; for (const c of String(who || 'announcer')) h = (h * 31 + c.charCodeAt(0)) >>> 0; const pref = voices.filter((v) => /Google|Microsoft|Daniel|Alex|Samantha|Fred|Arthur|Aaron|Karen/i.test(v.name)); const pool = pref.length >= 2 ? pref : voices; return pool[h % pool.length]; };
+  const say = (text, pitch = 0.75, rate = 1.05, o = {}) => { try {
+    if (!window.speechSynthesis || getVol() <= 0 || !text) return;
+    const scene = !!o.scene; if (!scene && (performance.now() < sceneTalk || (speechSynthesis.speaking && o.noQueue))) return;
+    const u = new SpeechSynthesisUtterance(text); u.volume = Math.min(1, getVol() * 1.3); u.pitch = pitch; u.rate = rate; const v = voiceFor(o.who); if (v) u.voice = v;
+    if (scene) { speechSynthesis.cancel(); sceneTalk = performance.now() + 900 + text.length * 70; }
+    speechSynthesis.speak(u);
+  } catch (e) { /* no voices */ } };
   return {
     play(name, vol = 1, pan = 0, extra) { if (!ensure()) return; far = 0; try { if (GUN_SND[name]) gun(GUN_SND[name], vol, pan); else if (SND[name]) SND[name](vol, Math.max(-1, Math.min(1, pan)), extra); } catch (e) { /* audio busy */ } },
     at(name, x, y, z, cam, range = 60, extra) {  // positional: volume by distance, pan by angle, muffled when far
@@ -916,8 +929,8 @@ export default function start({ cfg, E, N, smoke }) {
     function onDrops(d) { st.drops = d || []; syncDrops(); }
     function onFx(list) { st.effects = list || []; syncEffects(); }
     function onNade(n) { { const r = rigs.get(n.owner); if (r && r.soldier) soldierEvent(r, 'throw'); } const m = makeGrenade(n.type); m.position.set(n.x, n.y, n.z); fx.add(m); flying.set(n.id, { n: { ...n }, m }); audio.at('bounce', n.x, n.y, n.z, cam, 20); }
-    function onChat(m) { hud.chat(m.name, m.team, m.text, m.teamOnly); audio.play('radio'); if (m.text.startsWith('📻 ') && S.voice) audio.say(m.text.slice(3), 1.0); }
-    function announce(key) { if (!S.voice) return; const l = line(S.voicePack, key); if (l.text) audio.say(l.text, l.pitch, l.rate); sfxFor(S.voicePack, key).forEach((n, i) => setTimeout(() => audio.play(n, 0.8), i * 160)); }
+    function onChat(m) { hud.chat(m.name, m.team, m.text, m.teamOnly); audio.play('radio'); if (m.text.startsWith('📻 ') && S.voice) audio.say(m.text.slice(3), 1.0, 1.05, { who: 'radio' + m.name }); }
+    function announce(key) { if (!S.voice) return; const l = line(S.voicePack, key); if (l.text) audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack, noQueue: true }); sfxFor(S.voicePack, key).forEach((n, i) => setTimeout(() => audio.play(n, 0.8), i * 160)); }
     // kill / death / flash call-outs (packs that have them, e.g. MLG 420): soundboard effects first, then the line
     let mkN = 0, mkT = 0, mkR = -1, flashSaid = 0, firstDone = -1;
     function announceEv(key) { if (!S.voice || !hasLine(S.voicePack, key)) return; announce(key); }
@@ -1066,7 +1079,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (id === myId) { me.hp = hp; if (me.alive && !alive) me.alive = false; me.armor = armor; me.helmet = !!helmet; me.money = money; me.planting = plant; continue; }
         let p = st.players.get(id); if (!p) st.players.set(id, (p = { id, x, y, z, tx: x, ty: y, tz: z }));
         if (Math.hypot(x - p.x, z - p.z) > 4) { p.x = x; p.y = y; p.z = z; }
-        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.rl = !!rl; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.helmet = !!helmet; p.money = money; p.team = (st.roster.get(id) || {}).team; p.scale = (st.roster.get(id) || {}).scale || 1;
+        p.tx = x; p.ty = y; p.tz = z; p.tyaw = yaw; p.tpitch = pitch; p.tcrouch = crouch; if (p.yaw == null) { p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; } p.lean = +lean || 0; p.prone = +prone || 0; p.rl = !!rl; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.helmet = !!helmet; p.money = money; p.team = (st.roster.get(id) || {}).team; p.scale = (st.roster.get(id) || {}).scale || 1;
       }
       for (const id of [...st.players.keys()]) if (!s.p.some((a) => a[0] === id)) st.players.delete(id);
       if (s.b) st.bomb = { s: s.b.s, x: s.b.x, y: s.b.y, z: s.b.z, t: s.b.t, d: s.b.d, site: s.b.site }; else if (st.bomb && st.bomb.s !== 'exploded' && st.bomb.s !== 'defused') st.bomb = null;
@@ -1263,7 +1276,10 @@ export default function start({ cfg, E, N, smoke }) {
         const aBtn = E.input.touch.buttons.has('jump'); if (SC.cutscene && aBtn && !SC.aWas) SC.skip(); SC.aWas = aBtn;   // controller A skips a line
       }
       if (!match) {
-        for (const p of st.players.values()) { const k = Math.min(1, dt * 14); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.z += (p.tz - p.z) * k; }
+        for (const p of st.players.values()) {   // between network updates everything glides: position, facing, aim and crouch
+          const k = Math.min(1, dt * 14); p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.z += (p.tz - p.z) * k;
+          if (p.tyaw != null) { let dy = p.tyaw - p.yaw; dy -= Math.round(dy / (Math.PI * 2)) * Math.PI * 2; const ka = Math.min(1, dt * 18); p.yaw += dy * ka; p.pitch += (p.tpitch - p.pitch) * ka; p.crouch += (p.tcrouch - p.crouch) * Math.min(1, dt * 12); }
+        }
         netT += dt; ammoT += dt;
         if (session && netT >= 1 / 30) { netT = 0; const fl = (me.cur === 5 && (mouseBtn[0] || kd('KeyE')) ? 1 : 0) | (((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && me.team === 'CT' ? 2 : 0) | (me.onGround ? 4 : 0) | (me.reload > 0 ? 8 : 0);
           session.toHost('pose', [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(3), +me.pitch.toFixed(3), +me.crouch.toFixed(2), fl, me.cur, +me.lean.toFixed(2), +(me.prone || 0).toFixed(2)]); }
@@ -1433,7 +1449,7 @@ export default function start({ cfg, E, N, smoke }) {
         r.x = p.x; r.z = p.z; r.y = p.y;
         { const pr = p.prone || 0; r.g.position.set(p.x + Math.sin(p.yaw) * 0.85 * pr, p.y + pr * 0.14, p.z + Math.cos(p.yaw) * 0.85 * pr); }   // feet behind the hitbox centre when lying r.g.rotation.order = 'YXZ'; r.g.rotation.y = p.yaw; r.g.rotation.x = r.dieT ? 0 : -(p.prone || 0) * Math.PI / 2 * 0.94;   // prone: lie forward
         setTpGun(r, SC && SC.melee && (p.wid || 'knife') === 'knife' ? (p.team === 'T' ? 'fists' : 'knife:dildo') : p.wid || 'knife', rosterAtt(p.id, p.wid));   // the club: sabers versus slaps
-        if (r.tag) r.tag.visible = p.alive && p.team === me.team && !(spectating && p.id === spectating.id) && !(SC && SC.cutscene);   // no name tags in a cutscene's shots
+        if (r.tag) { const dT = Math.hypot(p.x - cam.position.x, p.z - cam.position.z); r.tag.visible = p.alive && p.team === me.team && !(spectating && p.id === spectating.id) && !(SC && SC.cutscene) && dT > 3.5; if (r.tag.visible) { const k = Math.min(1.6, Math.max(0.55, dT / 12)); r.tag.scale.set(1.3 * k, 0.25 * k, 1); } }   // tags stay readable far off and out of your face up close   // no name tags in a cutscene's shots
         r.t += dt;
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
@@ -1481,7 +1497,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (bombObj.visible) { bombObj.position.set(b.x, b.y + 0.02, b.z); bombObj.userData.led.visible = b.s !== 'planted' || (now * (1 + (40 - (b.t || 40)) / 8)) % 1 < 0.5; }
       // ---- view model ----
       if (vm) {
-        vm.visible = me.alive && !(me.scoped && w && w.zoom) && !spectating && !me.emote && !cine && !(me.ads > 0.9 && vm.userData.optic === 'acog');   // a 4x scope: you look through the glass, not at the gun
+        vm.visible = me.alive && !(me.scoped && w && w.zoom) && !spectating && !me.emote && !cine && !(me.ads > 0.9 && ['acog', 'reddot', 'holo'].includes(vm.userData.optic));   // aimed through an optic: you look through the glass, not at the gun
         const base = vm.userData.base, sp = speedOf(me);
         const animReload = !!(vm.userData.leftArm && (vm.userData.magGroup || (w && w.shellReload)));
         const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
@@ -1572,7 +1588,7 @@ export default function start({ cfg, E, N, smoke }) {
       hudT += dt; radarT += dt;
       hud.flashAmt(me.flash > 1.5 ? 1 : me.flash / 1.5);
       hud.setScope(me.alive && me.scoped > 0 && w && w.zoom, (w && myAtt(w.id) && myAtt(w.id).reticle) || 'duplex');
-      hud.setAds(me.alive && me.ads > 0.85 && vm && vm.userData && vm.userData.optic === 'acog' ? 'acog' : null);   // red dot and holo reticles live in the glass now; only the 4x scope uses the overlay
+      hud.setAds(me.alive && me.ads > 0.85 && vm && vm.userData && ['acog', 'reddot', 'holo'].includes(vm.userData.optic) ? vm.userData.optic : null);   // every optic: the sight picture fills the view
       const spreadPx = (w ? spreadOf(w, me, me.scoped > 0, me.spray) : 0) * 600;
       hud.xh(spreadPx, me.alive && !(me.scoped && w && w.zoom) && !uiOpen && me.ads < 0.3);
       if (hudT > 0.066) {

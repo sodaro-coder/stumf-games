@@ -155,4 +155,37 @@ export function dressWorld({ B, hr, mat, flag, faces, matName, add, ts }) {
     else if (r < 0.35) { cyl('metal', cx, top, cz, cx, top + 3.2, cz, 0.04, 4); cyl('metal', cx - 0.4, top + 2.6, cz, cx + 0.4, top + 2.6, cz, 0.02, 4); cyl('metal', cx - 0.3, top + 3, cz, cx + 0.3, top + 3, cz, 0.02, 4); }
     else { box(matName(mat[i]), cx, top + 1.1, cz, 2.2, 2.2, 1.8); box('darkwood', cx, top + 1.0, cz - 0.91, 0.9, 1.9, 0.04); }
   }
+
+  // ground clutter: stones, broken bits of wall and the odd brick collect at the foot of walls (never in the middle of
+  // a lane, so nothing reads as cover that isn't)
+  const GROUND = new Set(['sand', 'dirt', 'asphalt', 'concrete', 'grass', 'rock']);
+  for (let z = 1; z < d - 1; z++) for (let x = 1; x < w - 1; x++) {
+    const i = z * w + x; if (flag[i] !== 2 || !GROUND.has(matName(mat[i]))) continue;
+    let wx = 0, wz = 0; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (HR(x + dx, z + dz) > hr[i] + 1.2) { wx = dx; wz = dz; break; }
+    if (!wx && !wz) continue;
+    const r0 = hash(x, z, 31); if (r0 > 0.45) continue;
+    const n = 1 + Math.floor(hash(x, z, 32) * 3), fl = hr[i];
+    for (let k = 0; k < n; k++) {
+      const u = hash(x, z, 40 + k), v = hash(x, z, 50 + k), sz = 0.03 + hash(x, z, 60 + k) * 0.09;
+      const px = x + 0.5 + wx * (0.32 + u * 0.12) + (wz ? (u - 0.5) * 0.9 : 0), pz = z + 0.5 + wz * (0.32 + v * 0.12) + (wx ? (v - 0.5) * 0.9 : 0);
+      const g = new THREE.DodecahedronGeometry(sz, 0), uv = g.attributes.uv; for (let j = 0; j < uv.count; j++) uv.setXY(j, uv.getX(j) * sz * 2, uv.getY(j) * sz * 2);
+      _m.compose(_p.set(px, fl + sz * 0.45, pz), _q.setFromEuler(_e.set(u * 6, v * 6, u * v * 6)), _s.set(1, 0.6 + v * 0.5, 1)); g.applyMatrix4(_m);
+      add(hash(x, z, 70 + k) < 0.7 ? 'rock' : matName(HR(x + wx, z + wz) > 0 ? mat[idx(x + wx, z + wz)] : mat[i]), g);
+    }
+  }
+
+  // softened edges: nothing real has a razor corner. Every exposed block top gets a rolled edge and every outside
+  // corner a rounded one (a thin bullnose in the block's own material: the shading rolls round instead of snapping)
+  const NOROUND = new Set(['lava', 'water', 'neon', 'snow', 'sand', 'grass', 'dirt', 'asphalt']), corners = new Set();
+  for (const f of faces) {
+    const m = matName(f.m), hgt = f.top - f.bot; if (NOROUND.has(m) || hgt < 0.15) continue;
+    const fp = (f.dirx || f.dirz) > 0 ? f.a + 1 : f.a, r = hgt < 1.4 ? 0.035 : 0.05, P = (s, y) => (f.dirx ? [fp, y, s] : [s, y, fp]);
+    const coped = (m === 'sandwall' || m === 'plaster' || m === 'brick' || m === 'concrete' || m === 'rock' || m === 'yellow' || m === 'green' || m === 'trim') && hgt >= 1.6 && f.top >= 2.2;
+    if (!coped) { const [ax, ay, az] = P(f.s0, f.top), [bx, by, bz] = P(f.s1, f.top); cyl(m, ax, ay, az, bx, by, bz, r, 6); }
+    for (const [s, sOut] of [[f.s0, f.s0 - 1], [f.s1, f.s1]]) {   // an outside corner: the solid cell round the end is lower
+      const ox = f.dirx ? f.a : sOut, oz = f.dirx ? sOut : f.a; if (HR(ox, oz) > f.top - 0.3) continue;
+      const [cx, , cz] = P(s, 0), key = cx + ',' + cz + ',' + f.bot; if (corners.has(key)) continue; corners.add(key);
+      cyl(m, cx, f.bot, cz, cx, f.top, cz, r, 6);
+    }
+  }
 }

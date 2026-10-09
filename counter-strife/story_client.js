@@ -145,7 +145,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   // ---- state ----
   let camRef = null;
   let S = null, cutQ = [], cutT = 0, cutAll = [], cutT0 = 0, talkQ = [], talkT = 0, barkT = 0, focusT = 0, groundAt = () => 0, lineIdx = 0, shotT = 0;
-  const say = (l) => { if (!stage(l.text) && l.who !== 'credits' && audio && audio.say) { const v = VOICE[l.who] || [1, 1]; audio.say(String(l.text).replace(/\([^)]*\)|\*[^*]*\*/g, ''), v[0], v[1]); } };
+  const say = (l, scene = true) => { if (!stage(l.text) && l.who !== 'credits' && audio && audio.say) { const v = VOICE[l.who] || [1, 1]; audio.say(String(l.text).replace(/\([^)]*\)|\*[^*]*\*/g, '').trim(), v[0], v[1], { who: l.who, scene }); } };   // each character keeps their own voice; a scene line cuts in, a mid-fight line waits its turn
   function showLine() {
     const l = cutQ[0]; document.body.classList.toggle('sc-cutting', !!l);
     if (!l) { $('.sc-cut').style.display = 'none'; return; }
@@ -178,7 +178,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     const l = talkQ.shift(), el = $('.sc-talk');
     if (!l) { el.style.opacity = 0; talkT = 0; return; }
     el.style.setProperty('--c', COLORS[l.who] || '#fff'); el.innerHTML = stage(l.text) ? `<i>${esc(l.text)}</i>` : `<b>${esc(l.name)}:</b> ${esc(l.text)}`; el.style.opacity = 1;
-    talkT = lineTime(l) + 0.3; say(l);
+    talkT = lineTime(l) + 0.3; say(l, false);
   }
   function render() {
     if (!S) return;

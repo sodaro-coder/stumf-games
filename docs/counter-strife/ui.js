@@ -105,6 +105,9 @@ const CSS = `
 .cs-ads{position:fixed;inset:0;z-index:18;pointer-events:none;display:none}
 .cs-ads .dot{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#ff2a2a;box-shadow:0 0 6px 2px rgba(255,40,40,.7)}
 .cs-ads .holo{position:absolute;left:50%;top:50%;width:10vh;height:10vh;transform:translate(-50%,-50%);filter:drop-shadow(0 0 3px rgba(255,50,50,.8))}
+.cs-ads.reddot{background:radial-gradient(circle at 50% 50%,rgba(120,180,255,.04) 0,rgba(120,180,255,.06) 24vh,rgba(10,12,14,.85) 25.5vh,rgba(22,24,28,.97) 30vh,rgba(10,12,14,.9) 33vh,transparent 36vh)}
+.cs-ads.reddot::after{content:'';position:absolute;left:50%;top:50%;width:52vh;height:52vh;transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 6vh rgba(0,0,0,.45)}
+.cs-ads.holo::before{content:'';position:absolute;left:50%;top:48%;width:64vh;height:42vh;transform:translate(-50%,-50%);border:4.5vh solid rgba(20,22,26,.96);border-radius:2.5vh;box-shadow:0 0 0 1px rgba(255,255,255,.08),inset 0 0 5vh rgba(80,140,255,.12)}
 .cs-ads.acog{background:radial-gradient(circle at 50% 50%,transparent 0,transparent 31vh,rgba(0,0,0,.55) 33vh,rgba(0,0,0,.94) 35vh)}
 .cs-ads .chev{position:absolute;left:50%;top:50%;width:34vh;height:34vh;transform:translate(-50%,-50%)}
 .cs-scope:before,.cs-scope:after{content:"";position:absolute;background:#000}.cs-scope:before{left:0;right:0;top:50%;height:1px}.cs-scope:after{top:0;bottom:0;left:50%;width:1px}
