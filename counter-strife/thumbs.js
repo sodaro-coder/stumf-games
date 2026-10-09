@@ -63,7 +63,8 @@ function figureFor(item, opt = {}) {
     const a = info.kind === 'agent' ? AGENT_BY_ID[info.weapon] : (opt.performer || PERFORMER); if (!a) return undefined;
     const r = makeSoldier(a.look, a.team, true), g = new THREE.Group(); g.add(r.g); g.add(contactShadow());
     const em = info.kind === 'emote' ? EMOTE_BY_ID[info.weapon] : null;
-    if (!em) { setTpGun(r, a.team === 'CT' ? 'm4a4' : 'ak47'); r.g.rotation.y = Math.PI; }   // armed: the rig faces down its aim (-z), so turn it round to the camera; emotes already play facing out
+    if (!em) setTpGun(r, a.team === 'CT' ? 'm4a4' : 'ak47');
+    r.g.rotation.y = Math.PI;   // soldiers face -z (down their aim): turn them round to the camera
     return { o: g, kind: 'figure', rig: r, emote: em ? { anim: em.anim, t: 0, dur: 1e9 } : null };
   }
   const tex = info.paint && !(info.kind === 'knife' && /:Vanilla$/.test(item.def)) ? skinTexture(item, info) : null;
@@ -230,7 +231,7 @@ export function stage(canvas, look) {
     cur = { look: lk, team, wid };
     if (rig) sc.remove(rig.g);
     rig = charsReady() ? makeSoldier(lk, team, true) : makePlayer(lk, team);   // the realistic soldier once it has loaded
-    setTpGun(rig, wid || (team === 'CT' ? 'm4a4' : 'ak47')); rig.g.position.set(0.9, 0, 0); rig.g.rotation.y = 0.5; sc.add(rig.g);
+    setTpGun(rig, wid || (team === 'CT' ? 'm4a4' : 'ak47')); rig.g.position.set(0.9, 0, 0); rig.g.rotation.y = (rig.soldier ? Math.PI : 0) + 0.5; sc.add(rig.g);
   };
   set(look.look, look.team, look.wid);
   if (!charsReady()) loadChars().then(() => { if (!stopped && charsReady()) set(cur.look, cur.team, cur.wid); });
@@ -238,7 +239,7 @@ export function stage(canvas, look) {
     if (stopped) return; raf = requestAnimationFrame(frame3);
     if (now - last < 33) return; const dt = (now - last) / 1000; last = now; t += dt;   // 30 fps is plenty here
     const w = canvas.clientWidth, h = canvas.clientHeight; if (canvas.width !== w || canvas.height !== h) { r3.setSize(w, h, false); cam3.aspect = w / Math.max(1, h); cam3.updateProjectionMatrix(); }
-    if (rig && rig.soldier) { rig.g.rotation.y = 0.5 + Math.sin(t * 0.25) * 0.12; poseSoldier(rig, { dt, yaw: rig.g.rotation.y, pitch: Math.sin(t * 0.7) * 0.05 }); }
+    if (rig && rig.soldier) { rig.g.rotation.y = Math.PI + 0.5 + Math.sin(t * 0.25) * 0.12; poseSoldier(rig, { dt, yaw: rig.g.rotation.y, pitch: Math.sin(t * 0.7) * 0.05 }); }
     else if (rig) { posePlayer(rig, { t, pitch: Math.sin(t * 0.7) * 0.05 }); rig.torso.position.y += Math.sin(t * 1.6) * 0.008; rig.g.rotation.y = 0.5 + Math.sin(t * 0.25) * 0.12; }
     const a = Math.sin(t * 0.08) * 0.15;
     cam3.position.set(Math.sin(a) * 5.2, 1.55, Math.cos(a) * 5.2); cam3.lookAt(0.15, 1.05, 0);

@@ -16,7 +16,7 @@ export function loadChars() {
 export const charsReady = () => !!D;
 
 const UPPER = /Spine|Neck|Head|Shoulder|Arm|Hand/;
-const LEANF = 0.3;   // radians of forward lean for an armed stance (spread over the three spine bones)   // bones an upper-body overlay (fire, reload, throw, hit) may move
+const LEANF = -0.14;   // negative about the rig's right (+x) tips the chest forward   // radians of forward lean for an armed stance (spread over the three spine bones)   // bones an upper-body overlay (fire, reload, throw, hit) may move
 function build(j, bin) {
   const c = j.characters[0];
   const meshes = c.meshes.map((m) => {
@@ -125,7 +125,7 @@ export function makeSoldier(look, team, hq = true) {
   // the default T / CT agents are the plain soldier in their team's uniform; every costume shows: its colours, its headgear
   const L = look || {}, plainAgent = !!L.plain;
   const tint = plainAgent && !L.glow ? null : L.body;
-  const g = new THREE.Group(), holder = new THREE.Group(); holder.rotation.y = Math.PI; g.add(holder);   // Mixamo faces +z; the game's players face -z
+  const g = new THREE.Group(), holder = new THREE.Group(); holder.rotation.y = 0; g.add(holder);   // the converted rig already faces -z, like the game's players (measured: the support hand is in front at -z)
   const c = D.c, root = new THREE.Group();
   root.position.fromArray(c.root.t); root.quaternion.fromArray(c.root.q); root.scale.fromArray(c.root.s); holder.add(root);
   const bones = c.bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); o.quaternion.fromArray(b.q); o.scale.fromArray(b.s); return o; });
@@ -241,30 +241,38 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     const low = (cat === 'pistol' ? 0.2 : cat === 'sniper' ? 0.1 : 0.16) * (1 - r.aimK) * (1 - prone);
     const ap = Math.max(-1.2, Math.min(1.2, pitch)) - low + prone * Math.PI / 2 * 0.94;   // prone: the body lies forward, the gun still points ahead
     if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
-      if (!prone) { const rt = _t5.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())); for (const [n, a] of [['Spine', LEANF * 0.4], ['Spine1', LEANF * 0.35], ['Spine2', LEANF * 0.25]]) if (B[n]) turnWorld(B[n], rt, a); }   // an aggressive, slightly forward weight, not the clip's lean-back
-      { // square the chest to the aim: the shoulder line should run along the rig's right (keep ~20 degrees of rifle stance)
-        const L = B.LeftArm.getWorldPosition(_t1), Rs = B.RightArm.getWorldPosition(_t2), sl = _t3.copy(Rs).sub(L); sl.y = 0;
-        const want = _t4.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())); want.y = 0;
-        if (sl.lengthSq() > 1e-6) { sl.normalize(); want.normalize(); let ang = Math.atan2(sl.x * want.z - sl.z * want.x, sl.dot(want)); ang = -(ang - (cat === 'pistol' ? 0 : 0.35));
-          const up = _t5.set(0, 1, 0); for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], up, ang / 3); }
+      // The clips are a rifle set: the hands already hold an (invisible) rifle in a natural, motion-captured pose. So the
+      // gun follows the hands, not the other way round: the grip sits in the right palm and the barrel runs out through
+      // the left hand. Aiming up and down bends the upper spine until that hand line points where the player aims, so
+      // the arms never have to be twisted onto the gun.
+      const pistol = cat === 'pistol', rt = _t5.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
+      if (!prone) for (const [n, a] of [['Spine', LEANF * 0.4], ['Spine1', LEANF * 0.35], ['Spine2', LEANF * 0.25]]) if (B[n]) turnWorld(B[n], rt, a);
+      const palm = (h, f, out) => { h.getWorldPosition(out); if (f) out.lerp(f.getWorldPosition(_t6), 0.55); return out; };
+      for (let pass = 0; pass < 2; pass++) {   // two small passes: bend the spine, re-read the hands
+        const rh = palm(B.RightHand, B.RightHandMiddle1, _t1), lh = palm(B.LeftHand, B.LeftHandMiddle1, _t2), d = _t3.copy(lh).sub(rh);
+        if (d.lengthSq() < 0.01) break;
+        const cur = Math.atan2(d.y, Math.hypot(d.x, d.z)), want = ap * (pistol ? 0.9 : 1), delta = Math.max(-0.9, Math.min(0.9, want - cur));
+        if (Math.abs(delta) < 0.01) break;
+        for (const [n, k] of [['Spine', 0.2], ['Spine1', 0.35], ['Spine2', 0.45]]) if (B[n]) turnWorld(B[n], rt, delta * k);
       }
-      // aim frame in the rig's own space: forward is -z, pitched up/down about the shoulders
-      const pistol = cat === 'pistol', S = B.RightArm.getWorldPosition(_v); r.g.worldToLocal(S);
-      const cp = Math.cos(ap), sp = Math.sin(ap), fwd = _fw.set(0, sp, -cp);
-      const reachF = pistol ? 0.5 : 0.2, drop = pistol ? 0.13 : 0.12, inX = pistol ? -0.16 : -0.04;   // pistols pushed out, centred, both arms extended
-      tg.position.set(S.x + inX, S.y - drop * cp, S.z).addScaledVector(fwd, reachF);
-      tg.rotation.set(ap, 0, 0, 'YXZ');
+      const rh = palm(B.RightHand, B.RightHandMiddle1, _t1), lh = palm(B.LeftHand, B.LeftHandMiddle1, _t2);
+      const dir = _t3.copy(lh).sub(rh);
+      if (dir.lengthSq() < 0.01) dir.set(0, Math.sin(ap), -Math.cos(ap)).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
+      dir.normalize();
+      // the gun's frame in world space: barrel (-z) along the hand line, up as close to world up as the barrel allows
+      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _fw.crossVectors(yA, zA);
+      _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
+      r.g.getWorldQuaternion(_q2).invert(); tg.quaternion.copy(_q2.multiply(_q));
+      tg.position.copy(rh); r.g.worldToLocal(tg.position);
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
-      const gripW = tg.localToWorld(_t1.set(0, 0, 0)), fore = gm.userData.fore;
-      const foreW = fore ? gm.localToWorld(_t2.copy(fore)) : tg.localToWorld(_t2.set(-0.035, -0.03, 0.02));
-      const R = _t3.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), D = _t4.set(0, -1, 0);
-      if (r.reloadT > 0 && B.Hips) {   // reload: the left hand drops to the mag pouch and brings a fresh one up to the gun
-        const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(_t6).addScaledVector(_t3.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), -0.18).add(_t4.set(0, 0.05, 0));
-        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, _t5.copy(foreW).lerp(pouch, out), _t1.copy(B.LeftArm.getWorldPosition(_t1)).add(_t4.set(0, -0.6, 0)));
+      if (pistol) {   // two-handed pistol: the support hand comes back from where the rifle's handguard would be onto the grip
+        const sup = tg.localToWorld(_t2.set(-0.045, -0.035, 0.01)), D = _t4.set(0, -1, 0);
+        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, sup, _t5.copy(B.LeftArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(rt, -0.35));
+      } else if (r.reloadT > 0 && B.Hips) {   // reload: the left hand drops to the mag pouch and brings a fresh one up
+        const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(_t6).addScaledVector(rt, -0.18).add(_t4.set(0, 0.05, 0));
+        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, _t5.copy(lh).lerp(pouch, out), _t1.copy(B.LeftArm.getWorldPosition(_t1)).add(_t4.set(0, -0.6, 0)));
       }
-      if (!(r.reloadT > 0)) ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, foreW, _t5.copy(B.LeftArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(R, -0.35));
-      ik2(B.RightArm, B.RightForeArm, B.RightHand, gripW, _t5.copy(B.RightArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(R, 0.45));
     } else {   // knife, grenade, bomb: carried in the right hand as animated
       hand.getWorldPosition(_v); r.g.worldToLocal(_v);
       tg.position.copy(_v); tg.rotation.set(ap, 0, 0, 'YXZ');
@@ -279,8 +287,9 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
   }
 }
 // emotes the clips don't cover: a few big readable poses built from world-axis bone turns
-function emotePose(r, e, right) {
-  const B = r.bones, t = e.t, s = Math.sin, up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3().crossVectors(up, right).negate();
+function emotePose(r, e, rightIn) {
+  // the poses were authored when the model stood turned round: keep their axes (forward = the body's front, "right" = its left side)
+  const right = rightIn.clone().negate(), B = r.bones, t = e.t, s = Math.sin, up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3().crossVectors(up, right).negate();
   switch (e.anim) {
     case 'wave': turnWorld(B.RightArm, fwd, -2.3); turnWorld(B.RightForeArm, fwd, -0.6 + s(t * 10) * 0.5); break;
     case 'salute': turnWorld(B.RightArm, fwd, -1.7); turnWorld(B.RightForeArm, up, 2.2); break;
