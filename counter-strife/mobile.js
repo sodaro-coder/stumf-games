@@ -57,14 +57,24 @@ export function mobileControls(input) {
     t.move.x = Math.abs(x) < 0.12 ? 0 : x; t.move.y = Math.abs(y) < 0.12 ? 0 : -y; knob.style.transform = `translate(${x * 36}px,${y * 36}px)`;
   });
   const endStick = (e) => { if (e.pointerId !== sid) return; sid = null; t.move.x = t.move.y = 0; knob.style.transform = ''; stick.className = 'stick ghost'; stick.style.left = stick.style.top = ''; };
-  zl.addEventListener('pointerup', endStick); zl.addEventListener('pointercancel', endStick);
+  zl.addEventListener('pointerup', endStick); zl.addEventListener('pointercancel', endStick); zl.addEventListener('lostpointercapture', endStick);
+  // a finger that lifted while the controls were hidden (a menu opened, the app was switched away, a system gesture
+  // took over) never sends pointerup here: forget every touch, or the stick would stay "held" by a finger that's gone
+  // and ignore every new touch (you could no longer move after leaving a menu)
+  const resetTouches = () => {
+    sid = null; t.move.x = t.move.y = 0; knob.style.transform = ''; stick.className = 'stick ghost'; stick.style.left = stick.style.top = '';
+    looks.clear(); for (const n of [...t.buttons]) if (n !== 'crouch') t.buttons.delete(n);
+    root.querySelectorAll('b.dn').forEach((b) => b.classList.remove('dn'));
+  };
   // right thumb: look. Several fingers can look at once (each moves the view by its own drag)
   const looks = new Map(), sens = { k: 1 };
   const lookStart = (e) => looks.set(e.pointerId, [e.clientX, e.clientY]);
   const lookMove = (e) => { const p = looks.get(e.pointerId); if (!p) return; t.look.dx += (e.clientX - p[0]) * 1.25 * sens.k; t.look.dy += (e.clientY - p[1]) * 1.25 * sens.k; p[0] = e.clientX; p[1] = e.clientY; };
   const lookEnd = (e) => looks.delete(e.pointerId);
   zr.addEventListener('pointerdown', (e) => { lookStart(e); try { zr.setPointerCapture(e.pointerId); } catch (x) { /* fine */ } e.preventDefault(); });
-  zr.addEventListener('pointermove', lookMove); zr.addEventListener('pointerup', lookEnd); zr.addEventListener('pointercancel', lookEnd);
+  zr.addEventListener('pointermove', lookMove); zr.addEventListener('pointerup', lookEnd); zr.addEventListener('pointercancel', lookEnd); zr.addEventListener('lostpointercapture', lookEnd);
+  const onHide = () => { if (document.hidden) resetTouches(); };
+  document.addEventListener('visibilitychange', onHide); addEventListener('blur', resetTouches); addEventListener('orientationchange', resetTouches);
   // buttons. kind: 'hold' (pressed while down), 'tap' (one frame), 'toggle' (on/off). drag: also looks while held
   const btn = (parent, cls, name, label, kind = 'tap', drag = false) => {
     const el = document.createElement('b'); el.className = cls; el.innerHTML = I[label] || label; parent.appendChild(el);
@@ -77,7 +87,7 @@ export function mobileControls(input) {
     });
     if (drag) el.addEventListener('pointermove', lookMove);
     const up = (e) => { el.classList.remove('dn'); if (kind === 'hold') t.buttons.delete(name); if (drag) lookEnd(e); };
-    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
     return el;
   };
   btn(root, 'fire', 'fire', 'fire', 'hold', true);
@@ -97,7 +107,7 @@ export function mobileControls(input) {
     setAiming(on) { if (on !== aiming) { aiming = on; root.classList.toggle('aiming', on); } },
     setCrouch(on) { if (!on && t.buttons.has('crouch')) { t.buttons.delete('crouch'); crouchB.classList.remove('tog'); } },
     setSens(k) { sens.k = k; },
-    show(on) { root.style.display = on ? '' : 'none'; if (!on) { t.buttons.clear(); t.move.x = t.move.y = 0; looks.clear(); crouchB.classList.remove('tog'); } },
-    destroy() { root.remove(); rot.remove(); css.remove(); t.buttons.clear(); t.active = false; },
+    show(on) { root.style.display = on ? '' : 'none'; resetTouches(); if (!on) { t.buttons.clear(); crouchB.classList.remove('tog'); } },
+    destroy() { root.remove(); rot.remove(); css.remove(); t.buttons.clear(); t.active = false; document.removeEventListener('visibilitychange', onHide); removeEventListener('blur', resetTouches); removeEventListener('orientationchange', resetTouches); },
   };
 }

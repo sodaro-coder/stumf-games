@@ -15,7 +15,8 @@ export function loadChars() {
 }
 export const charsReady = () => !!D;
 
-const UPPER = /Spine|Neck|Head|Shoulder|Arm|Hand/;   // bones an upper-body overlay (fire, reload, throw, hit) may move
+const UPPER = /Spine|Neck|Head|Shoulder|Arm|Hand/;
+const LEANF = 0.3;   // radians of forward lean for an armed stance (spread over the three spine bones)   // bones an upper-body overlay (fire, reload, throw, hit) may move
 function build(j, bin) {
   const c = j.characters[0];
   const meshes = c.meshes.map((m) => {
@@ -55,14 +56,66 @@ function texture(name) {
 }
 // one material per (team, tint, quality, glow); tint = an agent's colour washed over the uniform; glow = a Mythic
 // outfit's energy veins, which crawl over the uniform and pulse
-function material(team, tint, hq, glow) {
-  const key = `${team}|${tint || ''}|${hq}|${glow ? glow.glow + glow.t : ''}`;
+function material(team, tint, hq, glow, costume = null) {
+  const key = `${team}|${tint || ''}|${hq}|${glow ? glow.glow + glow.t : ''}|${costume ? costume.key : ''}`;
   if (D.mats.has(key)) return D.mats.get(key);
   const res = hq ? 1024 : 512;
   const m = new THREE.MeshLambertMaterial({ map: texture(`soldier_${team === 'CT' ? 'ct' : 't'}_${res}.jpg`), normalMap: hq ? texture(`soldier_n_${res}.jpg`) : null });
-  if (tint) m.color.set(tint).lerp(new THREE.Color(1, 1, 1), glow ? 0.15 : 0.35);
+  if (tint && !costume) m.color.set(tint).lerp(new THREE.Color(1, 1, 1), glow ? 0.15 : 0.35);
   if (glow) glowify(m, glowMask({ t: glow.t, glow: glow.glow }, 3), 0.9);
-  litPatch(m, 'dyn'); D.mats.set(key, m); return m;
+  litPatch(m, 'dyn');
+  if (costume) dye(m, costume);
+  D.mats.set(key, m); return m;
+}
+
+// ---- costumes: the soldier re-dyed per body region -----------------------------------------------------------------
+// The uniform photo keeps every seam, scratch and fold; only its colours change. Regions come from the model's rest
+// pose (centimetres, z up, front +y): head, torso, arms, hips, legs. Armour plates and the undersuit stay told apart
+// (plates take the colour, the suit a darker cut of it), bare-skin costumes smooth the armour detail out to skin, and
+// a few outfits add a pattern: the mime's stripes, the hotdog's mustard squiggle, the cone's reflective bands.
+const SKINNY = (L) => L.body === L.head || !!L.speedo;
+export function costumeOf(L) {
+  if (!L || L.plain || L.model === 'log') return null;
+  const skin = SKINNY(L), c = (v, d) => new THREE.Color(v || d);
+  const cs = {
+    head: c(L.head, '#c89a74'), torso: c(L.body), arms: c(L.arms || L.body), hips: c(L.speedo || L.hips || L.legs), legs: c(L.legs),
+    skin: skin ? 1 : 0, speedo: L.speedo ? 1 : 0, stripes: L.stripes ? 1 : 0, mustard: L.mustard ? 1 : 0, bands: L.hat === 'cone' ? 1 : 0, belly: L.belly ? 1 : 0,
+  };
+  cs.key = [L.head, L.body, L.legs, L.speedo, L.stripes, L.mustard, L.hat, L.belly].join(',');
+  return cs;
+}
+function dye(m, cs) {
+  m.color.set(1, 1, 1);
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    prev(sh, r);
+    Object.assign(sh.uniforms, { cHead: { value: cs.head }, cTorso: { value: cs.torso }, cArms: { value: cs.arms }, cHips: { value: cs.hips }, cLegs: { value: cs.legs },
+      cFlags: { value: new THREE.Vector4(cs.skin, cs.stripes, cs.mustard, cs.bands) }, cFlags2: { value: new THREE.Vector4(cs.speedo, cs.belly, 0, 0) } });
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;\nuniform vec3 cHead; uniform vec3 cTorso; uniform vec3 cArms; uniform vec3 cHips; uniform vec3 cLegs; uniform vec4 cFlags; uniform vec4 cFlags2;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+	{
+		vec3 tx = diffuseColor.rgb; float lum = dot(tx, vec3(0.299, 0.587, 0.114));
+		float plate = smoothstep(0.07, 0.2, lum), z = vRest.z, ax = abs(vRest.x);
+		vec3 c = cTorso; float skinR = cFlags.x;
+		if (z > 152.0) { c = cHead; skinR = 1.0; }
+		else if (ax > 20.0 && z > 96.0) c = cArms;
+		else if (z < 90.0) c = cLegs;
+		else if (z < 106.0) { c = cHips; if (cFlags2.x > 0.5) skinR = 0.0; }
+		if (cFlags.y > 0.5 && z > 96.0 && z < 152.0 && ax < 20.0 && fract(z / 11.0) < 0.5) c = vec3(0.05);   // mime stripes
+		if (cFlags.w > 0.5 && ((z > 112.0 && z < 120.0) || (z > 128.0 && z < 136.0))) c = vec3(0.92, 0.94, 0.9);   // reflective cone bands
+		if (cFlags.z > 0.5 && vRest.y > 4.0 && z > 92.0 && z < 150.0 && abs(vRest.x - sin(z * 0.55) * 7.0) < 2.2) c = vec3(0.95, 0.72, 0.05);   // mustard
+		c = max(c, vec3(0.05));   // near-black outfits still show their folds and plates
+		// plates take the colour with the photo's light and scratches; the undersuit a darker, matte cut of it
+		float detail = plate > 0.5 ? clamp(lum / 0.36, 0.35, 1.35) : clamp(0.55 + lum * 9.0, 0.5, 1.2);
+		vec3 dyed = c * mix(0.42 * detail, detail, plate);
+		vec3 bare = c * mix(0.88, 1.06, smoothstep(0.0, 0.4, lum));   // skin: the armour detail smoothed away
+		diffuseColor.rgb = mix(dyed, bare, skinR);
+	}`);
+  };
+  const k0 = m.customProgramCacheKey;
+  m.customProgramCacheKey = () => k0() + '|costume';
+  return m;
 }
 
 // clip speeds (metres per second at timeScale 1) for matching the feet to the ground speed
@@ -77,7 +130,7 @@ export function makeSoldier(look, team, hq = true) {
   root.position.fromArray(c.root.t); root.quaternion.fromArray(c.root.q); root.scale.fromArray(c.root.s); holder.add(root);
   const bones = c.bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); o.quaternion.fromArray(b.q); o.scale.fromArray(b.s); return o; });
   c.bones.forEach((b, i) => { if (b.p >= 0) bones[b.p].add(bones[i]); else root.add(bones[i]); });
-  const mat = material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null);
+  const mat = material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null, costumeOf(L));
   if (L.model !== 'log') for (const m of D.meshes) {
     const sm = new THREE.SkinnedMesh(m.g, mat); sm.frustumCulled = false; root.add(sm);
     sm.bind(new THREE.Skeleton(m.joints.map((i) => bones[i]), m.inverses), m.bind);
@@ -182,8 +235,13 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
   if (hand && gm) {
     tg.visible = !emote && !r.dead;
     const cat = (tg.userData || {}).cat || 'rifle', armed = !emote && !r.dead && B.RightArm && B.LeftArm;
-    const ap = Math.max(-1.2, Math.min(1.2, pitch)) + prone * Math.PI / 2 * 0.94;   // prone: the body lies forward, the gun still points ahead
+    // ready stance: between shots the muzzle rests a little low (rifles at low ready, pistols at a compressed ready),
+    // snapping level the moment they fire (r.flashT is set on every shot) and easing back down after a second
+    r.aimK = (r.flashT || 0) > 0 ? 1 : Math.max(0, (r.aimK || 0) - dt * 0.8);
+    const low = (cat === 'pistol' ? 0.2 : cat === 'sniper' ? 0.1 : 0.16) * (1 - r.aimK) * (1 - prone);
+    const ap = Math.max(-1.2, Math.min(1.2, pitch)) - low + prone * Math.PI / 2 * 0.94;   // prone: the body lies forward, the gun still points ahead
     if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
+      if (!prone) { const rt = _t5.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())); for (const [n, a] of [['Spine', LEANF * 0.4], ['Spine1', LEANF * 0.35], ['Spine2', LEANF * 0.25]]) if (B[n]) turnWorld(B[n], rt, a); }   // an aggressive, slightly forward weight, not the clip's lean-back
       { // square the chest to the aim: the shoulder line should run along the rig's right (keep ~20 degrees of rifle stance)
         const L = B.LeftArm.getWorldPosition(_t1), Rs = B.RightArm.getWorldPosition(_t2), sl = _t3.copy(Rs).sub(L); sl.y = 0;
         const want = _t4.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())); want.y = 0;
@@ -193,7 +251,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       // aim frame in the rig's own space: forward is -z, pitched up/down about the shoulders
       const pistol = cat === 'pistol', S = B.RightArm.getWorldPosition(_v); r.g.worldToLocal(S);
       const cp = Math.cos(ap), sp = Math.sin(ap), fwd = _fw.set(0, sp, -cp);
-      const reachF = pistol ? 0.42 : 0.2, drop = pistol ? 0.1 : 0.12, inX = pistol ? -0.13 : -0.04;
+      const reachF = pistol ? 0.5 : 0.2, drop = pistol ? 0.13 : 0.12, inX = pistol ? -0.16 : -0.04;   // pistols pushed out, centred, both arms extended
       tg.position.set(S.x + inX, S.y - drop * cp, S.z).addScaledVector(fwd, reachF);
       tg.rotation.set(ap, 0, 0, 'YXZ');
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();

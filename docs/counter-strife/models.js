@@ -425,14 +425,14 @@ const xpin = (u, v, len, r = 0.0032) => place(CYL(r, r, len, 8), [0, v, -u], [0,
 const RECIPE = {};
 const R = (ids, fn) => { for (const id of ids.split(' ')) RECIPE[id] = fn; };
 function rifle(G, o) {
-  const [r0, r1, rb, rt] = o.recv, w = o.w || 0.05, F = o.furn || 'dark', B = 'body';
+  const [r0, r1, rb, rt] = o.recv, w = o.w || 0.05, F = 'f~' + (o.furn || 'dark'), B = 'body';   // f~: furniture (stock, grip, handguard): a skin covers it too
   // receiver (dust cover rounded on the AK family, flat-top rail on the western rifles)
   if (o.top === 'ak') G(B, ext([[r0, rb], [r1, rb], [r1, rt - 0.012], ['q', (r0 + r1) / 2, rt + 0.01, r0, rt - 0.004]], w));
   else G(B, ext([[r0, rb], [r1, rb], [r1, rt - 0.01], [r1 - 0.015, rt], [r0 + 0.01, rt], [r0, rt - 0.012]], w));
   G('dark', blk(r1 - 0.13, r1 - 0.05, rt - 0.036, rt - 0.014, w + 0.004));   // ejection port
   G('metal', blk(r1 - 0.045, r1 - 0.025, rt - 0.03, rt - 0.016, w + 0.03, w / 2 + 0.012));   // charging handle
   // grip + trigger guard + trigger
-  G(o.gripMat || F, ext([[-0.04, rb + 0.004], [0.018, rb + 0.004], [-0.004, rb - 0.115], [-0.056, rb - 0.12], ['q', -0.064, rb - 0.06, -0.04, rb + 0.004]], w * 0.82));
+  G(o.gripMat ? 'f~' + o.gripMat : F, ext([[-0.04, rb + 0.004], [0.018, rb + 0.004], [-0.004, rb - 0.115], [-0.056, rb - 0.12], ['q', -0.064, rb - 0.06, -0.04, rb + 0.004]], w * 0.82));
   G('metal', guard(0.012, 0.09, rb - 0.048, rb + 0.002)); G('metal', blk(0.04, 0.048, rb - 0.03, rb, 0.006));
   // magazine
   const m0 = o.mag0 ?? 0.11;
@@ -665,7 +665,7 @@ const geoCache = new Map();
 export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = true, att = null) {
   const w = W_BY_ID[id] || { cat: 'pistol' }, recipe = RECIPE[id] || RECIPE[w.cat === 'pistol' ? 'p250' : w.cat === 'smg' ? 'mp7' : w.cat === 'sniper' ? 'ssg08' : w.cat === 'heavy' ? 'nova' : 'm4a4'];
   const opt = att && att.optic && att.optic !== 'iron' && !w.zoom ? att.optic : null, mz = att && att.muzzle && att.muzzle !== 'standard' && !w.silenced ? att.muzzle : null;
-  const ckey = `${id}|${opt || ''}|${mz || ''}`;
+  const ckey = `${id}|${opt || ''}|${mz || ''}|${tex ? 1 : 0}`;
   let cg = geoCache.get(ckey);
   if (!cg) {
     const buckets = {}, G = (k, g) => { if (g) (buckets[k] = buckets[k] || []).push([g, null]); };
@@ -675,11 +675,15 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     const geos = {};
     let box = null;
     for (const [k, list] of Object.entries(buckets)) { geos[k] = merge(list); geos[k].computeBoundingBox(); if (k === 'body') box = geos[k].boundingBox; }
-    if (box && geos.body) {   // the skin wraps the whole gun side-on (u along the barrel, v up)
-      const p = geos.body.attributes.position, uv = geos.body.attributes.uv, du = box.max.z - box.min.z || 1, dv = box.max.y - box.min.y || 1;
-      for (let i = 0; i < p.count; i++) uv.setXY(i, (box.max.z - p.getZ(i)) / du, (p.getY(i) - box.min.y) / dv);
+    // the skin wraps the whole gun side-on (u along the barrel, v up): receiver and, when skinned, the furniture too,
+    // like a real hydro-dip, with the barrel, bolt and small metal parts left bare
+    const painted = Object.keys(geos).filter((k) => k === 'body' || (tex && k.startsWith('f~')));
+    if (box && geos.body) {
+      const u = new THREE.Box3(); for (const k of painted) u.union(geos[k].boundingBox);
+      const du = u.max.z - u.min.z || 1, dv = u.max.y - u.min.y || 1;
+      for (const k of painted) { const p = geos[k].attributes.position, uv = geos[k].attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, (u.max.z - p.getZ(i)) / du, (p.getY(i) - u.min.y) / dv); }
     }
-    if (geos.wood) { const p = geos.wood.attributes.position, uv = geos.wood.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, -p.getZ(i) * 3, p.getY(i) * 3 + p.getX(i) * 3); }
+    for (const wk of ['wood', 'f~wood']) if (geos[wk] && !painted.includes(wk)) { const p = geos[wk].attributes.position, uv = geos[wk].attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, -p.getZ(i) * 3, p.getY(i) * 3 + p.getX(i) * 3); }
     let len = 0; for (const g of Object.values(geos)) { g.computeBoundingBox(); len = Math.max(len, -g.boundingBox.min.z); }
     if (hold.iron && !opt) {   // iron sights, R6-style: a raised sight line over the gun, a front post and (long guns) a rear aperture ring
       const fz = -hold.iron[0]; let top = hold.iron[1];
@@ -705,7 +709,8 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
   const g = new THREE.Group(), magGroup = new THREE.Group(); g.add(magGroup);
   for (const [k, geo] of Object.entries(cg.geos)) {
     if (k.startsWith('mag|')) { magGroup.add(new THREE.Mesh(geo, gm(k.slice(4)))); continue; }
-    g.add(new THREE.Mesh(geo, k === 'body' ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(k === 'ironpost' ? 'dark' : k)));
+    const furn = k.startsWith('f~');
+    g.add(new THREE.Mesh(geo, k === 'body' || (furn && tex) ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(furn ? k.slice(2) : k === 'ironpost' ? 'dark' : k)));
   }
   const magBox = new THREE.Box3().setFromObject(magGroup), magPos = magGroup.children.length ? magBox.getCenter(new THREE.Vector3()) : null;
   const grip = new THREE.Vector3(0, cg.hold.grip[1], -cg.hold.grip[0]), fore = cg.hold.fore ? new THREE.Vector3(0, cg.hold.fore[1], -cg.hold.fore[0]) : null;

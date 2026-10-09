@@ -77,7 +77,7 @@ export class Profile {
       if (p.rank) this.d.rank = { rr: p.rank.rr | 0, n: p.rank.n | 0, w: p.rank.w | 0, best: p.rank.best | 0 };
       this.d.pass = Array.isArray(p.pass) ? p.pass : []; if (p.guns && typeof p.guns === 'object') this.d.guns = p.guns;
       this.tag = p.tag || null; this.username = p.username || null; this.admin = !!p.admin; this.dep = p.dep || null;
-      this.d.inventory = (p.items || []).map((i) => ({ uid: i.uid, def: i.def, float: i.float, st: i.st, seed: i.seed, kills: i.kills || 0, t: Date.parse(i.created) || 0, listed: i.listed || null }));
+      this.d.inventory = (p.items || []).map((i) => ({ uid: i.uid, def: i.def, float: i.float, st: i.st, seed: i.seed, kills: i.kills || 0, t: Date.parse(i.created) || 0, listed: i.listed || null, grade: i.grade ?? null, acquired: Date.parse(i.acquired) || Date.parse(i.created) || 0, owners: i.owners || 1 }));
       this.online = true; this.changed(); return true;
     } catch (e) { this.online = false; this.err = String(e.message || e); return false; }
   }
@@ -91,7 +91,7 @@ export class Profile {
   async openCrate(id) {
     const c = CRATE_BY_ID[id]; if (!c) throw new Error('no such crate');
     if (this.d.coins < c.price) throw new Error('Not enough coins');
-    if (this.signedIn) { const it = await this.rpc('cs_open_crate', { p_crate: id }); const item = { uid: it.uid, def: it.def, float: it.float, st: it.st, seed: it.seed, kills: 0, t: Date.now() }; this.d.coins = it.coins; this.d.inventory.unshift(item); this.changed(); return item; }
+    if (this.signedIn) { const it = await this.rpc('cs_open_crate_pooled', { p_crate: id }); /* the spin's coins go into today's prize pool */ const item = { uid: it.uid, def: it.def, float: it.float, st: it.st, seed: it.seed, kills: 0, t: Date.now() }; this.d.coins = it.coins; this.d.inventory.unshift(item); this.changed(); return item; }
     const item = rollCrate(c); this.d.coins -= c.price; this.d.inventory.unshift(item); this.changed(); return item;
   }
   async sell(uid) {
@@ -103,7 +103,11 @@ export class Profile {
   async adminCollection() { const n = await this.rpc('cs_admin_collection'); await this.sync(); return n; }
   async listItem(uid, price) { await this.rpc('cs_list', { p_uid: uid, p_price: Math.round(price) }); await this.sync(); }
   async unlistItem(uid) { await this.rpc('cs_unlist', { p_uid: uid }); await this.sync(); }
-  async buyListing(id) { await this.rpc('cs_buy', { p_listing: id }); await this.sync(); }
+  async buyListing(id) { await this.rpc('cs_buy_pooled', { p_listing: id }); await this.sync(); }
+  // the market screen in one call: player listings, the house stock, and the prize pool
+  market() { return this.rpc('cs_market'); }
+  async houseBuy(id) { await this.rpc('cs_ai_buy', { p_id: id }); await this.sync(); }
+  poolStatus() { return this.signedIn ? this.rpc('cs_pool_status') : Promise.resolve(null); }
   // ---- friends, trades, gifts (accounts only; every check runs on the server) ----
   async setName(n) {
     n = String(n || '').replace(/[<>#]/g, '').trim().slice(0, 20);
@@ -188,7 +192,7 @@ export class Profile {
     for (const q of this.d.quests) if (!q.claimed) q.prog = Math.min(q.goal, q.prog + (r[q.stat] || 0));
     const coins = Math.min(600, (r.win ? 300 : r.draw ? 150 : 100) + r.k * 10 + r.roundWin * 20 + r.mvp * 25) * (r.botsOnly ? 0.5 : 1);
     const xp = 100 + r.k * 15 + r.roundWin * 20 + (r.win ? 150 : 0);
-    const got = await this.reward('match', coins, xp, { k: r.k, d: r.d, win: !!r.win, rounds: r.rounds });
+    const got = await this.reward('match', coins, xp, { k: r.k, d: r.d, win: !!r.win, rounds: r.rounds, mvp: r.mvp | 0, bots: !!r.botsOnly });
     this.changed(); return { coins: got, xp };
   }
   // ranked result: the server works out the Rank Rating (offline: the same rules locally, no coins)

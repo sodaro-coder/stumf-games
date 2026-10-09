@@ -5,7 +5,8 @@
 import { WEAPONS, W_BY_ID, G_BY_ID, GEAR_BY_ID, BUY_MENU, MODES, BOT_LEVELS, RADIO, itemName, itemPrice, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS } from './data.js';
 import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_ID, ITEM_BY_ID, PASS, PASS_TIERS, EMOTE_BY_ID } from './skins.js';
 import { MAPS } from './maps.js';
-import { thumb, stage } from './thumbs.js';
+import { thumb, stage, viewer } from './thumbs.js';
+import { cardInto, cardImage, gradeBadge } from './cards.js';
 import { VOICE_PACKS } from './voices.js';
 import { ATTACH, slotsFor, optionsFor, gunLevel, xpForLevel, GUN_MAX } from './guns.js';
 import { topUp as sdkTopUp } from '../sdk/topup.js';
@@ -45,6 +46,7 @@ const CSS = `
 .cs-bar{height:8px;background:#0d1117;border-radius:4px;overflow:hidden}.cs-bar i{display:block;height:100%;background:var(--o)}
 .cs-modal{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.7);display:grid;place-items:center}
 .cs-modal>.cs-card{width:min(640px,94vw);max-height:90vh;overflow:auto}
+.cs-view{display:block;background:radial-gradient(ellipse at 50% 38%,#3a4352 0%,#1d232c 55%,#0d1015 100%);box-shadow:inset 0 0 0 1px #ffffff14,inset 0 -40px 60px #00000055}
 .cs-reel{position:relative;height:150px;overflow:hidden;border-radius:10px;background:#0b0e13;border:1px solid var(--line)}
 .cs-reel .strip{position:absolute;left:0;top:10px;display:flex;gap:8px;will-change:transform}
 .cs-reel .cell{width:130px;height:130px;background:var(--bg2);border-radius:8px;padding:6px;border-bottom:4px solid}
@@ -249,11 +251,23 @@ export function drawItem(canvas, item) {
   g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 1.5; g.beginPath(); sil.forEach(([x, y], k) => (k ? g.lineTo : g.moveTo).call(g, x / 100 * W, y / 40 * H)); g.closePath(); g.stroke();
   return canvas;
 }
+// today's prize pool: size, the stat it ranks by, time left, the top five and your standing; yesterday's payout
+const POOL_STAT = { kills: 'kills', mvps: 'MVPs', wins: 'wins' };
+function poolCard(p) {
+  if (!p) return '';
+  const left = Math.max(0, new Date(p.ends) - Date.now()), h = Math.floor(left / 3.6e6), mn = Math.floor(left / 6e4) % 60, st = POOL_STAT[p.category] || p.category;
+  const last = p.last && p.last.results ? p.last : null;
+  return `<div class="cs-card" style="border:1px solid #f2a33a55;background:linear-gradient(135deg,#2a2112,#161a20)"><div class="cs-row"><b style="font-size:18px">🏆 Daily prize pool: 🪙 ${(+p.coins).toLocaleString()}</b><span style="flex:1"></span><span class="cs-chip">pays out at 11pm New York · ${h}h ${mn}m left</span></div>
+    <div class="cs-mut cs-small" style="margin:6px 0">Today ranks by <b style="color:#fff">most ${esc(st)}</b> (kills → MVPs → wins, rotating daily). 1st 50% · 2nd 25% · 3rd 15% · everyone else who played shares 10%. Case spins and House purchases fill it.</div>
+    <div class="cs-row" style="flex-wrap:wrap;gap:14px">${(p.top || []).map((t, k) => `<span>${['🥇', '🥈', '🥉', '4.', '5.'][k]} <b>${esc(t.name)}</b> <span class="cs-mut">${t.stat} ${esc(st)}</span></span>`).join('') || '<span class="cs-mut">Nobody has played yet today: be first.</span>'}</div>
+    ${p.me ? `<div class="cs-small" style="margin-top:6px">You: <b>#${p.me.rank}</b> with ${p.me.stat} ${esc(st)} over ${p.me.matches} match${p.me.matches === 1 ? '' : 'es'}</div>` : '<div class="cs-small cs-mut" style="margin-top:6px">Play a match today to get a share.</div>'}
+    ${last ? `<div class="cs-small cs-mut" style="margin-top:6px">Last payout (${esc(POOL_STAT[last.category] || last.category)}): 🪙 ${(+last.coins).toLocaleString()}${last.mine > 0 ? ` · <b style="color:#7ed957">you won 🪙 ${(+last.mine).toLocaleString()}</b>` : ''}${last.results[0] ? ` · winner ${esc(last.results[0].name)}` : ''}</div>` : ''}</div>`;
+}
 const itemCard = (item, extra = '', eqTag = '') => {
   const info = itemInfo(item); if (!info) return '';
   return `<div class="cs-tile${info.tier === 6 ? ' mythic' : ''}" data-uid="${esc(item.uid)}" style="--rc:${info.rarity.color}"><div class="img"><canvas width="320" height="160" data-draw="${esc(item.uid)}"></canvas></div>
     ${item.st ? '<span class="st">STATTRAK™</span>' : ''}${eqTag ? `<span class="eq">${esc(eqTag)}</span>` : item.listed ? '<span class="eq" style="color:#7ed957">LISTED</span>' : ''}
-    <div class="tx"><div class="w">${esc(info.wpn)}${info.wear ? ' · ' + esc(info.wear.key) : ''}</div><div class="n">${esc(info.finish)}</div>${extra ? `<div class="pr">${extra}</div>` : ''}</div><div class="rb"></div></div>`;
+    <div class="tx"><div class="w">${esc(info.wpn)}${info.wear ? ' · ' + esc(info.wear.key) : ''}${gradeBadge(item)}</div><div class="n">${esc(info.finish)}</div>${extra ? `<div class="pr">${extra}</div>` : ''}</div><div class="rb"></div></div>`;
 };
 // draw every item picture in a container: the 3D render when available, the flat drawing meanwhile / otherwise
 function paintAll(root, items) {
@@ -375,10 +389,11 @@ export class Menu {
         ${matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches ? '' : '<div><button class="cs-btn alt" id="hDl" style="margin-top:12px">⬇ Download</button></div>'}
         ${P.cloud && !P.signedIn ? '<div class="cs-signup"><b>Make a free account</b><div class="cs-small cs-mut" style="margin:4px 0 10px">Keep your skins and coins on every device, add friends, trade. Takes 20 seconds.</div><button class="cs-btn" id="hAcct" style="width:100%">Create account / Sign in</button></div>' : ''}
         <div class="cs-panel2" style="margin-top:26px;max-width:380px"><h3>Quick match</h3><div class="bd"><div class="cs-small cs-mut" id="hSel"></div></div></div></div><div></div>
-      <div class="cs-side2"><div class="cs-panel2"><h3>Featured case</h3><div class="bd" style="text-align:center;cursor:pointer" id="hCase"><canvas width="240" height="120" style="width:100%"></canvas><b>${esc(featured.name)}</b><div class="cs-small cs-mut">${esc(featured.desc)}</div></div></div>
+      <div class="cs-side2"><div id="hPool"></div><div class="cs-panel2"><h3>Featured case</h3><div class="bd" style="text-align:center;cursor:pointer" id="hCase"><canvas width="240" height="120" style="width:100%"></canvas><b>${esc(featured.name)}</b><div class="cs-small cs-mut">${esc(featured.desc)}</div></div></div>
         <div class="cs-panel2"><h3>Daily quests</h3><div class="bd">${q.map((x) => `<div style="margin-bottom:9px"><div class="cs-row cs-small"><span>${esc(x.text)}</span><span style="flex:1"></span><span class="cs-coin">${x.claimed ? '✓' : '🪙 ' + x.coins}</span></div><div class="cs-bar" style="height:4px;margin-top:4px"><i style="width:${Math.round(x.prog / x.goal * 100)}%"></i></div></div>`).join('')}</div></div>
         <div class="cs-panel2"><h3>Free battle pass</h3><div class="bd cs-small">Level ${P.level} · ${passReady ? `<b style="color:#f2a33a">${passReady} reward${passReady > 1 ? 's' : ''} to claim</b>` : 'keep playing for the next reward'}</div></div></div></div>`;
     $('#hSel', B).textContent = `${MODES[this.sel.mode].name} · ${MAPS[this.sel.map].name} · bots ${BOT_LEVELS[this.sel.bot].name}`;
+    P.poolStatus().then((p) => { const el = $('#hPool', B); if (el && p) el.innerHTML = poolCard(p); }).catch(() => {});
     $('#hGo', B).onclick = () => { this.tab = 'play'; this.render(); };
     const dl = $('#hDl', B); if (dl) dl.onclick = () => this.downloadPanel();
     const ha = $('#hAcct', B); if (ha) ha.onclick = () => { this.tab = 'profile'; this.render(); setTimeout(() => { const e = $('#aE', this.root); if (e) e.focus(); }, 50); };
@@ -438,14 +453,26 @@ export class Menu {
     const slotKey = info.kind === 'agent' ? 'agent' : info.kind === 'knife' ? 'knife' : info.weapon;
     const teams = info.kind === 'agent' ? [AGENT_BY_ID[info.weapon].team] : info.kind === 'knife' ? ['T', 'CT'] : ['T', 'CT'].filter((t) => forTeam(info.weapon, t));
     m.innerHTML = `<div class="cs-card"><div class="cs-row"><b style="font-size:18px;color:${info.rarity.color}">${esc(info.label)}</b><span style="flex:1"></span><button class="cs-btn alt sm" data-x>✕</button></div>
-      <canvas width="560" height="224" style="width:100%;margin:10px 0;border-radius:8px;background:#0b0e13"></canvas>
+      <div class="cs-row" style="margin-top:8px"><button class="cs-btn sm" data-vw="3d">3D</button><button class="cs-btn alt sm" data-vw="card">Card</button><span style="flex:1"></span><button class="cs-btn alt sm" data-png style="display:none">Save card image</button></div>
+      <div data-card style="display:none;padding:14px 0"></div>
+      <canvas width="560" height="${info.kind === 'agent' ? 420 : 280}" class="cs-view" style="width:100%;height:${info.kind === 'agent' ? 'min(420px,52vh)' : 'min(280px,34vh)'};margin:10px 0;border-radius:10px"></canvas>
+      <div class="cs-small cs-mut" style="text-align:center;margin:-6px 0 6px">drag to turn · scroll or pinch to zoom</div>
       <div class="cs-small cs-mut">${esc(info.rarity.name)}${info.wear ? ` · ${esc(info.wear.name)} · float ${it.float.toFixed(5)} · pattern ${it.seed}` : ''}${it.st ? ` · StatTrak™ kills: ${it.kills | 0}` : ''} · worth ~${info.value} coins</div>
       <div class="cs-row" style="margin-top:12px">${teams.map((t) => `<button class="cs-btn sm" data-eq="${t}">Equip ${t === 'T' ? 'Terrorist' : 'Counter-Terrorist'}</button>`).join('')}
         <button class="cs-btn alt sm" data-sell>Sell instantly (${Math.round(info.value * 0.8)} coins)</button>
         ${P.signedIn ? (it.listed ? '<button class="cs-btn alt sm" data-unlist>Remove listing</button>' : '<input type="number" min="1" id="lp" placeholder="price" style="width:100px"><button class="cs-btn alt sm" data-list>List on market</button>') : ''}</div></div>`;
     document.body.appendChild(m);
-    drawItem($('canvas', m), it);
-    const close = () => m.remove();
+    const v = viewer($('canvas', m), it); if (!v) drawItem($('canvas', m), it);
+    const close = () => { if (v) v.stop(); m.remove(); };
+    // 3D model or collector's card
+    m.querySelectorAll('[data-vw]').forEach((b) => (b.onclick = () => {
+      const card = b.dataset.vw === 'card';
+      m.querySelectorAll('[data-vw]').forEach((x) => x.classList.toggle('alt', x !== b));
+      $('canvas', m).style.display = card ? 'none' : ''; $('[data-card]', m).style.display = card ? '' : 'none'; $('[data-png]', m).style.display = card ? '' : 'none';
+      const hint = $('canvas', m).nextElementSibling; if (hint) hint.style.display = card ? 'none' : '';
+      if (card && !$('[data-card]', m).firstChild) cardInto($('[data-card]', m), it);
+    }));
+    $('[data-png]', m).onclick = async () => { const c = await cardImage(it); if (!c) return; const a = document.createElement('a'); a.download = info.label.replace(/[^\w-]+/g, '_') + '.png'; a.href = c.toDataURL('image/png'); a.click(); };
     m.onclick = (e) => { if (e.target === m) close(); };
     $('[data-x]', m).onclick = close;
     m.querySelectorAll('[data-eq]').forEach((b) => (b.onclick = () => { P.equip(b.dataset.eq, slotKey, uid); this.h.toast('Equipped'); close(); this.render(); }));
@@ -456,11 +483,14 @@ export class Menu {
   emoteModal(it, info) {
     const P = this.P, m = document.createElement('div'), w = P.wheel(); m.className = 'cs cs-modal';
     m.innerHTML = `<div class="cs-card"><div class="cs-row"><b style="font-size:18px">${esc(info.finish)}</b><span style="flex:1"></span><button class="cs-btn alt sm" data-x>✕</button></div>
-      <canvas width="300" height="200" style="width:240px;display:block;margin:10px auto;border-radius:8px"></canvas>
+      <canvas width="420" height="420" class="cs-view" style="width:min(420px,100%);height:min(420px,52vh);display:block;margin:10px auto;border-radius:10px"></canvas>
       <div class="cs-mut cs-small">In a match press <b>T</b>, then 1-4. Everyone sees it; your camera pulls back while it plays.</div>
       <div class="cs-row" style="margin-top:10px">${[0, 1, 2, 3].map((k) => `<button class="cs-btn sm ${w[k] === info.weapon ? '' : 'alt'}" data-slot="${k}">Wheel ${k + 1}: ${esc((EMOTE_BY_ID[w[k]] || {}).name || 'empty')}</button>`).join('')}</div>
       <div class="cs-row" style="margin-top:8px"><button class="cs-btn alt sm" data-sell>Sell (${Math.round(info.value * 0.8)} coins)</button></div></div>`;
-    document.body.appendChild(m); drawItem($('canvas', m), it);
+    document.body.appendChild(m);
+    const lo = P.loadoutFor('T'), perf = AGENT_BY_ID[lo.agent] || AGENT_BY_ID.a_t_default;   // performed by your own outfit
+    const v = viewer($('canvas', m), it, { performer: { look: perf.look, team: perf.team } }); if (!v) drawItem($('canvas', m), it);
+    const rm0 = m.remove.bind(m); m.remove = () => { if (v) v.stop(); rm0(); };
     $('[data-x]', m).onclick = () => m.remove(); m.onclick = (e) => { if (e.target === m) m.remove(); };
     m.querySelectorAll('[data-slot]').forEach((b) => (b.onclick = () => { P.setWheel(+b.dataset.slot, info.weapon); this.h.toast('On your emote wheel'); m.remove(); }));
     $('[data-sell]', m).onclick = async () => { if (!confirm('Sell ' + info.finish + '?')) return; try { await P.sell(it.uid); } catch (e) { this.h.toast(e.message); } m.remove(); this.render(); };
@@ -535,16 +565,28 @@ export class Menu {
     if (!P.cloud) { B.innerHTML = `<div class="cs-card"><b>Player market needs accounts</b><div class="cs-mut" style="margin-top:6px">This copy of the game runs with local profiles only. You can still sell items instantly from your inventory (80% of their value). The owner can switch on free accounts (Supabase) to enable trading between players.</div></div>`; return; }
     if (!P.signedIn) { B.innerHTML = `<div class="cs-card"><b>Sign in to trade</b><div class="cs-mut" style="margin:6px 0">Buy and sell skins with other players for coins (5% market fee).</div><button class="cs-btn" id="mGo">Sign in / create account</button></div>`; $('#mGo', B).onclick = () => { this.tab = 'profile'; this.render(); }; return; }
     B.innerHTML = '<div class="cs-mut">Loading the market…</div>';
-    let list = []; try { list = await P.listings(); } catch (e) { B.innerHTML = `<div class="cs-mut">Market unavailable: ${esc(e.message)}</div>`; return; }
-    const items = list.map((l) => ({ uid: 'L' + l.id, def: l.def, float: l.float, seed: l.seed, st: l.st, lid: l.id, price: l.price, seller: l.seller_name, mine: l.seller === (P.sess && P.sess.user && P.sess.user.id) })).filter((i) => ITEM_BY_ID[i.def]);
-    B.innerHTML = `<div class="cs-row"><b>${items.length} listings</b><span class="cs-mut cs-small">Prices are set by players. 5% of each sale is burned as a fee.</span></div>
-      <div class="cs-grid" style="margin-top:10px">${items.map((i) => itemCard(i, ` · <b style="color:#7ed957">🪙 ${i.price}</b>`).replace('cs-card cs-item click', 'cs-card cs-item click') ).join('') || '<div class="cs-mut">Nothing listed yet.</div>'}</div>`;
-    paintAll(B, items);
+    let m; try { m = await P.market(); } catch (e) { B.innerHTML = `<div class="cs-mut">Market unavailable: ${esc(e.message)}</div>`; return; }
+    const meId = P.sess && P.sess.user && P.sess.user.id;
+    const players = (m.players || []).map((l) => ({ uid: 'L' + l.id, def: l.def, float: l.float, seed: l.seed, st: l.st, lid: l.id, price: l.price, seller: l.seller_name, mine: l.seller === meId })).filter((i) => ITEM_BY_ID[i.def]);
+    const house = (m.house || []).map((l) => ({ uid: 'H' + l.id, def: l.def, float: l.float, seed: l.seed, st: l.st, hid: l.id, price: l.price, seller: 'The House' })).filter((i) => ITEM_BY_ID[i.def]);
+    const kinds = [['all', 'All'], ['skin', 'Skins'], ['knife', 'Knives'], ['agent', 'Outfits'], ['emote', 'Emotes']], f = this.mFilter || 'all';
+    const pass = (i) => f === 'all' || ITEM_BY_ID[i.def].kind === f;
+    const price = (i) => ` · <b style="color:#7ed957">🪙 ${i.price.toLocaleString()}</b>`;
+    B.innerHTML = `${poolCard(m.pool)}
+      <div class="cs-row" style="margin:14px 0 8px">${kinds.map(([k, n]) => `<button class="cs-btn sm ${k === f ? '' : 'alt'}" data-mf="${k}">${n}</button>`).join('')}</div>
+      <div class="cs-sec">From players · ${players.filter(pass).length}</div>
+      <div class="cs-mut cs-small" style="margin-bottom:8px">Prices set by players. 5% of each sale goes into today's prize pool.</div>
+      <div class="cs-grid">${players.filter(pass).map((i) => itemCard(i, price(i) + (i.mine ? ' · <span class="cs-mut">yours</span>' : ''))).join('') || '<div class="cs-mut">Nothing listed by players right now: list something from your inventory.</div>'}</div>
+      <div class="cs-sec" style="margin-top:18px">The House · ${house.filter(pass).length}</div>
+      <div class="cs-mut cs-small" style="margin-bottom:8px">Always stocked, restocked every half hour. Priced by rarity, wear, how rare it is among players and how much it has been selling. Everything you spend here goes into today's prize pool.</div>
+      <div class="cs-grid">${house.filter(pass).map((i) => itemCard(i, price(i))).join('')}</div>`;
+    paintAll(B, players.concat(house));
+    B.querySelectorAll('[data-mf]').forEach((b) => (b.onclick = () => { this.mFilter = b.dataset.mf; this.render(); }));
     B.querySelectorAll('[data-uid]').forEach((e) => (e.onclick = async () => {
-      const it = items.find((x) => x.uid === e.dataset.uid); if (!it) return;
+      const it = players.find((x) => x.uid === e.dataset.uid) || house.find((x) => x.uid === e.dataset.uid); if (!it) return;
       if (it.mine) return this.h.toast('That one is yours (remove it from your inventory screen).');
-      if (!confirm(`Buy ${itemInfo(it).label} from ${it.seller || 'a player'} for ${it.price} coins?`)) return;
-      try { await P.buyListing(it.lid); this.h.toast('Bought!'); } catch (err) { this.h.toast(err.message); }
+      if (!confirm(`Buy ${itemInfo(it).label} from ${it.seller || 'a player'} for ${it.price.toLocaleString()} coins?`)) return;
+      try { if (it.hid) await P.houseBuy(it.hid); else await P.buyListing(it.lid); this.h.toast('Bought!'); this.h.sound('reveal'); } catch (err) { this.h.toast(err.message); }
       this.render();
     }));
   }

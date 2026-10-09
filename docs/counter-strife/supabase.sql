@@ -779,11 +779,13 @@ begin
   end if;
   -- once: the owner's inventory reset to one of everything (re-run any time from the Admin tab)
   if cs_is_admin() and not exists (select 1 from cs_log where action = 'admin_collection') then perform cs_admin_collection(); end if;
+  if cs_is_admin() then perform cs_admin_fill(); end if;
+  perform cs_settle_due();   -- pay out any finished prize-pool day
   if cs_is_admin() and not exists (select 1 from cs_log where action = 'admin_max') then perform cs_admin_max(); end if;
   return (select json_build_object('name', p.name, 'username', p.username, 'tag', p.tag, 'dep', p.dep_code, 'admin', cs_is_admin(), 'guns', coalesce(p.guns, '{}'::jsonb) - '_day', 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
     'rank', json_build_object('rr', p.rr, 'n', p.ranked_n, 'w', p.ranked_w, 'best', p.ranked_best),
     'items', coalesce((select json_agg(json_build_object('uid', i.uid, 'def', i.def, 'float', i.float, 'st', i.st, 'seed', i.seed, 'kills', i.kills,
-      'created', i.created, 'listed', (select l.price from cs_listings l where l.uid = i.uid)) order by i.created desc) from cs_items i where i.owner = me), '[]'::json))
+      'created', i.created, 'grade', i.grade, 'acquired', i.acquired, 'owners', i.owners, 'listed', (select l.price from cs_listings l where l.uid = i.uid)) order by i.created desc) from cs_items i where i.owner = me), '[]'::json))
     from cs_profiles p where p.id = me);
 end $$;
 
@@ -799,6 +801,7 @@ begin
   lv0 := floor(sqrt(r.xp / 100.0)) + 1; lv1 := floor(sqrt((r.xp + gx) / 100.0)) + 1;
   update cs_profiles set coins = coins + give + 200 * (lv1 - lv0), xp = xp + gx, earn_day = d, earned_today = r.earned_today + give where id = me
     returning coins, xp into r.coins, r.xp;
+  if p_kind = 'match' then perform cs_daily_stat(me, p_detail); end if;   -- today's prize-pool ranking
   return json_build_object('coins', r.coins, 'xp', r.xp, 'granted', give);
 end $$;
 
@@ -1024,6 +1027,19 @@ begin
   insert into cs_log (actor, action, detail) values (me, 'admin_collection', json_build_object('items', n));
   return n;
 end $$;
+-- the owner's showroom stays complete: on every load, one of each catalog item the admin doesn't currently hold is
+-- added (new items appear as soon as the catalog has them; a sold or traded one comes back). Extras are left alone.
+create or replace function cs_admin_fill() returns int language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); n int;
+begin
+  if not cs_is_admin() then raise exception 'admin only'; end if;
+  insert into cs_items (uid, owner, def, float, st, seed)
+    select md5(random()::text || clock_timestamp()::text || c.def), me, c.def, case when c.kind in ('agent', 'emote') then 0 else random() * 0.07 end, c.kind in ('skin', 'knife'), floor(random() * 1000)
+    from cs_catalog c where not exists (select 1 from cs_items i where i.owner = me and i.def = c.def);
+  get diagnostics n = row_count;
+  if n > 0 then insert into cs_log (actor, action, detail) values (me, 'admin_fill', json_build_object('items', n)); end if;
+  return n;
+end $$;
 -- the owner's account maxed: top player level (every pass tier marked claimed: the collection already holds them) and
 -- every gun at Level 10, so every attachment is unlocked. Attachments chosen before are kept.
 create or replace function cs_admin_max() returns void language plpgsql security definer set search_path = public as $$
@@ -1060,6 +1076,7 @@ end $$;
 revoke all on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_admin_collection(), cs_admin_max(), cs_set_username(text), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) from public, anon;
 grant execute on function cs_is_admin(), cs_find(text), cs_set_name(text), cs_are_friends(uuid, uuid), cs_friend_request(text), cs_friend_accept(uuid), cs_friend_remove(uuid), cs_friends_list(), cs_friend_items(uuid), cs_gift_coins(uuid, int), cs_trade_offer(uuid, text[], int, text[], int), cs_trade_respond(bigint, boolean), cs_trades_list(), cs_admin_find(text), cs_admin_grant(uuid, int, text, int), cs_admin_collection(), cs_admin_max(), cs_set_username(text), cs_claim_pass(int), cs_profile(text), cs_reward(text, int, int, jsonb), cs_open_crate(text), cs_sell(text), cs_list(text, int), cs_unlist(text), cs_buy(bigint), cs_equip(jsonb) to authenticated;
 revoke all on function cs_value(text, real, boolean) from public, anon;
+revoke all on function cs_admin_fill() from public, anon, authenticated;   -- runs only inside cs_profile
 
 -- ===== gun levels and attachments ================================================================================
 -- XP per gun (damage, kills, round wins with it): capped per match report and per day; attachments unlock by level.
@@ -1137,3 +1154,206 @@ begin
 end $$;
 revoke all on function cs_ranked(boolean, boolean, int, int, boolean) from public, anon;
 grant execute on function cs_ranked(boolean, boolean, int, int, boolean) to authenticated;
+
+-- ===== economy: the house market, sales history, and the daily prize pool ========================================
+-- Coins that leave players (case spins, house-market purchases, the 5% player-market fee) go into the day's pool.
+-- At 11pm New York time the pool is paid out to that day's players, ranked by one stat that rotates daily
+-- (kills, then MVPs, then wins): 1st 50%, 2nd 25%, 3rd 15%, and 10% shared by everyone else who played. Shares
+-- nobody qualifies for roll into the next day. Only players with at least one match that day take part.
+create table if not exists cs_ai_listings (id bigserial primary key, def text not null references cs_catalog, float real not null, st boolean not null default false,
+  seed int not null, price int not null check (price > 0), created timestamptz default now());
+create table if not exists cs_sales (id bigserial primary key, def text not null, price int not null, ai boolean not null, at timestamptz default now());
+create index if not exists cs_sales_def on cs_sales (def, at);
+create table if not exists cs_pool (day date primary key, coins bigint not null default 0, settled boolean not null default false, category text, results jsonb);
+create table if not exists cs_daily (day date not null, uid uuid not null references auth.users on delete cascade, kills int not null default 0, mvps int not null default 0,
+  wins int not null default 0, matches int not null default 0, primary key (day, uid));
+create table if not exists cs_meta (k text primary key, at timestamptz);
+alter table cs_ai_listings enable row level security; alter table cs_sales enable row level security; alter table cs_pool enable row level security;
+alter table cs_daily enable row level security; alter table cs_meta enable row level security;
+drop policy if exists cs_ail on cs_ai_listings; create policy cs_ail on cs_ai_listings for select using (true);
+drop policy if exists cs_pl on cs_pool; create policy cs_pl on cs_pool for select using (true);
+drop policy if exists cs_dl on cs_daily; create policy cs_dl on cs_daily for select using (auth.uid() = uid);
+
+-- the pool "day" runs 11pm to 11pm New York time (daylight saving handled by the time zone)
+create or replace function cs_pool_day(ts timestamptz default now()) returns date language sql stable as $$
+  select ((ts at time zone 'America/New_York') + interval '1 hour')::date $$;
+create or replace function cs_pool_cat(d date) returns text language sql immutable as $$
+  select (array['kills', 'mvps', 'wins'])[(((d - date '2026-10-08') % 3) + 3) % 3 + 1] $$;
+create or replace function cs_pool_add(n bigint) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if n is null or n <= 0 then return; end if;
+  insert into cs_pool (day, coins, category) values (cs_pool_day(), n, cs_pool_cat(cs_pool_day()))
+    on conflict (day) do update set coins = cs_pool.coins + excluded.coins;
+end $$;
+
+-- pay out one finished day (idempotent: a settled day is skipped)
+create or replace function cs_settle(d date) returns void language plpgsql security definer set search_path = public as $$
+declare p cs_pool%rowtype; cat text := cs_pool_cat(d); r record; n int; rest int; paid bigint := 0; share bigint; res jsonb := '[]'::jsonb; k int := 0; restShare bigint;
+begin
+  insert into cs_pool (day, coins, category) values (d, 0, cat) on conflict (day) do nothing;
+  select * into p from cs_pool where day = d for update;
+  if p.settled then return; end if;
+  select count(*) into n from cs_daily where day = d and matches > 0;
+  rest := greatest(0, n - 3); restShare := case when rest > 0 then floor(p.coins * 0.10 / rest) else 0 end;
+  for r in select x.uid, (case cat when 'kills' then x.kills when 'mvps' then x.mvps else x.wins end) as m, coalesce(pr.name, 'Player') as name
+           from cs_daily x left join cs_profiles pr on pr.id = x.uid
+           where x.day = d and x.matches > 0
+           order by (case cat when 'kills' then x.kills when 'mvps' then x.mvps else x.wins end) desc, x.kills + x.mvps + x.wins desc, x.matches, x.uid loop
+    k := k + 1;
+    share := case when k = 1 and r.m > 0 then floor(p.coins * 0.50) when k = 2 and r.m > 0 then floor(p.coins * 0.25) when k = 3 and r.m > 0 then floor(p.coins * 0.15)
+                  when k > 3 then restShare else 0 end;
+    if share > 0 then
+      update cs_profiles set coins = coins + least(share, 2000000000 - coins) where id = r.uid;
+      paid := paid + share;
+    end if;
+    if k <= 10 or share > 0 then res := res || jsonb_build_object('rank', k, 'name', r.name, 'stat', r.m, 'coins', share, 'uid', r.uid); end if;
+  end loop;
+  update cs_pool set settled = true, category = cat, results = res where day = d;
+  if p.coins - paid > 0 then   -- shares nobody qualified for roll into the next day
+    insert into cs_pool (day, coins, category) values (d + 1, p.coins - paid, cs_pool_cat(d + 1))
+      on conflict (day) do update set coins = cs_pool.coins + excluded.coins;
+  end if;
+  insert into cs_log (actor, action, detail) values (null, 'pool_settle', jsonb_build_object('day', d, 'category', cat, 'pool', p.coins, 'paid', paid, 'players', n));
+end $$;
+-- every finished, unpaid day. Runs from the 11pm schedule (pg_cron, below) and, as a backstop, whenever anyone loads
+-- their profile or the market, so a payout is never missed even without the scheduler.
+create or replace function cs_settle_due() returns void language plpgsql security definer set search_path = public as $$
+declare d date;
+begin
+  for d in select day from cs_pool where not settled and day < cs_pool_day() order by day loop perform cs_settle(d); end loop;
+  for d in select distinct day from cs_daily x where day < cs_pool_day() and not exists (select 1 from cs_pool p where p.day = x.day) loop perform cs_settle(d); end loop;
+end $$;
+do $$ begin
+  create extension if not exists pg_cron;
+  perform cron.unschedule(jobid) from cron.job where jobname = 'cs-pool';
+  perform cron.schedule('cs-pool', '1 * * * *', 'select cs_settle_due()');   -- hourly at :01 catches 11pm in both EST and EDT
+exception when others then raise notice 'pg_cron not available (%): payouts run when players next load the game', sqlerrm;
+end $$;
+
+-- a match's stats count toward today's ranking (capped per match, and at most 40 matches a day count)
+create or replace function cs_daily_stat(me uuid, p_detail jsonb) returns void language plpgsql security definer set search_path = public as $$
+declare d date := cs_pool_day();
+begin
+  insert into cs_daily (day, uid) values (d, me) on conflict do nothing;
+  -- matches against bots only count half their kills and MVPs (no farming the easy bots for the pool)
+  update cs_daily set kills = kills + least(greatest(coalesce((p_detail->>'k')::int, 0), 0), 60) / (case when (p_detail->>'bots')::boolean then 2 else 1 end),
+    mvps = mvps + least(greatest(coalesce((p_detail->>'mvp')::int, 0), 0), 16) / (case when (p_detail->>'bots')::boolean then 2 else 1 end),
+    wins = wins + (case when (p_detail->>'win')::boolean then 1 else 0 end), matches = matches + 1
+    where day = d and uid = me and matches < 40;
+end $$;
+
+-- ---- the house market: always stocked, priced by rarity x wear x scarcity x recent demand ----
+-- scarcity: the fewer copies players own, the pricier (up to 2.2x); demand: every sale of that item in the last 7
+-- days adds 8% (up to 2x). The house sells at a 25% markup, so player listings are the bargains and show first.
+create or replace function cs_ai_price(p_def text, p_float real, p_st boolean, p_seed int) returns int language sql stable set search_path = public as $$
+  select greatest(1, round(cs_value(p_def, p_float, p_st)
+    * (1 + 1.2 / (1 + (select count(*) from cs_items where def = p_def) / 3.0))
+    * least(2.0, 1 + 0.08 * (select count(*) from cs_sales where def = p_def and at > now() - interval '7 days'))
+    * 1.25 * (0.92 + (p_seed % 17) / 100.0)))::int $$;
+create or replace function cs_ai_restock() returns void language plpgsql security definer set search_path = public as $$
+declare last timestamptz; need int; t int; pick text; kd text; fl real; sd int; sst boolean;
+begin
+  select m.at into last from cs_meta m where m.k = 'ai_restock' for update;
+  if last is not null and last > now() - interval '30 minutes' then return; end if;
+  insert into cs_meta (k, at) values ('ai_restock', now()) on conflict (k) do update set at = now();
+  delete from cs_ai_listings where created < now() - interval '36 hours';
+  update cs_ai_listings a set price = cs_ai_price(a.def, a.float, a.st, a.seed);   -- reprice with the latest sales
+  select 90 - count(*) into need from cs_ai_listings;
+  for i in 1 .. greatest(need, 0) loop
+    t := case when random() < 0.40 then 0 when random() < 0.55 then 1 when random() < 0.6 then 2 when random() < 0.65 then 3 when random() < 0.7 then 4 when random() < 0.5 then 5 else 6 end;
+    select def, kind into pick, kd from cs_catalog where tier = t and crate <> 'pass' order by random() limit 1;
+    if pick is null then continue; end if;
+    fl := case when kd in ('agent', 'emote') then 0 else power(random(), 1.6) end; sst := kd in ('skin', 'knife') and random() < 0.08; sd := floor(random() * 1000);
+    insert into cs_ai_listings (def, float, st, seed, price) values (pick, fl, sst, sd, cs_ai_price(pick, fl, sst, sd));
+  end loop;
+end $$;
+-- the market screen: player listings first (newest), then the house stock (priciest first)
+create or replace function cs_market() returns json language plpgsql security definer set search_path = public as $$
+begin
+  perform cs_settle_due(); perform cs_ai_restock();
+  return json_build_object(
+    'players', coalesce((select json_agg(l order by l.created desc) from (select id, def, float, st, seed, price, seller, seller_name, created from cs_listings order by created desc limit 200) l), '[]'::json),
+    'house', coalesce((select json_agg(a order by a.price desc) from (select id, def, float, st, seed, price from cs_ai_listings) a), '[]'::json),
+    'pool', cs_pool_status());
+end $$;
+create or replace function cs_ai_buy(p_id bigint) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); a cs_ai_listings%rowtype; c int; u text;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  select * into a from cs_ai_listings where id = p_id for update; if a.id is null then raise exception 'already sold'; end if;
+  update cs_profiles set coins = coins - a.price where id = me and coins >= a.price returning coins into c;
+  if c is null then raise exception 'Not enough coins'; end if;
+  delete from cs_ai_listings where id = a.id;
+  u := md5(random()::text || clock_timestamp()::text || me::text);
+  insert into cs_items (uid, owner, def, float, st, seed) values (u, me, a.def, a.float, a.st, a.seed);
+  insert into cs_sales (def, price, ai) values (a.def, a.price, true);
+  perform cs_pool_add(a.price);
+  return json_build_object('uid', u, 'coins', c);
+end $$;
+
+-- the pool as players see it: today's size and stat, time left, the top five, your own standing, yesterday's winners
+create or replace function cs_pool_status() returns json language plpgsql security definer set search_path = public as $$
+declare d date := cs_pool_day(); cat text := cs_pool_cat(cs_pool_day()); me uuid := auth.uid(); ends timestamptz;
+begin
+  ends := ((d::timestamp - interval '1 hour') + interval '1 day') at time zone 'America/New_York';
+  return json_build_object('day', d, 'category', cat, 'coins', coalesce((select coins from cs_pool where day = d), 0), 'ends', ends,
+    'players', (select count(*) from cs_daily where day = d and matches > 0),
+    'top', coalesce((select json_agg(t) from (select coalesce(pr.name, 'Player') as name, (case cat when 'kills' then x.kills when 'mvps' then x.mvps else x.wins end) as stat
+      from cs_daily x left join cs_profiles pr on pr.id = x.uid where x.day = d and x.matches > 0
+      order by 2 desc, x.kills + x.mvps + x.wins desc, x.matches, x.uid limit 5) t), '[]'::json),
+    'me', (select json_build_object('stat', case cat when 'kills' then kills when 'mvps' then mvps else wins end, 'matches', matches,
+      'rank', (select count(*) + 1 from cs_daily y where y.day = d and y.matches > 0 and (case cat when 'kills' then y.kills when 'mvps' then y.mvps else y.wins end) > (case cat when 'kills' then x.kills when 'mvps' then x.mvps else x.wins end)))
+      from cs_daily x where x.day = d and x.uid = me),
+    'last', (select json_build_object('day', day, 'category', category, 'coins', coins, 'results', (select coalesce(jsonb_agg(e - 'uid'), '[]'::jsonb) from jsonb_array_elements(results) e),
+      'mine', (select coalesce(sum((e->>'coins')::bigint), 0) from jsonb_array_elements(results) e where e->>'uid' = me::text))
+      from cs_pool where settled order by day desc limit 1));
+end $$;
+
+-- coins that leave players feed the pool: wrap case opening and the player market
+create or replace function cs_open_crate_pooled(p_crate text) returns json language plpgsql security definer set search_path = public as $$
+declare r json;
+begin
+  r := cs_open_crate(p_crate);
+  perform cs_pool_add((select price from cs_crates where id = p_crate));
+  return r;
+end $$;
+create or replace function cs_buy_pooled(p_listing bigint) returns void language plpgsql security definer set search_path = public as $$
+declare l cs_listings%rowtype;
+begin
+  select * into l from cs_listings where id = p_listing;
+  perform cs_buy(p_listing);
+  if l.id is not null then insert into cs_sales (def, price, ai) values (l.def, l.price, false); perform cs_pool_add(l.price - floor(l.price * 0.95)); end if;   -- the 5% fee
+end $$;
+
+revoke all on function cs_pool_add(bigint), cs_settle(date), cs_settle_due(), cs_daily_stat(uuid, jsonb), cs_ai_restock(), cs_ai_price(text, real, boolean, int) from public, anon, authenticated;
+revoke all on function cs_market(), cs_ai_buy(bigint), cs_pool_status(), cs_open_crate_pooled(text), cs_buy_pooled(bigint) from public, anon;
+grant execute on function cs_market(), cs_ai_buy(bigint), cs_pool_status(), cs_open_crate_pooled(text), cs_buy_pooled(bigint) to authenticated;
+-- the raw versions are only reachable through the pooled ones now
+revoke execute on function cs_open_crate(text), cs_buy(bigint) from authenticated;
+
+-- ===== trading cards: PSA-style grade and provenance per item =====================================================
+-- grade: below Epic is ungraded; Epic 8-9; Legendary 9, rarely 10; Funny and Mythic always 10. Set once when the
+-- item first exists (it never changes). acquired / owners: when the current owner got it, and how many owners it
+-- has had (a sale or trade stamps a new date and counts one more owner).
+alter table cs_items add column if not exists grade int;
+alter table cs_items add column if not exists acquired timestamptz default now();
+alter table cs_items add column if not exists owners int not null default 1;
+create or replace function cs_items_card() returns trigger language plpgsql set search_path = public as $$
+declare t int;
+begin
+  if tg_op = 'INSERT' then
+    select tier into t from cs_catalog where def = new.def;
+    new.grade := case when t = 3 then (case when random() < 0.7 then 8 else 9 end) when t = 4 then (case when random() < 0.12 then 10 else 9 end) when t >= 5 then 10 else null end;
+    new.acquired := now(); new.owners := 1;
+  elsif new.owner is distinct from old.owner then
+    new.acquired := now(); new.owners := old.owners + 1; new.grade := old.grade;
+  else
+    new.grade := old.grade; new.owners := old.owners; new.acquired := old.acquired;   -- nobody edits a card's history
+  end if;
+  return new;
+end $$;
+drop trigger if exists cs_items_card on cs_items;
+create trigger cs_items_card before insert or update on cs_items for each row execute function cs_items_card();
+-- items that existed before cards: grade them once
+update cs_items i set grade = case when c.tier = 3 then (case when random() < 0.7 then 8 else 9 end) when c.tier = 4 then (case when random() < 0.12 then 10 else 9 end) when c.tier >= 5 then 10 end
+  from cs_catalog c where c.def = i.def and i.grade is null and c.tier >= 3;
