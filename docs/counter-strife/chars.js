@@ -73,15 +73,15 @@ function material(team, tint, hq, glow, costume = null) {
 // pose (centimetres, z up, front +y): head, torso, arms, hips, legs. Armour plates and the undersuit stay told apart
 // (plates take the colour, the suit a darker cut of it), bare-skin costumes smooth the armour detail out to skin, and
 // a few outfits add a pattern: the mime's stripes, the hotdog's mustard squiggle, the cone's reflective bands.
-const SKINNY = (L) => L.body === L.head || !!L.speedo;
+const SKINNY = (L) => L.body === L.head || !!L.speedo || !!L.bikini;
 export function costumeOf(L) {
   if (!L || L.plain || L.model === 'log') return null;
   const skin = SKINNY(L), c = (v, d) => new THREE.Color(v || d);
   const cs = {
-    head: c(L.head, '#c89a74'), torso: c(L.body), arms: c(L.arms || L.body), hips: c(L.speedo || L.hips || L.legs), legs: c(L.legs),
-    skin: skin ? 1 : 0, speedo: L.speedo ? 1 : 0, stripes: L.stripes ? 1 : 0, mustard: L.mustard ? 1 : 0, bands: L.hat === 'cone' ? 1 : 0, belly: L.belly ? 1 : 0,
+    head: c(L.head, '#c89a74'), torso: c(L.body), arms: c(L.arms || L.body), hips: c(L.speedo || L.bikini || L.hips || L.legs), legs: c(L.legs),
+    skin: skin ? 1 : 0, speedo: L.speedo || L.bikini ? 1 : 0, bikini: L.bikini ? 1 : 0, stripes: L.stripes ? 1 : 0, mustard: L.mustard ? 1 : 0, bands: L.hat === 'cone' ? 1 : 0, belly: L.belly ? 1 : 0,
   };
-  cs.key = [L.head, L.body, L.legs, L.speedo, L.stripes, L.mustard, L.hat, L.belly].join(',');
+  cs.key = [L.head, L.body, L.legs, L.speedo, L.stripes, L.mustard, L.hat, L.belly, L.bikini].join(',');
   return cs;
 }
 function dye(m, cs) {
@@ -90,7 +90,7 @@ function dye(m, cs) {
   m.onBeforeCompile = (sh, r) => {
     prev(sh, r);
     Object.assign(sh.uniforms, { cHead: { value: cs.head }, cTorso: { value: cs.torso }, cArms: { value: cs.arms }, cHips: { value: cs.hips }, cLegs: { value: cs.legs },
-      cFlags: { value: new THREE.Vector4(cs.skin, cs.stripes, cs.mustard, cs.bands) }, cFlags2: { value: new THREE.Vector4(cs.speedo, cs.belly, 0, 0) } });
+      cFlags: { value: new THREE.Vector4(cs.skin, cs.stripes, cs.mustard, cs.bands) }, cFlags2: { value: new THREE.Vector4(cs.speedo, cs.belly, cs.bikini || 0, 0) } });
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;\nuniform vec3 cHead; uniform vec3 cTorso; uniform vec3 cArms; uniform vec3 cHips; uniform vec3 cLegs; uniform vec4 cFlags; uniform vec4 cFlags2;')
       .replace('#include <map_fragment>', `#include <map_fragment>
@@ -105,6 +105,7 @@ function dye(m, cs) {
 		if (cFlags.y > 0.5 && z > 96.0 && z < 152.0 && ax < 20.0 && fract(z / 11.0) < 0.5) c = vec3(0.05);   // mime stripes
 		if (cFlags.w > 0.5 && ((z > 112.0 && z < 120.0) || (z > 128.0 && z < 136.0))) c = vec3(0.92, 0.94, 0.9);   // reflective cone bands
 		if (cFlags.z > 0.5 && vRest.y > 4.0 && z > 92.0 && z < 150.0 && abs(vRest.x - sin(z * 0.55) * 7.0) < 2.2) c = vec3(0.95, 0.72, 0.05);   // mustard
+		if (cFlags2.z > 0.5 && z > 124.0 && z < 135.0 && ax < 17.0) { c = cHips; skinR = 0.0; }   // a bikini top
 		c = max(c, vec3(0.05));   // near-black outfits still show their folds and plates
 		// plates take the colour with the photo's light and scratches; the undersuit a darker, matte cut of it
 		float detail = plate > 0.5 ? clamp(lum / 0.36, 0.35, 1.35) : clamp(0.55 + lum * 9.0, 0.5, 1.2);
@@ -146,8 +147,9 @@ export function makeSoldier(look, team, hq = true) {
   // the gear you bought, worn on top of the uniform: a plate carrier with its pouches, a ballistic helmet
   const chest = new THREE.Group(); chest.visible = false; g.add(chest);
   const vest = gearMesh(vestParts(team)); chest.add(vest);
+  const bomb = L.bombvest ? gearMesh(bombVestParts()) : null; if (bomb) { chest.add(bomb); chest.visible = true; }
   const helm = gearMesh(helmetParts(team)); helm.visible = false; head.add(helm);
-  const r = { soldier: true, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, tpKey: '', over: null, t: 0, dieDone: false };
+  const r = { soldier: true, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, vest, bomb, tpKey: '', over: null, t: 0, dieDone: false };
   // where the head and hand sit relative to their bones at rest: lets props follow the animated bones
   g.updateMatrixWorld(true);
   r.headCorr = byName.Head.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
@@ -426,7 +428,7 @@ function betaTag() {
 }
 
 // ---- bought gear: kevlar (a plate carrier) and a helmet, shown only while the player has them ----
-export function setGear(r, armor, helmet) { if (!r || !r.chest) return; r.chest.visible = armor > 0; r.helm.visible = !!helmet && armor > 0; }
+export function setGear(r, armor, helmet) { if (!r || !r.chest) return; r.vest.visible = armor > 0; r.chest.visible = armor > 0 || !!r.bomb; r.helm.visible = !!helmet && armor > 0; }
 let gearMat = null;
 function rbox(w, h, d, rad = 0.012) {   // a box with rounded edges (pads and plates aren't sharp)
   const sh = new THREE.Shape(), x = w / 2 - rad, y = h / 2 - rad;
@@ -480,5 +482,19 @@ function helmetParts(team) {
   P.push(painted(rbox(0.05, 0.035, 0.02, 0.006), C.metal, 0, 0.28, -0.135, -0.5));   // NVG shroud
   P.push(painted(rbox(0.07, 0.03, 0.03, 0.006), C.strap, 0, 0.27, 0.15, 0.4));       // counterweight pouch
   P.push(painted(new THREE.TorusGeometry(0.118, 0.006, 4, 16, Math.PI), C.strap, 0, 0.12, 0.0, 0, Math.PI / 2, Math.PI));   // chin strap
+  return P;
+}
+// a suicide vest, the cartoon kind: sticks of dynamite on a harness, wires everywhere, a timer with a red light
+function bombVestParts() {
+  const P = [];
+  for (const sd of [-1, 1]) P.push(painted(rbox(0.045, 0.02, 0.29, 0.006), '#1a1a1a', sd * 0.09, 0.15, 0));   // harness straps
+  P.push(painted(rbox(0.36, 0.05, 0.27, 0.01), '#222222', 0, -0.13, 0));                                      // the belt
+  for (let k = 0; k < 6; k++) { const x = -0.125 + k * 0.05;
+    P.push(painted(new THREE.CylinderGeometry(0.022, 0.022, 0.17, 10), '#c0281e', x, -0.02, -0.15));
+    P.push(painted(new THREE.CylinderGeometry(0.023, 0.023, 0.012, 10), '#e8d8b0', x, 0.065, -0.15)); }       // paper ends
+  P.push(painted(rbox(0.3, 0.02, 0.02, 0.005), '#3a3a3a', 0, 0.02, -0.17));                                   // tape round the sticks
+  P.push(painted(rbox(0.09, 0.06, 0.03, 0.006), '#2a2a2a', 0.0, 0.1, -0.165));                                // the timer
+  P.push(painted(rbox(0.06, 0.025, 0.006, 0.002), '#ff2010', 0.0, 0.1, -0.182));                              // its red display
+  for (const [c, x] of [['#2a6aff', -0.07], ['#ffd020', 0.07], ['#ff3030', 0.03]]) P.push(painted(new THREE.TorusGeometry(0.05, 0.004, 4, 10, Math.PI), c, x, 0.07, -0.168, 0, 0, Math.PI / 2));
   return P;
 }

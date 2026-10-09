@@ -115,6 +115,11 @@ export const STORY_LOOKS = {
   suit: { body: '#1c1c20', legs: '#1c1c20', head: '#b8875e', hat: 'none' },
   winter_a: { body: '#d6dad6', legs: '#c4c8c4', head: '#d8b896', hat: 'helmet', hatColor: '#dcdedc' },
   winter_b: { body: '#c8d0c4', legs: '#b6beb2', head: '#caa486', hat: 'helmet', hatColor: '#a8b2a2' },
+  // the Velvet Rope's dancers, now the Brotherhood's: bikinis, big hair, and bomb vests
+  dancer_a: { body: '#d8a07a', legs: '#d8a07a', head: '#d8a07a', bikini: '#ff2fa0', hat: 'bob', hatColor: '#f2d060', bombvest: true },
+  dancer_b: { body: '#7a4e36', legs: '#7a4e36', head: '#7a4e36', bikini: '#30e0ff', hat: 'bob', hatColor: '#1a1210', bombvest: true },
+  dancer_c: { body: '#f0c8a8', legs: '#f0c8a8', head: '#f0c8a8', bikini: '#ffd23a', hat: 'bob', hatColor: '#c8301e', bombvest: true },
+  headliner: { body: '#c08a66', legs: '#c08a66', head: '#c08a66', bikini: '#b040ff', hat: 'bob', hatColor: '#f4f4f4', bombvest: true },
 };
 
 // ---- the campaign: 8 chapters, 27 levels ---------------------------------------------------------------------------------
@@ -135,10 +140,10 @@ export const STORY_LOOKS = {
 //   revive { who }  a squadmate is down: hold USE on them while the enemy pushes
 //   carry { who, zone }  that character carries the objective to the zone; everyone else keeps them alive
 // Speakers: the four characters, 'boss', and the extra voices in SPEAKERS.
-export const SPEAKERS = { command: 'Colonel Brisket (Command)', tape: 'Dale (on tape)', doctor: 'Dr. Adebayo', nurse: 'Nurse Kowalczyk', chef: 'The Chili Chef', captain: 'The Captain', bouncer: 'The Bouncer', recruit: 'New Recruit', squad: 'Everyone', credits: '', dad: 'Dad', danny: 'Danny', radio: 'Radio', enemy: 'Guard' };
+export const SPEAKERS = { command: 'Colonel Brisket (Command)', tape: 'Dale (on tape)', doctor: 'Dr. Adebayo', nurse: 'Nurse Kowalczyk', chef: 'The Chili Chef', captain: 'The Captain', bouncer: 'The Bouncer', recruit: 'New Recruit', squad: 'Everyone', credits: '', dad: 'Dad', danny: 'Danny', radio: 'Radio', headliner: 'Mercedes (Headliner)', enemy: 'Guard' };
 
 export const CHAPTERS = [
-  { id: 'c1', map: 'range', name: 'Wieners Protect Their Own', hub: 'Frank Wiener got back up. He has never once told anyone what it cost.', missions: [
+  { id: 'c1', map: 'range', name: 'Wieners Protect Their Own', tease: 'Boot camp, a live-fire exercise, and the worst day of Sergeant Wiener\'s life. Twice.', hub: 'Frank Wiener got back up. He has never once told anyone what it cost.', missions: [
     { id: 'm1', name: 'Reveille', map: 'barracks', tier: 0, intro: 'Fort Brisket. 0500. Somebody is already doing push-ups.',
       objectives: [
         { kind: 'explore', hint: 'Find your squad', points: [
@@ -209,7 +214,7 @@ export const CHAPTERS = [
       cut: { in: [['wiener', 'Wiener\'s protect their own.', { cam: 'pov_down', vision: 'dying', music: '' }], ['wiener', '(His eyes open.)', { cam: 'pov_down', hold: 1.2 }], ['wiener', '(He gets up.)', { cam: 'close', vision: '', music: 'pulse' }]],
         out: [['ricky', 'Okay so who taught the hot dog to do surgery?', { cam: 'wide', music: 'tender' }], ['cancer', 'He\'s a hot dog, Ricky. Everything about him is surgery.'], ['igor', 'Wiener. Where did you learn this?'], ['wiener', '(He doesn\'t answer. He\'s already checking their bandages again.)', { hold: 1.5 }], ['ricky', '...Sarge? You good?'], ['wiener', 'Squad. Back to base.']] } },
   ] },
-  { id: 'c2', map: 'mansion', name: 'The Wrong House', hub: 'Two weeks later, clearing out his mother\'s closet, Ricky found a shoebox of letters and four old videotapes. Every letter was from the same man.', missions: [
+  { id: 'c2', map: 'mansion', name: 'The Wrong House', tease: 'Ricky, eight months before he enlisted. A big house that was supposed to be empty.', hub: 'Two weeks later, clearing out his mother\'s closet, Ricky found a shoebox of letters and four old videotapes. Every letter was from the same man.', missions: [
     { id: 'r1', name: 'The Wrong House', tier: 2, featured: 'ricky', vision: 'night', music: '', intro: 'Ricky. Eight months before he enlisted.', loadout: { ricky: { guns: [], armor: false } }, enemyLook: 'suit',
       enemyNames: ['Big Sal', 'Little Sal', 'Tony Two-Times', 'Mikey Cufflinks', 'Paulie Napkins', 'Vinnie Valet', 'Jimmy Coat Check', 'Nicky Bones'],
       objectives: [
@@ -246,6 +251,28 @@ export const CHAPTERS = [
       ],
       cut: { in: [['wiener', 'The chili is the weapon. Ballin\' is fermenting it into gas. We extract the cook.']],
         out: [['ricky', 'He gave me a sample. It\'s actually fire though.'], ['cancer', 'Ricky, you just ate a chemical weapon.'], ['ricky', '...it\'s actually fire though.'], ['chef', 'He\'s not wrong. It\'s my best batch. That\'s the problem.']] } },
+    { id: 'v1', name: 'The Velvet Rope', map: 'club', tier: 1, melee: true, noAbility: true, music: 'action', intro: 'The Velvet Rope. Tuesday, 11:40 PM. The chef said the money goes through here.',
+      loadout: { all: { guns: [], armor: false } }, enemyLooks: ['dancer_a', 'dancer_b', 'dancer_c'],
+      enemyNames: ['Destiny', 'Crystal', 'Diamond', 'Champagne', 'Cinnamon', 'Bambi', 'Raven', 'Starla', 'Chastity', 'Porsche', 'Paprika', 'Sapphire'],
+      objectives: [
+        { kind: 'reach', zone: 'Main Floor', hint: 'Find the Brotherhood\'s money man', say: [['ricky', 'I want it on the record that I was ordered to be here. By the government. I am a patriot.'], ['cancer', 'You are a patriot with a fist full of ones, Ricky.'], ['igor', 'In my country this is called "Tuesday".']] },
+        { kind: 'clear', zone: 'Main Floor', count: 8, hint: 'They\'re not dancers. Slap them down (sabers only)',
+          scene: [['headliner', 'Boys. Welcome to the Velvet Rope. Two-drink minimum.', { cam: 'wide' }], ['headliner', '(Every dancer in the club turns around. Every one of them is wearing a bomb vest.)', { cam: 'wide', hold: 1.2 }],
+            ['headliner', 'And a one-explosion maximum. Get them, girls.'], ['wiener', 'We have no guns. We have no grenades. We have...'], ['ricky', 'We have DICKS, Sarge. Big rubber ones. FOR GLORY!'], ['cancer', 'This is the worst day of my life and I have cancer.']],
+          done: [['igor', '(The vest pops. Confetti. Glitter. A kazoo sound.) ...Is party popper. The vests are party poppers.'], ['wiener', 'Don\'t get comfortable. The money man is still here somewhere.']] },
+        { kind: 'interact', targets: 1, zone: 'DJ Booth', hint: 'Kill the music and pop the door locks', say: [['ricky', 'Wait wait wait. Let me play one song first. ONE SONG.'], ['wiener', 'Ricky.'], ['ricky', 'It\'s my mixtape, Sarge, it\'s a strategic morale—'], ['wiener', 'RICKY.']],
+          done: [['ricky', '(The music stops. Somebody in the VIP room screams "WHO TURNED OFF MY SONG".)'], ['cancer', 'Well. Now they know where we are.']] },
+        { kind: 'clear', zone: 'VIP Lounge', count: 9, hint: 'VIP: more of them, angrier', say: [['cancer', 'I\'ve been slapped by a stripper before. I\'ve never been slapped by nine at once.'], ['igor', 'Sit down, Captain. Is complimentary.']],
+          done: [['wiener', 'Clear! Ricky, put the singles away.'], ['ricky', 'They\'re not singles, they\'re EVIDENCE.']] },
+        { kind: 'survive', time: 45, zone: 'Dressing Room', hint: 'The headliner\'s locked in the dressing room: hold the door', say: [['headliner', '(over the speakers) Every girl in the building, to the dressing room. Bring the glitter.'], ['wiener', 'Backs to the wall! Swing at anything with sequins!']] },
+        { kind: 'defuse', puzzle: 'wires', hint: 'The headliner\'s vest is real. Defuse it',
+          scene: [['headliner', '(She stands in the doorway, holding a dead man\'s switch.)', { cam: 'wide' }], ['headliner', 'Mine\'s not a party popper, sugar.'], ['igor', '(Igor bonks her once, very gently, on the head with a rubber penis. She goes down.)', { cam: 'wide', hold: 1 }], ['igor', 'Somebody must cut the wires. Not me. I am holding a penis.']] },
+        { kind: 'reach', zone: 'Back Exit', hint: 'Out the back', say: [['wiener', 'Nobody talks about this. EVER.'], ['ricky', 'I already posted it.']] },
+      ],
+      cut: { in: [['bouncer', 'Whoa whoa whoa. Club policy. No weapons past the rope.', { cam: 'wide' }], ['wiener', 'We\'re on official—'], ['bouncer', 'No. Weapons. Past. The rope.'], ['bouncer', '(He takes the rifles. The pistols. The grenades. Ricky\'s Glock. Igor\'s sniper rifle, very slowly. Cancer\'s secret third knife.)', { hold: 1.5 }],
+          ['bouncer', 'Gift shop\'s on the left if you need something to hold.'], ['ricky', '(The gift shop has exactly one item, in bulk.)', { cam: 'close' }], ['ricky', 'Oh, these are lightsabers now. These are our lightsabers.'], ['cancer', 'Frank, I am not going into battle holding a—'], ['wiener', 'Pick a color, Captain.']],
+        out: [['bouncer', '(The alley. The bouncer is standing next to a bin with all their gear in it.)', { cam: 'wide', music: 'tender' }], ['bouncer', 'You boys leaving? Here. Club policy. You get it back at the door.'], ['wiener', '(They take their guns back. Their grenades. Their gear. Something in each of them comes back online.)', { hold: 1.5 }],
+          ['cancer', 'Do we... return the sabers?'], ['bouncer', 'Keep \'em. Nobody\'s using those again.'], ['igor', 'I will keep mine. As a memory.'], ['wiener', 'Mount up. And Ricky—'], ['ricky', 'Deleted it, Sarge. ...It has forty thousand views.']] } },
     { id: 'm7', name: 'Ricky\'s Bad Idea', tier: 2, intro: 'Ricky went live. Forty viewers. One of them was the enemy.',
       objectives: [
         { kind: 'survive', time: 140, hint: 'Survive: Ricky posted your location online', say: [['ricky', 'Shout out to the chat! Go stream my mixtape, Tapes From My Pops, link in bio!'], ['igor', 'Tapes From My Pops. Is terrible name.'], ['ricky', 'It\'s a GREAT name. It\'s personal.'], ['cancer', 'You make tapes about your father?'], ['ricky', 'About what he left behind. Shoot the guys, Cancer.']] },
@@ -308,7 +335,7 @@ export const CHAPTERS = [
       cut: { in: [['command', 'Uh oh. Explosives on the hull. Didn\'t see that one coming!']],
         out: [['cancer', 'Yacht party is tonight. Dress code: lethal.'], ['command', 'Black tie, team. Ballin\'s guests all wear black tie.'], ['wiener', 'How do you know the dress code before we do?'], ['command', 'I\'m Command, Sergeant. Command knows things!']] } },
   ] },
-  { id: 'c6', map: 'yacht', name: 'Yacht Party Crashers', hub: 'The squad found the leak. They found it in the wrong pocket.', missions: [
+  { id: 'c6', map: 'yacht', name: 'Yacht Party Crashers', tease: 'A yacht, a party, and a leak somebody has to find before the squad finds it the hard way.', hub: 'The squad found the leak. They found it in the wrong pocket.', missions: [
     { id: 'm14', name: 'Plus Ones', tier: 4, intro: 'A superyacht, a guest list, and Ricky in his element.',
       objectives: [
         { kind: 'reach', zone: 'stern', hint: 'Get aboard' },
@@ -334,7 +361,7 @@ export const CHAPTERS = [
       cut: { in: [['command', 'Hold on, team. And, uh, keep an eye on each other. Just a hunch.']],
         out: [['wiener', 'Secret calls. Disappearing. And a Brotherhood keycard. Explain it.'], ['cancer', 'No.'], ['wiener', 'Then you\'re confined to barracks. Command\'s orders. Mine too.'], ['ricky', 'He didn\'t do it! You don\'t know him like I— he didn\'t DO it!'], ['igor', 'Ricky. How do you know him so well?'], ['ricky', '...'], ['cancer', 'Leave it, kid. Fine, Frank. Confine me. I\'ve got nothing to lose.'], ['ricky', 'Stop SAYING that.']] } },
   ] },
-  { id: 'c7', map: 'hospital', name: 'One Week', hub: 'A week. He is going to spend it with them.', missions: [
+  { id: 'c7', map: 'hospital', name: 'One Week', tease: 'St. Mercy Hospital. Captain Cancer has an appointment he never told anybody about.', hub: 'A week. He is going to spend it with them.', missions: [
     { id: 'o1', name: 'One Week', tier: 5, featured: 'cancer', vision: '', music: '', intro: 'St. Mercy Hospital. The appointment he never told anybody about.',
       loadout: { cancer: { guns: [], armor: false } }, speed: { cancer: 0.82 }, enemyLook: 'security', enemyNames: ['Security', 'Security', 'Night Security', 'Head of Security'],
       actors: [{ id: 'doctor', look: 'doctor', zone: 'Oncology', name: 'Dr. Adebayo' }],
@@ -373,7 +400,7 @@ export const CHAPTERS = [
       cut: { in: [['wiener', 'Squad. Bags first, then the roof. And nobody dies in a hospital, it\'s embarrassing.']],
         out: [['wiener', 'Dale. I was wrong. I don\'t say that. I\'m saying it.'], ['wiener', 'Squad Six. Forty-one people. Every op planned with Command\'s intel. I\'ve suspected a leak for years. I picked the wrong man.'], ['cancer', 'You picked the right squad, Frank. You just aimed at the wrong guy.'], ['cancer', 'Here. Screenshot from Command\'s last video call. Look at his hand.'], ['igor', 'A championship ring. "O.B.B. Champions."'], ['wiener', 'Colonel Brisket.'], ['ricky', 'Pain is weakness leaving the body, right, Sarge?'], ['wiener', 'Not this one, Ricky. This one\'s staying.']] } },
   ] },
-  { id: 'c8', map: 'nuke', name: 'Winters', hub: 'Command is the enemy, the squad has to keep pretending it doesn\'t know, and Igor will not look at the reactor.', missions: [
+  { id: 'c8', map: 'nuke', name: 'Winters', tease: 'Twelve winters ago, Igor told two armies a lie. Today the squad walks into Command\'s reactor.', hub: 'Command is the enemy, the squad has to keep pretending it doesn\'t know, and Igor will not look at the reactor.', missions: [
     { id: 'i1', name: 'Twelve Winters Ago', map: 'outpost', tier: 4, featured: 'igor', vision: 'blizzard', music: '', intro: 'Igor. Twelve winters ago.',
       loadout: { igor: { guns: ['ssg08', 'usp'], armor: false } }, sight: 3.2, botSight: 12, enemyLook: 'winter_a',
       enemyNames: ['Sentry', 'Patrol', 'Signals Officer', 'Sentry', 'Patrol', 'Duty Officer'],
@@ -419,7 +446,7 @@ export const CHAPTERS = [
       cut: { in: [['ricky', 'Real talk, if I don\'t make it, tell my mixtape I loved it.'], ['cancer', 'You\'re going to make it. That\'s an order.'], ['ricky', 'You\'re not my sergeant.'], ['cancer', 'No. I\'m not.']],
         out: [['command', 'Ballin\' Arena, tomorrow night. Sold out. See you there, team. I\'ll be courtside.'], ['wiener', 'The desert depot first. Then the arena.'], ['igor', 'Tomorrow, we end this. Tonight, we drink. Only water. I am joking. Not water.']] } },
   ] },
-  { id: 'c9', map: 'dust', name: 'Dust To Dust', hub: 'Espresso.', missions: [
+  { id: 'c9', map: 'dust', name: 'Dust To Dust', tease: 'The last stop. Bring everything.', hub: 'Espresso.', missions: [
     { id: 'm23', name: 'Long A', tier: 6, intro: 'The Brotherhood\'s desert depot. The last thing between the squad and the arena.',
       objectives: [
         { kind: 'reach', zone: 'Long Doors', hint: 'Push Long A' },

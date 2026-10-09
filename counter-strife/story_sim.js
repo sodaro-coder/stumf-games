@@ -36,8 +36,9 @@ export class StoryMatch extends Match {
   get unlockedNow() { return this._un || (this._un = new Set()); }
   get squadChars() { return SQUAD.filter((c) => !this.absent.has(c)); }
   // ---- the squad ----
+  skinFor() { return null; }   // issue kit only: cosmetics stay in multiplayer
   add(id, info) {
-    const p = super.add(id, { ...info, team: info.team || 'CT' });
+    const p = super.add(id, { ...info, team: info.team || 'CT', knife: null, agent: null });
     if (p.team === 'CT') {
       if (!p.char) {   // real players take the character they asked for if it is free, else the next free one
         const taken = new Set([...this.players.values()].filter((q) => q !== p && q.char && !(q.bot && q.squad)).map((q) => q.char));   // AI squadmates step aside for a human
@@ -69,7 +70,7 @@ export class StoryMatch extends Match {
     if (C.sidearm) p.inv[2] = { wid: 'glock', ammo: GLOCK_SWITCH.mag, reserve: GLOCK_SWITCH.reserve, sw: true, fresh: true };
     else { const pid = tier >= 4 ? 'deagle' : tier >= 2 ? 'fiveseven' : 'p2000', pw = W_BY_ID[pid]; p.inv[2] = { wid: pid, ammo: pw.mag, reserve: pw.reserve, skin: this.skinFor(p, pid), fresh: true }; }
     p.nades = ['he', 'flash']; p.armor = 100; p.helmet = true; p.cur = 1; p.money = 0;
-    const L = (this.mission.loadout || {})[p.char];   // a level's own kit: a kitchen knife, the Switch and nothing else, a hospital gown...
+    const L = (this.mission.loadout || {})[p.char] || (this.mission.loadout || {}).all;   // a level's own kit: a kitchen knife, the Switch and nothing else, a hospital gown...
     if (L) {
       p.inv = L.noKnife ? {} : { 3: { wid: 'knife' } }; p.nades = []; p.cur = L.noKnife ? 0 : 3;
       for (const w of L.guns || []) { if (w === 'glock_sw') { p.inv[2] = { wid: 'glock', ammo: GLOCK_SWITCH.mag, reserve: GLOCK_SWITCH.reserve, sw: true, fresh: true }; p.cur = 2; } else { const ww = W_BY_ID[w]; if (ww) { const sl = ww.cat === 'pistol' ? 2 : 1; p.inv[sl] = { wid: w, ammo: ww.mag, reserve: ww.reserve * 2, fresh: true }; p.cur = Math.min(p.cur, sl); } } }
@@ -206,6 +207,10 @@ export class StoryMatch extends Match {
     const wid = opts.wid || guns[Math.floor(this.rng() * guns.length)], w = W_BY_ID[wid];
     p.inv = { 3: { wid: 'knife' }, [w.cat === 'pistol' ? 2 : 1]: { wid, ammo: w.mag, reserve: w.reserve * 3 } }; p.cur = w.cat === 'pistol' ? 2 : 1;
     if (this.rng() < 0.3) p.nades = ['he']; p.armor = tier >= 2 ? 100 : 0; p.helmet = tier >= 4;
+    if (this.mission.melee) {   // the club: fists only (they're dancers, not soldiers), no armour, a look from the line-up
+      p.inv = { 3: { wid: 'knife' } }; p.cur = 3; p.nades = []; p.armor = 0; p.helmet = false;
+      const looks = this.mission.enemyLooks || []; if (!opts.look && looks.length) p.lookAs = looks[this.eid % looks.length];
+    }
     p.guard = opts.guard || null; this.enemies.add(id);
     return p;
   }
@@ -346,6 +351,7 @@ export class StoryMatch extends Match {
   ability(p) {
     if (!p || !p.alive || !p.squad || this.phase !== 'live') return;
     const A = (CHARACTERS[p.char] || {}).ability; if (!A) return;
+    if (this.mission.noAbility) { const m = { type: 'toast', data: { text: 'Nope. The bouncer took that too.' } }; if (p.local) this.onLocal('ev', m); else if (!p.bot) this.send('ev', m, p.id); return; }
     if (!this.unlocked(p.char)) { const m = { type: 'toast', data: { text: `${A.name} is locked until ${(CHARACTERS[p.char] || {}).short}'s story unlocks it` } }; if (p.local) this.onLocal('ev', m); else if (!p.bot) this.send('ev', m, p.id); return; }
     const now = this.clock || 0;
     if (A.id === 'mess_kit') {   // Combat Medic: every squadmate in reach back to full health
@@ -392,6 +398,7 @@ export class StoryMatch extends Match {
       if (group === 'head' && !v.bot) amount *= this.diff.hsTaken / 4;
     }
     if (v === this.boss && group === 'head' && this.boss.beam && this.boss.beam.charge) { this.boss.beam.stagger = (this.boss.beam.stagger || 0) + amount; }
+    if (this.mission.melee && by && by.team === 'T' && weapon === 'knife' && v.squad) amount = 10;   // a slap from a dancer: 10, flat
     if (v === this.boss && this.sceneT > 0) return;   // nobody lands a hit on it while a scene plays
     if (v === this.boss && v.bossKey && v.bossKey !== 'ballin') {   // the father and the Reaper: hits land properly only in an opening
       const B = BOSSES[v.bossKey]; amount *= v.vuln > 0 ? B.vulnMul : B.armorMul;
@@ -404,6 +411,7 @@ export class StoryMatch extends Match {
   }
   kill(v, by, weapon, head, wallbang) {
     super.kill(v, by, weapon, head, wallbang);
+    if (this.mission.melee && v.team === 'T') this.event('glitter', { x: v.x, y: v.y + 1.1, z: v.z });   // the vests: party poppers. Every one of them.
     if (v.squad && v.bot) v.reviveAt = (this.clock || 0) + this.diff.revive;   // AI squadmates get back up
     if (v === this.npc) { this.event('banner', { text: 'ESCORT DOWN', sub: 'back to the last checkpoint…' }); this.failT = 3; }
     if (this.state && this.state.who === v.id && (v.carrying || v.downed) && this.phase === 'live') { this.event('banner', { text: `${(CHARACTERS[v.char] || {}).short || 'They'} went down`, sub: 'back to the last checkpoint…' }); this.failT = 3; }
@@ -728,7 +736,7 @@ export class StoryMatch extends Match {
     const st = this.state, o = st && this.mission.objectives[this.obj];
     const b = this.boss, bm = b && b.beam;
     this.event('story', {
-      mission: this.mi, obj: this.obj, n: this.mission.objectives.length, hint: o ? o.hint : '', kind: o ? o.kind : '', have: st ? Math.floor(st.have) : 0, need: st ? Math.round(st.need) : 0,
+      mission: this.mi, obj: this.obj, n: this.mission.objectives.length, melee: !!this.mission.melee, hint: o ? o.hint : '', kind: o ? o.kind : '', have: st ? Math.floor(st.have) : 0, need: st ? Math.round(st.need) : 0,
       next: st && st.puzzle ? st.next : 0,
       markers: this.markers.map((m) => ({ id: m.id, x: +m.x.toFixed(2), z: +m.z.toFixed(2), kind: m.kind, label: m.label, done: !!m.done, prog: +(m.prog || 0).toFixed(2) })),
       boss: b ? { id: b.id, hp: Math.max(0, Math.round(b.hp)), max: b.maxHp, name: b.bossKey && BOSSES[b.bossKey] ? BOSSES[b.bossKey].name : BOSS.name } : null,

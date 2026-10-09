@@ -7,8 +7,8 @@
 import * as THREE from '../sdk/three.module.min.js';
 import { CHARACTERS, MISSIONS, CHAPTERS, SQUAD } from './story.js';
 
-const COLORS = { radio: '#a8b4bc', dad: '#c8a050', danny: '#f2b080', doctor: '#cfe0ea', nurse: '#cfe0ea', enemy: '#c8c8c8', wiener: '#e8613a', cancer: '#9ad0ff', ricky: '#c07aff', igor: '#8fd06a', recruit: '#d8d8a0', boss: '#ff3b3b', command: '#ffb04a', tape: '#9ad0ff', squad: '#ffffff' };
-const VOICE = { radio: [0.85, 1.25], dad: [0.55, 0.92], danny: [1.7, 1.1], doctor: [0.95, 0.95], nurse: [1.15, 1.0], bouncer: [0.6, 1.0], boss: [0.6, 1.0], ricky: [1.2, 1.05], igor: [0.75, 0.95], cancer: [0.9, 0.95], tape: [0.88, 0.92], wiener: [0.8, 1.05], command: [1.0, 1.15], recruit: [1.25, 1.1] };
+const COLORS = { headliner: '#d070ff', radio: '#a8b4bc', dad: '#c8a050', danny: '#f2b080', doctor: '#cfe0ea', nurse: '#cfe0ea', enemy: '#c8c8c8', wiener: '#e8613a', cancer: '#9ad0ff', ricky: '#c07aff', igor: '#8fd06a', recruit: '#d8d8a0', boss: '#ff3b3b', command: '#ffb04a', tape: '#9ad0ff', squad: '#ffffff' };
+const VOICE = { headliner: [1.35, 0.9], radio: [0.85, 1.25], dad: [0.55, 0.92], danny: [1.7, 1.1], doctor: [0.95, 0.95], nurse: [1.15, 1.0], bouncer: [0.6, 1.0], boss: [0.6, 1.0], ricky: [1.2, 1.05], igor: [0.75, 0.95], cancer: [0.9, 0.95], tape: [0.88, 0.92], wiener: [0.8, 1.05], command: [1.0, 1.15], recruit: [1.25, 1.1] };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const lineTime = (l) => 1.6 + String(l.text).length * 0.045 + ((l.o && l.o.hold) || 0);   // the same pace the host uses (story_sim.js scene())
 const stage = (t) => /^\(.*\)$|^\*.*\*$/.test(String(t).trim());   // "(laughing)", "*coughs*": a stage direction, not spoken
@@ -265,6 +265,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
       if (type === 'unlock') { const C = CHARACTERS[data.char] || {}, A = C.ability || {}, el = $('.sc-unlock'); el.innerHTML = `<b>ABILITY UNLOCKED</b><h2>${esc(A.name || '')}</h2><p>${esc(A.desc || '')}</p><p style="margin-top:8px"><kbd>G</kbd> keyboard · <kbd>SKILL</kbd> phone · <kbd>D-pad ↑</kbd> controller</p>`; el.style.display = 'block'; if (audio) audio.play('unlock', 0.9); setTimeout(() => { el.style.display = 'none'; }, 7000); }
     },
     get cutscene() { return cutQ.length > 0; },
+    get melee() { return !!(S && S.melee); },
     get mine() { return S && S.chars ? S.chars.find((c) => c.id === myId) : null; },
     get focus() { return focusT > 0; },
     skip: askSkip,
@@ -282,7 +283,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
       const done = st.chapter >= CHAPTERS.length, c = CHAPTERS[st.chapter] || {}, me = (st.party || []).find((p) => p.id === myId) || {}, taken = new Set((st.party || []).filter((p) => p.id !== myId).map((p) => p.char));
       const all = (st.party || []).every((p) => p.ready);
       h.innerHTML = `<div><small style="color:#f2a33a;letter-spacing:.2em">${done ? 'CAMPAIGN COMPLETE' : 'NEXT: CHAPTER ' + (st.chapter + 1)}</small><h2>${esc(done ? 'Operation Ballin\' Out' : c.name)}</h2>
-        <div style="color:#8d97a5;margin-bottom:10px">${esc(done ? 'Replay any chapter from the Story tab.' : c.hub || '')}</div>
+        <div style="color:#8d97a5;margin-bottom:10px">${esc(done ? 'Replay any chapter from the Story tab.' : c.tease || c.hub || '')}</div>
         ${(st.party || []).map((p) => `<div class="p" style="--c:${COLORS[p.char] || '#fff'}"><b>${esc(p.name)}</b><span>${esc((CHARACTERS[p.char] || {}).short || '')}</span>${p.ready ? '<span class="ok">READY</span>' : '<span>not ready</span>'}</div>`).join('')}
         <div style="margin-top:10px;color:#8d97a5;font-size:12px">Characters nobody picks are played by AI squadmates.</div>
         <div class="chars" style="margin-top:6px">${SQUAD.map((k) => `<button data-ch="${k}" class="${me.char === k ? 'sel' : ''}" ${taken.has(k) ? 'disabled' : ''}>${esc(CHARACTERS[k].short)}</button>`).join('')}</div>

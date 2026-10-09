@@ -112,7 +112,7 @@ export class Bots {
       else moveStep(W, p, inp, dt, w.speed * 0.0254);
       const onTarget = Math.abs(ey) < 0.06 + 0.4 / Math.max(d, 1);
       if (b.react <= 0 && onTarget && b.cd <= 0 && it) {
-        if (w.cat === 'knife') { if (d < 1.6) { m.shot(p, 'knife', [{ id: tgt.id, group: 'chest', pen: 1 }], eye); b.cd = 0.5; } }
+        if (w.cat === 'knife') { if (d < 1.6) { m.shot(p, 'knife', [{ id: tgt.id, group: 'chest', pen: 1 }], eye); b.cd = m.mission && m.mission.melee ? 0.95 : 0.5; } }
         else if (p.nades.includes('he') && d > 8 && d < 26 && b.heRound !== m.round && Math.random() < 0.02) { b.heRound = m.round; this.throwAt(p, 'he', tgt.x, tgt.z); b.cd = 0.8; }
         else if (it.ammo > 0) {
           this.fire(p, b, w, it, eye, L);

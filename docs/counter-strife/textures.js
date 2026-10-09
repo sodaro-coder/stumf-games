@@ -48,6 +48,14 @@ const P = {
     cell(u, v, 22, 13, C); if (C[0] < 0.16) { const t = C[2] < 0.5 ? 0.78 : 1.1, e = 1 - C[0] / 0.16; o[0] *= t; o[1] *= t; o[2] *= t; o[3] += e * 0.5; }
     const wind = vnoise(u * 6 + v * 40, v * 3, 40, 14); o[0] -= wind * 6; o[1] -= wind * 6; o[2] -= wind * 4;
   },
+  neon(u, v, o) {   // a lit tube: hot core, soft falloff to the edges
+    const e = Math.min(v, 1 - v) * 2, k = 0.55 + 0.45 * Math.pow(Math.min(1, e * 1.6), 0.6), f = fbm(u, v, 30, 2, 51) * 0.08;
+    o[0] = 255 * k; o[1] = (70 + 120 * k * k) * k + f * 40; o[2] = 200 * k; o[3] = 0.5;
+  },
+  velvet(u, v, o) {   // crushed velvet: a deep pile with a sheen that shifts in patches
+    const n = fbm(u, v, 5, 4, 61), f = fbm(u, v, 80, 2, 62), k = 0.7 + n * 0.45 + (f - 0.5) * 0.15;
+    o[0] = 78 * k; o[1] = 22 * k; o[2] = 66 * k; o[3] = 0.4 + f * 0.3;
+  },
   snow(u, v, o) {   // packed snow: soft drifts and blue hollows
     const n = fbm(u, v, 3, 4, 41), f = fbm(u, v, 60, 2, 43), k = 0.94 + n * 0.06;
     o[0] = 232 * k + (f - 0.5) * 8; o[1] = 237 * k + (f - 0.5) * 8; o[2] = 246 * k + (f - 0.5) * 6; o[3] = n * 0.4 + f * 0.2;

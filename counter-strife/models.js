@@ -189,7 +189,8 @@ export function setTpGun(r, wid, att = null) {
   if (r.tpKey === key) return; r.tpKey = key;
   for (const c of [...r.tpGun.children]) r.tpGun.remove(c);
   const w = W_BY_ID[wid], cat = w ? w.cat : wid === 'c4' ? 'c4' : wid === 'knife' || !wid ? 'knife' : 'grenade';
-  const m = cat === 'c4' ? makeBomb() : cat === 'knife' ? makeKnife(null, null, undefined, undefined, false) : cat === 'grenade' ? makeGrenade(wid, undefined, undefined, false) : makeGun(wid, null, undefined, undefined, false, att);
+  if (wid === 'fists') { r.tpGun.userData = { grip: new THREE.Vector3(...TP_GRIP.knife), fore: null, cat: 'knife' }; return; }   // bare hands: nothing to hold
+  const m = wid === 'knife:dildo' ? makeKnife('k_dildo', null, undefined, undefined, false) : cat === 'c4' ? makeBomb() : cat === 'knife' ? makeKnife(null, null, undefined, undefined, false) : cat === 'grenade' ? makeGrenade(wid, undefined, undefined, false) : makeGun(wid, null, undefined, undefined, false, att);
   if (cat === 'c4') m.scale.setScalar(0.8);
   const grip = m.userData.grip || new THREE.Vector3(), t = TP_GRIP[cat] || TP_GRIP.rifle;
   m.position.set(t[0] - grip.x * m.scale.x, t[1] - grip.y * m.scale.y, t[2] - grip.z * m.scale.z);
@@ -958,6 +959,10 @@ export function makeProp(p) {
     case 'tree': P.push([place(CYL(0.13, 0.2, 2.4, 8), [0, 1.2, 0]), '#5e4430']); for (const [dx, dy, dz, r] of [[0, 3.2, 0, 1.3], [0.7, 2.7, 0.3, 0.9], [-0.6, 2.8, -0.4, 0.95], [0.1, 3.9, 0.2, 0.8]]) P.push([place(new THREE.IcosahedronGeometry(r, 1), [dx, dy, dz]), dy > 3.5 ? '#4a8a3a' : '#3a7230']); break;
     case 'goat': P.push([place(CAP(0.2, 0.45, 8), [0, 0.78, 0], [0, 0, Math.PI / 2], [1, 1, 0.85]), '#e8e4d8']); for (const [x, z] of [[-0.3, -0.12], [0.3, -0.12], [-0.3, 0.12], [0.3, 0.12]]) P.push([place(CYL(0.035, 0.03, 0.55, 6), [x, 0.28, z]), '#d8d0c0'], [place(CYL(0.04, 0.04, 0.05, 6), [x, 0.02, z]), '#333']);
       P.push([place(CAP(0.09, 0.12, 8), [0.52, 1.0, 0], [0, 0, -0.9]), '#e8e4d8'], [place(new THREE.ConeGeometry(0.025, 0.2, 6), [0.5, 1.2, -0.06], [0.3, 0, 0.5]), '#8a7a6a'], [place(new THREE.ConeGeometry(0.025, 0.2, 6), [0.5, 1.2, 0.06], [-0.3, 0, 0.5]), '#8a7a6a'], [place(CAP(0.03, 0.08, 6), [0.62, 0.85, 0]), '#ccc']); break;
+    case 'pole': P.push([place(CYL(0.035, 0.035, 3.0, 14), [0, 1.5, 0]), '#d8dce4'], [place(CYL(0.22, 0.24, 0.05, 20), [0, 0.025, 0]), '#b8bcc4'], [place(CYL(0.12, 0.12, 0.06, 16), [0, 2.98, 0]), '#b8bcc4']); break;   // chrome dance pole
+    case 'speaker': P.push([place(BOX(0.6, 1.1, 0.5), [0, 0.55, 0]), '#16161a']); for (const [y, r] of [[0.32, 0.2], [0.78, 0.11]]) P.push([place(CYL(r, r, 0.03, 18), [0, y, -0.26], [Math.PI / 2, 0, 0]), '#2c2c32'], [place(CYL(r * 0.35, r * 0.35, 0.04, 12), [0, y, -0.27], [Math.PI / 2, 0, 0]), '#46464e']); break;
+    case 'stool': P.push([place(CYL(0.19, 0.17, 0.08, 16), [0, 0.76, 0]), '#5a1840'], [place(CYL(0.03, 0.03, 0.72, 8), [0, 0.38, 0]), '#b8bcc4'], [place(CYL(0.18, 0.2, 0.03, 16), [0, 0.015, 0]), '#a8acb4'], [place(new THREE.TorusGeometry(0.14, 0.012, 6, 16), [0, 0.3, 0], [Math.PI / 2, 0, 0]), '#b8bcc4']); break;
+    case 'discoball': P.push([place(CYL(0.008, 0.008, 0.6, 4), [0, 3.7, 0]), '#888']); break;   // the ball itself is lit, below
     case 'tv': P.push([place(BOX(0.9, 0.7, 0.5), [0, 1.25, 0]), '#2a2a2a'], [place(BOX(0.72, 0.52, 0.02), [0, 1.25, -0.255]), '#3a6a9a'], [place(BOX(1.2, 0.9, 0.6), [0, 0.45, 0]), '#6a4a2a']); for (let k = 0; k < 5; k++) P.push([place(BOX(0.2, 0.04, 0.12), [-0.4 + k * 0.05, 0.92 + k * 0.04, 0.1]), '#111']); break;
     case 'barrel': P.push([place(CYL(0.3, 0.3, 0.88, 14), [0, 0.44, 0]), '#3a6a8a']); for (const y of [0.12, 0.44, 0.76]) P.push([place(CYL(0.31, 0.31, 0.04, 14), [0, y, 0]), '#2a4a62']); P.push([place(CYL(0.29, 0.29, 0.01, 14), [0, 0.885, 0]), '#2e5470'], [place(CYL(0.04, 0.04, 0.02, 8), [0.15, 0.89, 0.05]), '#222']); break;
     case 'dummy': for (const x of [-0.1, 0.1]) P.push([place(CAP(0.07, 0.7, 8), [x, 0.45, 0]), '#e8d040']); P.push([place(CAP(0.17, 0.4, 10), [0, 1.15, 0], [0, 0, 0], [1, 1, 0.65]), '#e8d040'], [place(SPH(0.13, 12, 9), [0, 1.62, 0]), '#e8d040'], [place(BOX(0.22, 0.02, 0.02), [0, 1.64, -0.125]), '#111']);
@@ -969,6 +974,12 @@ export function makeProp(p) {
   }
   if (P.length) g.add(new THREE.Mesh(merge(P), propMat()));
   if (L.length) g.add(new THREE.Mesh(merge(L), leafMat()));
+  if (p.type === 'discoball') {   // a mirror ball: faceted, bright, slowly turning (game.js spins props with spin)
+    const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 2), new THREE.MeshBasicMaterial({ color: '#dfe2f0' }));
+    ball.geometry = ball.geometry.toNonIndexed(); ball.geometry.computeVertexNormals();
+    const col = new Float32Array(ball.geometry.attributes.position.count * 3); for (let i = 0; i < col.length; i += 9) { const k = 0.55 + ((i * 2654435761) % 97) / 97 * 0.45; col.fill(k, i, i + 9); }
+    ball.geometry.setAttribute('color', new THREE.BufferAttribute(col, 3)); ball.material.vertexColors = true; ball.position.set(0, 3.3, 0); g.add(ball); g.userData.spin = ball;
+  }
   if (p.type === 'lamp') { const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), basic('#ffe9a8')); bulb.position.set(0.55, 3.8, 0); g.add(bulb); }
   g.position.set(p.x, p.y || 0, p.z); g.rotation.y = p.rot || 0;
   return g;

@@ -581,7 +581,7 @@ export default function start({ cfg, E, N, smoke }) {
         culler = new PVSCuller(decodePVS(pd), B);
         for (const c of W.chunks) { const bb = c.geometry.boundingBox; culler.addBox(c, bb.min.x, bb.min.z, bb.max.x, bb.max.z); }
       }
-      for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); }
+      W.spinners = []; for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); if (m.userData.spin) W.spinners.push(m.userData.spin); }
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       hud.radarBase(W);
       if (SC) SC.setWorld(W);
@@ -617,19 +617,21 @@ export default function start({ cfg, E, N, smoke }) {
     }
 
     // ---- first-person view model ----
+    let lastMelee = false;
     let vm = null, vmKey = '', vmSunK = 1, vmProbeK = 1; const vmProbe = [1, 1, 1];
     function setViewModel() {
       const it = me.cur === 4 ? { wid: me.nades[me.nadeSel] } : me.inv[me.cur];
       const wid = it ? it.wid : null;
       const team = me.team, info = st.roster.get(myId) || {};
-      const lo = loadout[team] || {}; const knife = lo.knife;
+      const lo = loadout[team] || {}; const knife = mode === 'story' ? null : lo.knife;   // the story is played in issue kit: no skins, no costumes
       const att = wid ? myAtt(wid) : null;
-      const key = `${wid}|${it && it.skin ? it.skin.uid : ''}|${team}|${knife ? knife.uid : ''}|${att ? (att.optic || '') + (att.muzzle || '') : ''}`;
+      const key = `${wid}|${SC && SC.melee ? 'saber' : ''}|${it && it.skin ? it.skin.uid : ''}|${team}|${knife ? knife.uid : ''}|${att ? (att.optic || '') + (att.muzzle || '') : ''}`;
       if (key === vmKey) return; vmKey = key;
       if (vm) vmScene.remove(vm);
       const sleeve = team === 'T' ? '#5e5440' : '#33445c', glove = team === 'T' ? '#2c2824' : '#1e2126';
       if (!wid) { vm = null; return; }
-      if (wid === 'knife') { const ki = knife ? itemInfo({ ...knife }) : null; vm = makeKnife(ki ? ki.weapon : null, knife && ki && !/:Vanilla$/.test(knife.def) ? skinTexture(knife, ki) : null, sleeve, glove); }   // Vanilla keeps the knife's own colours
+      if (wid === 'knife' && SC && SC.melee) vm = makeKnife('k_dildo', null, sleeve, glove);   // all anyone was allowed to keep
+      else if (wid === 'knife') { const ki = knife ? itemInfo({ ...knife }) : null; vm = makeKnife(ki ? ki.weapon : null, knife && ki && !/:Vanilla$/.test(knife.def) ? skinTexture(knife, ki) : null, sleeve, glove); }   // Vanilla keeps the knife's own colours
       else if (G_BY_ID[wid]) { vm = makeGrenade(wid, sleeve, glove, true); vm.scale.setScalar(1.25); }
       else if (wid === 'c4') { vm = makeBomb(sleeve, glove, true); vm.scale.setScalar(0.9); }
       else if (it.skin && /:Finger Gun$/.test(it.skin.def)) vm = makeFingerGun(sleeve);   // the Finger Gun is literally a finger gun
@@ -848,7 +850,7 @@ export default function start({ cfg, E, N, smoke }) {
         match.shot(p, d.w, hits, o);
         const held = d.w === 'knife' ? ((p.knife || {})[p.team]) : (Object.values(p.inv).find((i) => i && i.wid === d.w) || {}).skin;
         const sup = !!d.sup && (rosterAtt(peer, d.w) || {}).muzzle === 'suppressor';
-        const fireMsg = { id: peer, wid: d.w, o: [o.x, o.y, o.z], e: Array.isArray(d.e) ? d.e.slice(0, 3).map(Number) : null, s: sup ? supSound(w) : shotSound(d.w, held, hits.length > 0 || !!d.wh), sup: sup ? 1 : 0 };
+        const fireMsg = { id: peer, wid: d.w, o: [o.x, o.y, o.z], e: Array.isArray(d.e) ? d.e.slice(0, 3).map(Number) : null, s: sup ? supSound(w) : d.w === 'knife' && match.mission && match.mission.melee ? (hits.length ? 'wetslap' : 'doing') : shotSound(d.w, held, hits.length > 0 || !!d.wh), sup: sup ? 1 : 0 };
         send('fire', fireMsg); onFire(fireMsg); if (bots) bots.heard(o.x, o.z, p, sup ? 12 : 30);
         return;
       }
@@ -971,6 +973,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (fxd && vp2) { if (parts) parts.emit(vp2.x, vp2.y + 1.2, vp2.z, { n: fxd.n, colors: fxd.colors, speed: fxd.speed, up: 1, size: 0.06, life: 1.4, g: fxd.g ?? 1 }); if (fxd.text) textPop(scene, vp2.x, vp2.y + 2.2, vp2.z, fxd.text, fxd.textColor); audio.at(fxd.sound, vp2.x, vp2.y, vp2.z, cam, 40); }
       }
       if (type === 'planted') { hud.banner('The bomb has been planted', `Site ${data.site}`, 3000); audio.play('planted'); announce('planted'); if (data.by === myName) stats.plant++; }
+      if (type === 'glitter' && parts) { for (let k = 0; k < 3; k++) parts.emit(data.x, data.y, data.z, { n: 40, colors: ['#ff4ad2', '#ffd23a', '#5af0ff', '#ffffff', '#b040ff'], speed: 4.5, up: 2.5, size: 0.05, life: 1.6 }); audio.at('doing', data.x, data.y, data.z, cam, 30); }   // a vest goes off: confetti
       if (type === 'sound' && data.s !== 'defused' && data.s) audio.at(data.s, data.x || me.x, me.y + 1, data.z || me.z, cam, 45);
       if (type === 'sound' && data.s === 'defused') { audio.play('defused'); announce('defused'); hud.banner('The bomb has been defused', '', 3000); const b = match ? match.bomb : null; if (b && b.defuser === myId) stats.defuse++; if (!match && st.bomb && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2) stats.defuse++; }
       if (type === 'explode') { audio.at('explode', data.x, data.y, data.z, cam, 200); me.flash = Math.max(me.flash, Math.hypot(data.x - me.x, data.z - me.z) < data.r * 1.5 ? 1.2 : 0.4); camShake = 1.2; }
@@ -1174,7 +1177,7 @@ export default function start({ cfg, E, N, smoke }) {
       }
       if (h) { const p = st.players.get(h.id); if (p) { puff(p.x, p.y + 1.2, p.z); if (parts) parts.emit(p.x, p.y + 1.2, p.z, { n: 10, colors: ['#8a0d0d', '#5a0505'], speed: 2.2, up: 0.8, size: 0.035, life: 0.5 }); } }
       const wall = !h && wallAny;
-      audio.play(shotSound('knife', (loadout[me.team] || {}).knife, !!h || wall), 0.7);
+      audio.play(SC && SC.melee ? (h ? 'wetslap' : 'doing') : shotSound('knife', (loadout[me.team] || {}).knife, !!h || wall), 0.7);
       toHost('shot', { w: 'knife', h: h ? [{ id: h.id, group: 'chest', pen: 1, heavy: !!heavy }] : [], o: [eye.x, eye.y, eye.z], e: null, wh: wall });
     }
     function throwNade(lob) {
@@ -1429,7 +1432,7 @@ export default function start({ cfg, E, N, smoke }) {
         r.vx = (r.vx || 0) + ((p.x - r.x) / Math.max(dt, 1e-3) - (r.vx || 0)) * kv; r.vz = (r.vz || 0) + ((p.z - r.z) / Math.max(dt, 1e-3) - (r.vz || 0)) * kv; r.vy = (r.vy || 0) + ((p.y - (r.y || p.y)) / Math.max(dt, 1e-3) - (r.vy || 0)) * kv;
         r.x = p.x; r.z = p.z; r.y = p.y;
         { const pr = p.prone || 0; r.g.position.set(p.x + Math.sin(p.yaw) * 0.85 * pr, p.y + pr * 0.14, p.z + Math.cos(p.yaw) * 0.85 * pr); }   // feet behind the hitbox centre when lying r.g.rotation.order = 'YXZ'; r.g.rotation.y = p.yaw; r.g.rotation.x = r.dieT ? 0 : -(p.prone || 0) * Math.PI / 2 * 0.94;   // prone: lie forward
-        setTpGun(r, p.wid || 'knife', rosterAtt(p.id, p.wid));
+        setTpGun(r, SC && SC.melee && (p.wid || 'knife') === 'knife' ? (p.team === 'T' ? 'fists' : 'knife:dildo') : p.wid || 'knife', rosterAtt(p.id, p.wid));   // the club: sabers versus slaps
         if (r.tag) r.tag.visible = p.alive && p.team === me.team && !(spectating && p.id === spectating.id) && !(SC && SC.cutscene);   // no name tags in a cutscene's shots
         r.t += dt;
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
@@ -1554,6 +1557,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (dsh && W) dsh.update(renderer, scene, cam, LIGHT.sunDir.value);
       if (sky) { sky.position.set(cam.position.x, 0, cam.position.z); if (sky.userData.drift) sky.userData.drift.x += dt * 0.0015; }
       // ---- draw ----
+      for (const sp of W.spinners || []) sp.rotation.y += dt * 0.5;   // mirror balls
       animateGlow(now, dt);   // Mythic finishes and outfits: pulsing, crawling veins
       if (postOn()) {
         const rt = postTarget(); renderer.setRenderTarget(rt);
@@ -1578,7 +1582,8 @@ export default function start({ cfg, E, N, smoke }) {
         hud.money(me.money, canBuy());
         const it = me.inv[me.cur];
         const ammoTxt = spectating ? `${esc(itemName(spectating.wid || 'knife'))}` : me.cur === 4 ? `${esc(itemName(me.nades[me.nadeSel] || ''))}` : w && w.cat !== 'knife' && it ? `${it.ammo}<small> / ${it.reserve}</small>` : '';
-        const slotHtml = [1, 2, 3, 6, 4, 5].map((s) => s === 4 ? (me.nades.length ? `<div class="slot ${me.cur === 4 ? 'on' : ''}"><b>4</b>${me.nades.map((n) => `<img src="${weaponIcon(n)}">`).join('')}</div>` : '') : me.inv[s] ? `<div class="slot ${me.cur === s ? 'on' : ''}"><b>${s === 6 ? 3 : s}</b><img src="${weaponIcon(s === 5 ? 'c4' : me.inv[s].wid)}">${esc(s === 5 ? 'C4 Bomb' : s === 6 ? 'Zap-27' : s === 3 && (loadout[me.team] || {}).knife ? (itemInfo((loadout[me.team] || {}).knife) || {}).wpn || 'Knife' : itemName(me.inv[s].wid))}</div>` : '').join('');
+        if (SC && SC.melee !== lastMelee) { lastMelee = SC.melee; setViewModel(); }   // the club's sabers swap in as soon as the level says so
+        const slotHtml = [1, 2, 3, 6, 4, 5].map((s) => s === 4 ? (me.nades.length ? `<div class="slot ${me.cur === 4 ? 'on' : ''}"><b>4</b>${me.nades.map((n) => `<img src="${weaponIcon(n)}">`).join('')}</div>` : '') : me.inv[s] ? `<div class="slot ${me.cur === s ? 'on' : ''}"><b>${s === 6 ? 3 : s}</b><img src="${weaponIcon(s === 5 ? 'c4' : me.inv[s].wid)}">${esc(s === 5 ? 'C4 Bomb' : s === 6 ? 'Zap-27' : s === 3 && SC && SC.melee ? 'Dildo Saber' : s === 3 && mode !== 'story' && (loadout[me.team] || {}).knife ? (itemInfo((loadout[me.team] || {}).knife) || {}).wpn || 'Knife' : itemName(me.inv[s].wid))}</div>` : '').join('');
         hud.ammo(ammoTxt, me.alive ? slotHtml : '');
         hud.loc(W.zoneAt(me.x, me.z));
         const teams = { T: [], CT: [] };

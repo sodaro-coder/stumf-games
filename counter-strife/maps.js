@@ -507,6 +507,58 @@ function wienerHouse() {
   return B;
 }
 
+// ---- The Velvet Rope: the town's gentlemen's club, taken over by the Brotherhood ---------------------------------
+function club() {
+  const B = new MapBuilder(62, 50, 6, 'brick', 'asphalt');
+  B.open(1, 1, 61, 49, 0, 'asphalt');
+  B.house(8, 5, 57, 45, 4.5, 'brick', 'darkwood', [[8, 10, 9, 13], [56, 38, 57, 41]]);   // front door (west) and the back exit (east)
+  const wall = (x0, z0, x1, z1) => B.block(x0, z0, x1, z1, 4.5, 'brick');
+  // entrance and coat check
+  B.open(9, 6, 18, 16, 0, 'tile'); wall(18, 6, 19, 10); wall(18, 13, 19, 16); wall(9, 16, 18, 17);
+  B.block(10, 6, 16, 7, 1.1, 'darkwood');                                     // the coat-check counter
+  B.block(13, 10, 14, 11, 2.2, 'metal').block(13, 13, 14, 14, 2.2, 'metal');  // the metal detector
+  // the main floor: a stage with a runway, neon at its feet, tables
+  B.block(26, 12, 36, 20, 0.45, 'darkwood').block(30, 20, 32, 26, 0.45, 'darkwood');
+  B.block(25, 11, 37, 12, 0.08, 'neon').block(25, 20, 30, 21, 0.08, 'neon').block(32, 20, 37, 21, 0.08, 'neon').block(29, 26, 33, 27, 0.08, 'neon');
+  for (const [x, z] of [[21, 9], [22, 23], [40, 9], [41, 23], [21, 16], [38, 16]]) B.block(x, z, x + 1, z + 1, 0.75, 'darkwood');
+  B.block(19, 6, 44, 7, 1.0, 'velvet');                                       // banquette along the north wall
+  // the bar
+  B.block(46, 9, 48, 19, 1.1, 'darkwood').block(45, 9, 46, 19, 0.08, 'neon').block(53, 6, 56, 20, 2.2, 'darkwood');
+  // DJ booth
+  B.block(37, 25, 42, 28, 0.6, 'darkwood').block(38, 26, 41, 27, 1.3, 'metal');
+  // restrooms
+  B.open(9, 17, 18, 28, 0, 'tile'); wall(18, 17, 19, 21); wall(18, 24, 19, 28); B.block(10, 18, 12, 19, 0.9, 'tile').block(10, 26, 12, 27, 0.9, 'tile');
+  // the divider between the floor and the back
+  wall(9, 28, 12, 29); wall(15, 28, 22, 29); wall(25, 28, 46, 29); wall(49, 28, 56, 29);
+  // VIP lounge: velvet everything
+  B.open(9, 29, 30, 44, 0, 'velvet'); wall(30, 29, 31, 35); wall(30, 38, 31, 44);
+  for (const z of [30, 35, 40]) B.block(10, z, 13, z + 2, 0.8, 'velvet').block(14, z, 15, z + 2, 0.75, 'darkwood');
+  B.block(24, 41, 29, 43, 0.8, 'velvet');
+  // dressing room
+  B.open(31, 29, 44, 44, 0, 'tile'); wall(44, 29, 45, 31); wall(44, 34, 45, 44);
+  B.block(32, 42, 43, 43, 0.9, 'trim').block(41, 31, 43, 37, 1.8, 'crate');   // the vanity, a rack of costumes
+  // back hall to the alley
+  B.open(45, 29, 56, 44, 0, 'concrete'); B.block(51, 30, 55, 32, 1.4, 'crate').block(46, 41, 48, 43, 1.0, 'metal');
+  B.roof(8, 5, 57, 45, 4.5, 'roof');
+  B.zone('Street', 1, 6, 8, 20).zone('Entrance', 9, 6, 18, 16).zone('Main Floor', 19, 7, 44, 28).zone('Stage', 26, 12, 36, 20).zone('Bar', 45, 7, 56, 21)
+    .zone('DJ Booth', 36, 22, 43, 25).zone('Restrooms', 9, 17, 18, 28).zone('VIP Lounge', 9, 29, 30, 44).zone('Dressing Room', 31, 29, 44, 44)
+    .zone('Back Hall', 45, 29, 56, 44).zone('Back Exit', 57, 36, 61, 43).zone('Coat Check', 10, 7, 16, 9).zone('Front Door', 9, 10, 12, 13);
+  B.site('A', 26, 12, 36, 20).site('B', 9, 29, 30, 44);
+  B.buyzone('CT', 9, 6, 18, 16).buyzone('T', 31, 29, 44, 44);
+  for (let k = 0; k < 4; k++) { B.spawn('CT', 11 + k * 1.5, 12, -Math.PI / 2); B.spawn('T', 34 + k * 2, 36, 0); }
+  B.duelSpawn('CT', 12, 12, -Math.PI / 2).duelSpawn('T', 36, 36, 0);
+  B.sign(31, 6.05, 3.2, 0, 'THE VELVET ROPE', 6, 1.0, '#1a0618', '#ff4ad2');
+  B.sign(9.05, 12, 2.6, Math.PI / 2, 'NO WEAPONS\nBEYOND THIS POINT\n(club policy)', 2.2, 1.0, '#140c12', '#ffd23a');
+  B.sign(55.95, 13, 3.2, -Math.PI / 2, 'HAPPY HOUR 4-7\n2-FOR-1 WINGS\nNO TOUCHING', 2.4, 1.1, '#140c12', '#5af0ff');
+  B.sign(23.5, 27.95, 3.2, Math.PI, 'VIP', 1.4, 0.6, '#1a0618', '#ff4ad2');
+  B.sign(47.5, 27.95, 3.2, Math.PI, 'EMPLOYEES ONLY', 2.2, 0.5, '#1a1a1a', '#e0e0e0');
+  B.prop('pole', 28.5, 16.5).prop('pole', 33.5, 16.5).prop('pole', 31, 24.5).prop('discoball', 31, 16.5)
+    .prop('speaker', 24, 12).prop('speaker', 38, 12).prop('speaker', 43, 27).prop('speaker', 19.5, 27);
+  for (let z = 10; z <= 18; z += 2) B.prop('stool', 44.6, z + 0.5);
+  B.sky = 0x140a1e; B.fog = 0x2a1434; B.sunColor = 0xffc8f0; B.amb = [0xf4c0f4, 0x7a4a80]; B.sunDir = [0.3, 0.8, 0.2]; B.sunI = 1.7; B.ambI = 2.1; B.fogNear = 18; B.fogFar = 80;
+  return B;
+}
+
 // ---- Big Lou's place: Ricky picked the wrong house -----------------------------------------------------------------
 function mansion() {
   const B = new MapBuilder(72, 58, 6, 'brick', 'grass');
@@ -580,5 +632,6 @@ export const MAPS = {
   stadium: { id: 'stadium', name: 'Ballin\' Arena', short: 'Ballin\' Arena', parody: 'story mode', build: stadium, modes: [], story: true },
   wiener_house: { id: 'wiener_house', name: '14 Mustard Street', short: 'Mustard Street', parody: 'story mode', build: wienerHouse, modes: [], story: true },
   mansion: { id: 'mansion', name: 'The Marrone Residence', short: 'Big Lou\'s', parody: 'story mode', build: mansion, modes: [], story: true },
+  club: { id: 'club', name: 'The Velvet Rope', short: 'Velvet Rope', parody: 'story mode', build: club, modes: [], story: true },
   outpost: { id: 'outpost', name: 'Post 7', short: 'Post 7', parody: 'story mode', build: outpost, modes: [], story: true },
 };
