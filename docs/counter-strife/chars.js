@@ -69,7 +69,8 @@ function material(team, tint, hq, glow) {
 const SPEED = { walk: 1.0, walkBack: 1.1, walkLeft: 1.4, walkRight: 0.75, run: 3.1, runBack: 2.7, runLeft: 2.8, runRight: 3.2, crouchWalk: 0.6 };
 const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3(), _fw = new THREE.Vector3(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
 export function makeSoldier(look, team, hq = true) {
-  const L = look || {}, plainAgent = !L.speedo && !L.mustard && !L.eyes && !L.stripes && !['bun', 'swirl', 'curlers', 'beak', 'stem', 'beret', 'cap', 'mullet', 'headset', 'toque', 'bob', 'cone'].includes(L.hat);
+  // the default T / CT agents are the plain soldier in their team's uniform; every costume shows: its colours, its headgear
+  const L = look || {}, plainAgent = !!L.plain;
   const tint = plainAgent && !L.glow ? null : L.body;
   const g = new THREE.Group(), holder = new THREE.Group(); holder.rotation.y = Math.PI; g.add(holder);   // Mixamo faces +z; the game's players face -z
   const c = D.c, root = new THREE.Group();
@@ -318,6 +319,9 @@ function hat(head, L) {
     case 'bob': add(new THREE.SphereGeometry(0.15, 14, 10), c, 0, 0.16, 0.025, 0, 0, 0, 1.05, 1, 1.05); add(new THREE.BoxGeometry(0.2, 0.05, 0.06), c, 0.03, 0.24, -0.11, 0, 0, -0.25); break;   // can I speak to your manager
     case 'cone': add(new THREE.ConeGeometry(0.11, 0.32, 14), c, 0, 0.38, 0); add(new THREE.CylinderGeometry(0.08, 0.09, 0.03, 14), '#ffffff', 0, 0.36, 0); add(new THREE.BoxGeometry(0.26, 0.02, 0.26), c, 0, 0.22, 0); break;
     case 'beret': add(new THREE.SphereGeometry(0.14, 14, 8), c, 0.02, 0.29, 0, 0, 0, 0.18, 1.12, 0.32, 1.1); break;
+    case 'shemagh': if (L.plain) break; add(new THREE.SphereGeometry(0.15, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, 0.17, 0.005, 0, 0, 0, 1.04, 1, 1.06); add(new THREE.BoxGeometry(0.25, 0.085, 0.07), c, 0, 0.075, -0.115); add(new THREE.BoxGeometry(0.13, 0.2, 0.03), c, 0.02, 0.0, 0.13, 0.25, 0, 0.1); break;   // head wrap, face cloth, tail down the back
+    case 'helmet': if (L.plain) break; add(new THREE.SphereGeometry(0.155, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.17, 0.01, 0, 0, 0, 1.06, 0.92, 1.12); add(new THREE.CylinderGeometry(0.165, 0.17, 0.03, 16), c, 0, 0.17, 0.01, 0, 0, 0, 1, 1, 1.08);
+      if (L.visor) add(new THREE.BoxGeometry(0.23, 0.07, 0.025), '#0e1014', 0, 0.13, -0.16, 0.12); break;
     case 'cap': add(new THREE.SphereGeometry(0.135, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.45), c, 0, 0.22, 0); add(new THREE.CylinderGeometry(0.1, 0.1, 0.014, 14), c, 0, 0.26, -0.11, 0, 0, 0, 1.05, 1, 1.1); break;
     default: break;
   }

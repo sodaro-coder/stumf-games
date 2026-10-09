@@ -36,8 +36,8 @@ export const KNIFE_BY_ID = Object.fromEntries(KNIVES.map((k) => [k.id, k]));
 
 // ---- agents (player models). look = the body recipe models.js builds ----
 export const AGENTS = [
-  { id: 'a_t_default', name: 'Desert Rebel', team: 'T', tier: -1, look: { body: '#7a6a4a', legs: '#4e4636', head: '#c89a74', hat: 'balaclava', hatColor: '#2c2a26' } },
-  { id: 'a_ct_default', name: 'Task Force Gassy Gary', team: 'CT', tier: -1, look: { body: '#3c4e66', legs: '#2c3442', head: '#e0b896', hat: 'helmet', hatColor: '#2a3646' } },
+  { id: 'a_t_default', name: 'Desert Rebel', team: 'T', tier: -1, look: { body: '#7a6a4a', legs: '#4e4636', head: '#c89a74', hat: 'balaclava', hatColor: '#2c2a26', plain: true } },
+  { id: 'a_ct_default', name: 'Task Force Gassy Gary', team: 'CT', tier: -1, look: { body: '#3c4e66', legs: '#2c3442', head: '#e0b896', hat: 'helmet', hatColor: '#2a3646', plain: true } },
   { id: 'a_t_ops', name: 'Sand-in-Crack Specialist', team: 'T', tier: 2, look: { body: '#8a5a3a', legs: '#3a3026', head: '#b48264', hat: 'shemagh', hatColor: '#d8c6a0' } },
   { id: 'a_ct_swat', name: 'Sgt. Wet Willy', team: 'CT', tier: 2, look: { body: '#1e242c', legs: '#16191e', head: '#d8a888', hat: 'helmet', hatColor: '#111', visor: true } },
   { id: 'a_t_speedo', name: 'Speedo Steve', team: 'T', tier: 3, look: { body: '#e8b48e', legs: '#e8b48e', head: '#e8b48e', speedo: '#2246d8', hat: 'none', belly: true } },

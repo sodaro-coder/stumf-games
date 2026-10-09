@@ -4,7 +4,10 @@
 // box-built players, so it holds 60 fps on weak integrated graphics.
 import * as THREE from '../sdk/three.module.min.js';
 import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS, BOT_LEVELS } from './data.js';
-import { buildWorld } from './world.js';
+import { buildWorld, LIGHT } from './world.js';
+import { GraphicsSettingsManager, DynamicShadows, markCaster } from './graphics.js';
+import { PVSCuller, decodePVS, mapHash } from './pvs.js';
+import { PVS_DATA } from './pvs_data.js';
 import { MAPS } from './maps.js';
 import { mobileControls } from './mobile.js';
 import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf, recoilAt, nadeStep, speedOf, aimDir } from './sim.js';
@@ -239,16 +242,15 @@ export default function start({ cfg, E, N, smoke }) {
     const hello = { name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
 
     // ---- renderer & scene ----
-    // graphics quality: a fixed preset, or Auto (0): start from what this device has done before (or a guess from its
-    // cores/memory), then step down whenever it can't hold ~40 fps even at reduced resolution. Remembered per device.
-    const AUTO = !S.quality, QSTEPS = [0.5, 0.75, 1, 1.5, 2];
-    let Q = S.quality;
-    if (AUTO) { const saved = +(localStorage.getItem('cs:autoq') || 0), weak = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS/i.test(navigator.userAgent); Q = QSTEPS.includes(saved) && saved < 2 ? saved : weak ? 0.75 : 1; }
-    const hi = Q >= 1.5;  // High: antialiasing, sharper bump detail; lower settings stay fast on weak machines
-    const ultra = Q >= 2;  // Ultra: renders up to 2x the screen's pixels (4K on a 1080p screen), 16x texture filtering, finer baked light
-    setModelQuality(Q);
-    if (Q >= 0.75) loadChars();
-    const renderer = new THREE.WebGLRenderer({ antialias: hi, powerPreference: 'high-performance' });
+    // graphics: one GraphicsSettingsManager decides every switch (graphics.js). A fixed tier, or Auto (setting 0): start
+    // from what this device managed before (or a guess from its cores/memory), then step down whenever it can't hold
+    // ~40 fps even at reduced resolution. Remembered per device.
+    const gfx = new GraphicsSettingsManager(S.quality), AUTO = gfx.auto;
+    let Q = gfx.q, P = gfx.p;
+    setModelQuality(P.hqModels ? 1 : 0.75);
+    if (P.chars) loadChars();
+    const renderer = new THREE.WebGLRenderer({ antialias: P.msaa > 0, powerPreference: 'high-performance' });
+    gfx.probe(renderer);
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
     renderer.domElement.style.cssText = 'position:fixed;inset:0;width:100%;height:100%';
     document.body.appendChild(renderer.domElement);
@@ -258,19 +260,30 @@ export default function start({ cfg, E, N, smoke }) {
     const vmHemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2), vmSun = new THREE.DirectionalLight(0xffffff, 1.6); vmSun.position.set(1, 2, 1);
     const vmFill = new THREE.DirectionalLight(0xfff2e0, 0.5); vmFill.position.set(-0.3, 0.6, 1);   // soft fill from the viewer's side: the gun always reads, like any shooter's viewmodel
     vmScene.add(vmHemi, vmSun, vmFill);
-    // the final look (Medium and up): the frame is drawn in HDR, then one pass adds a soft bloom on the brightest things
-    // (muzzle flashes, the sun, glowing skins), filmic tone mapping, a gentle contrast/colour grade (cool shadows, warm
-    // highlights), a vignette and fine film grain. Low and Potato skip it and draw straight to the screen.
+    // the final look (Medium and up, graphics.js decides what's in it): the frame is drawn in HDR (2x MSAA on Medium,
+    // 4x on High), then ONE composite pass does all of it: screen-space ambient occlusion from the depth buffer (High),
+    // a soft bloom on the brightest things (muzzle flashes, the sun, glowing skins), ACES filmic tone mapping, a gentle
+    // contrast/colour grade (cool shadows, warm highlights), a vignette and fine film grain. Low and Potato skip it and
+    // draw straight to the screen with no post-processing at all.
     const post = { rt: null, w: 0, h: 0 };
-    post.mat = new THREE.ShaderMaterial({
-      uniforms: { tex: { value: null }, vmTex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 }, ads: { value: 0 } },
-      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-      fragmentShader: `uniform sampler2D tex; uniform sampler2D vmTex; uniform vec2 res; uniform float time; uniform float exposure; uniform float ads; varying vec2 vUv;
+    const POST_FS = `uniform sampler2D tex; uniform sampler2D vmTex; uniform sampler2D depthTex; uniform vec2 res; uniform float time; uniform float exposure; uniform float ads; uniform vec3 camNF; varying vec2 vUv;
         vec3 comp(vec2 p) { vec4 v = texture2D(vmTex, p); return texture2D(tex, p).rgb * (1.0 - v.a) + v.rgb; }   // world + the gun layer (premultiplied)
         vec3 aces(vec3 c) { const mat3 i = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
           const mat3 o = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
           c = i * c; vec3 a = c * (c + 0.0245786) - 0.000090537, b = c * (0.983729 * c + 0.4329510) + 0.238081; return clamp(o * (a / b), 0.0, 1.0); }
         vec3 srgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+        #ifdef SSAO
+        float lin(vec2 p) { float z = texture2D(depthTex, p).r * 2.0 - 1.0; return 2.0 * camNF.x * camNF.y / (camNF.y + camNF.x - z * (camNF.y - camNF.x)); }
+        // 8 taps on a rotated ring sized to ~0.45 m in the world: neighbours nearer than this pixel (within range) occlude it
+        float ssao() {
+          float z = lin(vUv); if (z > 60.0) return 1.0;
+          float rad = 0.45 * res.y / (2.0 * camNF.z * z), rot = fract(sin(dot(vUv * res, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832, o = 0.0;
+          rad = clamp(rad, 2.0, 40.0);
+          for (int k = 0; k < 8; k++) { float a = float(k) * 0.7854 + rot, r = rad * (0.35 + 0.65 * fract(float(k) * 0.618 + 0.3));
+            float d = z - lin(vUv + vec2(cos(a), sin(a)) * r / res); o += step(0.04, d) * (1.0 - smoothstep(0.35, 1.2, d)); }
+          return 1.0 - o / 8.0 * 0.6;
+        }
+        #endif
         void main() {
           vec4 g = texture2D(vmTex, vUv);
           if (ads > 0.01) {   // aimed in: the gun body goes soft (depth of field) around a sharp sight picture, like R6
@@ -278,61 +291,79 @@ export default function start({ cfg, E, N, smoke }) {
             if (r > 0.01) { vec4 b = vec4(0.0); float j = fract(sin(dot(vUv * res, vec2(39.3468, 11.135))) * 43758.5453) * 6.2832;
               for (int k = 0; k < 12; k++) { float a = float(k) * 0.5236 + j; b += texture2D(vmTex, vUv + vec2(cos(a), sin(a)) / res * (1.5 + r * (2.0 + float(k) * 0.9))); } g = mix(g, b / 12.0, min(1.0, r * 1.6)); }
           }
-          vec3 c = texture2D(tex, vUv).rgb * (1.0 - g.a) + g.rgb, bl = vec3(0.0);
-          float rot = fract(sin(dot(vUv * res, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;   // per-pixel rotation: a soft halo, not a ring of dots
-          for (int k = 0; k < 10; k++) { float a = float(k) * 0.6283 + rot; vec2 o = vec2(cos(a), sin(a)) / res; float rr = 2.0 + float(k) * 1.3;
-            bl += max(comp(vUv + o * rr) - 0.9, 0.0) * (1.0 - float(k) * 0.07); }
-          c += bl * 0.06;
+          vec3 wc = texture2D(tex, vUv).rgb;
+          #ifdef SSAO
+          wc *= ssao();
+          #endif
+          vec3 c = wc * (1.0 - g.a) + g.rgb;
+          #ifdef BLOOM
+          { vec3 bl = vec3(0.0);
+            float rot = fract(sin(dot(vUv * res, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;   // per-pixel rotation: a soft halo, not a ring of dots
+            for (int k = 0; k < BLOOM_TAPS; k++) { float a = float(k) * 6.2832 / float(BLOOM_TAPS) + rot; vec2 o = vec2(cos(a), sin(a)) / res; float rr = 2.0 + float(k) * 13.0 / float(BLOOM_TAPS);
+              bl += max(comp(vUv + o * rr) - 0.9, 0.0) * (1.0 - float(k) * 0.7 / float(BLOOM_TAPS)); }
+            c += bl * 0.6 / float(BLOOM_TAPS); }
+          #endif
           c = aces(c * exposure / 0.6);
+          #ifdef GRADE
           c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);                                   // contrast
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = mix(vec3(l), c, 1.08);   // a touch more colour
           c += (1.0 - l) * vec3(-0.012, 0.0, 0.018) + l * vec3(0.016, 0.006, -0.012);   // cool shadows, warm highlights
           vec2 q = vUv - 0.5; c *= 1.0 - 0.32 * pow(length(q * vec2(1.25, 1.0)) * 1.3, 2.4);   // vignette
           c += (fract(sin(dot(vUv * res + time * 61.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.007;   // grain
+          #endif
           gl_FragColor = vec4(srgb(clamp(c, 0.0, 1.0)), 1.0);
-        }`,
-      depthTest: false, depthWrite: false,
+        }`;
+    post.mat = new THREE.ShaderMaterial({
+      uniforms: { tex: { value: null }, vmTex: { value: null }, depthTex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 }, ads: { value: 0 }, camNF: { value: new THREE.Vector3(0.05, 400, 1) } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: POST_FS, defines: gfx.postDefines(), depthTest: false, depthWrite: false,
     });
     post.scene = new THREE.Scene(); post.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post.mat); post.quad.frustumCulled = false; post.scene.add(post.quad);
     post.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     // the HDR pass needs float render targets; many Android GPUs can't render to them, so check rather than assume
-    const floatRT = renderer.capabilities.isWebGL2 && (renderer.extensions.has('EXT_color_buffer_half_float') || renderer.extensions.has('EXT_color_buffer_float'));
-    const postOn = () => Q >= 1 && floatRT;
+    const postOn = () => gfx.postOn;
     // if the phone's GPU gives up (context lost), drop to Potato and restart instead of leaving a black screen
     renderer.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (smoke) return; try { S.quality = 0.5; saveSet(S); localStorage.setItem('cs:autoq', '0.5'); } catch (er) { /* private mode */ } toast('Graphics crashed on this device: restarting on Potato'); setTimeout(() => location.reload(), 1500); });
     const postTarget = () => {
       const v = renderer.getDrawingBufferSize(new THREE.Vector2()), w = Math.max(1, v.x | 0), h = Math.max(1, v.y | 0);
       if (!post.rt || post.w !== w || post.h !== h) {
-        if (post.rt) { post.rt.dispose(); post.vt.dispose(); }
-        post.rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: hi ? 4 : 0 }); post.vt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: hi ? 4 : 0 });
+        if (post.rt) { if (post.rt.depthTexture) post.rt.depthTexture.dispose(); post.rt.dispose(); post.vt.dispose(); }
+        post.rt = new THREE.WebGLRenderTarget(w, h, gfx.targetOpts(w, h, true)); post.vt = new THREE.WebGLRenderTarget(w, h, gfx.targetOpts(w, h, false));
+        post.mat.uniforms.depthTex.value = post.rt.depthTexture || null;
         post.w = w; post.h = h; post.mat.uniforms.res.value.set(w, h);
       }
       return post.rt;
     };
+    // tier switches that live outside the map: post defines and target, models, the dynamic player shadows
+    let dsh = null;
+    const applyTier = () => {
+      Q = gfx.q; P = gfx.p; setModelQuality(P.hqModels ? 1 : 0.75);
+      post.mat.defines = gfx.postDefines(); post.mat.needsUpdate = true; post.w = 0;
+      if (dsh) { dsh.dispose(); dsh = null; }
+      if (P.shadows && renderer.capabilities.isWebGL2) dsh = new DynamicShadows(P.shadows);
+    };
+    applyTier();
     const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = vmCam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); vmCam.updateProjectionMatrix(); };
     addEventListener('resize', resize); resize();
     renderer.autoClear = false;
-    let scale = ultra ? Math.min(2, (devicePixelRatio || 1) * 2) : Math.min(1, devicePixelRatio || 1) * Q;
-    const govMinOf = () => (Q <= 0.5 ? 0.4 : AUTO ? 0.55 : 0.4); let govMin = govMinOf(); const mkGov = () => E.qualityGovernor((s) => { if (window.__lockPR) return; scale = s; renderer.setPixelRatio(s); }, { start: ultra ? Math.min(2, (devicePixelRatio || 1) * 2) : Math.min(devicePixelRatio || 1, 1) * Math.min(Q, 1), max: ultra ? Math.min(3, (devicePixelRatio || 1) * 2) : Math.min(1.5, (devicePixelRatio || 1) * Q), min: ultra ? 1 : govMin, targetMs: ultra ? 30 : 21 });
+    let scale = gfx.pixelBand(devicePixelRatio || 1).start;
+    const mkGov = () => { const b = gfx.pixelBand(devicePixelRatio || 1); return E.qualityGovernor((s) => { if (window.__lockPR) return; scale = s; renderer.setPixelRatio(s); }, { start: b.start, max: b.max, min: b.min, targetMs: b.targetMs }); };
+    let govMin = gfx.pixelBand(devicePixelRatio || 1).min;
     let gov = mkGov(), perfSum = 0, perfN = 0;
     // Auto: still under ~40 fps at the lowest resolution step -> one preset down (the map is rebuilt lighter)
     const autoCheck = (dt) => {
       if (!AUTO || !W || uiOpen || dt > 0.5) return;
       perfSum += dt; perfN++; if (perfSum < 4) return;
       const avg = perfSum / perfN; perfSum = 0; perfN = 0;
-      const i = QSTEPS.indexOf(Q);
-      if (avg > 1 / 40 && scale <= govMin + 0.06 && i > 0) {
-        Q = QSTEPS[i - 1]; try { localStorage.setItem('cs:autoq', String(Q)); } catch (e) { /* private mode */ }
-        setModelQuality(Q); buildMap(mapId); vmKey = ''; setViewModel(); govMin = govMinOf(); gov = mkGov();
-        toast('Graphics: ' + ['Potato', 'Low', 'Medium', 'High', 'Ultra'][i - 1] + ' (Auto) to keep it smooth');
-      } else if (avg < 1 / 75 && i < 2 && scale >= Math.min(1, devicePixelRatio || 1) * Math.min(Q, 1) - 0.01) {
-        try { localStorage.setItem('cs:autoq', String(QSTEPS[i + 1])); } catch (e) { /* private mode */ }   // headroom: next match one step up
-      }
+      if (avg > 1 / 40 && scale <= govMin + 0.06 && gfx.stepDown()) {
+        applyTier(); buildMap(mapId); vmKey = ''; setViewModel(); govMin = gfx.pixelBand(devicePixelRatio || 1).min; gov = mkGov();
+        toast('Graphics: ' + gfx.name + ' to keep it smooth');
+      } else if (avg < 1 / 75 && scale >= gfx.pixelBand(devicePixelRatio || 1).start - 0.01) gfx.rememberHeadroom();   // headroom: next match one step up
     };
     const fpsM = S.fps ? E.fpsMeter() : () => {};
     const hud = new Hud(S);
 
-    let lobbyPanel = null, sunLight = null, sky = null, parts = null, sunDir = [0.6, 0.7, 0.4];
+    let culler = null, lobbyPanel = null, sunLight = null, sky = null, parts = null, sunDir = [0.6, 0.7, 0.4];
     let W = null, mode = opt.mode, mapId = opt.map, botLevel = opt.bot || 'normal', match = null, bots = null, ended = false, started = false;
     // ranked: bots only on Normal or Hard, real players fill one team first, and that team must be all real to start
     let ranked = !!opt.ranked; if (ranked && !RANKED_BOTS.includes(botLevel)) botLevel = 'hard';
@@ -366,13 +397,20 @@ export default function start({ cfg, E, N, smoke }) {
     }
     function buildMap(id) {
       if (W) { scene.remove(W.group); W.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
-      mapId = id; W = buildWorld(E, MAPS[id], scene, Q, { aniso: renderer.capabilities.getMaxAnisotropy() });
+      mapId = id; W = buildWorld(E, MAPS[id], scene, Q, { ...gfx.worldOpts(), dynShadows: dsh ? P.shadows.cascades.length : 0 });
       const B = W.B;
       if (sky) { scene.remove(sky); sky = null; }
-      const lit = dressScene(scene, B, false, Q >= 1); sunLight = lit.sun; sky = lit.sky; sunDir = lit.dir;
+      const lit = dressScene(scene, B, false, P.clouds); sunLight = lit.sun; sky = lit.sky; sunDir = lit.dir;
       vmHemi.color.set(B.amb[0]); vmHemi.groundColor.set(B.amb[1]); vmSun.color.set(B.sunColor);
-      if (Q >= 1) setEnv(B);
-      for (const p of B.props) W.group.add(makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }));
+      if (P.env) setEnv(B);
+      // occlusion culling: the map's precompiled visibility set, if it was compiled from this exact map (pvs.js)
+      culler = null;
+      const pd = PVS_DATA[id];
+      if (pd && pd.hash === mapHash(B)) {
+        culler = new PVSCuller(decodePVS(pd), B);
+        for (const c of W.chunks) { const bb = c.geometry.boundingBox; culler.addBox(c, bb.min.x, bb.min.z, bb.max.x, bb.max.z); }
+      }
+      for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); }
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       hud.radarBase(W);
     }
@@ -389,7 +427,8 @@ export default function start({ cfg, E, N, smoke }) {
       if (r0 && r0.key === key) return r0;
       if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
-      const r = useS ? makeSoldier(a.look, team, Q >= 1) : makePlayer(a.look, team);
+      const r = useS ? makeSoldier(a.look, team, P.hqModels) : makePlayer(a.look, team);
+      markCaster(r.g);   // drawn into the dynamic player-shadow map (Medium and up)
       r.blob = new THREE.Mesh(blobGeo, blobMat); r.blob.rotation.x = -Math.PI / 2; r.blob.renderOrder = 1; scene.add(r.blob); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
       if (id !== myId) {  // teammates' names float over their heads
         const c = document.createElement('canvas'); c.width = 256; c.height = 48; const g = c.getContext('2d');
@@ -402,7 +441,7 @@ export default function start({ cfg, E, N, smoke }) {
     }
 
     // ---- first-person view model ----
-    let vm = null, vmKey = '', vmSunK = 1;
+    let vm = null, vmKey = '', vmSunK = 1, vmProbeK = 1; const vmProbe = [1, 1, 1];
     function setViewModel() {
       const it = me.cur === 4 ? { wid: me.nades[me.nadeSel] } : me.inv[me.cur];
       const wid = it ? it.wid : null;
@@ -1156,6 +1195,7 @@ export default function start({ cfg, E, N, smoke }) {
         { const gf = r.tpGun.children[0]; if (gf && gf.userData.flash) { r.flashT = (r.flashT || 0) - dt; gf.userData.flash.visible = r.flashT > 0; if (r.flashT > 0) gf.userData.flash.rotation.z = Math.random() * 6.3; } }
         if (r.dieT && r.fall && !r.soldier) { const k = Math.min(1, r.dieT * 3); r.g.position.x += r.fall.x * 0.5 * k; r.g.position.z += r.fall.z * 0.5 * k; r.g.rotation.z = r.fall.side * 0.35 * k; r.g.rotation.y = Math.atan2(-r.fall.x, -r.fall.z) + Math.PI; }
         if (spectating && p.id === spectating.id) { r.g.visible = false; if (r.blob) r.blob.visible = false; }
+        if (culler && r.g.visible && !culler.visibleAt(p.x, p.z)) { r.g.visible = false; if (r.blob) r.blob.visible = false; }   // behind solid walls: not drawn
       }
       // own body while emoting: camera swings out in front, you see yourself
       const selfRig = me.emote || rigs.has(myId) ? rigFor(myId) : null;
@@ -1226,19 +1266,22 @@ export default function start({ cfg, E, N, smoke }) {
       }
       if (parts) parts.tick(dt);
       stepCasings(dt);
-      if (sunLight && hi) { sunLight.position.set(me.x + sunDir[0] * 90, sunDir[1] * 90, me.z + sunDir[2] * 90); sunLight.target.position.set(me.x, 0, me.z); }
       if (W) {   // first-person arms catch the sun only when you stand in it (from the same baked shadows as the map)
         const sv = W.sunAt(cam.position.x, cam.position.y - 0.25, cam.position.z); vmSunK += (sv - vmSunK) * Math.min(1, dt * 8);
-        vmSun.intensity = (W.B.sunI || 2.4) * 0.75 * vmSunK; vmHemi.intensity = (W.B.ambI || 1.1) * 1.4; vmFill.intensity = (W.B.ambI || 1.1) * (0.35 + 0.3 * (1 - vmSunK)) + (W.B.sunI || 2.4) * 0.12 * vmSunK;
+        W.probeAt(cam.position.x, cam.position.z, vmProbe); vmProbeK += ((vmProbe[0] + vmProbe[1] + vmProbe[2]) / 3 - vmProbeK) * Math.min(1, dt * 6);   // the light probes: arms darken deep indoors
+        vmSun.intensity = (W.B.sunI || 2.4) * 0.75 * vmSunK; vmHemi.intensity = (W.B.ambI || 1.1) * 1.4 * vmProbeK; vmFill.intensity = (W.B.ambI || 1.1) * (0.35 + 0.3 * (1 - vmSunK)) + (W.B.sunI || 2.4) * 0.12 * vmSunK;
         const yw = cam.rotation.y, lx = sunDir[0], lz = sunDir[2], c = Math.cos(-yw), s2 = Math.sin(-yw); vmSun.position.set(lx * c + lz * s2, sunDir[1], -lx * s2 + lz * c);
       }
       if (W) W.sortChunks(cam);
+      if (culler) culler.update(cam.position, (x, z) => W.groundAt(x, z, cam.position.y));
+      if (dsh && W) dsh.update(renderer, scene, cam, LIGHT.sunDir.value);
       if (sky) { sky.position.set(cam.position.x, 0, cam.position.z); if (sky.userData.drift) sky.userData.drift.x += dt * 0.0015; }
       // ---- draw ----
       animateGlow(now, dt);   // Mythic finishes and outfits: pulsing, crawling veins
       if (postOn()) {
         const rt = postTarget(); renderer.setRenderTarget(rt);
         renderer.clear(); renderer.render(scene, cam);
+        post.mat.uniforms.camNF.value.set(cam.near, cam.far, Math.tan(cam.fov * Math.PI / 360));
         renderer.setRenderTarget(post.vt); const cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha(); renderer.setClearColor(0x000000, 0); renderer.clear();
         if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
         renderer.setClearColor(cc, ca);
@@ -1330,6 +1373,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

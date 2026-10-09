@@ -6,6 +6,7 @@ import * as THREE from '../sdk/three.module.min.js';
 import { PHYS } from './data.js';
 import { surface, macroCanvas } from './textures.js';
 import { raiseBuildings, dressWorld, mergeGeos } from './dress.js';
+import { PVS_TILE } from './pvs.js';
 
 export const MATS = {  // surfaces (painted in textures.js): base colour (radar, particles), world size of one texture tile (m), wall-bang density
   sand: { c: [196, 168, 118], s: 3, d: 6 }, sandwall: { c: [214, 186, 136], s: 6, d: 4, trim: 1 },
@@ -79,6 +80,11 @@ export class MapBuilder {
 
 // ---- lighting shared by the world and the players: the baked sun-shadow/AO texture, applied in the shader ----
 export const LIGHT = { shTex: { value: null }, shInfo: { value: new THREE.Vector4(1, 1, 0, 0) }, macro: { value: null }, bake: { value: 0 } };
+// tier controls (graphics.js): texture mip bias; the dynamic player-shadow cascades (depth maps, light matrices, and
+// [cascades, texel 0, texel 1, filter taps]); the baked light-probe grid that lights players and props
+const grey1 = () => { const t = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1); t.needsUpdate = true; return t; };
+Object.assign(LIGHT, { mipBias: { value: 0 }, dsTex0: { value: null }, dsTex1: { value: null }, dsMat0: { value: new THREE.Matrix4() }, dsMat1: { value: new THREE.Matrix4() },
+  dsInfo: { value: new THREE.Vector4(0, 0, 0, 1) }, prTex: { value: grey1() }, prInfo: { value: new THREE.Vector4(0, 0, 0, 0) } });
 let macroT = null;
 export const macroTex = () => { if (!macroT) { macroT = new THREE.CanvasTexture(macroCanvas(64)); macroT.wrapS = macroT.wrapT = THREE.RepeatWrapping; } return macroT; };
 // ---- the world's surface shader: a lean custom one (texture, sky + sun light, baked shadow/AO, fog, tone mapping).
@@ -93,8 +99,29 @@ void main() {
   vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
 }`;
-const FAST_FS = `uniform sampler2D map; uniform sampler2D shTex; uniform sampler2D macroTex; uniform vec4 shInfo; uniform float bakeOn;
-uniform vec3 sunDir; uniform vec3 sunCol; uniform vec3 skyCol; uniform vec3 gndCol; uniform vec3 tint;
+const FAST_FS = `varying vec2 vUv; varying vec3 vWP; varying vec3 vWN;
+uniform sampler2D map; uniform sampler2D shTex; uniform sampler2D macroTex; uniform vec4 shInfo; uniform float bakeOn;
+uniform vec3 sunDir; uniform vec3 sunCol; uniform vec3 skyCol; uniform vec3 gndCol; uniform vec3 tint; uniform float mipBias;
+#ifdef DSHADOW
+uniform sampler2D dsTex0; uniform sampler2D dsTex1; uniform mat4 dsMat0; uniform mat4 dsMat1; uniform vec4 dsInfo;
+// 1 = lit, 0 = in a player's shadow. Cascade 0 (sharp, near) first, cascade 1 (wider) beyond it; fades out at the edge
+float dsTap(sampler2D t, vec2 uv, float z) { return step(z - 0.0015, texture2D(t, uv).r); }
+float dsCascade(sampler2D t, mat4 m, float texel) {
+  vec4 c = m * vec4(vWP, 1.0); vec3 q = c.xyz * 0.5 + 0.5;
+  if (q.x <= 0.0 || q.y <= 0.0 || q.x >= 1.0 || q.y >= 1.0 || q.z >= 1.0) return -1.0;
+  float s;
+  if (dsInfo.w > 4.5) { s = 0.0; for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) s += dsTap(t, q.xy + vec2(float(i), float(j)) * texel * 1.2, q.z); s /= 9.0; }
+  else if (dsInfo.w > 1.5) { s = (dsTap(t, q.xy + vec2(-0.5, -0.5) * texel, q.z) + dsTap(t, q.xy + vec2(0.5, -0.5) * texel, q.z) + dsTap(t, q.xy + vec2(-0.5, 0.5) * texel, q.z) + dsTap(t, q.xy + vec2(0.5, 0.5) * texel, q.z)) * 0.25; }
+  else s = dsTap(t, q.xy, q.z);
+  vec2 e = min(q.xy, 1.0 - q.xy); return mix(1.0, s, smoothstep(0.0, 0.08, min(e.x, e.y)));
+}
+float dynShadow() {
+  if (dsInfo.x < 0.5) return 1.0;
+  float s = dsCascade(dsTex0, dsMat0, dsInfo.y);
+  if (s < 0.0 && dsInfo.x > 1.5) s = dsCascade(dsTex1, dsMat1, dsInfo.z);
+  return s < 0.0 ? 1.0 : s;
+}
+#endif
 #ifdef BUMP
 uniform sampler2D bumpMap;
 #endif
@@ -104,11 +131,10 @@ uniform sampler2D nMap; uniform float nOn;
 #ifdef DETAIL
 uniform sampler2D dMap;
 #endif
-varying vec2 vUv; varying vec3 vWP; varying vec3 vWN;
 #include <common>
 #include <fog_pars_fragment>
 void main() {
-  vec3 alb = texture2D(map, vUv).rgb * tint;
+  vec3 alb = texture2D(map, vUv, mipBias).rgb * tint;
   float mac = 0.5;
   #ifdef MACRO
   mac = texture2D(macroTex, vWP.xz * 0.037 + vec2(vWP.y * 0.029, vWP.y * 0.013)).r;
@@ -128,7 +154,7 @@ void main() {
   #endif
   #ifdef NMAP
   {   // painted normal + roughness map; tangent frame from screen derivatives (no tangents needed on the merged geometry)
-    vec4 nm = texture2D(nMap, vUv);
+    vec4 nm = texture2D(nMap, vUv, mipBias);
     vec2 txy = (nm.rg * 2.0 - 1.0) * nOn;
     rough = mix(0.85, nm.b, nOn);
     #ifdef DETAIL
@@ -152,6 +178,9 @@ void main() {
     #endif
   }
   vis = mix(1.0, vis, bakeOn); ao = mix(1.0, ao, bakeOn);
+  #ifdef DSHADOW
+  if (vis > 0.01) vis *= mix(0.25, 1.0, dynShadow());   // players' shadows (they only fall where the sun reaches)
+  #endif
   float ndl = max(dot(N, sunDir), 0.0);
   vec3 light = mix(gndCol, skyCol, N.y * 0.5 + 0.5) * ao + sunCol * ndl * vis * mix(1.0, ao, 0.35);
   light += sunCol * vec3(1.0, 0.92, 0.8) * 0.22 * (0.5 - 0.5 * N.y) * ao;   // warm bounce off the sunlit ground into shade
@@ -173,14 +202,15 @@ void main() {
   #include <fog_fragment>
 }`;
 let whiteT = null, flatN = null;
-export function fastMat({ map = null, color = 0xffffff, bump = null, nmap = null, detail = null, macro = true, side = THREE.FrontSide } = {}) {
+export function fastMat({ map = null, color = 0xffffff, bump = null, nmap = null, detail = null, macro = true, side = THREE.FrontSide, shadows = 0 } = {}) {
   if (!map) { if (!whiteT) { whiteT = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); whiteT.needsUpdate = true; } map = whiteT; }
   const m = new THREE.ShaderMaterial({
     uniforms: { ...THREE.UniformsLib.fog, map: { value: map }, bumpMap: { value: bump }, tint: { value: new THREE.Color(color) }, shTex: LIGHT.shTex, shInfo: LIGHT.shInfo, macroTex: LIGHT.macro, bakeOn: LIGHT.bake,
-      sunDir: LIGHT.sunDir, sunCol: LIGHT.sunCol, skyCol: LIGHT.skyCol, gndCol: LIGHT.gndCol, nMap: { value: nmap }, nOn: { value: nmap ? 1 : 0 }, dMap: { value: detail } },
+      sunDir: LIGHT.sunDir, sunCol: LIGHT.sunCol, skyCol: LIGHT.skyCol, gndCol: LIGHT.gndCol, nMap: { value: nmap }, nOn: { value: nmap ? 1 : 0 }, dMap: { value: detail }, mipBias: LIGHT.mipBias,
+      dsTex0: LIGHT.dsTex0, dsTex1: LIGHT.dsTex1, dsMat0: LIGHT.dsMat0, dsMat1: LIGHT.dsMat1, dsInfo: LIGHT.dsInfo },
     vertexShader: FAST_VS, fragmentShader: FAST_FS, fog: true, side, defines: {},
   });
-  if (bump) m.defines.BUMP = ''; if (macro) m.defines.MACRO = '';
+  if (bump) m.defines.BUMP = ''; if (macro) m.defines.MACRO = ''; if (shadows) m.defines.DSHADOW = '';
   if (nmap) { m.defines.NMAP = ''; if (detail) m.defines.DETAIL = ''; }
   if (bump || nmap) m.extensions = { derivatives: true };
   return m;
@@ -226,10 +256,10 @@ vec3 perturbNormalArb( vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDire
 // colour variation so tiling doesn't show); 'dyn': players and props (shadow at their own position)
 export function litPatch(mat, kind = 'dyn') {
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.shTex = LIGHT.shTex; sh.uniforms.shInfo = LIGHT.shInfo; sh.uniforms.macroTex = LIGHT.macro; sh.uniforms.bakeOn = LIGHT.bake;
+    sh.uniforms.shTex = LIGHT.shTex; sh.uniforms.shInfo = LIGHT.shInfo; sh.uniforms.macroTex = LIGHT.macro; sh.uniforms.bakeOn = LIGHT.bake; sh.uniforms.prTex = LIGHT.prTex; sh.uniforms.prInfo = LIGHT.prInfo;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vWN;')
       .replace('#include <project_vertex>', '#include <project_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWN = normalize(mat3(modelMatrix) * objectNormal);');
-    let f = sh.fragmentShader.replace('#include <bumpmap_pars_fragment>', BUMP_SAFE).replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vWN;\nuniform sampler2D shTex;\nuniform vec4 shInfo;\nuniform sampler2D macroTex;\nuniform float bakeOn;');
+    let f = sh.fragmentShader.replace('#include <bumpmap_pars_fragment>', BUMP_SAFE).replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vWN;\nuniform sampler2D shTex;\nuniform vec4 shInfo;\nuniform sampler2D macroTex;\nuniform float bakeOn;\nuniform sampler2D prTex;\nuniform vec4 prInfo;');
     if (kind === 'world') f = f.replace('#include <map_fragment>', '#include <map_fragment>\n\tdiffuseColor.rgb *= mix(1.0, 0.8 + 0.4 * texture2D(macroTex, vWP.xz * 0.037 + vec2(vWP.y * 0.029, vWP.y * 0.013)).r, bakeOn);');
     f = f.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
 	{
@@ -241,6 +271,10 @@ export function litPatch(mat, kind = 'dyn') {
 		vis = mix(1.0, vis, bakeOn); ao = mix(1.0, ao, bakeOn);
 		reflectedLight.directDiffuse *= vis * mix(1.0, ao, 0.35);
 		reflectedLight.indirectDiffuse *= ao;
+		${kind === 'world' ? '' : `if (prInfo.z > 0.5) {   // light probes: the baked sky openness + bounce colour around this point, interpolated
+			vec4 pr = texture2D(prTex, vWP.xz * prInfo.xy + 0.5 * prInfo.xy);
+			reflectedLight.indirectDiffuse *= mix(vec3(1.0), pr.rgb * 2.0, bakeOn);
+		}`}
 	}`);
     sh.fragmentShader = f;
   };
@@ -269,9 +303,9 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   const cellTop = (xx, zz, px, pz) => { const i = idx(xx, zz); if (i < 0) return B.wallH; const r = rid[i]; return r < 0 ? h[i] : slope(r, Math.min(xx + 1, Math.max(xx, px)), Math.min(zz + 1, Math.max(zz, pz))); };
 
   // --- meshes: greedy-merged tops + side faces, one mesh per material; ramps as slopes; stone coping along wall tops ---
-  // geometry is bucketed per material AND per 32 m chunk: chunks off screen are skipped, and near chunks draw first
-  // so hidden surfaces behind them are rejected cheaply (one giant mesh per material made weak GPUs shade everything)
-  const T = 32, tileOf = (x, z) => Math.max(0, Math.floor(x / T)) + Math.max(0, Math.floor(z / T)) * 64;
+  // geometry is bucketed per material AND per 16 m tile (the PVS tile, pvs.js): tiles off screen or behind walls are
+  // skipped, and near chunks draw first so hidden surfaces behind them are rejected cheaply
+  const T = PVS_TILE, tileOf = (x, z) => Math.max(0, Math.floor(x / T)) + Math.max(0, Math.floor(z / T)) * 64;
   const geo = new Map();
   const quad = (m, a, b, c, dd, uvs) => {
     const key = m * 10000 + tileOf((a[0] + c[0]) / 2, (a[2] + c[2]) / 2);
@@ -349,7 +383,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   side(1, 0); side(-1, 0); side(0, 1); side(0, -1);
   // set dressing (windows, lintels, beams, pipes, sand drifts, rooftop clutter): extra geometry per material
   const extra = new Map();
-  if (!headless && quality >= 0.75) dressWorld({ B, hr, mat, flag, faces, matName: (m) => MAT_LIST[m], ts: (k) => 1 / ((MATS[k] || { s: 2 }).s), add: (k, g) => { g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3()), key = k + '|' + tileOf(c.x, c.z); if (!extra.has(key)) extra.set(key, []); extra.get(key).push(g); } });
+  if (!headless && (opt.dress ?? quality >= 0.75)) dressWorld({ B, hr, mat, flag, faces, matName: (m) => MAT_LIST[m], ts: (k) => 1 / ((MATS[k] || { s: 2 }).s), add: (k, g) => { g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3()), key = k + '|' + tileOf(c.x, c.z); if (!extra.has(key)) extra.set(key, []); extra.get(key).push(g); } });
 
   // --- baked light: for every 1/K m of floor, how high the sun's shadow reaches there, plus ambient occlusion ---
   // One small texture gives soft sun shadows on every floor, wall and player and darkened corners, for the price of a
@@ -386,43 +420,99 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
     LIGHT.sunCol.value.set(B.sunColor || 0xffffff).multiplyScalar((B.sunI || 2.4) / Math.PI);
     LIGHT.skyCol.value.set((B.amb || [])[0] || 0xffffff).multiplyScalar(1.45 * (B.ambI || 1.1) / Math.PI); LIGHT.gndCol.value.set((B.amb || [])[1] || 0x555555).multiplyScalar(1.45 * (B.ambI || 1.1) / Math.PI);
   }
-  const useLight = () => { LIGHT.shTex.value = bakeTex; LIGHT.shInfo.value.set(1 / w, 1 / d, 0, 0); LIGHT.bake.value = 1; if (!LIGHT.macro.value && !headless) LIGHT.macro.value = macroTex(); };
-  useLight();
+  let useLight = () => { LIGHT.shTex.value = bakeTex; LIGHT.shInfo.value.set(1 / w, 1 / d, 0, 0); LIGHT.bake.value = 1; if (!LIGHT.macro.value && !headless) LIGHT.macro.value = macroTex(); };
   // is the sun hitting this point? (CPU side of the same bake: the first-person arms darken in the shade)
   const sunAt = (x, y, z) => {
     const tx = Math.min(TW - 1, Math.max(0, Math.floor(x * K))), tz = Math.min(TD - 1, Math.max(0, Math.floor(z * K)));
     const sh = bake[(tz * TW + tx) * 4] / 255 * 16 - 2; return Math.min(1, Math.max(0, (y - sh + 0.05) / 0.2));
   };
+  // --- light probes: what lights players and props. A probe every 2 m at chest height stores how much open sky it
+  // sees (16 directions, horizon found by marching the baked heights, roofs included: deep in a tunnel the ambient
+  // drops) and the colour bounced up from the sunlit floor around it. Dynamic objects read it with bilinear
+  // interpolation in their shader, so a player walking from the sun into a doorway darkens and tints smoothly.
+  const probesOn = opt.probes ?? !headless;
+  const PS = 2, PW = Math.ceil(w / PS) + 1, PD = Math.ceil(d / PS) + 1, probes = new Uint8Array(PW * PD * 4), pOk = new Uint8Array(PW * PD);
+  const floorOf = (x, z) => { const ix = Math.floor(x), iz = Math.floor(z); let lo = Infinity; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const v = topR(ix + a + 0.5, iz + b + 0.5); if (v < lo) lo = v; } return lo; };
+  const albedo = (x, z) => { const i = idx(Math.floor(x), Math.floor(z)); const c = i < 0 ? null : (MATS[MAT_LIST[mat[i]]] || {}).c; return c || [150, 150, 150]; };
+  if (probesOn) {
+    const DIRS = 16, sky = LIGHT.skyCol.value, gnd = LIGHT.gndCol.value, sun = LIGHT.sunCol.value;
+    for (let j = 0; j < PD; j++) for (let i = 0; i < PW; i++) {
+      const px = Math.min(w - 0.5, Math.max(0.5, i * PS)), pz = Math.min(d - 0.5, Math.max(0.5, j * PS)), fl = floorOf(px, pz);
+      if (topR(px, pz) > fl + 1.6) continue;   // inside a wall: filled from its neighbours below
+      const y = fl + 1.2;
+      let open = 0;
+      for (let k = 0; k < DIRS; k++) {
+        const a = k / DIRS * 6.2832, dx = Math.cos(a), dz = Math.sin(a); let hz = 0;
+        for (let t = 0.5; t < 24; t += t < 4 ? 0.5 : 1) { const e = (occAt(px + dx * t, pz + dz * t) - y) / t; if (e > hz) hz = e; }
+        open += 1 - hz / Math.hypot(1, hz);   // 1 - sin(horizon elevation)
+      }
+      open /= DIRS;
+      // bounce: the floor's colour within ~3 m, weighted by how much sun lands on it
+      let br = 0, bg = 0, bb = 0, n = 0;
+      for (let b = -3; b <= 3; b += 1.5) for (let a = -3; a <= 3; a += 1.5) { const c = albedo(px + a, pz + b), sv = sunAt(px + a, topR(px + a, pz + b) + 0.05, pz + b); br += c[0] / 255 * sv; bg += c[1] / 255 * sv; bb += c[2] / 255 * sv; n++; }
+      br /= n; bg /= n; bb /= n;
+      // relative to the plain hemisphere light the shader already applies: ambient scales with openness (never fully
+      // black: light still bounces in), plus a warm/cool bounce tint
+      const sk = 0.45 + 0.45 * open, bounce = 0.32 * (sun.r + sun.g + sun.b) / 3 / Math.max(0.05, (sky.r + gnd.r) / 2);
+      const o = (j * PW + i) * 4, enc2 = (v) => Math.max(0, Math.min(255, Math.round(v / 2 * 255)));
+      probes[o] = enc2(sk + br * bounce * 0.5); probes[o + 1] = enc2(sk + bg * bounce * 0.5); probes[o + 2] = enc2(sk + bb * bounce * 0.5); probes[o + 3] = 255; pOk[j * PW + i] = 1;
+    }
+    for (let pass = 0; pass < 4; pass++) for (let j = 0; j < PD; j++) for (let i = 0; i < PW; i++) {   // fill wall probes from open neighbours
+      const q = j * PW + i; if (pOk[q]) continue; let r = 0, g = 0, b = 0, n = 0;
+      for (let b2 = -1; b2 <= 1; b2++) for (let a2 = -1; a2 <= 1; a2++) { const ii = i + a2, jj = j + b2; if (ii < 0 || jj < 0 || ii >= PW || jj >= PD) continue; const qq = jj * PW + ii; if (pOk[qq] !== 1) continue; r += probes[qq * 4]; g += probes[qq * 4 + 1]; b += probes[qq * 4 + 2]; n++; }
+      if (n) { probes[q * 4] = r / n; probes[q * 4 + 1] = g / n; probes[q * 4 + 2] = b / n; probes[q * 4 + 3] = 255; pOk[q] = 2; }
+    }
+    for (let q = 0; q < PW * PD; q++) { if (!pOk[q]) { probes[q * 4] = probes[q * 4 + 1] = probes[q * 4 + 2] = 128; probes[q * 4 + 3] = 255; } else if (pOk[q] === 2) pOk[q] = 1; }
+  }
+  const probeTex = new THREE.DataTexture(probes, PW, PD, THREE.RGBAFormat, THREE.UnsignedByteType);
+  probeTex.magFilter = probeTex.minFilter = THREE.LinearFilter; probeTex.needsUpdate = true;
+  // the CPU side (first-person arms and gun): the same bilinear interpolation, as an [r, g, b] ambient multiplier
+  const probeAt = (x, z, out = [1, 1, 1]) => {
+    if (!probesOn) { out[0] = out[1] = out[2] = 1; return out; }
+    const fx = Math.min(PW - 1.001, Math.max(0, x / PS)), fz = Math.min(PD - 1.001, Math.max(0, z / PS)), i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j;
+    for (let c = 0; c < 3; c++) {
+      const p = (ii, jj) => probes[(jj * PW + ii) * 4 + c];
+      out[c] = ((p(i, j) * (1 - u) + p(i + 1, j) * u) * (1 - v) + (p(i, j + 1) * (1 - u) + p(i + 1, j + 1) * u) * v) / 255 * 2;
+    }
+    return out;
+  };
+  const useProbes = () => { LIGHT.prTex.value = probeTex; LIGHT.prInfo.value.set(1 / (PS * PW), 1 / (PS * PD), probesOn ? 1 : 0, 0); };
+  const useLight0 = useLight;
+  useLight = () => { useLight0(); useProbes(); };
+  useLight();
 
   const group = new THREE.Group(); scene.add(group);
   // surfaces: the painted photo maps shipped with the game (texgen.py): colour on every setting; from Medium up also a
   // normal + roughness map (light catches every brick and plank, smooth things shine), on High and Ultra 1024 px with a
   // fine detail layer up close. While they download, the quick in-browser painter fills in, so the map is never blank.
-  const texSize = quality >= 1.5 ? 1024 : 512, nmOn = quality >= 1, aniso = Math.min(quality >= 2 ? 16 : quality >= 1.5 ? 8 : quality >= 1 ? 4 : 1, opt.aniso || 1);
+  // tier switches (graphics.js worldOpts); the old quality-number rules when called without them (tests, menu pictures)
+  const texSize = opt.texSize || (quality >= 1.5 ? 1024 : 512), nmOn = opt.normalMaps ?? quality >= 1, macroOn = opt.macro ?? quality >= 0.75;
+  const aniso = opt.texSize ? Math.max(1, opt.aniso || 1) : Math.min(quality >= 2 ? 16 : quality >= 1.5 ? 8 : quality >= 1 ? 4 : 1, opt.aniso || 1);
+  const txQ = (opt.nearestMip ?? quality < 0.75) ? 0.5 : 1, dynSh = opt.dynShadows || 0;
   const texCache = {};
   const matTex = (k) => {
     if (texCache[k]) return texCache[k];
-    const sf = surface(k, 128, false), mk = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (quality < 0.75) t.minFilter = THREE.LinearMipmapNearestFilter; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const sf = surface(k, 128, false), mk = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (txQ < 0.75) t.minFilter = THREE.LinearMipmapNearestFilter; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
     return (texCache[k] = { map: mk(sf.map, true), bump: null });
   };
   const photo = (mat, k) => {   // swap in the photo maps once they arrive (cached across map changes)
-    loadTx(`tx_${k}_${texSize}.jpg`, true, aniso, quality).then((t) => { if (t) { mat.uniforms ? (mat.uniforms.map.value = t) : (mat.map = t, mat.needsUpdate = true); } });
-    if (nmOn && mat.uniforms && mat.uniforms.nMap) loadTx(`tx_${k}_${texSize}n.jpg`, false, aniso, quality).then((t) => { if (t) { mat.uniforms.nMap.value = t; mat.uniforms.nOn.value = 1; } });
+    loadTx(`tx_${k}_${texSize}.jpg`, true, aniso, txQ).then((t) => { if (t) { mat.uniforms ? (mat.uniforms.map.value = t) : (mat.map = t, mat.needsUpdate = true); } });
+    if (nmOn && mat.uniforms && mat.uniforms.nMap) loadTx(`tx_${k}_${texSize}n.jpg`, false, aniso, txQ).then((t) => { if (t) { mat.uniforms.nMap.value = t; mat.uniforms.nOn.value = 1; } });
   };
-  const detailT = quality >= 1.5 ? flatNormal() : null;
-  if (detailT && !headless) loadTx('tx_detail_512n.jpg', false, aniso, quality).then((t) => { if (t) for (const m of matCache.values()) if (m.uniforms && m.uniforms.dMap) m.uniforms.dMap.value = t; });
+  const detailT = (opt.detail ?? quality >= 1.5) ? flatNormal() : null;
+  if (detailT && !headless) loadTx('tx_detail_512n.jpg', false, aniso, txQ).then((t) => { if (t) for (const m of matCache.values()) if (m.uniforms && m.uniforms.dMap) m.uniforms.dMap.value = t; });
   const worldMat = (k) => {
     if (headless) return new THREE.MeshBasicMaterial();   // simulations without a browser: geometry only
     const M = MATS[k], t = matTex(k);
     if (M.glow) { const m = new THREE.MeshBasicMaterial({ map: t.map }); photo(m, k); return m; }
-    const m = fastMat({ map: t.map, nmap: nmOn ? flatNormal() : null, detail: detailT, macro: quality >= 0.75 });
+    const m = fastMat({ map: t.map, nmap: nmOn ? flatNormal() : null, detail: detailT, macro: macroOn, shadows: dynSh });
     if (nmOn) m.uniforms.nOn.value = 0;
     photo(m, k);
     return m;
   };
   const matCache = new Map(), matFor = (k) => { if (!matCache.has(k)) matCache.set(k, k === 'glassdark' ? fastMat({ color: 0x1c2328, macro: false }) : worldMat(k)); return matCache.get(k); };
   const chunks = [];
-  const addChunk = (bg, k) => { bg.computeBoundingSphere(); const mesh = new THREE.Mesh(bg, matFor(k)); mesh.matrixAutoUpdate = false; group.add(mesh); chunks.push(mesh); };
+  const addChunk = (bg, k) => { bg.computeBoundingSphere(); bg.computeBoundingBox(); const mesh = new THREE.Mesh(bg, matFor(k)); mesh.matrixAutoUpdate = false; group.add(mesh); chunks.push(mesh); };
   for (const g of geo.values()) {
     const bg = new THREE.BufferGeometry();
     bg.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3));
@@ -623,5 +713,5 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
     }
   }
   return { B, w, d, h, mat, flag, H, idx, group, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
-    topAt, cellTop, sunAt, useLight, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
+    topAt, cellTop, sunAt, probeAt, useLight, chunks, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
 }
