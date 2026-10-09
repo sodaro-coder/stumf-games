@@ -435,7 +435,8 @@ export class Menu {
   }
   // ---- INVENTORY ----
   tab_inv(B) {
-    const P = this.P, items = P.d.inventory, f = this.invFilter || 'all';
+    const P = this.P, f = this.invFilter || 'all', rk = (it) => { const i = itemInfo(it); return i ? i.tier * 1e7 + i.value : -1; };
+    const items = P.d.inventory.slice().sort((a, b) => rk(b) - rk(a) || (b.t || 0) - (a.t || 0));   // always highest rarity first, then value, then newest
     const kinds = { all: 'All', skin: 'Weapons', knife: 'Knives ★', agent: 'Agents', emote: 'Emotes' };
     const shown = items.filter((i) => f === 'all' || (ITEM_BY_ID[i.def] || {}).kind === f);
     const eq = (uid) => ['T', 'CT'].filter((t) => Object.values(P.d.equipped[t] || {}).includes(uid)).join('+');
