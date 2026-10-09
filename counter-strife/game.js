@@ -402,8 +402,7 @@ export default function start({ cfg, E, N, smoke }) {
     // a scene's staging for this player's own character (the host moves the AI ones): stand here, walk there, slow down
     let slowT = 0, slowK = 1;
     function storyDirect(o, zoneAt) {
-      const mine = myChar(), at = (z) => zoneAt(z);
-      if (o.place && o.place[0] === mine) { const p = at(o.place[1]); if (p) { me.x = p.x; me.z = p.z; me.y = W.groundAt(p.x, p.z, 10); me.vx = me.vz = 0; } }
+      const mine = myChar(), at = (z) => zoneAt(z);   // (where a scene puts this player is the host's call: see onTp)
       if (o.walk && o.walk[0] === mine) { const p = at(o.walk[1]); if (p) me.walkTo = [p.x, p.z]; }
       if (o.slowmo) { slowK = o.slowmo[0]; slowT = o.slowmo[1]; }
       if (o.smoke) { const who = o.smoke === mine ? me : [...st.players.values()].find((q) => (st.roster.get(q.id) || {}).char === o.smoke); if (who && parts) for (let k = 0; k < 6; k++) setTimeout(() => parts.smoke(who.x - Math.sin(who.yaw || 0) * 0.3, who.y + 1.75, who.z - Math.cos(who.yaw || 0) * 0.3, { n: 2, color: '#cfcfcf', size: 0.12, life: 2.2, rise: 0.35, alpha: 0.5 }), k * 450); }
@@ -801,7 +800,8 @@ export default function start({ cfg, E, N, smoke }) {
       if (t === 'pose' && Array.isArray(d) && d.length >= 8) {
         const [x, y, z, yaw, pitch, cr, fl, cur] = d.map(Number);
         if (![x, y, z, yaw, pitch, cr].every(Number.isFinite)) return;
-        if (p.alive) { const jump = Math.hypot(x - p.x, z - p.z); if (jump < 4 || !p.seen) { p.x = x; p.y = y; p.z = z; } p.seen = true; }
+        if (p.tpAt && (Math.hypot(x - p.tpAt[0], z - p.tpAt[1]) < 4 || (match.clock || 0) - p.tpAt[2] > 5)) p.tpAt = null;   // a scene moved them: wait for a report from the new spot
+        if (p.alive && !p.tpAt) { const jump = Math.hypot(x - p.x, z - p.z); if (jump < 4 || !p.seen) { p.x = x; p.y = y; p.z = z; } p.seen = true; }
         p.yaw = yaw; p.pitch = Math.max(-1.6, Math.min(1.6, pitch)); p.crouch = Math.max(0, Math.min(1, cr)); p.plant = !!(fl & 1); p.defusing = !!(fl & 2);
         p.lean = Number.isFinite(+d[8]) ? Math.max(-1, Math.min(1, +d[8])) : 0; p.prone = Number.isFinite(+d[9]) ? Math.max(0, Math.min(1, +d[9])) : 0;
         if ([1, 2, 3, 4, 5, 6].includes(cur) && (p.inv[cur] || cur === 4)) p.cur = cur; p.onGround = !!(fl & 4); p.reloading = !!(fl & 8); p.vx = 0; p.vz = 0;
@@ -860,6 +860,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (hud.panelRender && hud.panel && hud.panel.dataset.k === 'buy') hud.panelRender();
       setViewModel();
     }
+    function onTp(m) { if (!m || ![m.x, m.y, m.z].every(Number.isFinite)) return; me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vy = me.vz = 0; me.walkTo = null; if (Number.isFinite(m.yaw)) { me.yaw = m.yaw; me.pitch = 0; } }   // a story scene puts this player somewhere
     function onSpawn(m) { dmgFrom.clear(); dmgTo.clear(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
     function onHurt(m) {
       me.hp = m.hp; me.armor = m.armor; audio.play('hurt'); if (m.by) dmgFrom.set(m.by, (dmgFrom.get(m.by) || 0) + (m.dmg | 0));
@@ -984,7 +985,7 @@ export default function start({ cfg, E, N, smoke }) {
 
     // host-local dispatch (the Match calls this for the host's own player and for broadcast-to-self)
     function local(type, d) {
-      if (type === 'inv') onInv(d); else if (type === 'spawn') onSpawn(d); else if (type === 'hurt') onHurt(d); else if (type === 'hitconfirm') onHitConfirm(d);
+      if (type === 'inv') onInv(d); else if (type === 'spawn') onSpawn(d); else if (type === 'tp') onTp(d); else if (type === 'hurt') onHurt(d); else if (type === 'hitconfirm') onHitConfirm(d);
       else if (type === 'ev') onEvent(d); else if (type === 'fire') onFire(d); else if (type === 'bomb') onBomb(d); else if (type === 'drops') onDrops(d); else if (type === 'fx') onFx(d); else if (type === 'nade') onNade(d);
     }
 
@@ -1010,7 +1011,7 @@ export default function start({ cfg, E, N, smoke }) {
         mode = d.mode; botLevel = d.bot; ranked = !!d.ranked; if (!W || mapId !== d.map) buildMap(d.map);
         started = !!d.started; hud.banner(started ? '' : 'Waiting for the host to start', `${MODES[mode].name} · ${MAPS[mapId].name}`, started ? 1 : 0);
       });
-      const msgTypes = { inv: onInv, spawn: onSpawn, hurt: onHurt, hitconfirm: onHitConfirm, ev: onEvent, fire: onFire, bomb: onBomb, drops: onDrops, fx: onFx, nade: onNade, chat: onChat, toast: (t) => toast(String(t).slice(0, 80)), camp: onCamp };
+      const msgTypes = { inv: onInv, spawn: onSpawn, tp: onTp, hurt: onHurt, hitconfirm: onHitConfirm, ev: onEvent, fire: onFire, bomb: onBomb, drops: onDrops, fx: onFx, nade: onNade, chat: onChat, toast: (t) => toast(String(t).slice(0, 80)), camp: onCamp };
       for (const [k, fn] of Object.entries(msgTypes)) session.on(k, (d, peer) => { if (peer === session.hostId) fn(d); });
       session.on('roster', (list, peer) => { if (peer === session.hostId && Array.isArray(list)) setRoster(list); });
       session.on('snap', (s, peer) => { if (peer === session.hostId) applySnap(s); });
@@ -1347,7 +1348,7 @@ export default function start({ cfg, E, N, smoke }) {
       const lo = leanOff(me); let viewYaw = me.yaw, viewPitch = me.pitch + me.punch * 0.35 + camKick, ex = me.x + lo.x, ey = me.y + eyeHeight(me) * (mineStory().scale || 1) - Math.abs(me.lean) * 0.05, ez = me.z + lo.z, viewRoll = -me.lean * 0.2;
       let spectating = null;
       if (!me.alive && (st.phase !== 'warmup')) {
-        const mates = [...st.players.values()].filter((p) => p.alive && p.team === me.team);
+        const mates = [...st.players.values()].filter((p) => p.alive && p.team === me.team && !String(p.id).startsWith('actor_'));   // not the story's bystanders
         if (mates.length) { if (!specTarget || !mates.find((p) => p.id === specTarget)) specTarget = mates[0].id; if (specNext) { specNext = false; const i = mates.findIndex((p) => p.id === specTarget); specTarget = mates[(i + 1) % mates.length].id; } const p = st.players.get(specTarget); spectating = p;
           if (specId !== p.id) { specId = p.id; specYaw = p.yaw || 0; specPitch = p.pitch || 0; svmKey = ''; }
           let dy = (p.yaw || 0) - specYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); const k = Math.min(1, dt * 14);

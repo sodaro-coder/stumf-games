@@ -7,10 +7,10 @@
 import * as THREE from '../sdk/three.module.min.js';
 import { CHARACTERS, MISSIONS, CHAPTERS, SQUAD } from './story.js';
 
-const COLORS = { dad: '#c8a050', danny: '#f2b080', doctor: '#cfe0ea', nurse: '#cfe0ea', enemy: '#c8c8c8', wiener: '#e8613a', cancer: '#9ad0ff', ricky: '#c07aff', igor: '#8fd06a', recruit: '#d8d8a0', boss: '#ff3b3b', command: '#ffb04a', tape: '#9ad0ff', squad: '#ffffff' };
-const VOICE = { dad: [0.55, 0.92], danny: [1.7, 1.1], doctor: [0.95, 0.95], nurse: [1.15, 1.0], bouncer: [0.6, 1.0], boss: [0.6, 1.0], ricky: [1.2, 1.05], igor: [0.75, 0.95], cancer: [0.9, 0.95], tape: [0.88, 0.92], wiener: [0.8, 1.05], command: [1.0, 1.15], recruit: [1.25, 1.1] };
+const COLORS = { radio: '#a8b4bc', dad: '#c8a050', danny: '#f2b080', doctor: '#cfe0ea', nurse: '#cfe0ea', enemy: '#c8c8c8', wiener: '#e8613a', cancer: '#9ad0ff', ricky: '#c07aff', igor: '#8fd06a', recruit: '#d8d8a0', boss: '#ff3b3b', command: '#ffb04a', tape: '#9ad0ff', squad: '#ffffff' };
+const VOICE = { radio: [0.85, 1.25], dad: [0.55, 0.92], danny: [1.7, 1.1], doctor: [0.95, 0.95], nurse: [1.15, 1.0], bouncer: [0.6, 1.0], boss: [0.6, 1.0], ricky: [1.2, 1.05], igor: [0.75, 0.95], cancer: [0.9, 0.95], tape: [0.88, 0.92], wiener: [0.8, 1.05], command: [1.0, 1.15], recruit: [1.25, 1.1] };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const lineTime = (l) => 1.6 + String(l.text).length * 0.045;   // the same pace the host uses (story_sim.js scene())
+const lineTime = (l) => 1.6 + String(l.text).length * 0.045 + ((l.o && l.o.hold) || 0);   // the same pace the host uses (story_sim.js scene())
 const stage = (t) => /^\(.*\)$|^\*.*\*$/.test(String(t).trim());   // "(laughing)", "*coughs*": a stage direction, not spoken
 
 export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDirect, music }) {
@@ -159,6 +159,14 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     } else if (shadowPose) showShadow('');
     if (lineIdx > 1) $('.sc-title').textContent = '';   // the title sits on the opening shot only
   }
+  // a skipped scene still leaves the world where it would have ended: the lasting directions of the unplayed lines
+  // (the look, the score, where people stand) happen at once; the momentary ones (sounds, slow motion) are dropped
+  const flushCut = () => {
+    for (const l of cutQ.slice(1)) { const o = l.o; if (!o) continue;
+      if (o.vision != null) vision(o.vision); if (o.music != null && music) music.set(o.music);
+      const at = o.place || o.walk; if (onDirect && at) onDirect({ place: at }, zoneAt);
+    }
+  };
   const endCut = () => { showShadow(''); cutQ = []; $('.sc-title').textContent = ''; showLine(); };
   const next = () => { if (!cutQ.length) return; cutQ.shift(); if (!cutQ.length) $('.sc-title').textContent = ''; showLine(); };
   // asking to skip: everyone playing has to agree (solo: instant); the host then ends the scene for everyone
@@ -181,7 +189,8 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     $('.sc-squad').innerHTML = (S.chars || []).map((c) => { const C = CHARACTERS[c.char] || CHARACTERS.ricky, ab = C.ability; return `<div class="sc-m${c.alive ? '' : ' dead'}" style="--c:${COLORS[c.char] || '#fff'}"><em>${esc(C.short)}${c.id === myId ? ' (you)' : ''}</em><span class="bar"><i style="width:${Math.max(0, Math.min(100, c.hp / (c.max || 100) * 100))}%"></i></span><small>${ab ? (c.lock ? '🔒' : ab.id === 'cancer_nade' ? (c.nade ? 'G' : '–') : c.cd ? c.cd + 's' : 'G') : ''}</small></div>`; }).join('');
     const b = S.boss; $('.sc-boss').style.display = b ? 'block' : 'none';
     if (b) { $('.sc-boss b').textContent = b.name || 'Osama bin Ballin'; $('.sc-boss i').style.width = Math.max(0, b.hp / b.max * 100) + '%'; $('.sc-boss em').textContent = S.vuln ? 'OPEN: HIT IT NOW' : ''; }
-    const f = S.featured, w = $('.sc-watch'); if (f && f.id && f.id !== myId) { w.textContent = `You're watching ${(CHARACTERS[f.char] || {}).short || ''}'s story`; w.style.display = 'block'; } else w.style.display = 'none';
+    // the banner only while this player is out of it, not once they're back in
+    const f = S.featured, w = $('.sc-watch'); if (f && f.id && f.id !== myId && !(S.chars || []).some((c) => c.id === myId)) { w.textContent = `You're watching ${(CHARACTERS[f.char] || {}).short || ''}'s story`; w.style.display = 'block'; } else w.style.display = 'none';
     if (!cutQ.length) { if (S.vision != null) vision(S.vision); if (S.music != null && music) music.set(S.music); }
     const keep = new Set();
     for (const m of S.markers || []) {
@@ -220,7 +229,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     } else if (cam1 === 'pull' && who2) {   // behind and above, pulling away as they walk off
       const k = Math.min(1, shotT / 6), back = 3 + k * 9, up = 1.8 + k * 5, fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0);
       p = new THREE.Vector3(who2.x - fx * back, who2.y + up, who2.z - fz * back); look = new THREE.Vector3(who2.x + fx * 2, who2.y + 1.2, who2.z + fz * 2);
-      cam.p.lerp(p, 0.02); cam.l.lerp(look, 0.05); if (!cam.init) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } return { pos: cam.p, look: cam.l };
+      if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } else { cam.p.lerp(p, 0.02); cam.l.lerp(look, 0.05); } return { pos: cam.p, look: cam.l };
     } else if (cam1 === 'close' && who2) {
       const s2 = who2.scale || 1, fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0), d = (1.7 - Math.min(0.3, shotT * 0.04)) * s2, side = 0.45 * s2;
       p = new THREE.Vector3(who2.x + fx * d + fz * side, who2.y + 1.6 * s2, who2.z + fz * d - fx * side); look = new THREE.Vector3(who2.x, who2.y + 1.5 * s2, who2.z);
@@ -244,8 +253,8 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   const card = (small, h1, p, em, rw) => { const c = $('.sc-card'); $('.sc-card small').textContent = small || ''; $('.sc-card h1').textContent = h1 || ''; $('.sc-card p').textContent = p || ''; $('.sc-card em').textContent = em || ''; $('.sc-card .rw').textContent = rw || ''; c.style.display = 'grid'; c.style.opacity = 1; };
   return {
     onEvent(type, data) {
-      if (type === 'cut') { cutAll = (data.lines || []).slice(); cutQ = cutAll.slice(); cutT0 = performance.now(); lineIdx = 0; $('.sc-title').textContent = data.title || ''; $('.sc-skip').textContent = 'tap / Space / A: skip'; talkQ = []; talkT = 0; $('.sc-talk').style.opacity = 0; showLine(); }
-      if (type === 'cutSkip') endCut();
+      if (type === 'cut') { $('.sc-unlock').style.display = 'none'; cutAll = (data.lines || []).slice(); cutQ = cutAll.slice(); cutT0 = performance.now(); lineIdx = 0; $('.sc-title').textContent = data.title || ''; $('.sc-skip').textContent = 'tap / Space / A: skip'; talkQ = []; talkT = 0; $('.sc-talk').style.opacity = 0; showLine(); }
+      if (type === 'cutSkip') { flushCut(); endCut(); }
       if (type === 'skipVotes') $('.sc-skip').textContent = `skip: ${data.n} of ${data.need} want to skip`;
       if (type === 'talk') { talkQ.push(...(data.lines || [])); if (talkT <= 0) nextTalk(); }
       if (type === 'story') { S = data; render(); }

@@ -426,7 +426,7 @@ function hospital() {
   B.roof(2, 2, 68, 30, 3.6, 'tile').roof(2, 31, 48, 50, 3.6, 'tile').roof(48, 31, 68, 42, 3.6, 'tile');
   B.zone('Chapel', 2, 2, 16, 25).zone('Nursery', 18, 2, 32, 25).zone('Oncology', 34, 2, 50, 25).zone('Records', 52, 2, 68, 25)
     .zone('Corridor', 2, 26, 68, 30).zone('Ward', 2, 31, 22, 50).zone('Lobby', 24, 31, 46, 50).zone('Blood Bank', 48, 31, 68, 42)
-    .zone('Stairs', 48, 43, 60, 56).zone('Roof', 60, 44, 68, 56).zone('Ambulance Bay', 24, 51, 46, 56);
+    .zone('Stairs', 48, 43, 60, 56).zone('Roof', 60, 44, 68, 56).zone('Ambulance Bay', 24, 51, 46, 56).zone('Lobby Entry', 33, 31.5, 37, 33).zone('Lobby Doors', 32, 43, 38, 46);
   B.site('A', 52, 2, 68, 25).site('B', 2, 31, 22, 50);
   B.buyzone('T', 2, 26, 8, 30).buyzone('CT', 28, 40, 42, 50);
   for (let k = 0; k < 5; k++) { B.spawn('CT', 29 + k * 3, 46, 0); B.spawn('T', 4 + k * 13, 28, 0); }
@@ -493,7 +493,7 @@ function wienerHouse() {
   B.block(11, 4, 13, 5, 0.25, 'rock');                                                  // her grave, in the yard
   B.zone('Kitchen', 4, 10, 13, 18).zone('Living Room', 14, 10, 30, 18).zone('Hallway', 4, 19, 30, 21).zone('Danny\'s Room', 4, 22, 13, 28).zone('Master Bedroom', 14, 22, 21, 28)
     .zone('Bathroom', 22, 22, 30, 28).zone('Porch', 30, 15, 38, 24).zone('Grave', 8, 3, 16, 8).zone('Yard', 2, 2, 40, 9).zone('Coat Hooks', 25, 19, 29, 21).zone('Knife Block', 10, 12, 13, 13)
-    .zone('Danny\'s Door', 8, 20, 10, 22).zone('Shadow Wall', 10, 19, 13, 21);
+    .zone('Danny\'s Door', 8, 20, 10, 22).zone('Shadow Wall', 10, 19, 13, 21).zone('Grave Side', 14, 5, 15.5, 6.5).zone('Danny Doorway', 8.3, 22.4, 9.7, 23.2);
   B.mark('Shadow Wall', 11.5, 1.5, 21.95, Math.PI).mark('Kitchen Wall', 4.05, 1.6, 14, Math.PI / 2).mark('Grave', 12, 0.8, 5.2, 0);
   B.site('A', 4, 22, 13, 28).site('B', 14, 10, 30, 18);
   B.buyzone('T', 14, 22, 21, 28).buyzone('CT', 14, 10, 30, 18);

@@ -106,7 +106,7 @@ export class StoryMatch extends Match {
     }
     this.fillSquad();
     for (const a of this.mission.actors || []) {   // people the story needs who aren't fighting: Danny, the doctor
-      const q = this.add('actor_' + a.id, { name: a.name || a.id, bot: true, team: 'CT' }); q.squad = false; q.actorId = a.id; q.passive = true; q.lookAs = a.look; q.scale = a.scale || 1; q.npc = true;
+      const q = this.add('actor_' + a.id, { name: a.name || a.id, bot: true, team: 'CT' }); q.squad = false; q.char = null; q.name = a.name || a.id; q.actorId = a.id; q.passive = true; q.lookAs = a.look; q.scale = a.scale || 1; q.npc = true;
       const pt = this.zonePt(a.zone, 91); q.spawnAt = null; q.x = pt[0]; q.z = pt[1]; q.y = this.W.groundAt(pt[0], pt[1], 10); q.alive = true; q.hp = 9999; q.maxHp = 9999; q.inv = {}; q.cur = 0; q.scripted = true;
     }
     this.round = 1; this.phase = 'freeze'; this.timer = 9999;
@@ -133,6 +133,7 @@ export class StoryMatch extends Match {
   lines(raw) { return raw.map(([who, text, o]) => ({ who, name: who === 'boss' ? (this.boss && BOSSES[this.boss.bossKey] ? BOSSES[this.boss.bossKey].name : BOSS.name) : (CHARACTERS[who] || {}).name || SPEAKERS[who] || who, text, o: o || null })); }
   // a scene everyone watches together (the host keeps the clock; the clients pace the lines the same way)
   scene(raw, title = '', which = 'scene') {
+    this.flushDirs();   // whatever the last scene still had to do happens before this one starts
     const lines = this.lines(raw); this.skipVotes.clear();
     this.event('cut', { lines, title, which });
     let acc = 0; this.dirs = lines.map((l) => { const d = { t: acc, o: l.o, who: l.who }; acc += 1.6 + l.text.length * 0.045 + ((l.o && l.o.hold) || 0); return d; }).filter((d) => d.o); this.sceneClock = 0;
@@ -146,6 +147,8 @@ export class StoryMatch extends Match {
     this.sceneClock += dt;
     while (this.dirs.length && this.dirs[0].t <= this.sceneClock) this.doDir(this.dirs.shift().o);
   }
+  // a skipped scene: its lasting directions all happen now (walks become places), the momentary ones are dropped
+  flushDirs() { for (const d of this.dirs.splice(0)) { const o = { ...d.o }; delete o.slowmo; delete o.sfx; delete o.smoke; if (o.walk) { o.place = o.walk; delete o.walk; } this.doDir(o); } }
   doDir(o) {
     if (o.vision != null) { this.vision = o.vision; this.push(true); }
     if (o.music != null) { this.music = o.music; this.push(true); }
@@ -160,7 +163,12 @@ export class StoryMatch extends Match {
     if (o.fullhp) for (const q of this.players.values()) if (q.squad && q.alive) { q.hp = q.maxHp || 100; q.downed = false; if (q.local) this.onLocal('hurt', { id: q.id, hp: q.hp, armor: q.armor, heal: true }); else if (!q.bot) this.send('hurt', { id: q.id, hp: q.hp, armor: q.armor, heal: true }, q.id); }
     if (o.bossEnd && this.boss) { const b = this.boss; this.players.delete(b.id); this.enemies.delete(b.id); this.boss = null; this.tele = []; this.event('boss', null); this.broadcastRoster(); if (this.state) this.state.have = 1; }
     if (o.walk) for (const q of this.players.values()) if (q.bot && ((q.squad && o.walk[0] === q.char) || q.actorId === o.walk[0])) q.walkTo = Array.isArray(o.walk[1]) ? o.walk[1] : this.zonePt(o.walk[1], 77);
-    if (o.place) for (const q of this.players.values()) if ((q.squad && o.place[0] === q.char) || q.actorId === o.place[0]) { const pt = this.zonePt(o.place[1], 78); q.x = pt[0]; q.z = pt[1]; q.y = this.W.groundAt(pt[0], pt[1], 10); q.seen = false; }
+    if (o.place) for (const q of this.players.values()) if ((q.squad && o.place[0] === q.char) || q.actorId === o.place[0]) { const pt = this.zonePt(o.place[1], 78); q.x = pt[0]; q.z = pt[1]; q.y = this.W.groundAt(pt[0], pt[1], 10); q.seen = false; if (o.place[2]) { const f = this.zonePt(o.place[2], 79); q.yaw = Math.atan2(-(f[0] - q.x), -(f[1] - q.z)); }
+      if (!q.bot) {   // a real player is told where they now stand; their older position reports are ignored until one arrives from here
+        q.tpAt = [q.x, q.z, this.clock || 0]; const m = { x: q.x, y: q.y, z: q.z, yaw: o.place[2] ? q.yaw : null };
+        if (q.local) this.onLocal('tp', m); else this.send('tp', m, q.id);
+      }
+    }
   }
   // lines over gameplay: nobody stops
   talk(raw) { if (raw && raw.length) this.event('talk', { lines: this.lines(raw) }); }
@@ -170,7 +178,7 @@ export class StoryMatch extends Match {
     this.skipVotes.add(p.id);
     const need = this.humans().length || 1, n = [...this.skipVotes].filter((id) => { const q = this.players.get(id); return q && !q.bot; }).length;
     this.event('skipVotes', { n, need });
-    if (n >= need) { this.skipVotes.clear(); if (this.cutT > 0) this.cutT = 0.01; this.sceneT = 0; if (this.result) this.endT = Math.min(this.endT, 0.6); this.event('cutSkip', {}); }
+    if (n >= need) { this.skipVotes.clear(); if (this.cutT > 0) this.cutT = 0.01; this.sceneT = 0; this.flushDirs(); if (this.result) this.endT = Math.min(this.endT, 0.6); this.event('cutSkip', {}); }
   }
   // where a story place name lands on this map: a named zone (hashed, so the same name always means the same place)
   zonePt(name, salt = 0) {
@@ -384,10 +392,11 @@ export class StoryMatch extends Match {
       if (group === 'head' && !v.bot) amount *= this.diff.hsTaken / 4;
     }
     if (v === this.boss && group === 'head' && this.boss.beam && this.boss.beam.charge) { this.boss.beam.stagger = (this.boss.beam.stagger || 0) + amount; }
+    if (v === this.boss && this.sceneT > 0) return;   // nobody lands a hit on it while a scene plays
     if (v === this.boss && v.bossKey && v.bossKey !== 'ballin') {   // the father and the Reaper: hits land properly only in an opening
       const B = BOSSES[v.bossKey]; amount *= v.vuln > 0 ? B.vulnMul : B.armorMul;
-      if (v.bossKey === 'reaper' && v.hp - amount <= 0) { amount = 0; this.reaperEnd(); }
-      if (v.bossKey === 'reaper' && !v.fell && v.hp - amount <= v.maxHp * 0.25) { amount = Math.max(0, v.hp - v.maxHp * 0.25); this.reaperFall(); }
+      if (v.bossKey === 'reaper' && !v.fell && v.hp - amount <= v.maxHp * 0.25) { amount = Math.max(0, v.hp - v.maxHp * 0.25); this.reaperFall(); }   // it always wins once first
+      else if (v.bossKey === 'reaper' && v.fell && v.hp - amount <= 0) { amount = 0; this.reaperEnd(); }
     }
     if (v.squad && v.downed && this.sceneT > 0) return;   // nobody dies during a scene
     super.damage(v, by, amount, weapon, group, wallbang, silent);

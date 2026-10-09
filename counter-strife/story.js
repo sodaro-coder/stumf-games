@@ -135,7 +135,7 @@ export const STORY_LOOKS = {
 //   revive { who }  a squadmate is down: hold USE on them while the enemy pushes
 //   carry { who, zone }  that character carries the objective to the zone; everyone else keeps them alive
 // Speakers: the four characters, 'boss', and the extra voices in SPEAKERS.
-export const SPEAKERS = { command: 'Colonel Brisket (Command)', tape: 'Dale (on tape)', doctor: 'Dr. Adebayo', nurse: 'Nurse Kowalczyk', chef: 'The Chili Chef', captain: 'The Captain', bouncer: 'The Bouncer', recruit: 'New Recruit', squad: 'Everyone', credits: '', dad: 'Dad', danny: 'Danny', enemy: 'Guard' };
+export const SPEAKERS = { command: 'Colonel Brisket (Command)', tape: 'Dale (on tape)', doctor: 'Dr. Adebayo', nurse: 'Nurse Kowalczyk', chef: 'The Chili Chef', captain: 'The Captain', bouncer: 'The Bouncer', recruit: 'New Recruit', squad: 'Everyone', credits: '', dad: 'Dad', danny: 'Danny', radio: 'Radio', enemy: 'Guard' };
 
 export const CHAPTERS = [
   { id: 'c1', map: 'range', name: 'Wieners Protect Their Own', hub: 'Frank Wiener got back up. He has never once told anyone what it cost.', missions: [
@@ -185,13 +185,13 @@ export const CHAPTERS = [
         { kind: 'reach', zone: 'Hallway', hint: '(the hallway)',
           scene: [['dad', '(Something heavy hits a wall upstairs. Then again.)', { cam: 'pov', look: 'Shadow Wall', shadow: 'beat', sfx: 'punch' }], ['dad', 'You think you can just— LOOK at me when I\'m talking to you!', { cam: 'pov', look: 'Shadow Wall', shadow: 'beat', sfx: 'punch' }],
             ['dad', '(A cry. Muffled. Then nothing.)', { cam: 'pov', look: 'Shadow Wall', shadow: 'beat', hold: 1 }],
-            ['wiener', '(One year earlier.)', { place: ['wiener', 'Grave'], cam: 'grave', vision: 'memory', hold: 1.5 }], ['wiener', '(Nobody says anything at a funeral for a long time.)', { cam: 'grave', hold: 2 }], ['wiener', '(Frank holds his little brother\'s hand. Danny is holding a balloon he doesn\'t understand.)', { cam: 'grave', hold: 2 }],
+            ['wiener', '(One year earlier.)', { place: ['wiener', 'Grave Side'], cam: 'grave', vision: 'memory', hold: 1.5 }], ['wiener', '(Nobody says anything at a funeral for a long time.)', { cam: 'grave', hold: 2 }], ['wiener', '(Frank holds his little brother\'s hand. Danny is holding a balloon he doesn\'t understand.)', { cam: 'grave', hold: 2 }],
             ['wiener', '(The headstone says MARGARET WIENER. LOVED HER BOYS.)', { cam: 'grave', hold: 2.5 }],
             ['dad', 'Frankie!? Where\'s your brother!?', { place: ['wiener', 'Hallway'], cam: 'pov', look: 'Shadow Wall', vision: 'flashback', shadow: 'beat', sfx: 'punch' }],
             ['danny', 'FRANKIE—', { cam: 'pov', look: 'Danny\'s Door', shadow: 'beat', sfx: 'punch' }], ['wiener', '(Danny. It\'s Danny in there.)', { cam: 'pov', look: 'Kitchen', hold: 1.2 }]] },
         { kind: 'interact', targets: 1, zone: 'Knife Block', hint: 'The knife on the counter', give: ['wiener', 'knife'], say: [['wiener', '(His hands are shaking. He picks it up anyway.)']] },
         { kind: 'boss', boss: 'father', zone: 'Danny\'s Room', hint: 'Save Danny',
-          scene: [['wiener', '(He runs.)', { cam: 'pov', look: 'Danny\'s Door', music: '', slowmo: [0.55, 3.2], sfx: 'heartbeat' }], ['dad', '(The door bursts open. Dad turns, slow, huge, swaying.)', { cam: 'boss' }], ['dad', '...the hell are you doing with that, boy?', { cam: 'boss' }], ['dad', 'You\'re just like her. You know that? JUST like her.', { cam: 'boss', music: 'dad' }]] },
+          scene: [['wiener', '(He runs.)', { place: ['wiener', 'Shadow Wall'], cam: 'pov', look: 'Danny\'s Door', music: '', slowmo: [0.55, 3.2], sfx: 'heartbeat' }], ['dad', '(The door bursts open. Dad turns, slow, huge, swaying.)', { place: ['wiener', 'Danny Doorway', 'Danny\'s Room'], cam: 'boss' }], ['dad', '...the hell are you doing with that, boy?', { cam: 'boss' }], ['dad', 'You\'re just like her. You know that? JUST like her.', { cam: 'boss', music: 'dad' }]] },
       ],
       cut: { in: [['dad', '(A glass. Then just the bottle.)', { cam: 'pov', look: 'Shadow Wall', shadow: 'drink' }], ['dad', 'Ten years I gave that plant. Ten years. And she just... leaves me with them.', { cam: 'pov', look: 'Shadow Wall', shadow: 'drink' }], ['dad', '(The bottle hits the wall. Glass everywhere.)', { cam: 'pov', look: 'Shadow Wall', shadow: 'drink', sfx: 'glass', hold: 1.2 }]],
         out: [['danny', '(They sit on the porch steps until the sirens come. Neither of them lets go.)', { cam: 'wide', place: ['wiener', 'Porch'], walk: ['danny', 'Porch'], hold: 3 }]] } },
@@ -227,7 +227,7 @@ export const CHAPTERS = [
         { kind: 'reach', zone: 'Front Gate', hint: 'Out the front gate', say: [['ricky', 'Gate. Gate gate gate gate GATE.']] },
       ],
       cut: { in: [['ricky', '(A window. A rich house. Two in the morning.)', { cam: 'wide' }], ['ricky', 'In and out. Nobody gets hurt. Ricky gets paid.', { cam: 'close' }]],
-        out: [['ricky', '(He steps into the street. The night is very quiet.)', { cam: 'wide', music: 'ricky' }], ['ricky', '(He tucks the Glock into his waistband.)', { cam: 'close' }], ['ricky', '(He lights a blunt.)', { smoke: 'ricky', cam: 'close' }], ['ricky', 'Normal Tuesday.', { smoke: 'ricky' }], ['ricky', '(And he walks.)', { walk: ['ricky', 'Street End'], cam: 'pull', hold: 4 }]] } },
+        out: [['ricky', '(He steps into the street. The night is very quiet.)', { place: ['ricky', 'Street', 'Street End'], cam: 'wide', music: 'ricky' }], ['ricky', '(He tucks the Glock into his waistband.)', { cam: 'close' }], ['ricky', '(He lights a blunt.)', { smoke: 'ricky', cam: 'close' }], ['ricky', 'Normal Tuesday.', { smoke: 'ricky' }], ['ricky', '(And he walks.)', { walk: ['ricky', 'Street End'], cam: 'pull', hold: 4 }]] } },
   ] },
   { id: 'c3', map: 'town', name: 'Small Town, Big Problems', hub: 'Nine thousand bottle rockets, a pallet of expired chili, and Ricky with a phone.', missions: [
     { id: 'm5', name: 'Fireworks Stand', tier: 1, intro: 'Burnt Town. The Brotherhood paid cash for every firework in the county.',
@@ -346,8 +346,8 @@ export const CHAPTERS = [
         { kind: 'interact', targets: 1, zone: 'Records', hint: 'Search the back room',
           scene: [['cancer', '(A crate. Stencilled on the side: EXPERIMENTAL. CANCER-GAS. DO NOT INHALE.)', { cam: 'close', music: '' }], ['cancer', '(He looks at it for a long time.)', { hold: 1.5 }], ['cancer', '...you have GOT to be kidding me.', { unlock: 'cancer' }]] },
         { kind: 'clear', zone: 'Corridor', count: 3, hint: 'Three guards between you and the exit. Use the canisters (G)', give: ['cancer', 'p2000'], say: [['cancer', 'Breathe deep, boys. Doctor\'s orders.']], done: [['cancer', '(One of them dropped a pistol. He takes it.)']] },
-        { kind: 'boss', boss: 'reaper', zone: 'Lobby', hint: 'The exit',
-          scene: [['cancer', '(The exit. Daylight under the doors.)', { cam: 'wide', music: '' }], ['cancer', '(The lights go out. One by one. From the far end of the lobby, toward him.)', { vision: 'dread', music: 'dread', hold: 1 }], ['cancer', '(Something is standing between him and the doors.)', { cam: 'boss', hold: 1.5 }], ['cancer', '...Yeah. I figured you\'d be early.', { cam: 'close' }]] },
+        { kind: 'boss', boss: 'reaper', zone: 'Lobby Doors', hint: 'The exit',
+          scene: [['cancer', '(The exit. Daylight under the doors.)', { place: ['cancer', 'Lobby Entry', 'Ambulance Bay'], cam: 'wide', music: '' }], ['cancer', '(The lights go out. One by one. From the far end of the lobby, toward him.)', { vision: 'dread', music: 'dread', hold: 1 }], ['cancer', '(Something is standing between him and the doors.)', { cam: 'boss', hold: 1.5 }], ['cancer', '...Yeah. I figured you\'d be early.', { cam: 'close' }]] },
         { kind: 'reach', zone: 'Ambulance Bay', hint: 'Go outside', vision: '', music: 'tender' },
       ],
       cut: { in: [['cancer', '(A waiting room. A birthday card on his knee. HAPPY 35TH.)', { cam: 'close' }], ['cancer', '(mumbling, writing) "Ricky. I have wanted to tell you something for thirty-four—" no.'], ['cancer', '(He tears it up. Takes out another card. He bought six.)'], ['cancer', '(under his breath) Next month. His birthday. Fishing trip. Booked the boat and everything.'],
@@ -387,12 +387,12 @@ export const CHAPTERS = [
         { kind: 'intel', zone: 'Command Bunker', options: ['FOLDER K-1: EXERCISE', 'FOLDER K-7: EXERCISE', 'FOLDER K-7: LOGISTICS'], answer: 'FOLDER K-7: EXERCISE', guards: 8, look: 'winter_b', hint: 'The command bunker: replace the K-7 folder (read the clue)',
           say: [['igor', 'Last one. The K-7 folder, the one marked EXERCISE. Mine says STRIKE. Swap it, and they believe the other side is about to hit first.'], ['igor', '(Every patrol is closing in. They know someone is here.)'], ['igor', '(quietly) Only a few days of confusion. Enough to cross the border. That is all.']],
           done: [['igor', 'Three. Done. Now I go.']] },
-        { kind: 'reach', zone: 'Treeline', hint: 'Get out through the treeline', say: [['igor', '(On every radio, at once:) ...alert status raised... ...alert status raised...'], ['igor', 'Is only words on paper. Words on paper.']] },
+        { kind: 'reach', zone: 'Treeline', hint: 'Get out through the treeline', say: [['radio', '(On every radio, at once:) ...alert status raised... ...alert status raised...'], ['igor', 'Is only words on paper. Words on paper.']] },
       ],
-      cut: { in: [['igor', '(A ridge. A blizzard. A man who has not moved for six hours.)', { cam: 'wide' }], ['igor', '(radio, one channel) Volk-1, report.', { cam: 'close' }], ['igor', 'Volk-1. Nothing moves.'], ['igor', '(radio, the other channel) Snowbird, report.'], ['igor', 'Snowbird. Nothing moves.'],
-        ['igor', '(Both channels, one after the other:) We know, Snowbird. ...We know, Volk.', { hold: 1.5 }], ['igor', '(Engines. Dogs. Two armies, coming from both directions. For him.)', { hold: 1.5 }], ['igor', 'Then I make them busy with each other.']],
-        out: [['igor', '(Treeline. He looks back once.)', { cam: 'wide', music: '' }], ['igor', '(radio) ...this is not an exercise... repeat, this is not...'], ['igor', '(radio, the other side) ...we have launches... we have launches...', { hold: 1 }], ['igor', '(The horizon goes white. Then it goes white again, somewhere else.)', { vision: 'nuke', hold: 3 }],
-          ['igor', '(radio, a woman, civilian band) Mama? Mama, the lights went out, are you— can you hear—', { hold: 1.5 }], ['igor', '(radio) ...emergency broadcast... seek shelter... seek...', { hold: 1.5 }], ['igor', '(Static. On every channel. Everywhere.)', { hold: 3 }],
+      cut: { in: [['igor', '(A ridge. A blizzard. A man who has not moved for six hours.)', { cam: 'wide' }], ['radio', '(radio, one channel) Volk-1, report.', { cam: 'close' }], ['igor', 'Volk-1. Nothing moves.'], ['radio', '(radio, the other channel) Snowbird, report.'], ['igor', 'Snowbird. Nothing moves.'],
+        ['radio', '(Both channels, one after the other:) We know, Snowbird. ...We know, Volk.', { hold: 1.5 }], ['igor', '(Engines. Dogs. Two armies, coming from both directions. For him.)', { hold: 1.5 }], ['igor', 'Then I make them busy with each other.']],
+        out: [['igor', '(Treeline. He looks back once.)', { cam: 'wide', music: '' }], ['radio', '(radio) ...this is not an exercise... repeat, this is not...'], ['radio', '(radio, the other side) ...we have launches... we have launches...', { hold: 1 }], ['igor', '(The horizon goes white. Then it goes white again, somewhere else.)', { vision: 'nuke', hold: 3 }],
+          ['radio', '(radio, a woman, civilian band) Mama? Mama, the lights went out, are you— can you hear—', { hold: 1.5 }], ['radio', '(radio) ...emergency broadcast... seek shelter... seek...', { hold: 1.5 }], ['igor', '(Static. On every channel. Everywhere.)', { hold: 3 }],
           ['igor', '(He looks at the bullet in his hand. The one he never fires.)', { cam: 'close', hold: 3 }], ['igor', 'It was only paper.', { hold: 3 }]] } },
     { id: 'm20', name: 'Clock In', tier: 5, intro: 'Brisket thinks you don\'t know. Let him keep thinking it.',
       objectives: [
