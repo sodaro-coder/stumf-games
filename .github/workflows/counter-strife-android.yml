@@ -129,14 +129,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build release APK
+      - name: Build installable debug-signed APK
         working-directory: android-app
-        run: gradle --no-daemon assembleRelease
+        run: gradle --no-daemon assembleDebug
 
       - name: Publish APK for download
         uses: actions/upload-artifact@v4
         with:
           name: Counter-Strife-Android-APK
-          path: android-app/app/build/outputs/apk/release/app-release-unsigned.apk
+          path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 90
