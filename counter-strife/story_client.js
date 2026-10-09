@@ -28,9 +28,10 @@ export function storyClient({ scene, myId, audio, onNext, onQuit, onCutEnd, isHo
   .sc-end{position:absolute;inset:0;background:#05070bdd;display:none;place-items:center;pointer-events:auto}.sc-end>div{text-align:center}.sc-end h1{font:900 46px system-ui;margin:0;color:#f2a33a;letter-spacing:.06em}
   .sc-end button{margin:16px 6px 0;padding:12px 22px;border-radius:8px;border:0;font:800 14px system-ui;letter-spacing:.1em;cursor:pointer;background:#f2a33a;color:#111}.sc-end button.alt{background:#2a3140;color:#fff}
   .sc-focus{position:absolute;inset:0;box-shadow:inset 0 0 120px #8fd06a55;display:none}
-  @media (max-height:520px){.sc-obj{top:44px}.sc-squad{bottom:auto;top:150px}.sc-line p{font-size:15px}}`;
+  body.sc-cutting .kc-t{visibility:hidden}.sc-cut,.sc-end{z-index:50}
+  @media (max-height:520px){.sc-obj{top:44px;padding:4px 10px 4px 20px}.sc-obj span{font-size:13px}.sc-squad{bottom:auto;top:96px;left:auto;right:calc(env(safe-area-inset-right,0px) + 12px);gap:2px}.sc-m{min-width:118px;font-size:10px;padding:1px 6px}.sc-m .bar{width:40px}.sc-line p{font-size:15px}.sc-title{font-size:18px;top:13vh}.sc-line{bottom:13vh;padding:10px 14px}}`;
   document.head.appendChild(css);
-  const ui = document.createElement('div'); ui.className = 'sc-ui';
+  const ui = document.createElement('div'); ui.className = 'sc-ui'; ui.style.zIndex = 46;   // over the phone controls (45)
   ui.innerHTML = `<div class="sc-focus"></div><div class="sc-obj"><b></b><span></span><i></i></div><div class="sc-squad"></div><div class="sc-boss"><b></b><div><i></i></div></div>
     <div class="sc-bark"></div><div class="sc-cut"><div class="sc-title"></div><div class="sc-line"><b></b><p></p><small>tap / Space / A to skip</small></div></div>
     <div class="sc-end"><div><h1>MISSION COMPLETE</h1><div class="sc-endsub"></div><div><button data-next>NEXT MISSION</button><button class="alt" data-quit>MENU</button></div></div></div>`;
@@ -61,7 +62,7 @@ export function storyClient({ scene, myId, audio, onNext, onQuit, onCutEnd, isHo
   }
   let S = null, cutQ = [], cutT = 0, barkT = 0, focusT = 0, ended = false, groundAt = () => 0;
   function showLine() {
-    const l = cutQ[0]; if (!l) { $('.sc-cut').style.display = 'none'; return; }
+    const l = cutQ[0]; document.body.classList.toggle('sc-cutting', !!l); if (!l) { $('.sc-cut').style.display = 'none'; return; }
     $('.sc-cut').style.display = 'block'; $('.sc-line').style.setProperty('--c', COLORS[l.who] || '#fff');
     $('.sc-line b').textContent = l.name; $('.sc-line p').textContent = l.text; cutT = 1.6 + l.text.length * 0.045;
     if (audio && audio.say) audio.say(l.text, l.who === 'boss' ? 0.6 : l.who === 'ricky' ? 1.25 : l.who === 'igor' ? 0.75 : l.who === 'cancer' ? 0.9 : 0.85, 1.05);
@@ -117,6 +118,6 @@ export function storyClient({ scene, myId, audio, onNext, onQuit, onCutEnd, isHo
       while (balls.length < bl.length) { const m = new THREE.Mesh(ballGeo, ballMat); grp.add(m); balls.push(m); }
       balls.forEach((m, i) => { m.visible = i < bl.length; if (m.visible) m.position.set(bl[i][0], bl[i][1], bl[i][2]); });
     },
-    dispose() { scene.remove(grp); ui.remove(); css.remove(); },
+    dispose() { document.body.classList.remove('sc-cutting'); scene.remove(grp); ui.remove(); css.remove(); },
   };
 }

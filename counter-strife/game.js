@@ -15,7 +15,9 @@ import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf,
 import { Bots, botNames } from './bots.js';
 import { StoryMatch } from './story_sim.js';
 import { storyClient } from './story_client.js';
-import { MISSIONS, CHARACTERS } from './story.js';
+import { MISSIONS, CHARACTERS, BOSS } from './story.js';
+// the boss in a match: a giant in a basketball jersey and a gold cap
+const BOSS_LOOK = { body: BOSS.model.jersey, legs: BOSS.model.trim, head: '#a8805e', hat: 'cap', hatColor: BOSS.model.trim };
 import { Profile } from './backend.js';
 import { Menu, Hud, injectCss, esc, weaponIcon } from './ui.js';
 import { line, sfxFor, hasLine } from './voices.js';
@@ -381,7 +383,7 @@ export default function start({ cfg, E, N, smoke }) {
     const rankedReady = () => { if (!match) return false; const n = MODES[mode].size; return [...match.players.values()].filter((q) => !q.bot && q.team === 'T').length >= n || [...match.players.values()].filter((q) => !q.bot && q.team === 'CT').length >= n; };
     // story mode's screen layer (made on the first story event) and the end of a mission
     let SC = null;
-    const storyUI = () => SC || (hud.el.classList.add('story'), SC = storyClient({ scene, myId, audio, isHost, onCutEnd: () => { if (match && match.cutT > 0) match.cutT = 0.01; if (match && match.result) match.endT = Math.min(match.endT, 1); }, onQuit: () => quit(), onNext: () => { if (story && MISSIONS[story.mission + 1]) quit({ ...opt, story: { ...story, mission: story.mission + 1 } }); } }));
+    const storyUI = () => SC || (hud.el.classList.add('story'), SC = storyClient({ scene, myId, audio, isHost, onCutEnd: () => { if (match && match.cutT > 0) match.cutT = 0.01; if (match && match.result) match.endT = Math.min(match.endT, 1); }, onQuit: () => quit(), onNext: () => { if (story && MISSIONS[story.mission + 1]) { if (session) send('storyNext', 1); quit({ ...opt, code: session ? session.code : undefined, story: { ...story, mission: story.mission + 1 } }); } } }));
     async function storyDone(d) {
       if (ended) return; ended = true;
       document.exitPointerLock && document.exitPointerLock();
@@ -449,11 +451,14 @@ export default function start({ cfg, E, N, smoke }) {
       const r0 = rigs.get(id), info = st.roster.get(id) || {}, team = info.team || 'T';
       const agentId = (info.agent || {})[team] || (team === 'T' ? 'a_t_default' : 'a_ct_default');
       const useS = charsReady();   // the realistic animated soldier on every quality (11k triangles); the simple rig only while it loads
-      const key = agentId + team + (useS ? 'S' : '');
+      const role = info.boss ? 'boss' : info.char && CHARACTERS[info.char] ? info.char : '';   // story mode: squad characters and the boss
+      const key = agentId + team + (useS ? 'S' : '') + role;
       if (r0 && r0.key === key) return r0;
       if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
-      const r = useS ? makeSoldier(a.look, team, P.hqModels) : makePlayer(a.look, team);
+      const look = role === 'boss' ? BOSS_LOOK : role ? CHARACTERS[role].look : a.look;
+      const r = useS ? makeSoldier(look, team, P.hqModels) : makePlayer(look, team);
+      if (role === 'boss') r.g.scale.setScalar(BOSS.model.scale);
       markCaster(r.g);   // drawn into the dynamic player-shadow map (Medium and up)
       r.blob = new THREE.Mesh(blobGeo, blobMat); r.blob.rotation.x = -Math.PI / 2; r.blob.renderOrder = 1; scene.add(r.blob); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
       if (id !== myId) {  // teammates' names float over their heads
@@ -614,6 +619,7 @@ export default function start({ cfg, E, N, smoke }) {
     // raw mouse where the browser supports it (no OS acceleration, lower latency), else the plain lock
     const lock = () => { try { let r = null; try { r = renderer.domElement.requestPointerLock({ unadjustedMovement: true }); } catch (e1) { r = null; } if (r && r.catch) r = r.catch(() => renderer.domElement.requestPointerLock()); else if (!r && !document.pointerLockElement) r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock(['ControlLeft', 'KeyW', 'Tab']).catch(() => {}); };
     let mob = null; try { if (matchMedia('(pointer: coarse)').matches) mob = mobileControls(E.input); } catch (e) { /* no touch */ }
+    if (mob && story) document.querySelectorAll('.kc-t b').forEach((b) => { if (b.textContent === 'BUY') b.textContent = 'SKILL'; });   // nothing to buy in a mission: that button is the ability
     // controllers (consoles, TVs, PCs with a pad): drive the match while playing, the menus otherwise
     const pad = gamepadControls(E.input, { playing: () => started && !uiOpen && !ended && !hud.chatIn, sens: () => S.touchSens || 1 });
     if (mob) { hud.el.classList.add('touch'); mob.setSens(S.touchSens || 1); }
@@ -855,7 +861,9 @@ export default function start({ cfg, E, N, smoke }) {
       for (const [k, fn] of Object.entries(msgTypes)) session.on(k, (d, peer) => { if (peer === session.hostId) fn(d); });
       session.on('roster', (list, peer) => { if (peer === session.hostId && Array.isArray(list)) setRoster(list); });
       session.on('snap', (s, peer) => { if (peer === session.hostId) applySnap(s); });
-      session.on('_host', () => { if (!ended) { toast('The host left: match over'); quit(); } });
+      let following = false;
+      session.on('storyNext', (_, peer) => { if (peer !== session.hostId || following) return; following = true; toast('Next mission: following the host…'); setTimeout(() => quit({ code: session.code, host: false }), 2500); });   // co-op: the host re-opens the same code
+      session.on('_host', () => { if (!ended && !following) { toast('The host left: match over'); quit(); } });
       session.on('_roster', () => {});
       const sayHello = () => { if (session.hostId) session.toHost('hello', hello); };
       session.on('_join', (_, peer) => { if (peer === session.hostId) sayHello(); });
@@ -871,7 +879,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (id === myId) { me.hp = hp; if (me.alive && !alive) me.alive = false; me.armor = armor; me.helmet = !!helmet; me.money = money; me.planting = plant; continue; }
         let p = st.players.get(id); if (!p) st.players.set(id, (p = { id, x, y, z, tx: x, ty: y, tz: z }));
         if (Math.hypot(x - p.x, z - p.z) > 4) { p.x = x; p.y = y; p.z = z; }
-        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.rl = !!rl; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team;
+        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.rl = !!rl; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team; p.scale = (st.roster.get(id) || {}).boss ? BOSS.model.scale : 1;
       }
       for (const id of [...st.players.keys()]) if (!s.p.some((a) => a[0] === id)) st.players.delete(id);
       if (s.b) st.bomb = { s: s.b.s, x: s.b.x, y: s.b.y, z: s.b.z, t: s.b.t, d: s.b.d, site: s.b.site }; else if (st.bomb && st.bomb.s !== 'exploded' && st.bomb.s !== 'defused') st.bomb = null;
@@ -1021,10 +1029,10 @@ export default function start({ cfg, E, N, smoke }) {
         for (const p of match.players.values()) {
           if (p.id === myId) { me.hp = p.hp; me.alive = p.alive; me.money = p.money; me.armor = p.armor; me.helmet = p.helmet; me.planting = p.planting ? p.planting / BOMB.plant : 0; if (p.team !== me.team) { me.team = p.team; vmKey = ''; setViewModel(); } continue; }
           let q = st.players.get(p.id); if (!q) st.players.set(p.id, (q = { id: p.id }));
-          Object.assign(q, { x: p.x, y: p.y, z: p.z, tx: p.x, ty: p.y, tz: p.z, yaw: p.yaw, pitch: p.pitch, crouch: p.crouch, hp: p.hp, alive: p.alive, wid: (p.inv[p.cur] || {}).wid || 'knife', c4: !!p.inv[5], planting: p.planting ? p.planting / BOMB.plant : 0, team: p.team, money: p.money });
+          Object.assign(q, { x: p.x, y: p.y, z: p.z, tx: p.x, ty: p.y, tz: p.z, yaw: p.yaw, pitch: p.pitch, crouch: p.crouch, hp: p.hp, alive: p.alive, wid: (p.inv[p.cur] || {}).wid || 'knife', c4: !!p.inv[5], planting: p.planting ? p.planting / BOMB.plant : 0, team: p.team, money: p.money, scale: p.scale || 1 });
         }
         for (const id of [...st.players.keys()]) if (!match.players.has(id)) st.players.delete(id);
-        if (st.roster.size !== match.players.size || [...match.players.values()].some((p) => (st.roster.get(p.id) || {}).team !== p.team)) setRoster([...match.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: ((p.loadout || {})[p.team] || {}).att || null })));
+        if (st.roster.size !== match.players.size || (match.boss && !(st.roster.get(match.boss.id) || {}).boss) || [...match.players.values()].some((p) => (st.roster.get(p.id) || {}).team !== p.team)) setRoster([...match.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: ((p.loadout || {})[p.team] || {}).att || null, char: p.squad ? p.char : null, boss: !!p.boss })));
         netT += dt;
         if (session && netT >= 0.05) { netT = 0; session.send('snap', match.snap()); }
     }
@@ -1409,7 +1417,7 @@ export default function start({ cfg, E, N, smoke }) {
       hud.destroy(); renderer.dispose(); renderer.domElement.remove();
       document.querySelectorAll('.bd-stick,.bd-btns,.bd-look').forEach((e) => e.remove());
       history.replaceState(null, '', location.pathname);
-      if (next && next.story) runMatch(next); else if (!smoke) showMenu();
+      if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
     window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }

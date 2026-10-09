@@ -20,12 +20,12 @@ export function fillHitboxes(p) {
     putAlong(2, p, fx, fz, -0.1, 0.22, 0.02, 0.32); putAlong(3, p, fx, fz, -0.62, 0.26, 0.0, 0.26);
     return HB;
   }
-  const k = 1 - (p.crouch || 0) * 0.28, y = p.y, l = (p.lean || 0) * LEAN, cx = Math.cos(yaw), sz = -Math.sin(yaw);
+  const k = (1 - (p.crouch || 0) * 0.28) * (p.scale || 1), w = p.scale || 1, y = p.y, l = (p.lean || 0) * LEAN, cx = Math.cos(yaw), sz = -Math.sin(yaw);   // scale: the story boss is a giant
   const hx = cx * l, hz = sz * l, chx = hx * 0.55, chz = hz * 0.55, stx = hx * 0.2, stz = hz * 0.2;
-  put(0, p.x + hx - 0.15, y + 1.5 * k, p.z + hz - 0.15, p.x + hx + 0.15, y + 1.86 * k, p.z + hz + 0.15);
-  put(1, p.x + chx - 0.24, y + 1.15 * k, p.z + chz - 0.24, p.x + chx + 0.24, y + 1.5 * k, p.z + chz + 0.24);
-  put(2, p.x + stx - 0.22, y + 0.9 * k, p.z + stz - 0.22, p.x + stx + 0.22, y + 1.15 * k, p.z + stz + 0.22);
-  put(3, p.x - 0.22, y, p.z - 0.2, p.x + 0.22, y + 0.9 * k, p.z + 0.2);
+  put(0, p.x + hx - 0.15 * w, y + 1.5 * k, p.z + hz - 0.15 * w, p.x + hx + 0.15 * w, y + 1.86 * k, p.z + hz + 0.15 * w);
+  put(1, p.x + chx - 0.24 * w, y + 1.15 * k, p.z + chz - 0.24 * w, p.x + chx + 0.24 * w, y + 1.5 * k, p.z + chz + 0.24 * w);
+  put(2, p.x + stx - 0.22 * w, y + 0.9 * k, p.z + stz - 0.22 * w, p.x + stx + 0.22 * w, y + 1.15 * k, p.z + stz + 0.22 * w);
+  put(3, p.x - 0.22 * w, y, p.z - 0.2 * w, p.x + 0.22 * w, y + 0.9 * k, p.z + 0.2 * w);
   return HB;
 }
 // entry distance of the ray o + d*t into box k of a hitbox array, or -1

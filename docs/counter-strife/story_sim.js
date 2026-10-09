@@ -63,6 +63,8 @@ export class StoryMatch extends Match {
     if (p.squad) p.hp = p.maxHp || 100;
   }
   canBuy() { return false; }
+  // the roster also says who plays which character and which one is the boss (clients dress the models from it)
+  broadcastRoster() { this.send('roster', [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: null, char: p.squad ? p.char : null, boss: !!p.boss }))); }
   // the switch Glock fires far faster than a stock one: let its shots past the fire-rate check
   shot(p, wid, hits, origin) { if (wid === 'glock' && p.inv[2] && p.inv[2].sw) p.lastShot = 0; super.shot(p, wid, hits, origin); }
   // ---- flow: one long "round": a cutscene, then the objectives in order; everyone down = retry the objective ----
@@ -229,6 +231,7 @@ export class StoryMatch extends Match {
     if (v.team === 'T' && v.guard && by && by.team !== 'T') v.guard = null;   // shot at: leave the post and hunt
     if (v.squad || v === this.npc) {
       if (by && by.team === 'T') amount *= this.diff.enemyDmg;
+      if (by && by.boss && W_BY_ID[weapon]) amount *= 0.3;   // his Negev is for show: the dunk, the balls and the beam are what hurt
       if (group === 'head' && !v.bot) amount *= this.diff.hsTaken / 4;
     }
     if (v === this.boss && group === 'head' && this.boss.beam && this.boss.beam.charge) { this.boss.beam.stagger = (this.boss.beam.stagger || 0) + amount; }
@@ -246,7 +249,7 @@ export class StoryMatch extends Match {
   spawnBoss(at) {
     const n = Math.max(1, this.humans().length), hp = Math.round(BOSS.hp * this.diff.bossHp * (1 + 0.35 * (n - 1)));
     const b = this.enemy(at, { name: BOSS.name, hp: hp / this.diff.enemyHp, wid: 'negev' });
-    b.boss = true; b.maxHp = hp; b.hp = hp; b.armor = 100; this.boss = b; b.cd = { dunk: 6, rocket_ball: 3, triple_ball: 8, fart_bomb: 14, minions: 10, goy_beam: 8 };
+    b.boss = true; b.scale = BOSS.model.scale; b.maxHp = hp; b.hp = hp; b.armor = 100; this.boss = b; this.broadcastRoster(); b.cd = { dunk: 6, rocket_ball: 3, triple_ball: 8, fart_bomb: 14, minions: 10, goy_beam: 8 };
     this.event('boss', { id: b.id, name: BOSS.name, hp, max: hp });
   }
   bossTick(dt) {
