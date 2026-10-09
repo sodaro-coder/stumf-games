@@ -24,13 +24,14 @@ export const QSTEPS = [0.5, 0.75, 1, 1.5, 2];   // the saved setting's numbers (
 //  shadows      dynamic sun shadow cascades for players: [{ r: half-size m, size: px }], pcf: filter taps (1, 4 or 9)
 //  post         HDR composite pass;   bloom: taps (0 = off);   grade: ACES + colour grade + vignette + grain
 //  ssao         screen-space ambient occlusion in the composite
+//  ssr          screen-space reflections: ray-march steps (0 = off); smoothness comes from the world's roughness maps
 //  msaa         samples on the HDR render target (0 = off);  fxaa: one-pass FXAA in the composite
 //  hqModels     shiny PBR guns / bevelled parts / detailed soldiers
 //  dress        set dressing geometry (beams, pipes, rubble);   clouds;   env: per-map reflection map
 //  pixel        render scale band for the frame-time governor: start / max as multiples of the screen's pixel ratio
 const BASE = {
   texSize: 512, mipBias: 0, nearestMip: false, normalMaps: false, detail: false, macro: true, aniso: 1, bakeK: 4, probes: true,
-  shadows: null, post: false, bloom: 0, grade: false, ssao: false, msaa: 0, fxaa: false,
+  shadows: null, post: false, bloom: 0, grade: false, ssao: false, ssr: 0, msaa: 0, fxaa: false,
   hqModels: false, dress: true, clouds: true, env: false, chars: true, pixel: { start: 1, max: 1, min: 0.4 }, targetMs: 21,
 };
 export const PROFILES = {
@@ -40,13 +41,13 @@ export const PROFILES = {
   low: { ...BASE, q: 0.75, mipBias: 1, nearestMip: true, clouds: false, pixel: { start: 0.75, max: 0.75, min: 0.4 } },
   // MEDIUM: balanced. Full-resolution textures (bias 0), short-range player shadows, colour grade + cheap bloom, 2x MSAA
   medium: { ...BASE, q: 1, texSize: 1024, normalMaps: true, aniso: 4, shadows: { cascades: [{ r: 9, size: 1024 }], pcf: 1 },
-    post: true, bloom: 6, grade: true, msaa: 2, hqModels: true, env: true, pixel: { start: 1, max: 1, min: 0.55 } },
+    post: true, bloom: 6, grade: true, ssao: true, msaa: 2, hqModels: true, env: true, pixel: { start: 1, max: 1, min: 0.55 } },
   // HIGH: 8x anisotropic, two soft shadow cascades, full stack (SSAO, bloom, ACES grade), 4x MSAA
   high: { ...BASE, q: 1.5, texSize: 1024, normalMaps: true, detail: true, aniso: 8, bakeK: 6, shadows: { cascades: [{ r: 7, size: 2048 }, { r: 26, size: 1024 }], pcf: 9 },
-    post: true, bloom: 10, grade: true, ssao: true, msaa: 4, hqModels: true, env: true, pixel: { start: 1, max: 1.5, min: 0.55 } },
+    post: true, bloom: 10, grade: true, ssao: true, ssr: 20, msaa: 4, hqModels: true, env: true, pixel: { start: 1, max: 1.5, min: 0.55 } },
   // ULTRA: High plus 16x filtering, sharper cascades, finer lightmap and up to 2x the screen's pixels (4K on 1080p)
   ultra: { ...BASE, q: 2, texSize: 1024, normalMaps: true, detail: true, aniso: 16, bakeK: 8, shadows: { cascades: [{ r: 8, size: 4096 }, { r: 32, size: 2048 }], pcf: 9 },
-    post: true, bloom: 10, grade: true, ssao: true, msaa: 4, hqModels: true, env: true, pixel: { start: 2, max: 2, min: 1 }, targetMs: 30 },
+    post: true, bloom: 10, grade: true, ssao: true, ssr: 32, msaa: 4, hqModels: true, env: true, pixel: { start: 2, max: 2, min: 1 }, targetMs: 30 },
 };
 export const tierOf = (q) => { let best = 0; QSTEPS.forEach((s, i) => { if (Math.abs(s - q) < Math.abs(QSTEPS[best] - q)) best = i; }); return TIERS[best]; };
 
@@ -100,13 +101,13 @@ export class GraphicsSettingsManager {
   // the HDR target's options (MSAA samples, depth texture for SSAO)
   targetOpts(w, h, depth) {
     const o = { type: THREE.HalfFloatType, samples: this.msaa };
-    if (depth && this.p.ssao) { o.depthTexture = new THREE.DepthTexture(w, h); o.depthTexture.type = THREE.UnsignedIntType; }
+    if (depth && (this.p.ssao || this.p.ssr)) { o.depthTexture = new THREE.DepthTexture(w, h); o.depthTexture.type = THREE.UnsignedIntType; }
     return o;
   }
   // composite shader defines for this tier
   postDefines() {
     const p = this.p, d = { BLOOM_TAPS: String(Math.max(1, p.bloom)) };
-    if (p.bloom) d.BLOOM = ''; if (p.grade) d.GRADE = ''; if (p.ssao) d.SSAO = ''; if (p.fxaa) d.FXAA = '';
+    if (p.bloom) d.BLOOM = ''; if (p.grade) d.GRADE = ''; if (p.ssao) d.SSAO = ''; if (p.ssr) { d.SSR = ''; d.SSR_STEPS = String(p.ssr); } if (p.fxaa) d.FXAA = '';
     return d;
   }
   // Auto: one tier down (true if it changed). Never below Potato, never into Ultra by itself.

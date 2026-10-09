@@ -199,7 +199,11 @@ void main() {
     col += env * Fv * (1.0 - rough) * (1.0 - rough) * ao * 1.2;
   }
   #endif
-  gl_FragColor = vec4(col, 1.0);
+  float smoothK = 0.0;
+  #ifdef NMAP
+  smoothK = (1.0 - rough) * (1.0 - rough);   // how mirror-like this texel is: read back by the screen-space reflections
+  #endif
+  gl_FragColor = vec4(col, 1.0 - smoothK * 0.98);   // alpha carries it (1 = matte, as every other material writes)
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>

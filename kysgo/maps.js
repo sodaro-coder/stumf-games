@@ -441,6 +441,7 @@ function hospital() {
   B.sign(54.5, 30.05, 2.9, 0, 'BLOOD DRIVE\nO NEGATIVE NEEDED', 3.4, 0.9, '#b01818', '#fff');
   B.prop('lamp', 26, 54, {}).prop('lamp', 44, 54, {}).prop('tv', 36, 34, {}).prop('palm', 25, 33, {}).prop('palm', 45, 33, {}).prop('barrel', 66, 54, {});
   B.sky = 0x8ab0d8; B.fog = 0xd8e0e8; B.sunColor = 0xfff8f0; B.amb = [0xe8f0ff, 0x8a8a90]; B.sunDir = [0.4, 0.8, 0.3]; B.sunI = 2.0; B.ambI = 1.35;
+  B.wet = 3.2;   // screen-space reflections: polished hospital tile
   return B;
 }
 
@@ -556,6 +557,7 @@ function club() {
     .prop('speaker', 24, 12).prop('speaker', 38, 12).prop('speaker', 43, 27).prop('speaker', 19.5, 27);
   for (let z = 10; z <= 18; z += 2) B.prop('stool', 44.6, z + 0.5);
   B.sky = 0x140a1e; B.fog = 0x2a1434; B.sunColor = 0xffc8f0; B.amb = [0xf4c0f4, 0x7a4a80]; B.sunDir = [0.3, 0.8, 0.2]; B.sunI = 1.7; B.ambI = 2.1; B.fogNear = 18; B.fogFar = 80;
+  B.wet = 3.4;   // screen-space reflections: a polished dance floor
   return B;
 }
 
@@ -590,6 +592,7 @@ function mansion() {
   B.sign(16, 21.95, 2.4, Math.PI, 'NOT FOR SALE', 2.4, 0.6, '#1c1c20', '#d8b060');
   B.prop('lamp', 30, 46, {}).prop('lamp', 40, 46, {}).prop('lamp', 10, 50, {}).prop('lamp', 60, 50, {}).prop('tree', 6, 36, {}).prop('tree', 66, 38, {}).prop('palm', 26, 34, {}).prop('palm', 44, 34, {}).prop('tv', 36, 28, {});
   B.sky = 0x0a0e1e; B.fog = 0x10142a; B.sunColor = 0x9aaeff; B.amb = [0x46507a, 0x16121a]; B.sunDir = [0.4, 0.7, 0.3]; B.sunI = 1.1; B.ambI = 1.0; B.fogNear = 30; B.fogFar = 150;
+  B.wet = 3.0;   // screen-space reflections: marble and lacquered wood
   return B;
 }
 

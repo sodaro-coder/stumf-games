@@ -45,7 +45,7 @@ function dressScene(sc, B, shadows, clouds = true) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1 };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -314,7 +314,7 @@ export default function start({ cfg, E, N, smoke }) {
           const mat3 o = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
           c = i * c; vec3 a = c * (c + 0.0245786) - 0.000090537, b = c * (0.983729 * c + 0.4329510) + 0.238081; return clamp(o * (a / b), 0.0, 1.0); }
         vec3 srgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
-        #ifdef SSAO
+        #if defined(SSAO) || defined(SSR)
         float lin(vec2 p) { float z = texture2D(depthTex, p).r * 2.0 - 1.0; return 2.0 * camNF.x * camNF.y / (camNF.y + camNF.x - z * (camNF.y - camNF.x)); }
         // 8 taps on a rotated ring sized to ~0.45 m in the world: neighbours nearer than this pixel (within range) occlude it
         float ssao() {
@@ -326,6 +326,38 @@ export default function start({ cfg, E, N, smoke }) {
           return 1.0 - o / 8.0 * 0.6;
         }
         #endif
+        #ifdef SSR
+        // screen-space reflections: smooth surfaces (alpha < 1 in the frame, from the world's roughness maps) reflect
+        // what is already on screen. A ray marched in view space from each glossy pixel, tested against the depth
+        // buffer; rougher surfaces scatter the ray (blurrier, weaker reflections); faded at the screen edges, with
+        // distance along the ray and by Fresnel (grazing angles reflect most), times the map's wetness.
+        uniform float ssrK; uniform vec3 upV;
+        vec3 vpos(vec2 p) { float z = lin(p); vec2 nd = p * 2.0 - 1.0; return vec3(nd.x * camNF.z * (res.x / res.y) * z, nd.y * camNF.z * z, -z); }
+        vec3 ssr(vec3 base, float gloss) {
+          float z = lin(vUv); if (z > 50.0) return base;
+          vec2 px = 1.0 / res; vec3 P = vpos(vUv), N = normalize(cross(vpos(vUv + vec2(px.x, 0.0)) - P, vpos(vUv + vec2(0.0, px.y)) - P));
+          vec3 V = normalize(P); float up = dot(N, upV);
+          if (up < -0.2 || (up < 0.6 && gloss < 0.55)) return base;   // floors readily, walls only when really polished, never ceilings
+          float j = fract(sin(dot(vUv * res, vec2(12.9898, 78.233)) + time * 7.0) * 43758.5453), rough = 1.0 - sqrt(gloss);
+          vec3 jit = vec3(j, fract(j * 7.13), fract(j * 3.71)) - 0.5;
+          vec3 R = normalize(reflect(V, normalize(N + jit * rough * 0.35)));
+          float st = 0.12 + z * 0.012; vec3 Q = P + N * 0.02 + R * st * j;
+          for (int i = 0; i < SSR_STEPS; i++) {
+            Q += R * st; st *= 1.12;
+            if (Q.z > -0.06) break;
+            vec2 uv = vec2(Q.x / (-Q.z * camNF.z * res.x / res.y), Q.y / (-Q.z * camNF.z)) * 0.5 + 0.5;
+            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) break;
+            float d = -Q.z - lin(uv);
+            if (d > 0.0 && d < st * 1.6 + 0.15) {
+              vec3 hc = texture2D(tex, uv).rgb;
+              float edge = smoothstep(0.0, 0.12, uv.x) * smoothstep(1.0, 0.88, uv.x) * smoothstep(0.0, 0.12, uv.y) * smoothstep(1.0, 0.88, uv.y);
+              float fres = 0.06 + 0.94 * pow(1.0 - max(dot(-V, N), 0.0), 4.0), fade = 1.0 - float(i) / float(SSR_STEPS);
+              return mix(base, hc * mix(vec3(1.0), base / max(dot(base, vec3(0.33)), 0.05) * 0.33, 0.25), clamp(ssrK * gloss * fres * edge * fade * 1.6, 0.0, 0.8));
+            }
+          }
+          return base;
+        }
+        #endif
         void main() {
           vec4 g = texture2D(vmTex, vUv);
           if (ads > 0.01) {   // aimed in: the gun body goes soft (depth of field) around a sharp sight picture, like R6
@@ -333,9 +365,12 @@ export default function start({ cfg, E, N, smoke }) {
             if (r > 0.01) { vec4 b = vec4(0.0); float j = fract(sin(dot(vUv * res, vec2(39.3468, 11.135))) * 43758.5453) * 6.2832;
               for (int k = 0; k < 12; k++) { float a = float(k) * 0.5236 + j; b += texture2D(vmTex, vUv + vec2(cos(a), sin(a)) / res * (1.5 + r * (2.0 + float(k) * 0.9))); } g = mix(g, b / 12.0, min(1.0, r * 1.6)); }
           }
-          vec3 wc = texture2D(tex, vUv).rgb;
+          vec4 w4 = texture2D(tex, vUv); vec3 wc = w4.rgb;
           #ifdef SSAO
           wc *= ssao();
+          #endif
+          #ifdef SSR
+          { float gloss = clamp((1.0 - w4.a) / 0.98, 0.0, 1.0); if (gloss > 0.06 && ssrK > 0.0) wc = ssr(wc, gloss); }
           #endif
           vec3 c = wc * (1.0 - g.a) + g.rgb;
           #ifdef BLOOM
@@ -356,7 +391,7 @@ export default function start({ cfg, E, N, smoke }) {
           gl_FragColor = vec4(srgb(clamp(c, 0.0, 1.0)), 1.0);
         }`;
     post.mat = new THREE.ShaderMaterial({
-      uniforms: { tex: { value: null }, vmTex: { value: null }, depthTex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 }, ads: { value: 0 }, camNF: { value: new THREE.Vector3(0.05, 400, 1) } },
+      uniforms: { tex: { value: null }, vmTex: { value: null }, depthTex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 }, ads: { value: 0 }, camNF: { value: new THREE.Vector3(0.05, 400, 1) }, ssrK: { value: 1 }, upV: { value: new THREE.Vector3(0, 1, 0) } },
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: POST_FS, defines: gfx.postDefines(), depthTest: false, depthWrite: false,
     });
@@ -1579,11 +1614,13 @@ export default function start({ cfg, E, N, smoke }) {
         const rt = postTarget(); renderer.setRenderTarget(rt);
         renderer.clear(); renderer.render(scene, cam);
         post.mat.uniforms.camNF.value.set(cam.near, cam.far, Math.tan(cam.fov * Math.PI / 360));
+        post.mat.uniforms.exposure.value = 1.08 * (S.bright || 1);   // the player's brightness setting
+        post.mat.uniforms.upV.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); post.mat.uniforms.ssrK.value = W && W.B && W.B.wet != null ? W.B.wet : 2.2;   // how wet this map is (rain, polish)
         renderer.setRenderTarget(post.vt); const cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha(); renderer.setClearColor(0x000000, 0); renderer.clear();
         if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
         renderer.setClearColor(cc, ca);
         renderer.setRenderTarget(null); post.mat.uniforms.tex.value = rt.texture; post.mat.uniforms.vmTex.value = post.vt.texture; post.mat.uniforms.ads.value = vm && vm.visible ? me.ads : 0; post.mat.uniforms.time.value = (post.mat.uniforms.time.value + dt) % 100; renderer.render(post.scene, post.cam);
-      } else { renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam); }
+      } else { renderer.toneMappingExposure = 1.08 * (S.bright || 1); renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam); }
       // ---- HUD (throttled) ----
       hudT += dt; radarT += dt;
       hud.flashAmt(me.flash > 1.5 ? 1 : me.flash / 1.5);
@@ -1672,6 +1709,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

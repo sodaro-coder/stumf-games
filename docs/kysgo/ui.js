@@ -833,7 +833,7 @@ export class Menu {
   tab_settings(B) {
     const S = this.h.settings();
     const sl = (k, n, min, max, step) => `<label class="cs-card"><div class="cs-small cs-mut">${n}: <b id="v_${k}">${S[k]}</b></div><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${S[k]}" style="width:100%"></label>`;
-    B.innerHTML = `<div class="cs-h">Mouse & view</div><div class="cs-grid">${sl('sens', 'Sensitivity', 0.2, 6, 0.05)}${sl('fov', 'Field of view', 70, 110, 1)}${sl('touchSens', 'Touch look speed (phones)', 0.3, 3, 0.05)}${sl('vol', 'Volume', 0, 1, 0.05)}</div>
+    B.innerHTML = `<div class="cs-h">Mouse & view</div><div class="cs-grid">${sl('sens', 'Sensitivity', 0.2, 6, 0.05)}${sl('fov', 'Field of view', 70, 110, 1)}${sl('touchSens', 'Touch look speed (phones)', 0.3, 3, 0.05)}${sl('vol', 'Volume', 0, 1, 0.05)}${sl('bright', 'Brightness (exposure)', 0.6, 1.6, 0.02)}</div>
       <div class="cs-h">Crosshair</div><div class="cs-grid">${sl('xSize', 'Size', 1, 20, 1)}${sl('xGap', 'Gap', -4, 12, 1)}${sl('xThick', 'Thickness', 1, 6, 1)}${sl('xOutline', 'Outline', 0, 1, 0.1)}
         <label class="cs-card"><div class="cs-small cs-mut">Colour</div><input type="color" data-k="xColor" value="${S.xColor}" style="width:100%;height:34px"></label>
         <label class="cs-card"><div class="cs-small cs-mut">Style</div><select data-k="xDyn"><option value="0">Static</option><option value="1">Dynamic</option></select></label>

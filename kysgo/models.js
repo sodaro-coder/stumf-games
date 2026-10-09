@@ -296,7 +296,20 @@ float gW; vec3 gTri; vec4 gNs;`);
   gW = gWear * smoothstep(80.0, 320.0, gcurv) * smoothstep(0.5, 0.56, gpatch) * smoothstep(0.42, 0.6, gcol + (gNs.b - 0.5) * 0.5);
   diffuseColor.rgb = mix(diffuseColor.rgb, gWearC, gW);`);
     f = f.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor = clamp(roughnessFactor + (gNs.b - 0.5) * gRk * 2.0, 0.04, 1.0); roughnessFactor = mix(roughnessFactor, 0.3, gW);`);
+  roughnessFactor = clamp(roughnessFactor + (gNs.b - 0.5) * gRk * 2.0, 0.04, 1.0); roughnessFactor = mix(roughnessFactor, 0.3, gW);
+  {   // micro-scratches: hairline marks in a few directions, polished brighter and smoother than the finish around them,
+      // so they flash when the gun turns against the light; and oily, fingerprinted smudges that sit darker and glossier
+    vec3 sp = vOP * 260.0; float scr = 0.0;
+    for (int k = 0; k < 3; k++) { float a = float(k) * 2.1 + 0.4; vec3 dir = normalize(vec3(cos(a), sin(a * 1.7), sin(a)));
+      float line = abs(fract(dot(sp, dir) + texture2D(gC, vOP.xy * (3.0 + float(k))).r * 2.0) - 0.5);
+      float keep = smoothstep(0.62, 0.7, texture2D(gC, vOP.zx * (1.7 + float(k) * 0.9) + float(k) * 0.37).r);   // scratches come in patches
+      scr = max(scr, (1.0 - smoothstep(0.0, 0.035, line)) * keep); }
+    scr *= gWear > 0.0 ? 1.0 : 0.35;
+    roughnessFactor = mix(roughnessFactor, max(0.08, roughnessFactor * 0.35), scr);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.35 + 0.04, scr * 0.5);
+    float oil = smoothstep(0.58, 0.72, texture2D(gC, vOP.yz * 0.9 + 0.5).r) * 0.6;
+    roughnessFactor = mix(roughnessFactor, roughnessFactor * 0.55, oil); diffuseColor.rgb *= 1.0 - oil * 0.12;
+  }`);
     f = f.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
   metalnessFactor = mix(metalnessFactor, 1.0, gW);`);
     f = f.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -312,6 +325,30 @@ float gW; vec3 gTri; vec4 gNs;`);
   m.customProgramCacheKey = () => 'gun-' + set;
   m.extensions = { derivatives: true };
   return m;
+}
+
+// MatCap spheres, painted once: 'metal' (a hard studio key, a dark horizon band, a bright rim: polished steel),
+// 'gloss' (painted or lacquered: a soft key and a crisp highlight) and 'satin' (polymer and cloth: soft, broad light)
+const MATCAPS = {};
+export function matcapTex(kind) {
+  if (MATCAPS[kind]) return MATCAPS[kind];
+  const n = 128, c = document.createElement('canvas'); c.width = c.height = n; const x = c.getContext('2d');
+  const disc = (fill) => { x.fillStyle = fill; x.beginPath(); x.arc(n / 2, n / 2, n / 2, 0, Math.PI * 2); x.fill(); };
+  const rg = (cx, cy, r0, r1, stops) => { const g = x.createRadialGradient(cx * n, cy * n, r0 * n, cx * n, cy * n, r1 * n); for (const [t, col] of stops) g.addColorStop(t, col); return g; };
+  if (kind === 'metal') {
+    disc(rg(0.5, 0.42, 0.05, 0.55, [[0, '#f2f4f8'], [0.45, '#aab0b8'], [0.7, '#5a5e66'], [1, '#22252a']]));
+    x.globalCompositeOperation = 'source-atop';
+    x.fillStyle = 'rgba(10,12,16,0.55)'; x.fillRect(0, n * 0.56, n, n * 0.1);   // the horizon a polished part reflects
+    x.fillStyle = rg(0.36, 0.3, 0, 0.18, [[0, 'rgba(255,255,255,0.95)'], [1, 'rgba(255,255,255,0)']]); x.fillRect(0, 0, n, n);
+    x.strokeStyle = 'rgba(200,215,235,0.55)'; x.lineWidth = n * 0.04; x.beginPath(); x.arc(n / 2, n / 2, n / 2 - n * 0.02, Math.PI * 0.9, Math.PI * 1.6); x.stroke();
+  } else if (kind === 'gloss') {
+    disc(rg(0.45, 0.4, 0.05, 0.6, [[0, '#f0f0f0'], [0.5, '#a8a8a8'], [1, '#2a2a2a']]));
+    x.globalCompositeOperation = 'source-atop';
+    x.fillStyle = rg(0.38, 0.32, 0, 0.1, [[0, 'rgba(255,255,255,1)'], [1, 'rgba(255,255,255,0)']]); x.fillRect(0, 0, n, n);
+  } else {
+    disc(rg(0.42, 0.36, 0.0, 0.7, [[0, '#e6e6e6'], [0.55, '#9a9a9a'], [1, '#3c3c3c']]));
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; MATCAPS[kind] = t; return t;
 }
 
 const gmat = new Map();
@@ -339,7 +376,10 @@ function gm(key) {
   // Medium and up: physically based (metal reflects the map's sky, painted and plastic parts stay matte)
   const PBR = { metal: [0.85, 0.36], dark: [0.25, 0.62], steel: [0.95, 0.22], blade: [1, 0.14], wood: [0, 0.62], green: [0, 0.72], tan: [0, 0.75],
     olive: [0, 0.72], yellow: [0.1, 0.5], grip: [0, 0.86], lens: [0.4, 0.06], brass: [1, 0.3], optic: [0.55, 0.42], putty: [0, 0.85], tape: [0, 0.5], rag: [0, 0.95], wireR: [0, 0.35], wireB: [0, 0.35], wireY: [0, 0.35] }[key] || [0.2, 0.6];
-  const m = HQ ? new THREE.MeshStandardMaterial({ ...o, metalness: PBR[0], roughness: PBR[1], envMapIntensity: 1.1 }) : new THREE.MeshLambertMaterial(o);
+  // Low and Potato: no lighting maths at all, but not flat either: a MatCap (studio lighting baked into a tiny sphere
+  // picture, looked up by the surface's angle to the camera) makes steel read as polished steel for almost no cost
+  const m = HQ ? new THREE.MeshStandardMaterial({ ...o, metalness: PBR[0], roughness: PBR[1], envMapIntensity: 1.1 })
+    : new THREE.MeshMatcapMaterial({ color: new THREE.Color(o.color).lerp(new THREE.Color('#ffffff'), PBR[0] > 0.5 ? 0.26 : 0.1), map: o.map || null, side: o.side || THREE.FrontSide, matcap: matcapTex(PBR[0] > 0.5 ? 'metal' : PBR[1] < 0.45 ? 'gloss' : 'satin') });
   if (HQ) {
     const S = { metal: ['gsteel', { wear: 0.75 }], steel: ['gsteel', { wear: 0.5, wearColor: '#e2e6ec' }], blade: ['gsteel', { normal: 0.4, rough: 0.3 }], brass: ['gsteel', { normal: 0.5, wear: 0.6, wearColor: '#f0d890' }],
       dark: ['gpoly', { wear: 0.35, wearColor: '#6a6e74' }], grip: ['ggrip', { tile: 26 }], wood: ['gwood', { tile: 7, albedo: 1.1, wear: 0.4, wearColor: '#a8683a' }], green: ['gpaint', { wear: 0.7, wearColor: '#7a7d80' }],
@@ -394,7 +434,7 @@ export function animateGlow(t, dt) {   // call once a frame
 const paintMats = new Map();
 const paintMat = (tex) => {
   if (paintMats.has(tex)) return paintMats.get(tex);
-  const m = HQ ? new THREE.MeshStandardMaterial({ map: tex, metalness: tex.userData.glow ? 0.5 : 0.3, roughness: tex.userData.glow ? 0.25 : 0.42, envMapIntensity: 1.1 }) : new THREE.MeshLambertMaterial({ map: tex });
+  const m = HQ ? new THREE.MeshStandardMaterial({ map: tex, metalness: tex.userData.glow ? 0.5 : 0.3, roughness: tex.userData.glow ? 0.25 : 0.42, envMapIntensity: 1.1 }) : new THREE.MeshMatcapMaterial({ map: tex, matcap: matcapTex('gloss') });   // skins on Low: the finish under baked studio light
   if (HQ && !tex.userData.glow) gunSurface(m, 'gpaint', { wear: 0.85, albedo: 0.6 });   // skins are paint: it chips at the edges
   if (tex.userData.glow) glowify(m, tex.userData.glow, 1);
   paintMats.set(tex, m); return m;
@@ -731,7 +771,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
   return g;
 }
 let armMatC = null;
-const armMat = () => armMatC || (armMatC = HQ ? gunSurface(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.92, envMapIntensity: 0.5 }), 'gpoly', { tile: 34, normal: 1.4, albedo: 1.2, rough: 0.2 }) : new THREE.MeshLambertMaterial({ vertexColors: true }));   // woven sleeve / glove fabric
+const armMat = () => armMatC || (armMatC = HQ ? gunSurface(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.92, envMapIntensity: 0.5 }), 'gpoly', { tile: 34, normal: 1.4, albedo: 1.2, rough: 0.2 }) : new THREE.MeshMatcapMaterial({ vertexColors: true, matcap: matcapTex('satin') }));   // woven sleeve / glove fabric
 let flashTex = null;
 function muzzleFlash(z, k = 1) {
   if (!flashTex) {
@@ -874,7 +914,7 @@ export function makeFingerGun(sleeve = '#3c4e66', skin = '#d9a77e') {
   for (let k = 0; k < 3; k++) P.push([place(new THREE.TorusGeometry(0.012, 0.0075, 8, 12, Math.PI * 1.25), [0, -0.012 - k * 0.0165, -0.03], [0, Math.PI / 2, -0.4]), skin]);   // curled fingers
   P.push([place(SPH(0.003, 8, 6), [0, 0.0235, -0.112], [0, 0, 0], [1.6, 0.6, 1.2]), '#f0d2c0']);                     // fingernail
   vmArm(P, [0, -0.02, 0.035], [0.38, -0.5, 0.78], sleeve, skin, 0.6);
-  g.add(new THREE.Mesh(merge(P), HQ ? gunSurface(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.62, envMapIntensity: 0.4 }), 'gpoly', { tile: 60, normal: 0.5, albedo: 0.4 }) : new THREE.MeshLambertMaterial({ vertexColors: true })));
+  g.add(new THREE.Mesh(merge(P), HQ ? gunSurface(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.62, envMapIntensity: 0.4 }), 'gpoly', { tile: 60, normal: 0.5, albedo: 0.4 }) : new THREE.MeshMatcapMaterial({ vertexColors: true, matcap: matcapTex('satin') })));
   const flash = new THREE.Object3D(); flash.visible = false; g.add(flash);   // no muzzle flash: it's a finger
   g.userData = { magGroup: null, magPos: null, leftArm: null, leftHand: null, charge: null, flash, len: 0.12, grip: new THREE.Vector3(0, -0.02, 0.035), fore: null, sight: null, optic: null, iron: new THREE.Vector3(0, 0.026, -0.112) };
   return g;
