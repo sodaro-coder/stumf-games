@@ -1259,7 +1259,7 @@ begin
   if last is not null and last > now() - interval '30 minutes' then return; end if;
   insert into cs_meta (k, at) values ('ai_restock', now()) on conflict (k) do update set at = now();
   delete from cs_ai_listings where created < now() - interval '36 hours';
-  update cs_ai_listings a set price = cs_ai_price(a.def, a.float, a.st, a.seed);   -- reprice with the latest sales
+  update cs_ai_listings a set price = cs_ai_price(a.def, a.float, a.st, a.seed) where a.id > 0;   -- (Supabase refuses an update without a where)   -- reprice with the latest sales
   select 90 - count(*) into need from cs_ai_listings;
   for i in 1 .. greatest(need, 0) loop
     t := case when random() < 0.40 then 0 when random() < 0.55 then 1 when random() < 0.6 then 2 when random() < 0.65 then 3 when random() < 0.7 then 4 when random() < 0.5 then 5 else 6 end;
