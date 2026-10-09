@@ -205,9 +205,11 @@ export function qualityGovernor(setScale, opts = {}) {
   setScale(scale);
   return (dt) => {
     avg = avg * 0.95 + dt * 1000 * 0.05; t += dt;
-    if (t < 1.5) return; t = 0;
-    if (avg > target * 1.15 && scale > min) { scale = Math.max(min, scale - 0.1); setScale(scale); }
-    else if (avg < target * 0.7 && scale < max) { scale = Math.min(max, scale + 0.05); setScale(scale); }
+    // resizing reallocates the frame buffers (a visible hitch), so it waits for a clear, lasting trend and moves in
+    // bigger, rarer steps instead of nudging every 1.5 s
+    if (t < 4) return; t = 0;
+    if (avg > target * 1.25 && scale > min) { scale = Math.max(min, scale - 0.15); setScale(scale); }
+    else if (avg < target * 0.6 && scale < max) { scale = Math.min(max, scale + 0.1); setScale(scale); }
   };
 }
 

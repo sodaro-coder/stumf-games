@@ -18,15 +18,21 @@ export function moveStep(W, p, inp, dt, maxSpeed) {
   if (wl < 1e-6) top = 0;
   const ground = W.groundAt(p.x, p.z, p.y);
   const onGround = p.y <= ground + 0.02 && p.vy <= 0;
+  // jump buffer: a jump pressed up to 0.2 s before touching down (or held) happens on the landing frame with no ground
+  // friction, so a bunny-hop always connects and keeps its speed
+  if (inp.jump && !p.jumpHeld) p.jumpBuf = 0.2; else p.jumpBuf = Math.max(0, (p.jumpBuf || 0) - dt);
+  const hop = onGround && !p.prone && (p.jumpBuf > 0 || (inp.jump && (p.landT ?? 9) < 0.04));   // tapped early, or held through the landing
   if (onGround) {
-    // friction
+    // friction (skipped on a hop's landing frame)
     const sp = Math.hypot(p.vx, p.vz);
-    if (sp > 0) { const ctl = Math.max(sp, PHYS.stop * (1 - (p.prone || 0) * 0.85)), drop = ctl * PHYS.friction * dt, ns = Math.max(0, sp - drop) / sp; p.vx *= ns; p.vz *= ns; }
+    if (sp > 0 && !hop) { const ctl = Math.max(sp, PHYS.stop * (1 - (p.prone || 0) * 0.85)), drop = ctl * PHYS.friction * dt, ns = Math.max(0, sp - drop) / sp; p.vx *= ns; p.vz *= ns; }
     // accelerate
     const cur = p.vx * wish.x + p.vz * wish.z, add = top - cur;
     if (add > 0) { const acc = Math.min(PHYS.accel * dt * Math.max(top, 0.1), add); p.vx += acc * wish.x; p.vz += acc * wish.z; }
-    if (inp.jump && !p.jumpHeld && !p.prone) { p.vy = PHYS.jump; p.jumpHeld = true; p.y = ground + 0.03; }
-    else { p.y = ground; p.vy = 0; }
+    if (hop) {
+      p.vy = PHYS.jump; p.jumpHeld = true; p.jumpBuf = 0; p.y = ground + 0.03;
+      const s2 = Math.hypot(p.vx, p.vz), cap = maxSpeed * 1.55; if (s2 > cap) { p.vx *= cap / s2; p.vz *= cap / s2; }   // hops carry speed, within reason
+    } else { p.y = ground; p.vy = 0; }
   } else {
     const wsp = Math.min(top, 30 * U), cur = p.vx * wish.x + p.vz * wish.z, add = wsp - cur;
     if (add > 0 && wl > 0) { const acc = Math.min(PHYS.airAccel * dt * top, add); p.vx += acc * wish.x; p.vz += acc * wish.z; }
@@ -39,6 +45,7 @@ export function moveStep(W, p, inp, dt, maxSpeed) {
   if (p.y < g2) { p.y = g2; p.vy = 0; }
   // stepping smoothing for the camera
   p.onGround = p.y <= g2 + 0.02;
+  p.landT = p.onGround ? (p.wasAirEnd ? 0 : (p.landT ?? 9) + dt) : 9; p.wasAirEnd = !p.onGround;
   return p.onGround;
 }
 export const eyeHeight = (p) => { const e = PHYS.eye - (PHYS.eye - PHYS.crouchEye) * p.crouch; return e + (PHYS.proneEye - e) * (p.prone || 0); };

@@ -597,6 +597,31 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   const inRect = (r, x, z) => !!r && x >= r[0] && x < r[2] && z >= r[1] && z < r[3];
   const siteAt = (x, z) => { for (const [n, r] of Object.entries(B.sites)) if (inRect(r, x, z)) return n; return ''; };
 
+  // spawns never in each other's sight: a spawn that can see any enemy spawn (or a step either side of one) moves to the
+  // nearest spot it can walk to from there (same floor, open ground, within 12 m) that can't. Otherwise a scoped
+  // weapon got 1-5 free kills the moment the round went live.
+  {
+    const eyeAt = (x, z) => ({ x, y: groundAt(x, z, 50) + 1.55, z });
+    const enemyPts = (team) => B.spawns[team].flatMap(([x, z]) => [[x, z], [x + 1.5, z], [x - 1.5, z], [x, z + 1.5], [x, z - 1.5]]);
+    const exposed = (x, z, foes) => foes.some(([fx, fz]) => los(eyeAt(x, z), eyeAt(fx, fz)));
+    for (const team of ['T', 'CT']) {
+      const foes = enemyPts(team === 'T' ? 'CT' : 'T'), taken = new Set();
+      B.spawns[team] = B.spawns[team].map(([x, z, yaw]) => {
+        if (!exposed(x, z, foes)) { taken.add(Math.floor(x) + ',' + Math.floor(z)); return [x, z, yaw]; }
+        const sx = Math.floor(x), sz = Math.floor(z), seen = new Set([sx + ',' + sz]), q = [[sx, sz]];
+        while (q.length) {   // breadth-first over walkable neighbours: the first safe cell is the nearest one you can reach
+          const [cx, cz] = q.shift(), key = cx + ',' + cz, i = idx(cx, cz);
+          if (i >= 0 && flag[i] === 2 && !taken.has(key) && (!B.buy[team] || inRect(B.buy[team], cx + 0.5, cz + 0.5)) && !exposed(cx + 0.5, cz + 0.5, foes)) { taken.add(key); return [cx + 0.5, cz + 0.5, yaw]; }
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = cx + dx, nz = cz + dz, k2 = nx + ',' + nz, j = idx(nx, nz);
+            if (seen.has(k2) || j < 0 || flag[j] !== 2 || Math.hypot(nx - sx, nz - sz) > 12 || Math.abs(h[j] - h[i]) > 0.6) continue;
+            seen.add(k2); q.push([nx, nz]);
+          }
+        }
+        return [x, z, yaw];   // nowhere safe nearby: keep it (reported by the map check)
+      });
+    }
+  }
   return { B, w, d, h, mat, flag, H, idx, group, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
     topAt, sunAt, useLight, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
 }

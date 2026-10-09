@@ -3,7 +3,7 @@
 // rounds and the bomb, then sends 20 snapshots a second. Rendering is one merged mesh per material plus simple
 // box-built players, so it holds 60 fps on weak integrated graphics.
 import * as THREE from '../sdk/three.module.min.js';
-import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS } from './data.js';
+import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS, BOT_LEVELS } from './data.js';
 import { buildWorld } from './world.js';
 import { MAPS } from './maps.js';
 import { mobileControls } from './mobile.js';
@@ -163,6 +163,14 @@ const dy = (y, cam) => y - cam.position.y;
 // ======================================================================================================================
 export default function start({ cfg, E, N, smoke }) {
   injectCss();
+  // installable app (Android / PC: Chrome or Edge install it; iPhone: Add to Home Screen): manifest, icon, offline cache
+  if (!smoke) {
+    try { if (!document.querySelector('link[rel=manifest]')) { const l = document.createElement('link'); l.rel = 'manifest'; l.href = 'manifest.json'; document.head.appendChild(l);
+      const a = document.createElement('link'); a.rel = 'apple-touch-icon'; a.href = 'icon_192.png'; document.head.appendChild(a);
+      const m = document.createElement('meta'); m.name = 'apple-mobile-web-app-capable'; m.content = 'yes'; document.head.appendChild(m); } } catch (e) { /* no head */ }
+    try { if (navigator.serviceWorker && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) { /* not supported */ }
+    addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__installPrompt = e; });
+  }
   let S = loadSet();
   const profile = new Profile(cfg);
   if (profile.signedIn) profile.sync();
@@ -287,7 +295,11 @@ export default function start({ cfg, E, N, smoke }) {
     });
     post.scene = new THREE.Scene(); post.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post.mat); post.quad.frustumCulled = false; post.scene.add(post.quad);
     post.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    const postOn = () => Q >= 1 && renderer.capabilities.isWebGL2;
+    // the HDR pass needs float render targets; many Android GPUs can't render to them, so check rather than assume
+    const floatRT = renderer.capabilities.isWebGL2 && (renderer.extensions.has('EXT_color_buffer_half_float') || renderer.extensions.has('EXT_color_buffer_float'));
+    const postOn = () => Q >= 1 && floatRT;
+    // if the phone's GPU gives up (context lost), drop to Potato and restart instead of leaving a black screen
+    renderer.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (smoke) return; try { S.quality = 0.5; saveSet(S); localStorage.setItem('cs:autoq', '0.5'); } catch (er) { /* private mode */ } toast('Graphics crashed on this device: restarting on Potato'); setTimeout(() => location.reload(), 1500); });
     const postTarget = () => {
       const v = renderer.getDrawingBufferSize(new THREE.Vector2()), w = Math.max(1, v.x | 0), h = Math.max(1, v.y | 0);
       if (!post.rt || post.w !== w || post.h !== h) {
@@ -410,7 +422,7 @@ export default function start({ cfg, E, N, smoke }) {
       const small = (W_BY_ID[wid] || {}).cat === 'pistol' || wid === 'zeus';
       vm.userData.base = small ? new THREE.Vector3(0.17 * S.hand, -0.16, -0.44) : new THREE.Vector3(0.19 * S.hand, -0.2, -0.46); vm.userData.ry = (small ? 0.28 : 0.16) * S.hand; vm.scale.multiplyScalar(small ? 0.62 : 0.85);
       vm.position.copy(vm.userData.base); vmScene.add(vm);
-      me.deploy = wid === 'knife' ? 0.4 : G_BY_ID[wid] ? 0.5 : (W_BY_ID[wid] || {}).cat === 'pistol' ? 0.6 : 0.9; me.scoped = 0; audio.play('deploy');
+      me.deploy = wid === 'knife' ? 0.25 : G_BY_ID[wid] ? 0.35 : (W_BY_ID[wid] || {}).cat === 'pistol' ? 0.35 : (W_BY_ID[wid] || {}).cat === 'sniper' ? 0.7 : 0.5;   // quick draws: fast-paced, R6-like me.scoped = 0; audio.play('deploy');
     }
 
     // ---- reload animations: tilt the gun, drop the mag, bring a fresh one up, seat it, rack it -----------------------
@@ -529,7 +541,8 @@ export default function start({ cfg, E, N, smoke }) {
     addEventListener('wheel', (e) => { if (locked) pressed.add(e.deltaY > 0 ? 'WheelDown' : 'WheelUp'); }, { passive: true });
     const onLock = () => { locked = document.pointerLockElement === renderer.domElement; if (!locked && !uiOpen && !ended && !smoke) openPause(); };
     document.addEventListener('pointerlockchange', onLock);
-    const lock = () => { try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock(['ControlLeft', 'KeyW', 'Tab']).catch(() => {}); };
+    // raw mouse where the browser supports it (no OS acceleration, lower latency), else the plain lock
+    const lock = () => { try { let r = null; try { r = renderer.domElement.requestPointerLock({ unadjustedMovement: true }); } catch (e1) { r = null; } if (r && r.catch) r = r.catch(() => renderer.domElement.requestPointerLock()); else if (!r && !document.pointerLockElement) r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock(['ControlLeft', 'KeyW', 'Tab']).catch(() => {}); };
     let mob = null; try { if (matchMedia('(pointer: coarse)').matches) mob = mobileControls(E.input); } catch (e) { /* no touch */ }
     if (mob) { hud.el.classList.add('touch'); mob.setSens(S.touchSens || 1); }
     let mobShown = true;
@@ -795,7 +808,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (!lobbyPanel) return;
         const list = [...match.players.values()].filter((p) => !p.bot);
         lobbyPanel.innerHTML = `<div style="min-width:min(440px,90vw)"><b style="font-size:18px">${esc(MODES[mode].name)} · ${esc(MAPS[mapId].name)}</b>
-          <div class="cs-mut cs-small" style="margin:4px 0 10px">${ranked ? '<b style="color:#ffd84a">RANKED</b> · ' : ''}Invite code <b style="color:var(--o);font-size:16px">${esc(session.code)}</b> · bots (${esc(botLevel)}) fill empty slots</div>
+          <div class="cs-mut cs-small" style="margin:4px 0 10px">${ranked ? '<b style="color:#ffd84a">RANKED</b> · ' : ''}Invite code <b style="color:var(--o);font-size:16px">${esc(session.code)}</b> · bots (${esc((BOT_LEVELS[botLevel] || {}).name || botLevel)}) fill empty slots</div>
           ${ranked && !rankedReady() ? `<div class="cs-small" style="color:#ffb04a;margin-bottom:8px">Ranked starts when one team is all real players: ${[...match.players.values()].filter((q) => !q.bot && q.team === 'T').length}/${MODES[mode].size} on T. Share the invite code.</div>` : ''}
           ${list.map((p) => `<div class="cs-row"><span style="color:${p.team === 'CT' ? 'var(--ct)' : 'var(--tt)'}">●</span> ${esc(p.name)} <span class="cs-mut cs-small">${p.team}</span></div>`).join('')}
           <div class="cs-row" style="margin-top:12px"><button class="cs-btn" data-s>START MATCH</button><button class="cs-btn alt" data-c>COPY INVITE LINK</button><button class="cs-btn alt" data-q>LEAVE</button></div></div>`;

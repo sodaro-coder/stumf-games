@@ -114,17 +114,17 @@ export const BOMB = { timer: 40, plant: 3.2, defuse: 10, defuseKit: 5, radius: 5
 
 // player physics (classic numbers in metres)
 export const PHYS = {
-  speed: 250 * U, walk: 0.52, sprint: 1.3, prone: 0.22, proneEye: 0.42, crouch: 0.34, accel: 5.5, friction: 5.2, stop: 80 * U, airAccel: 12,
+  speed: 250 * U, walk: 0.52, sprint: 1.3, prone: 0.22, proneEye: 0.42, crouch: 0.34, accel: 6.5, friction: 5.2, stop: 80 * U, airAccel: 12,
   gravity: 800 * U, jump: 301.993 * U, height: 72 * U, crouchHeight: 54 * U, eye: 64 * U, crouchEye: 46 * U, radius: 16 * U, step: 18 * U,
   hp: 100,
 };
 
 // bot difficulty, picked by the host
 export const BOT_LEVELS = {
-  easy: { name: 'Easy', react: 1.35, aimErr: 0.2, turn: 2, head: 0, spray: 0.2, burst: 3 },   // slow to react, sloppy aim, never aims for the head
-  normal: { name: 'Normal', react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5 },
-  hard: { name: 'Hard', react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },
-  expert: { name: 'Expert', react: 0.17, aimErr: 0.015, turn: 14, head: 0.3, spray: 0.95, burst: 10 },
+  easy: { name: 'Beginner', react: 1.35, aimErr: 0.2, turn: 2, head: 0, spray: 0.2, burst: 3 },   // slow to react, sloppy aim, never aims for the head
+  normal: { name: 'Played CS:GO', react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5 },
+  hard: { name: 'Real Shoota', react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },
+  expert: { name: 'Real Shoota', hidden: true, react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },   // old saves: same as Real Shoota
 };
 
 // ranked: Rank Rating (RR) thresholds, worked out on the server (cs_ranked). First 5 matches are placements.

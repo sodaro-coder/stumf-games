@@ -70,7 +70,7 @@ const CSS = `
 .cs-hud.touch canvas.radar{width:100px;height:100px}.cs-hud.touch .tl{left:calc(env(safe-area-inset-left,0px) + 8px);top:6px}
 .cs-hud.touch .loc{font-size:11px}.cs-hud.touch .money{font-size:15px}.cs-hud.touch .buyic{display:none}.cs-hud.touch .slots{display:none}
 .cs-hud.touch .bl{left:50%;bottom:6px;transform:translateX(-80%);gap:6px}.cs-hud.touch .stat{font-size:17px;min-width:58px;padding:2px 8px 2px 6px}.cs-hud.touch .stat .ic{font-size:13px}
-.cs-hud.touch .br{right:calc(env(safe-area-inset-right,0px) + 196px);bottom:124px}.cs-hud.touch .ammo{font-size:22px}.cs-hud.touch .ammo small{font-size:12px}
+.cs-hud.touch .br{right:auto;left:calc(50% + 74px);bottom:6px}.cs-hud.touch .ammo{font-size:22px}.cs-hud.touch .ammo small{font-size:12px}
 .cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:4px;transform:translateX(-50%) scale(.72);transform-origin:top center}
 .cs-hud.touch .banner{font-size:18px;padding:6px 14px}.cs-hud.touch .center{top:16%}
 .cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px}
@@ -347,12 +347,32 @@ export class Menu {
     this['tab_' + this.tab](B);
   }
   // ---- HOME: the stage, a big GO, and the side panels ----
+  // Download: install the game as an app on whatever this is. Android / PC (Chrome, Edge): one tap installs it (its own
+  // icon, full screen, no browser bars); iPhone / iPad: Safari's Add to Home Screen; an Android APK when one is published
+  downloadPanel() {
+    const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1), android = /Android/.test(ua);
+    const ip = window.__installPrompt, ov = document.createElement('div'); ov.className = 'cs'; ov.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(460px,92vw);max-height:90vh;overflow:auto;z-index:500;background:#15191f;border:1px solid #2a313b;border-radius:10px;padding:18px 20px;color:#e8ecf0;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:inherit';
+    const step = (n, t) => `<div style="display:flex;gap:6px;align-items:flex-start;margin:7px 0"><b style="color:#ff9a3a;flex:0 0 22px">${n}.</b><span style="flex:1;min-width:0">${t}</span></div>`;
+    ov.innerHTML = `<b style="font-size:20px">⬇ Get KYS:GO</b>
+      ${ios ? `<div class="cs-small cs-mut" style="margin:6px 0 10px">On iPhone / iPad it installs from Safari as a full-screen app (Apple doesn't allow game downloads outside the App Store):</div>
+        ${step(1, 'Open this page in <b>Safari</b>.')}${step(2, 'Tap <b>Share</b> (the square with the arrow).')}${step(3, 'Tap <b>Add to Home Screen</b>, then <b>Add</b>.')}${step(4, 'Open KYS:GO from the new icon: it runs full screen, turn the phone sideways.')}`
+      : `<div class="cs-small cs-mut" style="margin:6px 0 10px">${android ? 'Installs as an app on your phone: its own icon, full screen, landscape.' : 'Installs as a desktop app: its own window and icon, no browser bars.'}</div>
+        ${ip ? '<button class="cs-go" id="dlGo" style="width:100%">Install KYS:GO</button>' : android ? step(1, 'Open this page in <b>Chrome</b>.') + step(2, 'Tap <b>⋮</b> (top right) → <b>Install app</b> (or <b>Add to Home screen</b>).') + step(3, 'Open KYS:GO from the new icon.') : step(1, 'Open this page in <b>Chrome</b> or <b>Edge</b>.') + step(2, 'Click the <b>install icon</b> at the right of the address bar (or menu → <b>Install KYS:GO</b>).') + step(3, 'Launch it from your desktop / Start menu.')}
+        ${android ? '<div id="dlApk" class="cs-small cs-mut" style="margin-top:10px"></div>' : ''}`}
+      <div style="margin-top:14px;text-align:right"><button class="cs-btn alt" id="dlX">Close</button></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#dlX').onclick = () => ov.remove();
+    const go = ov.querySelector('#dlGo'); if (go) go.onclick = async () => { try { ip.prompt(); const r = await ip.userChoice; if (r && r.outcome === 'accepted') { window.__installPrompt = null; ov.remove(); } } catch (e) { /* already used */ } };
+    const apk = ov.querySelector('#dlApk');
+    if (apk) fetch('kysgo.apk', { method: 'HEAD' }).then((r) => { if (r.ok) apk.innerHTML = 'Prefer an APK file? <a href="kysgo.apk" download style="color:var(--o)">Download kysgo.apk</a> (allow installs from your browser when Android asks).'; }).catch(() => {});
+  }
   tab_home(B) {
     const P = this.P; P.ensureQuests();
     const q = P.d.quests.filter((x) => !x.weekly), featured = CRATES[(Math.floor(Date.now() / 86400000)) % (CRATES.length - 1)];
     const passReady = (Array.from({ length: P.level }, (_, i) => i + 1)).filter((t) => t <= 50 && !(P.d.pass || []).includes(t)).length;
     B.innerHTML = `<div class="cs-home"><div class="cs-hero"><h1>${esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`)}</h1><div class="sub">${esc(this.cfg.tagline || '')}</div>
         <button class="cs-go" id="hGo">▶ PLAY</button>
+        ${matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches ? '' : '<div><button class="cs-btn alt" id="hDl" style="margin-top:12px">⬇ Download</button></div>'}
         ${P.cloud && !P.signedIn ? '<div class="cs-signup"><b>Make a free account</b><div class="cs-small cs-mut" style="margin:4px 0 10px">Keep your skins and coins on every device, add friends, trade. Takes 20 seconds.</div><button class="cs-btn" id="hAcct" style="width:100%">Create account / Sign in</button></div>' : ''}
         <div class="cs-panel2" style="margin-top:26px;max-width:380px"><h3>Quick match</h3><div class="bd"><div class="cs-small cs-mut" id="hSel"></div></div></div></div><div></div>
       <div class="cs-side2"><div class="cs-panel2"><h3>Featured case</h3><div class="bd" style="text-align:center;cursor:pointer" id="hCase"><canvas width="240" height="120" style="width:100%"></canvas><b>${esc(featured.name)}</b><div class="cs-small cs-mut">${esc(featured.desc)}</div></div></div>
@@ -360,6 +380,7 @@ export class Menu {
         <div class="cs-panel2"><h3>Free battle pass</h3><div class="bd cs-small">Level ${P.level} · ${passReady ? `<b style="color:#f2a33a">${passReady} reward${passReady > 1 ? 's' : ''} to claim</b>` : 'keep playing for the next reward'}</div></div></div></div>`;
     $('#hSel', B).textContent = `${MODES[this.sel.mode].name} · ${MAPS[this.sel.map].name} · bots ${BOT_LEVELS[this.sel.bot].name}`;
     $('#hGo', B).onclick = () => { this.tab = 'play'; this.render(); };
+    const dl = $('#hDl', B); if (dl) dl.onclick = () => this.downloadPanel();
     const ha = $('#hAcct', B); if (ha) ha.onclick = () => { this.tab = 'profile'; this.render(); setTimeout(() => { const e = $('#aE', this.root); if (e) e.focus(); }, 50); };
     drawCase($('#hCase canvas', B), featured); $('#hCase', B).onclick = () => this.contents(featured.id);
   }
@@ -371,7 +392,7 @@ export class Menu {
       <div class="cs-maps">${Object.values(MAPS).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
       <div style="display:grid;grid-template-columns:1fr 340px;gap:22px;margin-top:20px">
         <div><div class="cs-sec">Lobby</div><div class="cs-seg">${[['bots', 'Offline with bots'], ['pub', 'Host public'], ['priv', 'Host private'], ['ranked', '🏆 Ranked']].map(([k, n]) => `<button data-host="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
-          <div class="cs-sec">Bot difficulty</div><div class="cs-seg">${Object.entries(BOT_LEVELS).filter(([k]) => s.host !== 'ranked' || RANKED_BOTS.includes(k)).map(([k, b]) => `<button data-bot="${k}" class="${s.bot === k ? 'on' : ''}">${b.name}</button>`).join('')}</div>
+          <div class="cs-sec">Bot difficulty</div><div class="cs-seg">${Object.entries(BOT_LEVELS).filter(([k, b]) => !b.hidden && (s.host !== 'ranked' || RANKED_BOTS.includes(k))).map(([k, b]) => `<button data-bot="${k}" class="${s.bot === k ? 'on' : ''}">${b.name}</button>`).join('')}</div>
           ${s.host === 'ranked' ? (() => { const rk = this.P.d.rank || { rr: 0, n: 0, w: 0 }, R = RANKS[rankOf(rk.rr)], nx = RANKS[rankOf(rk.rr) + 1];
             return `<div class="cs-panel2" style="margin-top:10px"><h3>Your rank</h3><div class="bd"><b style="color:${R.c};font-size:18px">${rk.n < PLACEMENTS ? 'Unranked' : esc(R.name)}</b>
               <div class="cs-small cs-mut">${rk.n < PLACEMENTS ? `Placement matches: ${rk.n}/${PLACEMENTS} (double rating swings)` : `${rk.rr} RR${nx ? ` · ${nx.rr - rk.rr} to ${esc(nx.name)}` : ' · top rank'}`} · ${rk.w} wins</div>

@@ -1,0 +1,15 @@
+{
+  "name": "KYS:GO",
+  "short_name": "KYS:GO",
+  "description": "A crude-humour tactical shooter. Play in the browser or install it as an app.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#11151a",
+  "theme_color": "#11151a",
+  "icons": [
+    { "src": "icon_192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon_512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
