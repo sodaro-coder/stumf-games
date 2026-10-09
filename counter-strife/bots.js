@@ -74,7 +74,7 @@ export class Bots {
     // ---- perception ----
     if (think) {
       let best = null, bd = 1e9;
-      if (b.blind <= 0) for (const q of m.players.values()) {
+      if (b.blind <= 0 && !p.passive) for (const q of m.players.values()) {   // passive: an escorted NPC never picks fights
         if (!q.alive || q.team === p.team) continue;
         const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
         const off = Math.abs(angDiff(p.yaw, Math.atan2(-dx, -dz)));
@@ -154,6 +154,12 @@ export class Bots {
     const m = this.m, W = m.W, plan = this.plan || { site: 'A' };
     p.plant = false; p.defusing = false;
     const bomb = m.bomb;
+    if (m.botGoal) {   // story mode: the mission says where this bot belongs (guard post, follow the squad, escort)
+      const g = m.botGoal(p);
+      if (g === 'hold') { moveStep(W, p, { f: 0, s: 0 }, dt, 6); return; }
+      if (g) { this.walkTo(p, b, g, dt); return; }
+      if (p.team === 'T' && p.guard) { moveStep(W, p, { f: 0, s: 0 }, dt, 6); return; }
+    }
     if (b.lastSeen && b.lastSeen.t > 0) { b.lastSeen.t -= dt; if (b.lastSeen.t > 0 && !(m.M.bomb && p.team === 'T' && p.inv[5])) { this.walkTo(p, b, [b.lastSeen.x, b.lastSeen.z], dt); return; } }
     if (!m.M.bomb) { const e = [...m.players.values()].find((q) => q.alive && q.team !== p.team); if (e) this.walkTo(p, b, [e.x, e.z], dt); return; }
     if (p.team === 'T') {

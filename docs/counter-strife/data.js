@@ -110,6 +110,7 @@ export const MODES = {
   '2v2': { name: '2v2 Wingmen', size: 2, bomb: true, winTo: 4, half: 3, max: 7, freeze: 10, round: 90, buyTime: 20, bombSite: 'A' },
   '3v3': { name: '3v3 Trios', size: 3, bomb: true, winTo: 4, half: 3, max: 7, freeze: 12, round: 105, buyTime: 20 },
   '5v5': { name: '5v5 Competitive', size: 5, bomb: true, winTo: 4, half: 3, max: 7, freeze: 15, round: 115, buyTime: 20 },
+  story: { name: 'Story', size: 4, bomb: false, winTo: 1, half: 99, max: 1, freeze: 3, round: 99999, buyTime: 0, start: 0, hidden: true },   // co-op missions (story_sim.js)
 };
 export const BOMB = { timer: 40, plant: 3.2, defuse: 10, defuseKit: 5, radius: 500 * U, dmg: 500 };
 

@@ -5,6 +5,7 @@
 import { WEAPONS, W_BY_ID, G_BY_ID, GEAR_BY_ID, BUY_MENU, MODES, BOT_LEVELS, RADIO, itemName, itemPrice, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS } from './data.js';
 import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_ID, ITEM_BY_ID, PASS, PASS_TIERS, EMOTE_BY_ID } from './skins.js';
 import { MAPS } from './maps.js';
+import { CHAPTERS, MISSIONS, CHARACTERS, SQUAD, STORY_DIFF } from './story.js';
 import { thumb, stage, viewer } from './thumbs.js';
 import { cardInto, cardImage, gradeBadge } from './cards.js';
 import * as WAL from './wallet.js';
@@ -68,6 +69,7 @@ const CSS = `
 .cs-hud .slot b{color:var(--o);margin-right:6px}
 .cs-hud .tl{position:absolute;left:12px;top:12px}
 .cs-hud canvas.radar{width:190px;height:190px;border-radius:6px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12);display:block}
+.cs-hud.story .top,.cs-hud.story .money,.cs-hud.story .buyic{display:none}
 .cs-hud .loc{font-size:13px;margin-top:4px;color:#d8e0ea}.cs-hud .money{font-size:20px;color:#7ed957;margin-top:2px}.cs-hud .money.minus{color:#ff6a5a}
 .cs-hud .buyic{font-size:12px;color:#ffd45a;margin-top:2px}
 .cs-hud.touch canvas.radar{width:100px;height:100px}.cs-hud.touch .tl{left:calc(env(safe-area-inset-left,0px) + 8px);top:6px}
@@ -163,6 +165,7 @@ const MENU_CSS = `
 .cs-tile.mythic{border-color:var(--rc);animation:csMyth 2.4s ease-in-out infinite}.cs-tile.mythic .img{position:relative;overflow:hidden}
 .cs-tile.mythic .img::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.22) 50%,transparent 65%);animation:csSweep 3s linear infinite;pointer-events:none}
 @keyframes csMyth{0%,100%{box-shadow:0 0 6px 1px var(--rc)}50%{box-shadow:0 0 18px 5px var(--rc)}}@keyframes csSweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@media (max-width:760px){.cs-story{grid-template-columns:1fr!important}}
 @media (prefers-reduced-motion:reduce){.cs-tile.mythic,.cs-tile.mythic .img::after{animation:none}}
 .cs-tile .img{height:96px;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 60%,var(--rc,#4b69ff)33 0,transparent 70%),linear-gradient(180deg,#2a3039,#1d2128)}
 .cs-tile canvas{width:100%;height:96px;display:block}
@@ -282,6 +285,7 @@ function paintAll(root, items) {
   });
 }
 const ICON = {  // nav icons (simple inline SVG paths)
+  story: 'M3 5c3-1 6-1 8 1v14c-2-2-5-2-8-1zM21 5c-3-1-6-1-8 1v14c2-2 5-2 8-1z',
   guns: 'M11 2h2v4h-2zM11 18h2v4h-2zM2 11h4v2H2zM18 11h4v2h-4zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z',
   home: 'M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z', play: 'M7 4l13 8-13 8z', pass: 'M5 3h14v18l-7-4-7 4z', inv: 'M4 7h16v13H4zM8 7V4h8v3', crates: 'M3 8l9-5 9 5v8l-9 5-9-5zM12 13v8M3 8l9 5 9-5',
   market: 'M4 9l2-5h12l2 5zM5 9h14v11H5zM9 14h6', quests: 'M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z', friends: 'M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1 21c0-4 3-7 7-7s7 3 7 7zM17 11a3 3 0 1 0 0-6M16 14c4 0 7 3 7 7h-6', admin: 'M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6z', profile: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22c1-5 5-8 9-8s8 3 9 8z', settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 2h4l1 3 3 1 3-1 2 3-2 3 1 2-1 2 2 3-2 3-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-3 2-3-1-2 1-2-2-3 2-3 3 1 3-1z',
@@ -325,7 +329,7 @@ export class Menu {
     this.root = document.createElement('div'); this.root.className = 'cs cs-menu';
     const title = esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`);
     this.root.innerHTML = `<canvas class="cs-stage"></canvas><div class="cs-vig"></div>
-      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${[['home', 'Home'], ['play', 'Play'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])]
+      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${[['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])]
         .map(([k, n]) => `<button data-tab="${k}">${svg(k)}<span>${n}</span></button>`).join('')}</nav>
         <div class="cs-acct"><button class="cs-coinbox" id="mTop" style="cursor:pointer;color:#7ed957">＋ TOP UP</button><span class="cs-coinbox" id="mCoins"></span><div class="cs-rank"><b id="mLvlN">1</b><div><div style="font:700 11px system-ui;color:#c8d0da" id="mName"></div><div class="xp"><i id="mXp"></i></div></div></div>
         <button class="cs-ibtn" id="mFull" title="Fullscreen (also makes Ctrl-crouch safe)">⛶</button></div></div>
@@ -406,7 +410,7 @@ export class Menu {
   // ---- PLAY: mode tabs, map tiles, bots, then GO ----
   tab_play(B) {
     const s = this.sel;
-    B.innerHTML = `<div class="cs-tabs">${Object.entries(MODES).map(([k, m]) => `<button data-mode="${k}" class="${s.mode === k ? 'on' : ''}">${esc(m.name)}</button>`).join('')}</div>
+    B.innerHTML = `<div class="cs-tabs">${Object.entries(MODES).filter(([, m]) => !m.hidden).map(([k, m]) => `<button data-mode="${k}" class="${s.mode === k ? 'on' : ''}">${esc(m.name)}</button>`).join('')}</div>
       <div class="cs-small cs-mut" style="margin:-6px 0 14px">${MODES[s.mode].bomb ? 'Bomb defusal' : 'Combat only: no kill when time runs out = draw'} · first to ${MODES[s.mode].winTo} · bots fill empty slots</div>
       <div class="cs-maps">${Object.values(MAPS).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
       <div style="display:grid;grid-template-columns:1fr 340px;gap:22px;margin-top:20px">
@@ -433,6 +437,31 @@ export class Menu {
       for (const l of list) { const r = document.createElement('div'); r.className = 'cs-row'; r.style.marginBottom = '8px'; r.innerHTML = '<div style="flex:1;min-width:0"><b class="n" style="display:block;font-size:13px"></b><span class="cs-mut cs-small m"></span></div><button class="cs-btn sm">Join</button>';
         $('.n', r).textContent = String(l.name || 'Lobby').slice(0, 30); $('.m', r).textContent = `${l.ranked ? '🏆 RANKED · ' : ''}${String(l.mode || '').slice(0, 4)} · ${(MAPS[l.map] || {}).short || ''} · ${l.players | 0}/${l.max | 0}`;
         $('button', r).onclick = () => this.h.play({ code: l.code, host: false }); el.appendChild(r); } });
+  }
+  // ---- STORY: "Operation Ballin' Out", co-op missions (story.js / story_sim.js) ----
+  tab_story(B) {
+    let sp = { unlocked: 0, best: {}, chars: {} }; try { sp = Object.assign(sp, JSON.parse(localStorage.getItem('cs:story:v1') || '{}')); } catch (e) { /* private mode */ }
+    const s = this.story || (this.story = { mission: Math.min(sp.unlocked, MISSIONS.length - 1), diff: 'normal', char: (() => { try { return localStorage.getItem('cs:story:char') || 'ricky'; } catch (e) { return 'ricky'; } })(), host: 'solo' });
+    const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
+    const C = CHARACTERS[s.char], M = MISSIONS[s.mission];
+    B.innerHTML = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px" class="cs-story">
+      <div><div class="cs-sec">Operation Ballin' Out · co-op campaign · ${Math.min(sp.unlocked, MISSIONS.length)}/${MISSIONS.length} missions</div>
+        ${CHAPTERS.map((c, ci) => `<div class="cs-panel2" style="margin-bottom:10px"><h3>Chapter ${ci + 1}: ${esc(c.name)} <span class="cs-mut cs-small">· ${esc((MAPS[c.map] || {}).name || c.map)}</span></h3><div class="bd" style="display:flex;gap:8px;flex-wrap:wrap">
+          ${c.missions.map((m, mi) => { const i = ci * 3 + mi, locked = i > sp.unlocked; return `<button class="cs-btn ${s.mission === i ? '' : 'alt'} sm" data-mis="${i}" ${locked ? 'disabled style="opacity:.4"' : ''}>${locked ? '🔒 ' : ''}${i + 1}. ${esc(m.name)} <span style="color:#f2a33a">${stars(sp.best[i] || 0)}</span></button>`; }).join('')}</div></div>`).join('')}</div>
+      <div><div class="cs-panel2"><h3>Mission ${s.mission + 1}: ${esc(M.name)}</h3><div class="bd cs-small">${M.objectives.map((o, k) => `<div>${k + 1}. ${esc(o.hint)}</div>`).join('')}</div></div>
+        <div class="cs-sec">Your character</div><div class="cs-seg" style="flex-wrap:wrap">${SQUAD.map((k) => `<button data-ch="${k}" class="${s.char === k ? 'on' : ''}">${esc(CHARACTERS[k].short)}</button>`).join('')}</div>
+        <div class="cs-panel2" style="margin-top:8px"><h3>${esc(C.name)} <span class="cs-mut cs-small">· ${esc(C.role)}</span></h3><div class="bd cs-small"><div class="cs-mut">${esc(C.bio)}</div>
+          <div style="margin-top:6px">${C.ability ? `<b>G · ${esc(C.ability.name)}:</b> ${esc(C.ability.desc)}` : C.sidearm ? `<b>${esc(C.sidearm.name)}:</b> ${esc(C.sidearm.note)}` : ''}</div>
+          <div class="cs-mut" style="margin-top:4px">Missions played as ${esc(C.short)}: ${sp.chars[s.char] | 0}. Free characters are played by AI squadmates.</div></div></div>
+        <div class="cs-sec">Difficulty</div><div class="cs-seg">${Object.entries(STORY_DIFF).map(([k, d]) => `<button data-sd="${k}" class="${s.diff === k ? 'on' : ''}">${esc(d.name)}</button>`).join('')}</div>
+        <div class="cs-sec">Lobby</div><div class="cs-seg">${[['solo', 'Solo + AI squad'], ['coop', 'Host co-op (invite)']].map(([k, n]) => `<button data-sh="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <div class="cs-small cs-mut" style="margin-top:6px">Friends join with your invite code on the Play tab. You keep the campaign progress; everyone keeps their own gun XP.</div>
+        <div style="margin-top:16px"><button class="cs-go" id="sGo">START MISSION</button></div></div></div>`;
+    B.querySelectorAll('[data-mis]').forEach((e) => (e.onclick = () => { if (!e.disabled) { s.mission = +e.dataset.mis; this.render(); } }));
+    B.querySelectorAll('[data-ch]').forEach((e) => (e.onclick = () => { s.char = e.dataset.ch; try { localStorage.setItem('cs:story:char', s.char); } catch (er) { /* private mode */ } this.render(); }));
+    B.querySelectorAll('[data-sd]').forEach((e) => (e.onclick = () => { s.diff = e.dataset.sd; this.render(); }));
+    B.querySelectorAll('[data-sh]').forEach((e) => (e.onclick = () => { s.host = e.dataset.sh; this.render(); }));
+    $('#sGo', B).onclick = () => this.h.play({ story: { mission: s.mission, diff: s.diff, host: s.char }, bot: STORY_DIFF[s.diff].bot, host: true, solo: s.host === 'solo', pub: false });
   }
   // ---- INVENTORY ----
   tab_inv(B) {
