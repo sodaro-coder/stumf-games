@@ -329,10 +329,10 @@ export class Menu {
     this.root = document.createElement('div'); this.root.className = 'cs cs-menu';
     const title = esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`);
     this.root.innerHTML = `<canvas class="cs-stage"></canvas><div class="cs-vig"></div>
-      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${[['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])]
+      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${(this.h.back ? [['inv', 'Inventory'], ['guns', 'Gunsmith'], ['settings', 'Settings']] : [['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])])
         .map(([k, n]) => `<button data-tab="${k}">${svg(k)}<span>${n}</span></button>`).join('')}</nav>
         <div class="cs-acct"><button class="cs-coinbox" id="mTop" style="cursor:pointer;color:#7ed957">＋ TOP UP</button><span class="cs-coinbox" id="mCoins"></span><div class="cs-rank"><b id="mLvlN">1</b><div><div style="font:700 11px system-ui;color:#c8d0da" id="mName"></div><div class="xp"><i id="mXp"></i></div></div></div>
-        <button class="cs-ibtn" id="mFull" title="Fullscreen (also makes Ctrl-crouch safe)">⛶</button></div></div>
+        ${this.h.back ? '<button class="cs-btn" id="mBack" style="margin-right:8px">◀ BACK TO PARTY</button>' : ''}<button class="cs-ibtn" id="mFull" title="Fullscreen (also makes Ctrl-crouch safe)">⛶</button></div></div>
       <div class="cs-page" id="mBody"></div>`;
     document.body.appendChild(this.root);
     this.root.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { this.tab = b.dataset.tab; this.h.sound('tick'); this.render(); }));
@@ -341,6 +341,7 @@ export class Menu {
     this.adminShown = this.P.admin;
     this.stage = stage($('.cs-stage', this.root), this.stageLook());
     $('#mTop', this.root).onclick = () => this.topUp();
+    if (this.h.back) $('#mBack', this.root).onclick = () => this.h.back();   // opened from a story party: loadouts only, then back
     this.render();
     this.P.daily().then((n) => n && this.h.toast(`Daily bonus: +${n} coins`));
   }
@@ -413,7 +414,7 @@ export class Menu {
     const s = this.sel;
     B.innerHTML = `<div class="cs-tabs">${Object.entries(MODES).filter(([, m]) => !m.hidden).map(([k, m]) => `<button data-mode="${k}" class="${s.mode === k ? 'on' : ''}">${esc(m.name)}</button>`).join('')}</div>
       <div class="cs-small cs-mut" style="margin:-6px 0 14px">${MODES[s.mode].bomb ? 'Bomb defusal' : 'Combat only: no kill when time runs out = draw'} · first to ${MODES[s.mode].winTo} · bots fill empty slots</div>
-      <div class="cs-maps">${Object.values(MAPS).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
+      <div class="cs-maps">${Object.values(MAPS).filter((m) => !m.story).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
       <div style="display:grid;grid-template-columns:1fr 340px;gap:22px;margin-top:20px">
         <div><div class="cs-sec">Lobby</div><div class="cs-seg">${[['bots', 'Offline with bots'], ['pub', 'Host public'], ['priv', 'Host private'], ['ranked', '🏆 Ranked']].map(([k, n]) => `<button data-host="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
           <div class="cs-sec">Bot difficulty</div><div class="cs-seg">${Object.entries(BOT_LEVELS).filter(([k, b]) => !b.hidden && (s.host !== 'ranked' || RANKED_BOTS.includes(k))).map(([k, b]) => `<button data-bot="${k}" class="${s.bot === k ? 'on' : ''}">${b.name}</button>`).join('')}</div>
@@ -445,10 +446,13 @@ export class Menu {
     const s = this.story || (this.story = { mission: Math.min(sp.unlocked, MISSIONS.length - 1), diff: 'normal', char: (() => { try { return localStorage.getItem('cs:story:char') || 'ricky'; } catch (e) { return 'ricky'; } })(), host: 'solo' });
     const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
     const C = CHARACTERS[s.char], M = MISSIONS[s.mission];
+    let saved = null; try { saved = JSON.parse(localStorage.getItem('cs:story:camp') || 'null'); } catch (e) { saved = null; }
+    if (saved && !MISSIONS[saved.mission]) saved = null;
     B.innerHTML = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px" class="cs-story">
-      <div><div class="cs-sec">Operation Ballin' Out · co-op campaign · ${Math.min(sp.unlocked, MISSIONS.length)}/${MISSIONS.length} missions</div>
-        ${CHAPTERS.map((c, ci) => `<div class="cs-panel2" style="margin-bottom:10px"><h3>Chapter ${ci + 1}: ${esc(c.name)} <span class="cs-mut cs-small">· ${esc((MAPS[c.map] || {}).name || c.map)}</span></h3><div class="bd" style="display:flex;gap:8px;flex-wrap:wrap">
-          ${c.missions.map((m, mi) => { const i = ci * 3 + mi, locked = i > sp.unlocked; return `<button class="cs-btn ${s.mission === i ? '' : 'alt'} sm" data-mis="${i}" ${locked ? 'disabled style="opacity:.4"' : ''}>${locked ? '🔒 ' : ''}${i + 1}. ${esc(m.name)} <span style="color:#f2a33a">${stars(sp.best[i] || 0)}</span></button>`; }).join('')}</div></div>`).join('')}</div>
+      <div><div class="cs-sec">Operation Ballin' Out · a four-player co-op campaign · ${Math.min(sp.unlocked, MISSIONS.length)}/${MISSIONS.length} levels</div>
+        ${saved ? `<div class="cs-panel2" style="margin-bottom:10px;border-color:#f2a33a"><h3>Continue</h3><div class="bd cs-row"><span style="flex:1">Chapter ${MISSIONS[saved.mission].chapterIndex + 1} · ${esc(MISSIONS[saved.mission].name)}${saved.obj ? ` · checkpoint ${saved.obj + 1}` : ''} <span class="cs-mut cs-small">(${esc((STORY_DIFF[saved.diff] || {}).name || '')}, as ${esc((CHARACTERS[saved.char] || {}).short || '')})</span></span><button class="cs-btn" id="sCont">CONTINUE</button></div></div>` : ''}
+        ${CHAPTERS.map((c, ci) => `<div class="cs-panel2" style="margin-bottom:10px"><h3>Chapter ${ci + 1}: ${esc(c.name)}</h3><div class="bd" style="display:flex;gap:8px;flex-wrap:wrap">
+          ${c.missions.map((m) => { const i = MISSIONS.findIndex((x) => x.id === m.id), locked = i > sp.unlocked; return `<button class="cs-btn ${s.mission === i ? '' : 'alt'} sm" data-mis="${i}" ${locked ? 'disabled style="opacity:.4"' : ''}>${locked ? '🔒 ' : ''}${i + 1}. ${esc(m.name)} <span style="color:#f2a33a">${stars(sp.best[i] || 0)}</span></button>`; }).join('')}</div></div>`).join('')}</div>
       <div><div class="cs-panel2"><h3>Mission ${s.mission + 1}: ${esc(M.name)}</h3><div class="bd cs-small">${M.objectives.map((o, k) => `<div>${k + 1}. ${esc(o.hint)}</div>`).join('')}</div></div>
         <div class="cs-sec">Your character</div><div class="cs-seg" style="flex-wrap:wrap">${SQUAD.map((k) => `<button data-ch="${k}" class="${s.char === k ? 'on' : ''}">${esc(CHARACTERS[k].short)}</button>`).join('')}</div>
         <div class="cs-panel2" style="margin-top:8px"><h3>${esc(C.name)} <span class="cs-mut cs-small">· ${esc(C.role)}</span></h3><div class="bd cs-small"><div class="cs-mut">${esc(C.bio)}</div>
@@ -457,12 +461,14 @@ export class Menu {
         <div class="cs-sec">Difficulty</div><div class="cs-seg">${Object.entries(STORY_DIFF).map(([k, d]) => `<button data-sd="${k}" class="${s.diff === k ? 'on' : ''}">${esc(d.name)}</button>`).join('')}</div>
         <div class="cs-sec">Lobby</div><div class="cs-seg">${[['solo', 'Solo + AI squad'], ['coop', 'Host co-op (invite)']].map(([k, n]) => `<button data-sh="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
         <div class="cs-small cs-mut" style="margin-top:6px">Friends join with your invite code on the Play tab. You keep the campaign progress; everyone keeps their own gun XP.</div>
-        <div style="margin-top:16px"><button class="cs-go" id="sGo">START MISSION</button></div></div></div>`;
+        <div class="cs-small cs-mut" style="margin-top:6px">Levels flow into each other without menus; you come back here (with your party) at the end of each chapter.</div>
+        <div style="margin-top:16px"><button class="cs-go" id="sGo">START</button></div></div></div>`;
     B.querySelectorAll('[data-mis]').forEach((e) => (e.onclick = () => { if (!e.disabled) { s.mission = +e.dataset.mis; this.render(); } }));
     B.querySelectorAll('[data-ch]').forEach((e) => (e.onclick = () => { s.char = e.dataset.ch; try { localStorage.setItem('cs:story:char', s.char); } catch (er) { /* private mode */ } this.render(); }));
     B.querySelectorAll('[data-sd]').forEach((e) => (e.onclick = () => { s.diff = e.dataset.sd; this.render(); }));
     B.querySelectorAll('[data-sh]').forEach((e) => (e.onclick = () => { s.host = e.dataset.sh; this.render(); }));
     $('#sGo', B).onclick = () => this.h.play({ story: { mission: s.mission, diff: s.diff, host: s.char }, bot: STORY_DIFF[s.diff].bot, host: true, solo: s.host === 'solo', pub: false });
+    const cont = $('#sCont', B); if (cont) cont.onclick = () => this.h.play({ story: { mission: saved.mission, obj: saved.obj | 0, diff: saved.diff || 'normal', host: saved.char || s.char, runId: saved.runId }, bot: (STORY_DIFF[saved.diff] || STORY_DIFF.normal).bot, host: true, solo: s.host === 'solo', pub: false });
   }
   // ---- INVENTORY ----
   tab_inv(B) {

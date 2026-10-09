@@ -353,6 +353,125 @@ function range() {
   return B;
 }
 
+// ======================================================================================================================
+// Story-only maps (story mode never plays them in multiplayer: MAPS[id].story). Built for walk-and-talk scenes,
+// a hospital siege and the finale; zone names are the ones story.js points at.
+// ======================================================================================================================
+
+// ---- Fort Brisket: the squad's barracks (Reveille, The Last Night, Tape Four) ---------------------------------------
+function barracks(night = false) {
+  const B = new MapBuilder(64, 54, 6, 'concrete', 'dirt');
+  B.open(2, 2, 62, 52, 0, 'dirt');
+  B.open(20, 17, 44, 37, 0, 'asphalt');                                                   // parade ground
+  B.open(30, 2, 34, 17, 0, 'concrete').open(30, 37, 34, 52, 0, 'concrete').open(2, 25, 20, 29, 0, 'concrete').open(44, 25, 62, 29, 0, 'concrete');   // paths
+  B.house(4, 4, 18, 16, 3.4, 'plaster', 'wood', [[10, 15, 13, 16]]);                        // bunks
+  B.block(5, 5, 7, 8, 0.6, 'darkwood').block(5, 10, 7, 13, 0.6, 'darkwood').block(15, 5, 17, 8, 0.6, 'darkwood').block(15, 10, 17, 13, 0.6, 'darkwood');   // bunk beds
+  B.roof(4, 4, 18, 16, 3.4, 'roof').roof(10, 15, 13, 16, 2.4, 'plaster');
+  B.house(46, 4, 60, 16, 3.4, 'plaster', 'tile', [[50, 15, 54, 16]]);                       // mess hall
+  B.block(49, 7, 57, 8, 0.8, 'darkwood').block(49, 11, 57, 12, 0.8, 'darkwood').block(58, 5, 59, 7, 1.2, 'metal');   // tables and the coffee machine
+  B.roof(46, 4, 60, 16, 3.4, 'roof').roof(50, 15, 54, 16, 2.4, 'plaster');
+  B.house(4, 38, 18, 50, 3.4, 'plaster', 'tile', [[10, 38, 13, 39]]);                       // infirmary
+  B.block(5, 45, 8, 47, 0.7, 'trim').block(14, 45, 17, 47, 0.7, 'trim');
+  B.roof(4, 38, 18, 50, 3.4, 'roof').roof(10, 38, 13, 39, 2.4, 'plaster');
+  B.house(46, 38, 60, 50, 3.6, 'metal', 'concrete', [[50, 38, 54, 39]]);                    // armory
+  B.block(47, 46, 59, 49, 1.6, 'crate');
+  B.roof(46, 38, 60, 50, 3.6, 'metal').roof(50, 38, 54, 39, 2.6, 'metal');
+  B.ramp(36, 42, 40, 50, 0, 3.2, 'x', 'darkwood'); B.open(40, 42, 44, 50, 3.2, 'wood');     // watchtower: steps up to a lookout
+  B.block(44, 42, 45, 50, 4.2, 'wood').block(40, 41, 45, 42, 4.2, 'wood').block(40, 50, 45, 51, 4.2, 'wood');
+  B.block(24, 20, 26, 22, 1.1, 'crate').block(38, 32, 40, 34, 1.1, 'crate').block(22, 33, 24, 35, 0.8, 'darkwood');
+  B.zone('Bunks', 4, 4, 18, 17).zone('Mess Hall', 46, 4, 60, 17).zone('Infirmary', 4, 37, 18, 50).zone('Armory', 46, 37, 60, 50)
+    .zone('Watchtower', 36, 41, 45, 51).zone('Parade Ground', 20, 17, 44, 37);
+  B.site('A', 46, 4, 60, 16).site('B', 46, 38, 60, 50);
+  B.buyzone('T', 2, 25, 8, 29).buyzone('CT', 26, 24, 38, 30);
+  for (let k = 0; k < 5; k++) { B.spawn('CT', 27 + k * 2.5, 27, 0); B.spawn('T', 3 + (k % 2) * 2, 20 + k * 3, Math.PI / 2); }
+  for (let k = 0; k < 3; k++) B.spawn('T', 60, 20 + k * 6, -Math.PI / 2);
+  B.duelSpawn('T', 22, 27, -Math.PI / 2).duelSpawn('CT', 42, 27, Math.PI / 2);
+  B.sign(32, 2.05, 3.2, 0, 'FORT BRISKET\nhome of nobody important', 5, 1.4, '#2a3a2a', '#f3e9b0');
+  B.sign(58.05, 6, 2.0, -Math.PI / 2, 'ESPRESSO.\nThere is no X.', 1.6, 0.8, '#f4f0e6', '#b01818');   // his handwriting, from the first week
+  B.sign(11.5, 16.05, 2.8, 0, 'BUNKS\nlights out 2200', 3, 0.8, '#3a2a1a', '#fff');
+  B.sign(11.5, 37.95, 2.8, Math.PI, 'INFIRMARY', 3, 0.7, '#eeeeee', '#b01818');
+  B.sign(52, 37.95, 3.0, Math.PI, 'ARMORY\nsign out every gun\n(Ricky: ONE glock)', 3.4, 1.1, '#2a2a2a', '#ffd23a');
+  B.prop('lamp', 20, 17, {}).prop('lamp', 44, 37, {}).prop('lamp', 20, 37, {}).prop('lamp', 44, 17, {}).prop('tree', 4, 22, {}).prop('tree', 60, 32, {}).prop('tree', 26, 50, {})
+    .prop('barrel', 25, 40, {}).prop('barrel', 47, 20, {}).prop('tv', 8, 9, {});
+  if (night) { B.sky = 0x0b1230; B.fog = 0x141c34; B.sunColor = 0x9fb4ff; B.amb = [0x3a4a78, 0x14121a]; B.sunDir = [0.3, 0.75, -0.4]; B.sunI = 0.9; B.ambI = 0.75; }
+  else { B.sky = 0xf0b878; B.fog = 0xe8c8a0; B.sunColor = 0xffd8a8; B.amb = [0xf0d0b0, 0x6a5a4a]; B.sunDir = [-0.7, 0.35, 0.3]; B.sunI = 2.2; B.ambI = 1.1; }   // dawn
+  return B;
+}
+
+// ---- St. Mercy Hospital (chapter 6) -----------------------------------------------------------------------------------
+function hospital() {
+  const B = new MapBuilder(70, 58, 6, 'plaster', 'tile');
+  B.open(2, 2, 68, 56, 0, 'tile');
+  B.open(24, 50, 46, 56, 0, 'asphalt');                                                    // ambulance bay out front
+  const wall = (x0, z0, x1, z1) => B.block(x0, z0, x1, z1, 3.6, 'plaster');
+  // north wing: chapel, nursery, oncology, records; doors onto the main corridor (z 26-30)
+  wall(2, 25, 8, 26); wall(11, 25, 18, 26); wall(16, 2, 18, 25);
+  wall(18, 25, 23, 26); wall(26, 25, 34, 26); wall(32, 2, 34, 25);
+  wall(34, 25, 39, 26); wall(42, 25, 50, 26); wall(50, 2, 52, 25);
+  wall(52, 25, 57, 26); wall(60, 25, 68, 26);
+  B.block(18, 10, 32, 11, 1.3, 'fence');                                                     // nursery window (waist-high glass rail)
+  B.block(4, 6, 6, 18, 0.5, 'darkwood').block(9, 6, 11, 18, 0.5, 'darkwood').block(5, 3, 15, 4, 1.0, 'darkwood');   // chapel pews and altar
+  B.block(36, 4, 40, 6, 0.8, 'darkwood').block(44, 14, 48, 16, 0.5, 'carpet');               // oncology: the doctor's desk, a sofa
+  B.block(54, 4, 66, 6, 2.2, 'metal').block(54, 10, 66, 12, 2.2, 'metal').block(54, 16, 66, 18, 2.2, 'metal');   // records shelves
+  // south wing: the ward, the lobby, the blood bank, the stairs to the roof
+  wall(2, 30, 8, 31); wall(11, 30, 22, 31); wall(22, 30, 24, 50);
+  wall(24, 30, 31, 31); wall(39, 30, 46, 31); wall(46, 31, 48, 50);
+  wall(48, 30, 53, 31); wall(56, 30, 68, 31); wall(48, 42, 60, 43);
+  for (let k = 0; k < 4; k++) { B.block(4, 33 + k * 4, 7, 35 + k * 4, 0.7, 'trim'); B.block(16, 33 + k * 4, 19, 35 + k * 4, 0.7, 'trim'); }   // ward beds
+  B.block(30, 36, 40, 38, 1.1, 'darkwood');                                                  // reception desk
+  B.block(50, 33, 52, 41, 1.6, 'metal').block(64, 33, 66, 41, 1.6, 'metal');                 // blood bank fridges
+  wall(24, 50, 31, 51); wall(39, 50, 46, 51);                                                // front wall with the entrance
+  B.ramp(48, 44, 60, 52, 0, 4.2, 'x', 'concrete'); B.open(60, 43, 68, 56, 4.2, 'concrete');   // stairs up to the roof
+  B.block(60, 43, 68, 44, 5.2, 'concrete').block(67, 44, 68, 56, 5.2, 'concrete');
+  B.roof(2, 2, 68, 30, 3.6, 'tile').roof(2, 31, 48, 50, 3.6, 'tile').roof(48, 31, 68, 42, 3.6, 'tile');
+  B.zone('Chapel', 2, 2, 16, 25).zone('Nursery', 18, 2, 32, 25).zone('Oncology', 34, 2, 50, 25).zone('Records', 52, 2, 68, 25)
+    .zone('Corridor', 2, 26, 68, 30).zone('Ward', 2, 31, 22, 50).zone('Lobby', 24, 31, 46, 50).zone('Blood Bank', 48, 31, 68, 42)
+    .zone('Stairs', 48, 43, 60, 56).zone('Roof', 60, 44, 68, 56).zone('Ambulance Bay', 24, 51, 46, 56);
+  B.site('A', 52, 2, 68, 25).site('B', 2, 31, 22, 50);
+  B.buyzone('T', 2, 26, 8, 30).buyzone('CT', 28, 40, 42, 50);
+  for (let k = 0; k < 5; k++) { B.spawn('CT', 29 + k * 3, 46, 0); B.spawn('T', 4 + k * 13, 28, 0); }
+  B.spawn('T', 8, 12, 0).spawn('T', 60, 8, 0).spawn('T', 12, 45, 0).spawn('T', 58, 36, 0);
+  B.duelSpawn('T', 10, 28, -Math.PI / 2).duelSpawn('CT', 60, 28, Math.PI / 2);
+  B.sign(35, 55.95, 4.4, Math.PI, 'ST. MERCY HOSPITAL', 6, 1.2, '#ffffff', '#1a4a8a');
+  B.sign(35, 50.95, 2.9, Math.PI, 'VISITING HOURS 9 - 5\n(not for hot dogs)', 3.4, 0.9, '#eeeeee', '#1a4a8a');
+  B.sign(9.5, 25.95, 2.9, Math.PI, 'CHAPEL\nall faiths welcome', 3, 0.9, '#3a2a4a', '#f3e9b0');
+  B.sign(24.5, 25.95, 2.9, Math.PI, 'NURSERY\nquiet please', 3, 0.9, '#f4d8e8', '#5a2a4a');
+  B.sign(40.5, 25.95, 2.9, Math.PI, 'ONCOLOGY', 3, 0.7, '#e8f0f4', '#1a4a8a');
+  B.sign(58.5, 25.95, 2.9, Math.PI, 'MEDICAL RECORDS\nstaff only', 3, 0.9, '#2a2a2a', '#fff');
+  B.sign(54.5, 30.05, 2.9, 0, 'BLOOD DRIVE\nO NEGATIVE NEEDED', 3.4, 0.9, '#b01818', '#fff');
+  B.prop('lamp', 26, 54, {}).prop('lamp', 44, 54, {}).prop('tv', 36, 34, {}).prop('palm', 25, 33, {}).prop('palm', 45, 33, {}).prop('barrel', 66, 54, {});
+  B.sky = 0x8ab0d8; B.fog = 0xd8e0e8; B.sunColor = 0xfff8f0; B.amb = [0xe8f0ff, 0x8a8a90]; B.sunDir = [0.4, 0.8, 0.3]; B.sunI = 2.0; B.ambI = 1.35;
+  return B;
+}
+
+// ---- Ballin' Arena: the finale --------------------------------------------------------------------------------------
+function stadium() {
+  const B = new MapBuilder(90, 72, 9, 'concrete', 'concrete');
+  B.open(2, 2, 88, 70, 0, 'concrete');                                                      // the concourse ring
+  B.open(30, 22, 60, 48, 0, 'wood');                                                        // the court
+  B.ramp(30, 12, 60, 22, 0, 3.2, '-z', 'cred').ramp(30, 48, 60, 58, 0, 3.2, 'z', 'cred');   // bleachers, rising away from the court
+  B.ramp(18, 22, 30, 48, 0, 3.2, '-x', 'cblue').ramp(60, 22, 72, 48, 0, 3.2, 'x', 'cblue');
+  B.block(30, 11, 60, 12, 4.6, 'concrete').block(30, 58, 60, 59, 4.6, 'concrete').block(17, 22, 18, 48, 4.6, 'concrete').block(72, 22, 73, 48, 4.6, 'concrete');   // backs of the stands
+  B.block(31, 34, 32, 36, 3.4, 'metal').block(58, 34, 59, 36, 3.4, 'metal');                // the hoops
+  B.block(42, 33, 48, 37, 0.9, 'yellow');                                                   // the pot's stand at centre court
+  B.house(38, 2, 52, 9, 4.2, 'metal', 'metal', [[43, 8, 47, 9]]); B.roof(38, 2, 52, 9, 4.2, 'metal').roof(43, 8, 47, 9, 3.0, 'metal');   // the blast tank
+  B.block(8, 8, 12, 12, 1.1, 'crate').block(78, 8, 82, 12, 1.1, 'crate').block(8, 60, 12, 64, 1.1, 'crate').block(78, 60, 82, 64, 1.1, 'crate');
+  B.block(20, 4, 26, 6, 1.2, 'corange').block(64, 4, 70, 6, 1.2, 'corange').block(20, 66, 26, 68, 1.2, 'corange').block(64, 66, 70, 68, 1.2, 'corange');   // concession stands
+  B.zone('Court', 30, 22, 60, 48).zone('Concourse', 2, 2, 88, 70).zone('North Stands', 30, 12, 60, 22).zone('South Stands', 30, 48, 60, 58)
+    .zone('West Stands', 18, 22, 30, 48).zone('East Stands', 60, 22, 72, 48).zone('Blast Tank', 38, 2, 52, 10).zone('Tunnel', 38, 62, 52, 70);
+  B.site('A', 38, 2, 52, 10).site('B', 30, 22, 60, 48);
+  B.buyzone('T', 2, 2, 10, 10).buyzone('CT', 38, 62, 52, 70);
+  for (let k = 0; k < 5; k++) { B.spawn('CT', 40 + k * 2.5, 66, 0); B.spawn('T', 6 + k * 18, 3, Math.PI); }
+  B.spawn('T', 4, 36, -Math.PI / 2).spawn('T', 86, 36, Math.PI / 2).spawn('T', 10, 66, 0).spawn('T', 80, 66, 0);
+  B.duelSpawn('T', 45, 26, Math.PI).duelSpawn('CT', 45, 44, 0);
+  B.sign(45, 70 - 0.05, 5.5, Math.PI, 'BALLIN\' ARENA\ntonight: SOLD OUT', 8, 2, '#1a1a2a', '#ffd23a');
+  B.sign(45, 11.95, 6.0, Math.PI, 'HOME OF THE BROTHERHOOD\nno outside chili', 8, 1.6, '#c8a020', '#1a1a1a');
+  B.sign(45, 9.05, 3.2, 0, 'BLAST TANK\nauthorised personnel only', 4, 1, '#b01818', '#fff');
+  B.prop('lamp', 6, 30, {}).prop('lamp', 84, 30, {}).prop('lamp', 6, 44, {}).prop('lamp', 84, 44, {}).prop('tv', 45, 60, {});
+  B.sky = 0x241a3a; B.fog = 0x3a2a4a; B.sunColor = 0xffc890; B.amb = [0x8a70b0, 0x302030]; B.sunDir = [-0.5, 0.45, 0.4]; B.sunI = 1.8; B.ambI = 1.0;   // dusk
+  return B;
+}
+
 export const MAPS = {
   dust: { id: 'dust', name: 'Dust Two: Abbottabad', short: 'Abbottabad', parody: 'the classic desert bomb map', build: dust, modes: ['1v1', '2v2', '3v3', '5v5'] },
   nuke: { id: 'nuke', name: 'Nuke Town 2069', short: 'Nuke Town', parody: 'the little nuclear test town', build: nuke, modes: ['1v1', '2v2', '3v3', '5v5'] },
@@ -361,4 +480,9 @@ export const MAPS = {
   crust: { id: 'crust', name: 'Crust', short: 'Crust', parody: 'the tiny desert oil yard', build: crust, modes: ['1v1', '2v2', '3v3', '5v5'] },
   yacht: { id: 'yacht', name: 'Hijacked: Yacht Rock', short: 'Yacht Rock', parody: 'the hijacked superyacht', build: yacht, modes: ['1v1', '2v2', '3v3', '5v5'] },
   range: { id: 'range', name: 'Shooting Strange', short: 'Shooting Strange', parody: 'the army firing range', build: range, modes: ['1v1', '2v2', '3v3', '5v5'] },
+  // story mode only (never in the map list, lobbies or bots matches)
+  barracks: { id: 'barracks', name: 'Fort Brisket', short: 'Fort Brisket', parody: 'story mode', build: () => barracks(false), modes: [], story: true },
+  barracks_night: { id: 'barracks_night', name: 'Fort Brisket (night)', short: 'Fort Brisket', parody: 'story mode', build: () => barracks(true), modes: [], story: true },
+  hospital: { id: 'hospital', name: 'St. Mercy Hospital', short: 'St. Mercy', parody: 'story mode', build: hospital, modes: [], story: true },
+  stadium: { id: 'stadium', name: 'Ballin\' Arena', short: 'Ballin\' Arena', parody: 'story mode', build: stadium, modes: [], story: true },
 };

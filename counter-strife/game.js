@@ -15,7 +15,7 @@ import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf,
 import { Bots, botNames } from './bots.js';
 import { StoryMatch } from './story_sim.js';
 import { storyClient } from './story_client.js';
-import { MISSIONS, CHARACTERS, BOSS } from './story.js';
+import { MISSIONS, CHAPTERS, CHARACTERS, SQUAD, BOSS } from './story.js';
 // the boss in a match: a giant in a basketball jersey and a gold cap
 const BOSS_LOOK = { body: BOSS.model.jersey, legs: BOSS.model.trim, head: '#a8805e', hat: 'cap', hatColor: BOSS.model.trim };
 import { Profile } from './backend.js';
@@ -381,20 +381,137 @@ export default function start({ cfg, E, N, smoke }) {
     // ranked: bots only on Normal or Hard, real players fill one team first, and that team must be all real to start
     let ranked = !!opt.ranked; if (ranked && !RANKED_BOTS.includes(botLevel)) botLevel = 'hard';
     const rankedReady = () => { if (!match) return false; const n = MODES[mode].size; return [...match.players.values()].filter((q) => !q.bot && q.team === 'T').length >= n || [...match.players.values()].filter((q) => !q.bot && q.team === 'CT').length >= n; };
-    // story mode's screen layer (made on the first story event) and the end of a mission
+    // ---- the campaign (story mode) ------------------------------------------------------------------------------------
+    // One session for the whole campaign. A level ends -> everyone banks their rewards once -> a black card with the next
+    // level's line while it loads behind it -> gameplay starts when every player has loaded (or after 25 s). The last
+    // level of a chapter ends on the chapter hub: the same party picks characters and loadouts and readies up; the host
+    // starts the next chapter. Every checkpoint is saved on the host, so a crash or a quit resumes from there.
     let SC = null;
-    const storyUI = () => SC || (hud.el.classList.add('story'), SC = storyClient({ scene, myId, audio, isHost, onCutEnd: () => { if (match && match.cutT > 0) match.cutT = 0.01; if (match && match.result) match.endT = Math.min(match.endT, 1); }, onQuit: () => quit(), onNext: () => { if (story && MISSIONS[story.mission + 1]) { if (session) send('storyNext', 1); quit({ ...opt, code: session ? session.code : undefined, story: { ...story, mission: story.mission + 1 } }); } } }));
-    async function storyDone(d) {
-      if (ended) return; ended = true;
-      document.exitPointerLock && document.exitPointerLock();
-      const sp = storyProgress(), ch = (story && story.host) || 'wiener';
+    const storyUI = () => SC || (hud.el.classList.add('story'), SC = storyClient({ scene, myId, audio, isHost, onSkip: () => toHost('skipVote', 1) }));
+    const CAMP_KEY = 'cs:story:camp', CLAIM_KEY = 'cs:story:claimed';
+    const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } };
+    const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } };
+    const camp = { runId: story ? (story.runId || Math.random().toString(36).slice(2, 10)) : '', mission: story ? story.mission | 0 : -1, diff: story ? story.diff || 'normal' : 'normal', phase: story ? 'level' : '', party: new Map(), ready: new Set(), info: new Map(), ended: -1, hubChapter: 0 };
+    let campHold = false;   // a card or the hub is up: no game input
+    const storyHold = () => campHold || !!(SC && SC.cutscene);
+    const myChar = () => ((match && match.players.get(myId)) || st.roster.get(myId) || {}).char || (story && story.host) || 'ricky';
+    const saveCamp = (mi, obj) => { if (isHost && story) lsSet(CAMP_KEY, { runId: camp.runId, mission: mi, obj: obj | 0, diff: camp.diff, char: myChar(), t: Date.now() }); };
+    // each player banks their own reward for a level exactly once per run (a duplicate event or a replayed run can't pay twice)
+    async function bankLevel(d) {
+      const key = `${d.runId || camp.runId}:${d.mission}`, claimed = lsGet(CLAIM_KEY, []);
+      if (claimed.includes(key)) return 'rewards already collected';
+      claimed.push(key); lsSet(CLAIM_KEY, claimed.slice(-300));
+      const sp = storyProgress(), ch = myChar();
       if (isHost) sp.unlocked = Math.max(sp.unlocked, d.mission + 1);   // the host keeps the campaign progress
       sp.best[d.mission] = Math.max(sp.best[d.mission] || 0, ({ easy: 1, normal: 2, hard: 3 })[d.diff] || 1);
-      sp.chars[ch] = (sp.chars[ch] || 0) + 1;   // each player keeps their own character's missions played
-      saveStory(sp);
+      sp.chars[ch] = (sp.chars[ch] || 0) + 1; saveStory(sp);   // everyone keeps their own character's history
+      let res = null; try { res = await profile.matchDone({ ...stats, win: 1, draw: false, rounds: 1, botsOnly: true }); } catch (e) { /* offline: saved locally */ }
+      gunXPSaved = false; await saveGunXp(); for (const k of Object.keys(gunXP)) delete gunXP[k]; gunXPSaved = false;
+      for (const k of Object.keys(stats)) stats[k] = 0;
+      return res ? `+${res.coins} coins · +${res.xp} XP` : 'rewards saved';
+    }
+    async function levelEnd(d) {
+      if (camp.ended === d.mission) return; camp.ended = d.mission;
+      campHold = true; try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* not locked */ }
+      const m = MISSIONS[d.mission] || {}, nxt = MISSIONS[d.mission + 1];
+      if (!d.chapterEnd && nxt) storyUI().transition(d.mission + 1, 'saving…'); else if (nxt) storyUI().chapterCard(m.chapterIndex); else storyUI().finalCard();
       audio.play('win');
-      try { await profile.matchDone({ ...stats, win: 1, draw: false, rounds: 1, botsOnly: true }); } catch (e) { /* offline */ }
-      await saveGunXp();
+      const rw = await bankLevel(d); SC.reward(rw);
+      if (!isHost) return;   // the host moves everyone on
+      saveCamp(nxt ? d.mission + 1 : d.mission, 0);
+      if (!d.chapterEnd && nxt) setTimeout(() => goLevel(d.mission + 1), 1600);
+      else setTimeout(() => openHub(nxt ? nxt.chapterIndex : CHAPTERS.length), nxt ? 5500 : 9000);
+    }
+    function resetLevel() {   // the last level's leftovers: other players' bodies, smoke, drops, decals, grenades in the air
+      for (const [id, r] of rigs) { if (id === myId) continue; scene.remove(r.g); if (r.blob) scene.remove(r.blob); rigs.delete(id); }
+      st.players.clear(); st.bomb = null; onFx([]); onDrops([]);
+      for (const d of decals) fx.remove(d); decals.length = 0;
+      for (const [id, f] of flying) { fx.remove(f.m); flying.delete(id); }
+      if (SC) SC.reset();
+    }
+    const hostInfo = () => { loadout.T = profile.loadoutFor('T'); loadout.CT = profile.loadoutFor('CT'); return { ...hello, loadout: sanitizeLoadout(loadout), agent: sanitizeAgent({ T: loadout.T.agent, CT: loadout.CT.agent }), knife: sanitizeKnife({ T: loadout.T.knife, CT: loadout.CT.knife }) }; };
+    function goLevel(mi) {   // host: the next level, same session, same squad
+      const m = MISSIONS[mi]; if (!m || !isHost) return;
+      camp.mission = mi; camp.phase = 'loading'; campHold = true; camp.ended = -1;
+      send('camp', { phase: 'transition', mission: mi, runId: camp.runId });
+      storyUI().transition(mi, 'loading…'); SC.hub(null);
+      setTimeout(() => {
+        const people = [...match.players.values()].filter((p) => !p.bot).map((p) => ({ id: p.id, char: (camp.party.get(p.id) || {}).char || (p.char === 'recruit' ? null : p.char) }));
+        try { if (mapId !== m.map) buildMap(m.map); } catch (e) { toast('Could not build ' + m.name + ': ' + (e.message || e)); }
+        resetLevel();
+        const old = match, mine = people.find((p) => p.id === myId) || {};
+        match = new StoryMatch({ W, mode, mapId, botLevel, send: (t, d, to) => { if (session) session.send(t, d, to); }, onLocal: local }, { mission: mi, diff: camp.diff, host: mine.char || myChar(), runId: camp.runId, obj: camp.resumeObj || 0 });
+        camp.resumeObj = 0; match.hostId = myId; match.killFx = old.killFx; bots = new Bots(match);
+        const mp = match.add(myId, hostInfo()); mp.local = true; me.team = mp.team;
+        for (const p of people) if (p.id !== myId) match.add(p.id, { ...(camp.info.get(p.id) || { name: 'Player' }), char: p.char || undefined });
+        camp.party.clear();
+        send('camp', { phase: 'load', mission: mi, map: m.map, runId: camp.runId });
+        camp.ready = new Set([myId]);
+        const t0 = performance.now(), need = () => [...match.players.values()].filter((p) => !p.bot).map((p) => p.id);
+        const wait = setInterval(() => {
+          const ids = need(), n = ids.filter((id) => camp.ready.has(id)).length;
+          SC.status(n < ids.length ? `waiting for the squad to load (${n}/${ids.length})…` : 'everyone is here');
+          if (n >= ids.length || performance.now() - t0 > 25000) { clearInterval(wait); startLevel(); }
+        }, 250);
+      }, 900);
+    }
+    function startLevel() {
+      camp.phase = 'level'; campHold = false; started = true;
+      saveCamp(camp.mission, match.startObj || 0);
+      match.start(); send('lobby', { mode, map: mapId, bot: botLevel, started: true, ranked });
+      send('camp', { phase: 'go', mission: camp.mission }); SC.hideCard(); SC.hub(null); if (!smoke) lock();
+    }
+    // ---- the chapter hub (between chapters, same party) ----
+    function openHub(ci) {
+      camp.phase = 'hub'; camp.hubChapter = ci; campHold = true;
+      const taken = new Set();
+      camp.party = new Map([...match.players.values()].filter((p) => !p.bot).map((p) => {
+        let c = p.char && p.char !== 'recruit' && !taken.has(p.char) ? p.char : SQUAD.find((k) => !taken.has(k)); taken.add(c);
+        return [p.id, { id: p.id, name: ((camp.info.get(p.id) || {}).name || (p.id === myId ? myName : 'Player')), char: c, ready: false }];
+      }));
+      broadcastHub();
+    }
+    function broadcastHub() { const d = { phase: 'hub', chapter: camp.hubChapter, party: [...camp.party.values()] }; send('camp', d); renderHub(d); }
+    function renderHub(d) {
+      campHold = true; try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* not locked */ }
+      storyUI().hideCard();
+      SC.hub({ ...d, on: { char: (c) => campAct({ char: c }), ready: (r) => campAct({ ready: r }), loadout: openLoadout, start: hubStart, leave: () => quit() } });
+    }
+    const campAct = (a) => { if (isHost) hubAct(myId, a); else toHost('campHub', a); };
+    function hubAct(id, a) {
+      const p = camp.party.get(id); if (!p || !a || typeof a !== 'object') return;
+      if (a.char && SQUAD.includes(a.char) && ![...camp.party.values()].some((q) => q !== p && q.char === a.char)) { p.char = a.char; p.ready = false; }
+      if ('ready' in a) p.ready = !!a.ready;
+      broadcastHub();
+    }
+    function hubStart() { if (!isHost || camp.phase !== 'hub') return; const mi = MISSIONS.findIndex((m) => m.chapterIndex === camp.hubChapter); if (mi >= 0) goLevel(mi); }
+    // change your loadout without leaving the party: the inventory over the hub, then back
+    let loadMenu = null;
+    function openLoadout() {
+      if (loadMenu) return; SC.hub(null);
+      loadMenu = new Menu(cfg, profile, { play: () => {}, lobbies: () => ({ close() {}, announce() {}, update() {} }), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (v) => { S = v; saveSet(v); }, announce: () => {},
+        back: () => { loadMenu.hide(); loadMenu = null; const info = hostInfo(); if (isHost) camp.info.set(myId, info); else toHost('loadout', { loadout: info.loadout, agent: info.agent, knife: info.knife }); if (camp.phase === 'hub') renderHub({ phase: 'hub', chapter: camp.hubChapter, party: [...camp.party.values()] }); } });
+      loadMenu.tab = 'inv'; loadMenu.show();
+    }
+    // a client: what the host says the campaign is doing
+    function onCamp(d) {
+      if (!d || typeof d !== 'object') return;
+      storyUI();
+      if (d.runId) camp.runId = d.runId;
+      if (d.phase === 'transition') { camp.phase = 'loading'; campHold = true; SC.transition(d.mission, 'loading…'); SC.hub(null); try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* not locked */ } }
+      if (d.phase === 'load') {
+        camp.phase = 'loading'; campHold = true; camp.mission = d.mission | 0; camp.ended = -1; SC.transition(d.mission, 'loading…'); SC.hub(null);
+        try { if (!MAPS[d.map]) throw new Error('unknown map'); if (mapId !== d.map) buildMap(d.map); resetLevel(); toHost('campReady', d.mission); SC.status('loaded · waiting for the squad…'); }
+        catch (e) { d.tries = (d.tries || 0) + 1; if (d.tries < 3) { SC.status('loading failed, retrying…'); setTimeout(() => onCamp(d), 1500); } else { toast('Could not load the level'); quit(); } }
+      }
+      if (d.phase === 'go') { camp.phase = 'level'; campHold = false; SC.hideCard(); SC.hub(null); lock(); }
+      if (d.phase === 'hub') { camp.phase = 'hub'; camp.hubChapter = d.chapter; camp.party = new Map((d.party || []).map((p) => [p.id, p])); renderHub(d); }
+    }
+    // someone joins (or comes back) mid-campaign: catch them up on where the squad is
+    function campWelcome(peer) {
+      if (camp.phase === 'hub') { if (!camp.party.has(peer)) { const taken = new Set([...camp.party.values()].map((p) => p.char)); camp.party.set(peer, { id: peer, name: (camp.info.get(peer) || {}).name || 'Player', char: SQUAD.find((k) => !taken.has(k)) || 'ricky', ready: false }); } broadcastHub(); }
+      else if (camp.phase === 'loading') send('camp', { phase: 'load', mission: camp.mission, map: mapId, runId: camp.runId }, peer);
+      else if (match && match.push) { send('camp', { phase: 'go', mission: camp.mission, runId: camp.runId }, peer); match.push(true); }
     }
     const st = { phase: 'warmup', timer: 0, round: 0, score: { T: 0, CT: 0 }, bomb: null, effects: [], drops: [], history: [], roster: new Map(), players: new Map() };
     const stats = { k: 0, d: 0, a: 0, hs: 0, mvp: 0, plant: 0, defuse: 0, pistol: 0, smg: 0, knife: 0, nade: 0, roundWin: 0, dmg: 0 };
@@ -614,14 +731,14 @@ export default function start({ cfg, E, N, smoke }) {
     addEventListener('mousemove', onMove); renderer.domElement.addEventListener('mousedown', onDown); addEventListener('mouseup', onUp);
     addEventListener('contextmenu', (e) => e.preventDefault());
     addEventListener('wheel', (e) => { if (locked) pressed.add(e.deltaY > 0 ? 'WheelDown' : 'WheelUp'); }, { passive: true });
-    const onLock = () => { locked = document.pointerLockElement === renderer.domElement; if (!locked && !uiOpen && !ended && !smoke) openPause(); };
+    const onLock = () => { locked = document.pointerLockElement === renderer.domElement; if (!locked && !uiOpen && !ended && !smoke && !campHold && !loadMenu) openPause(); };   // the story hub / cards free the mouse on purpose
     document.addEventListener('pointerlockchange', onLock);
     // raw mouse where the browser supports it (no OS acceleration, lower latency), else the plain lock
     const lock = () => { try { let r = null; try { r = renderer.domElement.requestPointerLock({ unadjustedMovement: true }); } catch (e1) { r = null; } if (r && r.catch) r = r.catch(() => renderer.domElement.requestPointerLock()); else if (!r && !document.pointerLockElement) r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock(['ControlLeft', 'KeyW', 'Tab']).catch(() => {}); };
     let mob = null; try { if (matchMedia('(pointer: coarse)').matches) mob = mobileControls(E.input); } catch (e) { /* no touch */ }
     if (mob && story) document.querySelectorAll('.kc-t b').forEach((b) => { if (b.textContent === 'BUY') b.textContent = 'SKILL'; });   // nothing to buy in a mission: that button is the ability
     // controllers (consoles, TVs, PCs with a pad): drive the match while playing, the menus otherwise
-    const pad = gamepadControls(E.input, { playing: () => started && !uiOpen && !ended && !hud.chatIn, sens: () => S.touchSens || 1 });
+    const pad = gamepadControls(E.input, { playing: () => started && !uiOpen && !ended && !hud.chatIn && !campHold && !loadMenu, sens: () => S.touchSens || 1 });
     if (mob) { hud.el.classList.add('touch'); mob.setSens(S.touchSens || 1); }
     let mobShown = true;
     const kd = (c) => keys.has(c), kp = (c) => pressed.has(c);
@@ -636,21 +753,27 @@ export default function start({ cfg, E, N, smoke }) {
       if (t === 'hello') {
         if (p) return;
         const info = d && typeof d === 'object' ? d : {};
-        const clean = { char: CHARACTERS[info.char] ? info.char : undefined, name: String(info.name || 'Player').slice(0, 20), loadout: sanitizeLoadout(info.loadout), agent: sanitizeAgent(info.agent), knife: sanitizeKnife(info.knife) };
+        const clean = { char: SQUAD.includes(info.char) ? info.char : undefined, name: String(info.name || 'Player').slice(0, 20), loadout: sanitizeLoadout(info.loadout), agent: sanitizeAgent(info.agent), knife: sanitizeKnife(info.knife) };
         if (ranked && !started) { const n = MODES[mode].size, onT = [...match.players.values()].filter((q) => !q.bot && q.team === 'T').length; clean.team = onT < n ? 'T' : 'CT'; }
-        if (started) {  // replace a bot on the team that needs a human most
+        if (started && mode !== 'story') {  // replace a bot on the team that needs a human most
           const humans = (tm) => [...match.players.values()].filter((q) => q.team === tm && !q.bot).length;
           const team = humans('T') <= humans('CT') ? 'T' : 'CT';
           const bot = [...match.players.values()].find((q) => q.bot && q.team === team) || [...match.players.values()].find((q) => q.bot);
           if (bot) { match.remove(bot.id); clean.team = bot.team; }
         }
+        if (mode === 'story') { camp.info.set(peer, clean); const hp = camp.party.get(peer); if (hp) clean.char = hp.char; }
         match.add(peer, clean);
         send('lobby', { mode, map: mapId, bot: botLevel, started, ranked }, peer);
+        if (mode === 'story' && started) campWelcome(peer);
         if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
         return;
       }
-      if (!p) return;
+      if (!p && !(t === 'campReady' || t === 'campHub' || t === 'loadout')) return;
       if (t === 'ability') { if (match.ability) match.ability(p); return; }
+      if (t === 'skipVote') { if (match.skipVote) match.skipVote(p); return; }
+      if (t === 'campReady') { if (d === camp.mission) camp.ready.add(peer); return; }
+      if (t === 'campHub') { if (camp.phase === 'hub') hubAct(peer, d); return; }
+      if (t === 'loadout' && d && typeof d === 'object') { const o = camp.info.get(peer) || {}; camp.info.set(peer, { ...o, loadout: sanitizeLoadout(d.loadout), agent: sanitizeAgent(d.agent), knife: sanitizeKnife(d.knife) }); return; }
       if (t === 'pose' && Array.isArray(d) && d.length >= 8) {
         const [x, y, z, yaw, pitch, cr, fl, cur] = d.map(Number);
         if (![x, y, z, yaw, pitch, cr].every(Number.isFinite)) return;
@@ -807,7 +930,9 @@ export default function start({ cfg, E, N, smoke }) {
         if (em.anim === 'fart' && p) { setTimeout(() => { puff(p.x, p.y + 0.9, p.z, '#9ac84a'); puff(p.x + 0.3, p.y + 0.8, p.z + 0.2, '#8ab83a'); audio.at('smoke', p.x, p.y, p.z, cam, 30); }, 600); }
       }
       if (type === 'matchEnd') finish(data);
-      if (['cut', 'story', 'obj', 'bark', 'focus', 'storyEnd'].includes(type)) { storyUI().onEvent(type, data); if (type === 'storyEnd') storyDone(data); }
+      if (['cut', 'cutSkip', 'skipVotes', 'talk', 'story', 'obj', 'bark', 'focus'].includes(type)) storyUI().onEvent(type, data);
+      if (type === 'storyEnd') levelEnd(data);
+      if (type === 'checkpoint' && isHost) saveCamp(data.mission, data.obj);
       if (type === 'done') {}
     }
     function flashBy(d) {
@@ -847,8 +972,8 @@ export default function start({ cfg, E, N, smoke }) {
       mp.local = true; me.team = mp.team; match.spawn(mp); match.sendInv(mp);
       if (session) {
         session.on('_join', () => {});
-        for (const t of ['hello', 'pose', 'shot', 'buy', 'nade', 'pickup', 'drop', 'dropc4', 'ammo', 'chat', 'emote', 'ability']) session.on(t, (d, peer) => hostRecv(t, d, peer));
-        session.on('_leave', (_, peer) => { if (match) { match.remove(peer); const r = rigs.get(peer); if (r) { scene.remove(r.g); if (r.blob) scene.remove(r.blob); rigs.delete(peer); } if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length }); } });
+        for (const t of ['hello', 'pose', 'shot', 'buy', 'nade', 'pickup', 'drop', 'dropc4', 'ammo', 'chat', 'emote', 'ability', 'skipVote', 'campReady', 'campHub', 'loadout']) session.on(t, (d, peer) => hostRecv(t, d, peer));
+        session.on('_leave', (_, peer) => { if (camp.party.delete(peer) && camp.phase === 'hub') broadcastHub(); camp.ready.delete(peer); if (match) { match.remove(peer); const r = rigs.get(peer); if (r) { scene.remove(r.g); if (r.blob) scene.remove(r.blob); rigs.delete(peer); } if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length }); } });
       }
       if (solo) startMatch(); else showLobbyPanel();
     } else {
@@ -858,13 +983,11 @@ export default function start({ cfg, E, N, smoke }) {
         mode = d.mode; botLevel = d.bot; ranked = !!d.ranked; if (!W || mapId !== d.map) buildMap(d.map);
         started = !!d.started; hud.banner(started ? '' : 'Waiting for the host to start', `${MODES[mode].name} · ${MAPS[mapId].name}`, started ? 1 : 0);
       });
-      const msgTypes = { inv: onInv, spawn: onSpawn, hurt: onHurt, hitconfirm: onHitConfirm, ev: onEvent, fire: onFire, bomb: onBomb, drops: onDrops, fx: onFx, nade: onNade, chat: onChat, toast: (t) => toast(String(t).slice(0, 80)) };
+      const msgTypes = { inv: onInv, spawn: onSpawn, hurt: onHurt, hitconfirm: onHitConfirm, ev: onEvent, fire: onFire, bomb: onBomb, drops: onDrops, fx: onFx, nade: onNade, chat: onChat, toast: (t) => toast(String(t).slice(0, 80)), camp: onCamp };
       for (const [k, fn] of Object.entries(msgTypes)) session.on(k, (d, peer) => { if (peer === session.hostId) fn(d); });
       session.on('roster', (list, peer) => { if (peer === session.hostId && Array.isArray(list)) setRoster(list); });
       session.on('snap', (s, peer) => { if (peer === session.hostId) applySnap(s); });
-      let following = false;
-      session.on('storyNext', (_, peer) => { if (peer !== session.hostId || following) return; following = true; toast('Next mission: following the host…'); setTimeout(() => quit({ code: session.code, host: false }), 2500); });   // co-op: the host re-opens the same code
-      session.on('_host', () => { if (!ended && !following) { toast('The host left: match over'); quit(); } });
+      session.on('_host', () => { if (!ended) { toast('The host left: match over'); quit(); } });
       session.on('_roster', () => {});
       const sayHello = () => { if (session.hostId) session.toHost('hello', hello); };
       session.on('_join', (_, peer) => { if (peer === session.hostId) sayHello(); });
@@ -908,6 +1031,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (lobbyPanel) { clearInterval(lobbyPanel.iv); lobbyPanel.remove(); lobbyPanel = null; }
       uiOpen = null; started = true;
       if (mode !== 'story') match.fillBots(botNames(Math.floor(Math.random() * 18)));
+      else { storyUI().transition(camp.mission, ''); setTimeout(() => SC.hideCard(), 2600); saveCamp(camp.mission, match.startObj || 0); }
       match.start(); send('lobby', { mode, map: mapId, bot: botLevel, started: true, ranked });
       if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
     }
@@ -1069,7 +1193,7 @@ export default function start({ cfg, E, N, smoke }) {
 
       // ---- local input ----
       const typing = !!hud.chatIn;
-      const frozen = st.phase === 'freeze';
+      const frozen = st.phase === 'freeze' || storyHold();
       let lk = { dx: mdx, dy: mdy }; mdx = mdy = 0;
       lk.dx += E.input.touch.look.dx; lk.dy += E.input.touch.look.dy; E.input.touch.look.dx = E.input.touch.look.dy = 0;
       const adsOptic = vm && vm.userData && curWeapon() && !curWeapon().zoom ? (vm.userData.optic && vm.userData.sight ? vm.userData.optic : vm.userData.iron ? 'iron' : null) : null;   // every gun aims down sights: its optic, or its iron sights
@@ -1089,11 +1213,11 @@ export default function start({ cfg, E, N, smoke }) {
         }
       }
       const slow = assist ? 0.55 : 1;
-      if (!uiOpen && me.alive) { me.yaw -= lk.dx * sens * slow; me.pitch = Math.max(-1.55, Math.min(1.55, me.pitch - lk.dy * sens * slow)); }
+      if (!uiOpen && me.alive && !storyHold()) { me.yaw -= lk.dx * sens * slow; me.pitch = Math.max(-1.55, Math.min(1.55, me.pitch - lk.dy * sens * slow)); }
       if (assist && (E.input.touch.buttons.has('fire') || me.ads > 0.5)) { const k = Math.min(1, dt * 2.2); me.yaw += assist.dy * k; me.pitch += assist.dp * k * 0.6; }
       lookDX = Math.max(-40, Math.min(40, lk.dx * sens * 60)); lookDY = Math.max(-40, Math.min(40, lk.dy * sens * 60));
       if (radioOpen) { for (let k = 1; k <= 6; k++) if (kp('Digit' + k)) { hud.radioPick(k - 1); radioOpen = null; } if (kp('Digit0') || kp('Escape')) { hud.radio(null); hud.emoteWheel(null); radioOpen = null; } }
-      if (!typing && !uiOpen && !radioOpen) {
+      if (!typing && !uiOpen && !radioOpen && !storyHold()) {
         if (me.alive) {
           for (let k = 1; k <= 5; k++) if (kp('Digit' + k)) switchTo(k);
           const leaning = me.ads > 0.5;   // aimed in with an optic (never snipers): Q / E lean left / right, toggled like R6
@@ -1229,7 +1353,7 @@ export default function start({ cfg, E, N, smoke }) {
         r.x = p.x; r.z = p.z; r.y = p.y;
         { const pr = p.prone || 0; r.g.position.set(p.x + Math.sin(p.yaw) * 0.85 * pr, p.y + pr * 0.14, p.z + Math.cos(p.yaw) * 0.85 * pr); }   // feet behind the hitbox centre when lying r.g.rotation.order = 'YXZ'; r.g.rotation.y = p.yaw; r.g.rotation.x = r.dieT ? 0 : -(p.prone || 0) * Math.PI / 2 * 0.94;   // prone: lie forward
         setTpGun(r, p.wid || 'knife', rosterAtt(p.id, p.wid));
-        if (r.tag) r.tag.visible = p.alive && p.team === me.team && !(spectating && p.id === spectating.id);
+        if (r.tag) r.tag.visible = p.alive && p.team === me.team && !(spectating && p.id === spectating.id) && !(SC && SC.cutscene);   // no name tags in a cutscene's shots
         r.t += dt;
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
@@ -1244,9 +1368,12 @@ export default function start({ cfg, E, N, smoke }) {
         if (culler && r.g.visible && !culler.visibleAt(p.x, p.z)) { r.g.visible = false; if (r.blob) r.blob.visible = false; }   // behind solid walls: not drawn
       }
       // own body while emoting: camera swings out in front, you see yourself
-      const selfRig = me.emote || rigs.has(myId) ? rigFor(myId) : null;
+      // story cutscenes: the director's camera, and your own body in the shot like everyone else's
+      const cine = SC && SC.cutscene && W ? SC.shot(now, (id) => { if (id === myId) return me.alive ? { x: me.x, y: me.y, z: me.z, yaw: me.yaw } : null; const p = st.players.get(id); return p && p.alive ? { x: p.x, y: p.y, z: p.z, yaw: p.yaw, scale: p.scale || 1 } : null; }) : null;
+      const selfRig = me.emote || cine || rigs.has(myId) ? rigFor(myId) : null;
       if (selfRig) {
-        selfRig.g.visible = !!me.emote && me.alive; if (selfRig.blob) selfRig.blob.visible = selfRig.g.visible;
+        selfRig.g.visible = (!!me.emote || !!cine) && me.alive; if (selfRig.blob) selfRig.blob.visible = selfRig.g.visible;
+        if (cine && !me.emote && me.alive) { selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw; setTpGun(selfRig, (curWeapon() || {}).id || 'knife', null); if (selfRig.soldier) poseSoldier(selfRig, { dt, vx: 0, vz: 0, vy: 0, yaw: me.yaw, crouch: 0, pitch: 0 }); else posePlayer(selfRig, { speed: 0, t: selfRig.t, crouch: 0, pitch: 0 }); }
         if (me.emote) {
           selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw;
           if (selfRig.soldier) poseSoldier(selfRig, { dt, yaw: me.yaw, emote: me.emote }); else posePlayer(selfRig, { t: selfRig.t, emote: me.emote });
@@ -1257,12 +1384,18 @@ export default function start({ cfg, E, N, smoke }) {
           cam.position.set(o.x + d.x * dist, o.y + d.y * dist, o.z + d.z * dist); cam.lookAt(me.x, me.y + 1.2, me.z);
         }
       }
+      if (cine) {   // keep the camera out of walls: pull it in towards whoever it's looking at
+        const lk2 = cine.look, dx = cine.pos.x - lk2.x, dy = cine.pos.y - lk2.y, dz = cine.pos.z - lk2.z, L = Math.hypot(dx, dy, dz) || 1;
+        const hit = W.ray({ x: lk2.x, y: lk2.y, z: lk2.z }, { x: dx / L, y: dy / L, z: dz / L }, L), k = hit ? Math.max(0.15, (hit.t - 0.25) / L) : 1;
+        cam.position.set(lk2.x + dx * k, lk2.y + dy * k, lk2.z + dz * k); cam.up.set(0, 1, 0); cam.lookAt(lk2.x, lk2.y, lk2.z);
+        if (Math.abs(cam.fov - 50) > 0.01) { cam.fov = 50; cam.updateProjectionMatrix(); }
+      }
       // bomb
       const b = st.bomb; bombObj.visible = !!b && (b.s === 'planted' || b.s === 'dropped');
       if (bombObj.visible) { bombObj.position.set(b.x, b.y + 0.02, b.z); bombObj.userData.led.visible = b.s !== 'planted' || (now * (1 + (40 - (b.t || 40)) / 8)) % 1 < 0.5; }
       // ---- view model ----
       if (vm) {
-        vm.visible = me.alive && !(me.scoped && w && w.zoom) && !spectating && !me.emote && !(me.ads > 0.9 && vm.userData.optic === 'acog');   // a 4x scope: you look through the glass, not at the gun
+        vm.visible = me.alive && !(me.scoped && w && w.zoom) && !spectating && !me.emote && !cine && !(me.ads > 0.9 && vm.userData.optic === 'acog');   // a 4x scope: you look through the glass, not at the gun
         const base = vm.userData.base, sp = speedOf(me);
         const animReload = !!(vm.userData.leftArm && (vm.userData.magGroup || (w && w.shellReload)));
         const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
@@ -1420,6 +1553,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

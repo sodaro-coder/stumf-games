@@ -48,6 +48,7 @@ export class Bots {
 
   tick(dt) {
     const m = this.m; if (m.phase === 'warmup' || m.phase === 'done') return;
+    if (m.paused) { for (const p of m.players.values()) if (p.bot) { p.vx = p.vz = 0; p.plant = p.defusing = false; } return; }   // story scenes: everyone stands still
     if (m.phase === 'freeze' && this.plannedRound !== m.round) { this.plannedRound = m.round; this.newRound(); }
     this.thinkT -= dt; const think = this.thinkT <= 0; if (think) this.thinkT = 0.1;
     for (const p of m.players.values()) if (p.bot) this.step(p, dt, think);
