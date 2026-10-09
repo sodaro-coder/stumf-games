@@ -249,23 +249,24 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     const low = (cat === 'pistol' ? 0.2 : cat === 'sniper' ? 0.1 : 0.16) * (1 - r.aimK) * (1 - prone);
     const ap = Math.max(-1.2, Math.min(1.2, pitch)) - low + prone * Math.PI / 2 * 0.94;   // prone: the body lies forward, the gun still points ahead
     if (armed && rest && !['pistol', 'zeus', 'knife', 'grenade', 'c4'].includes(cat)) {
-      // at rest (menus, showcases): arms down by the sides, the rifle carried in the right hand by the pistol grip, muzzle
-      // to the ground beside the right leg; the left hand hangs loose by the left thigh.
+      // at rest (menus, showcases): the relaxed two-handed low ready. The rifle lies across the body at the belt, muzzle
+      // to the left and a little down; right hand on the grip by the right hip, left hand under the handguard, elbows
+      // bent and tucked down by the sides.
       const q = r.g.getWorldQuaternion(_q2.identity()), rt = _t5.set(1, 0, 0).applyQuaternion(q).clone(), fw = _fw.set(0, 0, -1).applyQuaternion(q).clone(), up = new THREE.Vector3(0, 1, 0);
       const hips = B.Hips.getWorldPosition(new THREE.Vector3());
-      const grip = hips.clone().addScaledVector(rt, 0.27).addScaledVector(fw, 0.06).addScaledVector(up, -0.12);
-      ik2(B.RightArm, B.RightForeArm, B.RightHand, grip, B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.5).addScaledVector(rt, 0.25).addScaledVector(fw, -0.6));
-      ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, hips.clone().addScaledVector(rt, -0.25).addScaledVector(fw, 0.03).addScaledVector(up, -0.14),
-        B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.5).addScaledVector(rt, -0.25).addScaledVector(fw, -0.6));
+      const grip = hips.clone().addScaledVector(rt, 0.12).addScaledVector(fw, 0.22).addScaledVector(up, -0.02);
+      const dir = new THREE.Vector3().addScaledVector(rt, -0.84).addScaledVector(fw, 0.42).addScaledVector(up, -0.34).normalize();
+      ik2(B.RightArm, B.RightForeArm, B.RightHand, grip, B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, 0.3).addScaledVector(fw, -0.45));
       const rh = B.RightHand.getWorldPosition(_t1);
       if (B.RightHandMiddle1) rh.lerp(B.RightHandMiddle1.getWorldPosition(_t2), 0.55);
-      const dir = _t3.copy(up).multiplyScalar(-0.86).addScaledVector(fw, 0.48).addScaledVector(rt, 0.08).normalize();   // muzzle down, a little ahead
-      const zA = _t4.copy(dir).negate(), yA = _v.copy(fw).negate().addScaledVector(zA, zA.dot(fw)).normalize(), xA = _t2.crossVectors(yA, zA);   // wrist turned down: the gun's top faces back, the magazine forward
+      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _t2.crossVectors(yA, zA);
       _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
       r.g.getWorldQuaternion(_q2).invert(); tg.quaternion.copy(_q2.multiply(_q));
       tg.position.copy(rh); r.g.worldToLocal(tg.position);
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
+      const fore = rh.clone().addScaledVector(dir, 0.36).addScaledVector(yA, -0.035);
+      ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, fore, B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, -0.35).addScaledVector(fw, -0.3));
     } else if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
       // The clips are a rifle set: the hands already hold an (invisible) rifle in a natural, motion-captured pose. So the
       // gun follows the hands, not the other way round: the grip sits in the right palm and the barrel runs out through

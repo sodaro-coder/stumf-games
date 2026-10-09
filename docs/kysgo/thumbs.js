@@ -205,7 +205,7 @@ export function viewer(canvas, item, opt = {}) {
     r3.setClearColor(0x000000, 0); r3.clear(); studioRender(r3, sc, vc);
   };
   raf = requestAnimationFrame(tick);
-  return { stop() { stopped = true; cancelAnimationFrame(raf); env.dispose(); r3.dispose(); try { r3.forceContextLoss(); } catch (e) { /* gone */ } } };
+  return { stop() { stopped = true; cancelAnimationFrame(raf); env.dispose(); rtA.dispose(); rtB.dispose(); r3.dispose(); try { r3.forceContextLoss(); } catch (e) { /* gone */ } } };
 }
 
 // ---- the main-menu stage: your equipped agent and gun, in a warm desert courtyard, slowly breathing ----
@@ -223,6 +223,7 @@ export function stage(canvas, look) {
   sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 50 }); sun.shadow.bias = -0.0006; sun.shadow.radius = 3; sc.add(sun);
   const rim = new THREE.DirectionalLight(0xbcd0ff, 1.0); rim.position.set(4, 3, -5); sc.add(rim);
   const sky = skyDome(sc, haze, 0x6f9fd8, sunD, 0xfff1e0, false, { name: 'day', size: 2048 });
+  const bg = new THREE.Group(); sc.add(bg);   // everything behind the agent: drawn out of focus
   // the world's photo surfaces: colour + packed normal (xy) / roughness (b), read by a lightly patched standard material
   const surf = (k, rough = 1) => {
     const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: rough, metalness: 0 });
@@ -239,18 +240,54 @@ export function stage(canvas, look) {
   const box = (w, h, d, m, tile, x, y, z, ry = 0) => {
     const g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv, fs = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
     for (let f = 0; f < 6; f++) for (let i = 0; i < 4; i++) { const j = f * 4 + i; uv.setXY(j, uv.getX(j) * fs[f][0] / tile, uv.getY(j) * fs[f][1] / tile); }
-    const b = new THREE.Mesh(g, m); b.position.set(x, y + h / 2, z); b.rotation.y = ry; b.castShadow = b.receiveShadow = true; sc.add(b); return b;
+    const b = new THREE.Mesh(g, m); b.position.set(x, y + h / 2, z); b.rotation.y = ry; b.castShadow = b.receiveShadow = true; bg.add(b); return b;
   };
   const sand = surf('sand'), wall = surf('sandwall'), trim = surf('trim'), crate = surf('crate'), wood = surf('darkwood'), metal = surf('metal', 0.6);
   { const g = new THREE.PlaneGeometry(60, 60), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 20, uv.getY(i) * 20);
-    const f = new THREE.Mesh(g, sand); f.rotation.x = -Math.PI / 2; f.receiveShadow = true; sc.add(f); }
+    const f = new THREE.Mesh(g, sand); f.rotation.x = -Math.PI / 2; f.receiveShadow = true; bg.add(f); }
   box(9, 3.2, 0.8, wall, 3, -4.5, 0, -7.5); box(9.2, 0.25, 1.0, trim, 2, -4.5, 3.2, -7.5);      // the back wall, its coping
   box(0.8, 4.4, 9, wall, 3, -8.6, 0, -3.4); box(1.0, 0.25, 9.2, trim, 2, -8.6, 4.4, -3.4);      // the tall side wall
   box(6, 2.4, 0.8, wall, 3, 5.5, 0, -10); box(1.2, 0.08, 2.2, metal, 1, -6, 2.6, -6.6);         // a far wall across the yard, an awning
   box(1.4, 2.3, 0.12, wood, 2, -3.2, 0, -7.06);                                                  // a door set into the back wall
   box(1.15, 1.15, 1.15, crate, 1, 2.2, 0, -2.6, 0.12); box(1.0, 1.0, 1.0, crate, 1, 3.4, 0, -3.1, -0.2); box(0.9, 0.9, 0.9, crate, 1, 2.5, 1.15, -2.7, 0.35);
   box(0.6, 0.9, 0.6, metal, 1, -6.8, 0, -5.8);                                                   // a barrel-height junction box
-  const shadow = contactShadow(0.6); shadow.position.set(0.9, 0.01, 0); sc.add(shadow); void sky;
+  const shadow = contactShadow(0.6); shadow.position.set(0.3, 0.01, 0); sc.add(shadow);
+  // depth of field, like an agent screen: the yard is rendered on its own at half size, blurred, laid down as the
+  // backdrop, and the agent is drawn sharp on top
+  const rtOpt = { type: THREE.HalfFloatType, depthBuffer: true }, rtA = new THREE.WebGLRenderTarget(4, 4, rtOpt), rtB = new THREE.WebGLRenderTarget(4, 4, rtOpt);
+  const qVS = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+  const blurM = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, step: { value: new THREE.Vector2() } }, vertexShader: qVS, depthTest: false, depthWrite: false,
+    fragmentShader: `uniform sampler2D tex; uniform vec2 step; varying vec2 vUv;
+      void main() { vec3 c = texture2D(tex, vUv).rgb * 0.2270;
+        c += (texture2D(tex, vUv + step * 1.3846).rgb + texture2D(tex, vUv - step * 1.3846).rgb) * 0.3162;
+        c += (texture2D(tex, vUv + step * 3.2308).rgb + texture2D(tex, vUv - step * 3.2308).rgb) * 0.0703;
+        gl_FragColor = vec4(c, 1.0); }` });
+  const outM = new THREE.ShaderMaterial({ uniforms: { tex: { value: null } }, vertexShader: qVS, depthTest: false, depthWrite: false, toneMapped: true,
+    fragmentShader: `uniform sampler2D tex; varying vec2 vUv;
+      void main() { gl_FragColor = vec4(texture2D(tex, vUv).rgb, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }` });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blurM), qScene = new THREE.Scene(), qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1); quad.frustumCulled = false; qScene.add(quad);
+  const pass = (mat, src, dst) => { quad.material = mat; mat.uniforms.tex.value = src.texture; r3.setRenderTarget(dst); r3.render(qScene, qCam); };
+  const render = () => {
+    const w = Math.max(4, Math.floor(r3.domElement.width / 2)), h = Math.max(4, Math.floor(r3.domElement.height / 2));
+    if (rtA.width !== w || rtA.height !== h) { rtA.setSize(w, h); rtB.setSize(w, h); }
+    // 1: the yard alone
+    if (rig) rig.g.visible = false; shadow.visible = false;
+    r3.setRenderTarget(rtA); studioRender(r3, sc, cam3);
+    // 2: blur it (two widening rounds of a separable gaussian)
+    for (const k of [1.0, 2.2]) {
+      blurM.uniforms.step.value.set(k / w, 0); pass(blurM, rtA, rtB);
+      blurM.uniforms.step.value.set(0, k / h); pass(blurM, rtB, rtA);
+    }
+    // 3: the soft backdrop on screen, then the agent, in focus, over it
+    pass(outM, rtA, null);
+    if (rig) rig.g.visible = true; shadow.visible = true;
+    const back = sc.background; bg.visible = false; sky.visible = false; sc.background = null; r3.autoClear = false; r3.clearDepth();
+    studioRender(r3, sc, cam3);
+    r3.autoClear = true; bg.visible = true; sky.visible = true; sc.background = back;
+  };
   const cam3 = new THREE.PerspectiveCamera(32, 1, 0.1, 400);
   let rig = null, t = 0, raf = 0, stopped = false, last = performance.now();
   let cur = look;
@@ -259,7 +296,7 @@ export function stage(canvas, look) {
     if (rig) sc.remove(rig.g);
     rig = charsReady() ? makeSoldier(lk, team, true) : makePlayer(lk, team);   // the realistic soldier once it has loaded
     rig.g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-    setTpGun(rig, wid || (team === 'CT' ? 'm4a4' : 'ak47')); rig.g.position.set(0.9, 0, 0); rig.g.rotation.y = (rig.soldier ? Math.PI : 0) + 0.5; sc.add(rig.g);
+    setTpGun(rig, wid || (team === 'CT' ? 'm4a4' : 'ak47')); rig.g.position.set(0.3, 0, 0); rig.g.rotation.y = (rig.soldier ? Math.PI + 0.85 : 0.08); sc.add(rig.g);
   };
   set(look.look, look.team, look.wid);
   if (!charsReady()) loadChars().then(() => { if (!stopped && charsReady()) set(cur.look, cur.team, cur.wid); });
@@ -267,12 +304,13 @@ export function stage(canvas, look) {
     if (stopped) return; raf = requestAnimationFrame(frame3);
     if (now - last < 33) return; const dt = (now - last) / 1000; last = now; t += dt;   // 30 fps is plenty here
     const w = canvas.clientWidth, h = canvas.clientHeight; if (canvas.width !== w || canvas.height !== h) { r3.setSize(w, h, false); cam3.aspect = w / Math.max(1, h); cam3.updateProjectionMatrix(); }
-    if (rig && rig.soldier) { rig.g.rotation.y = Math.PI + 0.5 + Math.sin(t * 0.25) * 0.12; poseSoldier(rig, { dt, yaw: rig.g.rotation.y, rest: 1 }); }
+    // the rifle idle stands bladed to the side: the rig is turned back so the agent faces the camera
+    if (rig && rig.soldier) { rig.g.rotation.y = Math.PI + 0.85 + Math.sin(t * 0.25) * 0.05; poseSoldier(rig, { dt, yaw: rig.g.rotation.y, rest: 1 }); }
     else if (rig) { posePlayer(rig, { t, pitch: Math.sin(t * 0.7) * 0.05 }); rig.torso.position.y += Math.sin(t * 1.6) * 0.008; rig.g.rotation.y = 0.5 + Math.sin(t * 0.25) * 0.12; }
-    const a = Math.sin(t * 0.08) * 0.15;
-    cam3.position.set(Math.sin(a) * 5.2, 1.55, Math.cos(a) * 5.2); cam3.lookAt(0.15, 1.05, 0);
-    animateGlow(t, dt); studioRender(r3, sc, cam3);
+    const a = Math.sin(t * 0.08) * 0.06;   // knees up, a touch below eye level, drifting very slowly
+    cam3.position.set(0.05 + Math.sin(a) * 3.4, 1.3, Math.cos(a) * 3.4); cam3.lookAt(0.05, 1.12, 0);
+    animateGlow(t, dt); render();
   };
   raf = requestAnimationFrame(frame3);
-  return { set, stop() { stopped = true; cancelAnimationFrame(raf); env.dispose(); r3.dispose(); try { r3.forceContextLoss(); } catch (e) { /* gone */ } } };
+  return { set, stop() { stopped = true; cancelAnimationFrame(raf); env.dispose(); rtA.dispose(); rtB.dispose(); r3.dispose(); try { r3.forceContextLoss(); } catch (e) { /* gone */ } } };
 }
