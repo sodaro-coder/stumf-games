@@ -196,7 +196,7 @@ function turnWorld(b, axis, ang) {
   b.quaternion.premultiply(_q2.setFromAxisAngle(_ax, ang)); b.updateMatrixWorld(true);
 }
 // per frame: pick the base animation from how the player moves, then aim, gun and props
-export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0 }) {
+export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
   r.t += dt;
   if (dead) {
     if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
@@ -228,6 +228,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     const p = Math.max(-1.2, Math.min(1.2, pitch)) + crouch * 0.15;
     if (!emote) for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], _v, p * 0.27);
     if (B.Head) turnWorld(B.Head, _v, p * 0.15);
+    if (rest && !emote) { if (B.Spine2) turnWorld(B.Spine2, _v, 0.03); if (B.Head) turnWorld(B.Head, _v, 0.03); }   // at rest: stand tall, chin up
     if (lean && !emote) {   // leaning (Q / E while aimed in): the spine rolls about the facing direction
       _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
       for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], _fw, lean * 0.2);
@@ -247,7 +248,25 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     r.aimK = (r.flashT || 0) > 0 ? 1 : Math.max(0, (r.aimK || 0) - dt * 0.8);
     const low = (cat === 'pistol' ? 0.2 : cat === 'sniper' ? 0.1 : 0.16) * (1 - r.aimK) * (1 - prone);
     const ap = Math.max(-1.2, Math.min(1.2, pitch)) - low + prone * Math.PI / 2 * 0.94;   // prone: the body lies forward, the gun still points ahead
-    if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
+    if (armed && rest && !['pistol', 'zeus', 'knife', 'grenade', 'c4'].includes(cat)) {
+      // at rest (menus, showcases): a relaxed low carry. The rifle hangs across the body, muzzle down and to the left,
+      // the right hand on the grip by the hip and the left on the handguard, elbows down by the sides.
+      const q = r.g.getWorldQuaternion(_q2.identity()), rt = _t5.set(1, 0, 0).applyQuaternion(q), fw = _fw.set(0, 0, -1).applyQuaternion(q), up = _t6.set(0, 1, 0);
+      const grip = B.Hips.getWorldPosition(_t1).addScaledVector(rt, 0.15).addScaledVector(fw, 0.24).addScaledVector(up, 0.1);
+      const dir = _t3.copy(fw).multiplyScalar(0.8).addScaledVector(rt, -0.34).addScaledVector(up, -0.5).normalize();
+      ik2(B.RightArm, B.RightForeArm, B.RightHand, grip, _t2.copy(B.RightArm.getWorldPosition(_t2)).addScaledVector(up, -0.8).addScaledVector(rt, 0.45).addScaledVector(fw, -0.35));
+      const rh = B.RightHand.getWorldPosition(_t1);
+      if (B.RightHandMiddle1) rh.lerp(B.RightHandMiddle1.getWorldPosition(_t2), 0.55);
+      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _t2.crossVectors(yA, zA);
+      _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
+      r.g.getWorldQuaternion(_q2).invert(); tg.quaternion.copy(_q2.multiply(_q));
+      tg.position.copy(rh); r.g.worldToLocal(tg.position);
+      if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
+      tg.updateMatrixWorld(true);
+      const fore = _t2.copy(rh).addScaledVector(dir, 0.3).addScaledVector(yA, -0.03);
+      const q3 = r.g.getWorldQuaternion(_q2.identity()), rt3 = _t5.set(1, 0, 0).applyQuaternion(q3);
+      ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, fore, _t6.copy(B.LeftArm.getWorldPosition(_t6)).add(_t4.set(0, -0.8, 0)).addScaledVector(rt3, -0.35));
+    } else if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
       // The clips are a rifle set: the hands already hold an (invisible) rifle in a natural, motion-captured pose. So the
       // gun follows the hands, not the other way round: the grip sits in the right palm and the barrel runs out through
       // the left hand. Aiming up and down bends the upper spine until that hand line points where the player aims, so

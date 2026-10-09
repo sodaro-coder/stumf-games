@@ -1509,7 +1509,7 @@ export default function start({ cfg, E, N, smoke }) {
       const selfRig = me.emote || (cine && !povShot) || rigs.has(myId) ? rigFor(myId) : null;
       if (selfRig) {
         selfRig.g.visible = (!!me.emote || (!!cine && !povShot)) && me.alive; if (selfRig.blob) selfRig.blob.visible = selfRig.g.visible;
-        if (cine && !povShot && !me.emote && me.alive) { selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw; setTpGun(selfRig, (curWeapon() || {}).id || 'knife', null); if (selfRig.soldier) setGear(selfRig, me.armor || 0, me.helmet); if (selfRig.soldier) poseSoldier(selfRig, { dt, vx: 0, vz: 0, vy: 0, yaw: me.yaw, crouch: 0, pitch: 0 }); else posePlayer(selfRig, { speed: 0, t: selfRig.t, crouch: 0, pitch: 0 }); }
+        if (cine && !povShot && !me.emote && me.alive) { selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw; setTpGun(selfRig, (curWeapon() || {}).id || 'knife', null); if (selfRig.soldier) setGear(selfRig, me.armor || 0, me.helmet); if (selfRig.soldier) poseSoldier(selfRig, { dt, vx: 0, vz: 0, vy: 0, yaw: me.yaw, crouch: 0, pitch: 0, rest: 1 }); else posePlayer(selfRig, { speed: 0, t: selfRig.t, crouch: 0, pitch: 0 }); }
         if (me.emote) {
           selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw;
           if (selfRig.soldier) setGear(selfRig, me.armor || 0, me.helmet); if (selfRig.soldier) poseSoldier(selfRig, { dt, yaw: me.yaw, emote: me.emote }); else posePlayer(selfRig, { t: selfRig.t, emote: me.emote });

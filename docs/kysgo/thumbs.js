@@ -85,7 +85,7 @@ function texReady(o) {
 function poseFigure(f, t, dt) {
   const r = f.rig;
   if (f.emote) { f.emote.t = t; r.t = t; }
-  poseSoldier(r, { dt, yaw: f.o.rotation.y, emote: f.emote, pitch: f.emote ? 0 : Math.sin(t * 0.7) * 0.04 });
+  poseSoldier(r, { dt, yaw: f.o.rotation.y, emote: f.emote, rest: 1 });
 }
 // the moment of each emote that reads best as a still picture
 const EMOTE_STILL = { wave: 0.5, salute: 0.6, dance: 0.9, dab: 0.6, cry: 0.8, flex: 0.7, tpose: 0.5, floss: 0.35, chicken: 0.45, worm: 0.9, fart: 0.9, twerk: 0.6,
@@ -267,7 +267,7 @@ export function stage(canvas, look) {
     if (stopped) return; raf = requestAnimationFrame(frame3);
     if (now - last < 33) return; const dt = (now - last) / 1000; last = now; t += dt;   // 30 fps is plenty here
     const w = canvas.clientWidth, h = canvas.clientHeight; if (canvas.width !== w || canvas.height !== h) { r3.setSize(w, h, false); cam3.aspect = w / Math.max(1, h); cam3.updateProjectionMatrix(); }
-    if (rig && rig.soldier) { rig.g.rotation.y = Math.PI + 0.5 + Math.sin(t * 0.25) * 0.12; poseSoldier(rig, { dt, yaw: rig.g.rotation.y, pitch: Math.sin(t * 0.7) * 0.05 }); }
+    if (rig && rig.soldier) { rig.g.rotation.y = Math.PI + 0.5 + Math.sin(t * 0.25) * 0.12; poseSoldier(rig, { dt, yaw: rig.g.rotation.y, rest: 1 }); }
     else if (rig) { posePlayer(rig, { t, pitch: Math.sin(t * 0.7) * 0.05 }); rig.torso.position.y += Math.sin(t * 1.6) * 0.008; rig.g.rotation.y = 0.5 + Math.sin(t * 0.25) * 0.12; }
     const a = Math.sin(t * 0.08) * 0.15;
     cam3.position.set(Math.sin(a) * 5.2, 1.55, Math.cos(a) * 5.2); cam3.lookAt(0.15, 1.05, 0);
