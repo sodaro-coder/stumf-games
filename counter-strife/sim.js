@@ -1,81 +1,20 @@
 // The rules. Movement and shot tracing are shared by everyone (players predict locally, bots run on the host); the
 // Match runs only on the host (or alone in solo play): rounds, economy, the bomb, damage, grenades, drops, buying.
-import { recoilPattern } from './guns.js';
-import { PHYS, ECON, BOMB, MODES, W_BY_ID, G_BY_ID, GEAR_BY_ID, MAX_GRENADES, slotOf, forTeam, itemPrice, damageFor, U } from './data.js';
+import { PHYS, ECON, BOMB, MODES, W_BY_ID, G_BY_ID, GEAR_BY_ID, MAX_GRENADES, slotOf, forTeam, itemPrice, damageFor, U, LEAN } from './data.js';
 
 // ---- movement (classic ground accel/friction, air strafing, jumping, crouching, stepping up ledges) ---------------
 // movement lives in controller.js (Source/Quake kinematic controller, CS:GO cvars); re-exported for existing callers
 export { moveStep } from './controller.js';
+// hitscan, hitboxes, spread and recoil live in weapons.js (allocation free); re-exported for existing callers
+export { traceShot, hitboxes, spreadOf, recoilAt, aimDir, TraceResult, RecoilState } from './weapons.js';
+export { LEAN };
 export const eyeHeight = (p) => { const e = PHYS.eye - (PHYS.eye - PHYS.crouchEye) * p.crouch; return e + (PHYS.proneEye - e) * (p.prone || 0); };
 export const speedOf = (p) => Math.hypot(p.vx, p.vz);
 
 // ---- hitboxes and shot tracing -----------------------------------------------------------------------------------
-const slab = (o, d, b, maxT) => {
-  let t0 = 0, t1 = maxT;
-  for (const [oo, dd, lo, hi] of [[o.x, d.x, b[0], b[3]], [o.y, d.y, b[1], b[4]], [o.z, d.z, b[2], b[5]]]) {
-    if (Math.abs(dd) < 1e-9) { if (oo < lo || oo > hi) return -1; continue; }
-    let a = (lo - oo) / dd, c = (hi - oo) / dd; if (a > c) [a, c] = [c, a];
-    t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) return -1;
-  }
-  return t0;
-};
 // leaning (aimed in, Q / E): the head and chest really move sideways, so you show only what you peek with
-export const LEAN = 0.38;   // metres the eye moves at full lean
 export const leanOff = (p, f = 1) => { const l = (p.lean || 0) * LEAN * f; return { x: Math.cos(p.yaw || 0) * l, z: -Math.sin(p.yaw || 0) * l }; };
 export const eyePos = (p) => { const o = leanOff(p); return { x: p.x + o.x, y: p.y + eyeHeight(p) - Math.abs(p.lean || 0) * 0.05, z: p.z + o.z }; };
-export function hitboxes(p) {
-  if ((p.prone || 0) > 0.6) {   // lying down: head out in front, legs behind, everything low
-    const fx = -Math.sin(p.yaw || 0), fz = -Math.cos(p.yaw || 0), at = (d, r, y0, y1) => [p.x + fx * d - r, p.y + y0, p.z + fz * d - r, p.x + fx * d + r, p.y + y1, p.z + fz * d + r];
-    return [['head', at(0.72, 0.15, 0.12, 0.45)], ['chest', at(0.3, 0.24, 0.02, 0.38)], ['stomach', at(-0.1, 0.22, 0.02, 0.32)], ['legs', at(-0.62, 0.26, 0.0, 0.26)]];
-  }
-  const k = 1 - p.crouch * 0.28, y = p.y, h = leanOff(p), c = leanOff(p, 0.55), s = leanOff(p, 0.2);
-  const box = (o, r, y0, y1, rz = r) => [p.x + o.x - r, y0, p.z + o.z - rz, p.x + o.x + r, y1, p.z + o.z + rz];
-  return [['head', box(h, 0.15, y + 1.5 * k, y + 1.86 * k)], ['chest', box(c, 0.24, y + 1.15 * k, y + 1.5 * k)],
-    ['stomach', box(s, 0.22, y + 0.9 * k, y + 1.15 * k)], ['legs', box({ x: 0, z: 0 }, 0.22, y, y + 0.9 * k, 0.2)]];
-}
-// one bullet: returns { hits: [{id, group, dist, pen}], end: {x,y,z}, wallHits: [{x,y,z}] }. Thin walls are shot through.
-export function traceShot(W, players, shooterId, o, d, w, range = 8192 * U) {
-  const res = { hits: [], wallHits: [], end: null };
-  let t = 0, pen = 1, n = 0;
-  const hitIds = new Set();
-  while (n++ < 3) {
-    const wall = W.ray(o, d, range, t);
-    const wallT = wall ? wall.t : range;
-    // closest player hit in [t, wallT)
-    let best = null;
-    for (const p of players) {
-      if (!p.alive || p.id === shooterId || hitIds.has(p.id)) continue;
-      for (const [grp, b] of hitboxes(p)) { const tt = slab(o, d, b, wallT); if (tt >= t && (!best || tt < best.t)) best = { t: tt, id: p.id, group: grp }; }
-    }
-    if (best) { res.hits.push({ id: best.id, group: best.group, dist: best.t, pen }); hitIds.add(best.id); if (res.hits.length >= 2) break; continue; }
-    if (!wall) { res.end = { x: o.x + d.x * range, y: o.y + d.y * range, z: o.z + d.z * range }; break; }
-    const pt = { x: o.x + d.x * wall.t, y: o.y + d.y * wall.t, z: o.z + d.z * wall.t, m: wall.m };
-    res.wallHits.push(pt); res.end = pt;
-    const th = W.thickness(o, d, wall.t), cost = th * W.density(wall.m), cap = (w.pen || 1) * 0.55;
-    if (!isFinite(th) || cost >= cap) break;
-    pen *= (1 - cost / cap) * 0.85; t = wall.t + th + 0.01;
-    if (pen < 0.1) break;
-  }
-  return res;
-}
-// spread for the current state: standing/moving/jumping/crouched/scoped, plus spray
-export function spreadOf(w, p, scoped, sprayIdx) {
-  const [stand, move, jump] = w.inacc || [0.005, 0.03, 0.1];
-  if (w.zoom && scoped && w.scopedInacc) {
-    const sp = speedOf(p) / (w.speed * U);
-    return w.scopedInacc + (p.onGround ? 0 : jump) + Math.max(0, sp - 0.34) * move;
-  }
-  const sp = Math.min(1, speedOf(p) / (w.speed * U));
-  let s = stand * ((p.prone || 0) > 0.6 ? 0.5 : p.crouch > 0.5 ? 0.7 : 1) + Math.max(0, sp - 0.34) * move * 1.4 + (p.sprinting ? move * 0.6 : 0) + (p.onGround ? 0 : jump);
-  if (w.cat === 'sniper' && !scoped) s = Math.max(s, w.inacc[1] * 0.6);
-  s += Math.min(sprayIdx, 12) * (w.kick || 0.01) * 0.12;
-  return s;
-}
-// the recoil pattern: each gun's own spray shape (guns.js), the same every spray so it can be learned
-export function recoilAt(w, i) {
-  const r = recoilPattern(w, i), k = (w.kick || 0.01) * 0.78;   // a touch lighter than the classic numbers
-  return { up: r.y * k, side: -r.x * k * 0.8 };
-}
 
 // ---- grenade physics (the same function on every machine, so everyone sees the same bounce) ----------------------
 export function nadeStep(W, n, dt) {

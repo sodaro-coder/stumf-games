@@ -3,6 +3,7 @@
 // Distances are in metres: 1 classic "unit" = 0.0254 m, so speeds and ranges feel the same.
 
 export const U = 0.0254;  // classic units -> metres
+export const LEAN = 0.38;  // metres the eye moves at full lean (Q / E while aimed in)
 
 // cat: pistol | smg | heavy | rifle | sniper | knife | zeus | grenade | bomb
 // team: T | CT | both. ap = armor penetration (share of damage that still reaches health through kevlar).

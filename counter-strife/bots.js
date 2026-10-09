@@ -2,7 +2,8 @@
 // angles, react to what they see and hear, plant, defuse, pick up the bomb and trade. Difficulty (picked by the
 // host) sets reaction time, aim error, turn speed, headshot chance and spray control.
 import { W_BY_ID, BOT_LEVELS, PHYS, BOMB } from './data.js';
-import { moveStep, traceShot, eyeHeight, spreadOf, recoilAt, speedOf } from './sim.js';
+import { moveStep, traceShot, eyeHeight, spreadOf, recoilAt, speedOf, aimDir } from './sim.js';
+const BOT_REC = { up: 0, side: 0 }, BOT_DIR = { x: 0, y: 0, z: 0 };
 
 const NAMES = ['Gassy Gary', 'Moist Mike', 'Butt Crack Barry', 'Stinky Pete', 'Diarrhea Dan', 'Skidmark Steve', 'Big Lenny', 'Booger', 'Lil Nugget', 'Sweaty Steve', 'Toilet Tom', 'Wet Willy', 'Bubba', 'Ur Mom', 'Dwayne', 'Pickle', 'Noodle', 'Chungus'];
 export const botNames = (seed = 0) => NAMES.slice(seed % NAMES.length).concat(NAMES.slice(0, seed % NAMES.length));
@@ -133,16 +134,16 @@ export class Bots {
     if (b.spray >= burstLen) { b.spray = 0; b.cd = 0.25 + Math.random() * 0.25; return; }
     it.ammo--; b.cd = 60 / w.rpm; b.spray++;
     const scoped = !!w.zoom;
-    const rc = recoilAt(w, b.spray - 1), comp = L.spray;
+    const rc = recoilAt(w, b.spray - 1, BOT_REC), comp = L.spray;
     const settle = 1 + 1.6 * Math.exp(-(b.settle || 0) / 0.45), moving = Math.min(1, speedOf(p) / 2.5);
     const sp = spreadOf(w, p, scoped, b.spray) + L.aimErr * (0.4 + Math.random()) * settle * (1 + moving * 0.8);
     const players = [...m.players.values()];
     const hitsAll = [];
     for (let k = 0; k < (w.pellets || 1); k++) {
       const yaw = p.yaw + rc.side * (1 - comp) + (Math.random() - 0.5) * (sp + (w.spread || 0)), pitch = p.pitch + rc.up * (1 - comp) + (Math.random() - 0.5) * (sp + (w.spread || 0));
-      const d = { x: -Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: -Math.cos(yaw) * Math.cos(pitch) };
+      const d = aimDir(yaw, pitch, BOT_DIR);
       const tr = traceShot(m.W, players, p.id, eye, d, w);
-      hitsAll.push(...tr.hits);
+      for (const h of tr.hits) hitsAll.push({ id: h.id, group: h.group, dist: h.dist, pen: h.pen });   // the trace result is reused
       if (k === 0) this.heard(eye.x, eye.z, p);
       if (k === 0) m.send('fire', { id: p.id, wid: w.id, o: [eye.x, eye.y, eye.z], e: tr.end ? [tr.end.x, tr.end.y, tr.end.z] : null }), m.onLocal('fire', { id: p.id, wid: w.id, o: [eye.x, eye.y, eye.z], e: tr.end ? [tr.end.x, tr.end.y, tr.end.z] : null });
     }

@@ -36,13 +36,15 @@ Object.assign(P, {
   m249: make(9, 1.0, 4.5, 9, 0.02, 100), negev: make(12, 0.9, 5.5, 11, -0.02, 150),
   cz75: make(5, 1.0, 1.4, 3, 0.05, 14), glock: make(8, 0.9, 0.8, 4, 0.03, 22), dualies: make(8, 0.9, 1.0, 3, 0, 32),
 });
-export function recoilPattern(w, i) {
+export function recoilPattern(w, i) { return recoilPatternInto(w, i, { x: 0, y: 0 }); }
+// the same, written into a caller's {x, y} (no allocation: used on every shot)
+export function recoilPatternInto(w, i, out) {
   const p = P[w.id];
   i = Math.max(0, Math.floor(Number.isFinite(i) ? i : 0));   // the spray count recovers smoothly between bursts: round it to a bullet
   let x, y;
   if (p) { const k = Math.min(i, p.length - 1); [x, y] = p[k]; if (i >= p.length) { const e = i - p.length + 1; x += Math.sin(e * 0.7) * 1.2; y += e * 0.05; } }
   else { y = Math.min(i, 9) * 1.0 + Math.max(0, i - 9) * 0.1; x = i > 8 ? Math.sin((i - 8) * 0.55) * 2.4 : Math.sin(i * 0.9) * 0.2; }
-  return { x, y };   // kick units: right, up
+  out.x = x; out.y = y; return out;   // kick units: right, up
 }
 
 // ---- attachments -------------------------------------------------------------------------------------------------

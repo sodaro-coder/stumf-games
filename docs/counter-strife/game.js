@@ -7,7 +7,7 @@ import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forT
 import { buildWorld } from './world.js';
 import { MAPS } from './maps.js';
 import { mobileControls } from './mobile.js';
-import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf, recoilAt, nadeStep, speedOf } from './sim.js';
+import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf, recoilAt, nadeStep, speedOf, aimDir } from './sim.js';
 import { Bots, botNames } from './bots.js';
 import { Profile } from './backend.js';
 import { Menu, Hud, injectCss, esc, weaponIcon } from './ui.js';
@@ -494,7 +494,11 @@ export default function start({ cfg, E, N, smoke }) {
     const impactFx = (m) => { let e = IMPACT[m] || IMPACT.concrete; if (typeof e === 'string') e = IMPACT[e]; return e; };
     const decalGeo = new THREE.PlaneGeometry(0.12, 0.12), decalMat = new THREE.MeshBasicMaterial({ color: 0x1a1612, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
     const decals = [];
-    const decal = (p, d) => { const m = new THREE.Mesh(decalGeo, decalMat); m.position.set(p.x - d.x * 0.01, p.y - d.y * 0.01, p.z - d.z * 0.01); m.lookAt(p.x - d.x, p.y - d.y, p.z - d.z); fx.add(m); decals.push(m); if (decals.length > 60) fx.remove(decals.shift()); };
+    const decal = (p, d) => {   // bullet holes: a ring of 60 meshes, the oldest reused (no allocation once it's full)
+      const m = decals.length >= 60 ? decals.shift() : new THREE.Mesh(decalGeo, decalMat);
+      m.position.set(p.x - d.x * 0.01, p.y - d.y * 0.01, p.z - d.z * 0.01); m.lookAt(p.x - d.x, p.y - d.y, p.z - d.z);
+      if (!m.parent) fx.add(m); decals.push(m);
+    };
     const puffMat = new THREE.MeshBasicMaterial({ color: 0xaa1111, transparent: true, opacity: 0.9 }); const puffGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18), puffs = [];
     const puff = (x, y, z, col) => { const m = new THREE.Mesh(puffGeo, col ? basic(col) : puffMat); m.position.set(x, y, z); fx.add(m); puffs.push({ m, t: 0.25 }); };
     const smokeTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 4, 32, 32, 32); gr.addColorStop(0, 'rgba(210,210,210,1)'); gr.addColorStop(0.6, 'rgba(190,190,190,.85)'); gr.addColorStop(1, 'rgba(180,180,180,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
@@ -844,6 +848,9 @@ export default function start({ cfg, E, N, smoke }) {
       hud.pauseMenu(true, { info: `${MODES[mode].name} · ${MAPS[mapId].name}${session ? ' · code ' + session.code : ''}`, S, invite: session ? location.origin + location.pathname + '#' + session.code : '', code: session ? session.code : '',
         resume: () => { hud.pauseMenu(false); uiOpen = null; lock(); }, quit, setSens: (v) => { S.sens = v; saveSet(S); }, admin: !!profile.admin && !touchPlayer, setRecoilHelp: (on) => { S.recoilHelp = on ? 1 : 0; saveSet(S); } });
     }
+    // who a shot can hit: the live players, gathered into one reused array (no per-shot allocation)
+    const SHOT_LIST = [], SHOT_DIR = { x: 0, y: 0, z: 0 }, REC_A = { up: 0, side: 0 }, REC_B = { up: 0, side: 0 };
+    const shotTargets = () => { SHOT_LIST.length = 0; for (const p of st.players.values()) if (p.alive) SHOT_LIST.push(p); return SHOT_LIST; };
     function fire(alt) {
       const it = me.inv[me.cur], w = curWeapon();
       if (me.cur === 4) return throwNade(alt);
@@ -862,21 +869,21 @@ export default function start({ cfg, E, N, smoke }) {
       if (parts && w.cat !== 'knife' && w.cat !== 'zeus' && Math.random() < 0.5) { const fx2 = -Math.sin(me.yaw) * Math.cos(me.pitch), fy2 = Math.sin(me.pitch), fz2 = -Math.cos(me.yaw) * Math.cos(me.pitch); parts.smoke(eye.x + fx2 * 1.0 + Math.cos(me.yaw) * 0.12 * S.hand, eye.y + fy2 * 1.0 - 0.08, eye.z + fz2 * 1.0 - Math.sin(me.yaw) * 0.12 * S.hand, { size: 0.12, life: 0.8, alpha: 0.3 }); }   // a wisp of muzzle smoke
       me.spray++; me.sprayT = 0.4 + 60 / w.rpm; me.lastGun = w.id; me.lastShotAt = performance.now(); me.lastScoped = me.scoped > 0;
       if (w.zoom && me.scoped && w.cat === 'sniper') me.unscopeAfterShot = true;
-      const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0, yaw: p.yaw || 0, lean: p.lean || 0, prone: p.prone || 0 }));
+      const players = shotTargets();
       const hits = []; let end = null;
       for (let k = 0; k < (w.pellets || 1); k++) {
         const r1 = (Math.random() - 0.5) * 2, r2 = (Math.random() - 0.5) * 2, spr = sp + (w.spread || 0) * (w.pellets > 1 ? 1 : 0);
-        const yaw = me.yaw + rc.side + r1 * spr, pitch = me.pitch + rc.up + r2 * spr;
-        const d = { x: -Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: -Math.cos(yaw) * Math.cos(pitch) };
-        const tr = traceShot(W, players, myId, eye, d, w);
-        hits.push(...tr.hits); if (!end) end = tr.end;
+        const d = aimDir(me.yaw + rc.side + r1 * spr, me.pitch + rc.up + r2 * spr, SHOT_DIR);
+        const tr = traceShot(W, players, myId, eye, d, w);   // pooled result: keep copies of what outlives this pellet
+        for (const h of tr.hits) hits.push({ id: h.id, group: h.group, dist: h.dist, pen: h.pen });
+        if (!end && tr.end) end = { x: tr.end.x, y: tr.end.y, z: tr.end.z };
         for (const h of tr.hits) { const p = st.players.get(h.id); if (p) puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); }
         if (tr.wallHits[0]) { decal(tr.wallHits[0], d); const hp = tr.wallHits[0], mn = W.matName(hp.m), e = impactFx(mn); if (parts) { parts.emit(hp.x - d.x * 0.05, hp.y - d.y * 0.05, hp.z - d.z * 0.05, e); if (e !== IMPACT.metal) parts.smoke(hp.x - d.x * 0.1, hp.y - d.y * 0.1, hp.z - d.z * 0.1, { n: 2, color: e.colors[0], size: e === IMPACT.sand ? 0.22 : 0.14, life: 1.1, rise: 0.15, alpha: 0.55 }); } if (e === IMPACT.metal && Math.random() < 0.35) audio.at('ricochet', hp.x, hp.y, hp.z, cam, 30); }
         for (const h of tr.hits) { const p = st.players.get(h.id); if (p && parts) parts.emit(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, { n: 6, colors: ['#8a0a0a', '#c01a1a'], speed: 1.5, up: 0.4, size: 0.04, life: 0.5 }); }
       }
       { // the crosshair follows recoil, always: each shot climbs your actual view along the gun's pattern (pull down to
         // control it). Hip fire kicks a little harder than aimed in.
-        const a = recoilAt(w, n0 + 1), b = recoilAt(w, n0), kv = adsOn ? 0.62 : 0.78, ks = adsOn ? 0.55 : 0.7;
+        const a = recoilAt(w, n0 + 1, REC_A), b = recoilAt(w, n0, REC_B), kv = adsOn ? 0.62 : 0.78, ks = adsOn ? 0.55 : 0.7;
         me.pitch = Math.min(1.55, me.pitch + (a.up - b.up) * kv * RH); me.yaw += (a.side - b.side) * ks * RH; camKick = Math.min(camKick + w.kick * (adsOn ? 0.3 : 0.45), adsOn ? 0.05 : 0.08);
       }
       const sup = (myAtt(w.id) || {}).muzzle === 'suppressor';
@@ -892,8 +899,7 @@ export default function start({ cfg, E, N, smoke }) {
     function knife(heavy) {
       me.cd = heavy ? 1.1 : 0.45; me.knifeSwing = 0.25;
       const eye = { x: me.x, y: me.y + eyeHeight(me), z: me.z }, d = { x: -Math.sin(me.yaw) * Math.cos(me.pitch), y: Math.sin(me.pitch), z: -Math.cos(me.yaw) * Math.cos(me.pitch) };
-      const players = [...st.players.values()].filter((p) => p.alive).map((p) => ({ id: p.id, alive: true, x: p.x, y: p.y, z: p.z, crouch: p.crouch || 0, yaw: p.yaw || 0, lean: p.lean || 0 }));
-      const tr = traceShot(W, players, myId, eye, d, W_BY_ID.knife, heavy ? 1.5 : 1.9);
+      const tr = traceShot(W, shotTargets(), myId, eye, d, W_BY_ID.knife, heavy ? 1.5 : 1.9);
       const h = tr.hits[0]; if (h) { const p = st.players.get(h.id); if (p) puff(p.x, p.y + 1.2, p.z); }
       const wall = !h && tr.wallHits.length > 0;
       audio.play(shotSound('knife', (loadout[me.team] || {}).knife, !!h || wall), 0.7);
