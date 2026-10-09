@@ -35,14 +35,14 @@ export const STORY_KEY = 'cs:story:v1';
 export const storyProgress = () => { try { return Object.assign({ unlocked: 0, best: {}, chars: {} }, JSON.parse(localStorage.getItem(STORY_KEY) || '{}')); } catch (e) { return { unlocked: 0, best: {}, chars: {} }; } };
 const saveStory = (s) => { try { localStorage.setItem(STORY_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // sun, sky light, fog and sky for a map (shared by the match and the menu's map pictures)
-function dressScene(sc, B, shadows, clouds = true) {
+function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   for (const l of sc.children.filter((c) => c.isLight)) sc.remove(l);
   const dir = B.sunDir || [0.6, 0.7, 0.4], L = Math.hypot(...dir), d = dir.map((v) => v / L), fog = B.fog || 0xaaaaaa;
   sc.background = new THREE.Color(fog); sc.fog = new THREE.Fog(fog, B.fogNear || 70, B.fogFar || 260);
   sc.add(new THREE.HemisphereLight((B.amb || [])[0] || 0xffffff, (B.amb || [])[1] || 0x555555, B.ambI || 1.1));
   const sun = new THREE.DirectionalLight(B.sunColor || 0xffffff, B.sunI || 2.4); sun.position.set(d[0] * 90, d[1] * 90, d[2] * 90); sc.add(sun);
   if (shadows) { sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); const c = sun.shadow.camera; c.left = c.bottom = -24; c.right = c.top = 24; c.near = 1; c.far = 220; sun.shadow.bias = -0.0008; sc.add(sun.target); }
-  const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds);
+  const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
 const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1 };
@@ -602,10 +602,12 @@ export default function start({ cfg, E, N, smoke }) {
       const es = new THREE.Scene(), sd = new THREE.Vector3(...(B.sunDir || [0.6, 0.7, 0.4])).normalize();
       es.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
         uniforms: { sky: { value: new THREE.Color(B.sky || 0x88aadd) }, fog: { value: new THREE.Color(B.fog || 0xccccbb) }, gnd: { value: new THREE.Color((B.amb || [])[1] || 0x776655) },
-          sun: { value: new THREE.Color(B.sunColor || 0xffffff).multiplyScalar(B.sunI || 2.4) }, sd: { value: sd } },
+          sun: { value: new THREE.Color(B.sunColor || 0xffffff).multiplyScalar(B.sunI || 2.4) }, sd: { value: sd },
+          photo: { value: (sky && sky.userData.photo) || null }, photoOn: { value: sky && sky.userData.photo ? 1 : 0 }, tint: { value: new THREE.Color(...(B.photoTint || [1, 1, 1])) } },
         vertexShader: 'varying vec3 vD; void main() { vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-        fragmentShader: `uniform vec3 sky; uniform vec3 fog; uniform vec3 gnd; uniform vec3 sun; uniform vec3 sd; varying vec3 vD;
+        fragmentShader: `uniform vec3 sky; uniform vec3 fog; uniform vec3 gnd; uniform vec3 sun; uniform vec3 sd; uniform sampler2D photo; uniform float photoOn; uniform vec3 tint; varying vec3 vD;
           void main() { float y = vD.y; vec3 c = y > 0.0 ? mix(fog * 1.1, sky, pow(y, 0.6)) : mix(fog * 0.8, gnd * 1.3, min(1.0, -y * 3.0));
+            if (photoOn > 0.5 && y > 0.0) c = mix(fog, texture2D(photo, vec2(fract((atan(vD.z, vD.x) - atan(sd.z, sd.x)) / 6.2831853 + 0.5), asin(y) / 1.5707963)).rgb * tint, smoothstep(0.0, 0.15, y));
             c = mix(vec3(dot(c, vec3(0.3, 0.55, 0.15))), c, 0.4);   // reflections in rough metal read greyer than the sky itself
             c += sun * (pow(max(dot(vD, sd), 0.0), 600.0) * 20.0 + pow(max(dot(vD, sd), 0.0), 8.0) * 0.25); gl_FragColor = vec4(c, 1.0); }` })));
       const pm = new THREE.PMREMGenerator(renderer);
@@ -619,7 +621,8 @@ export default function start({ cfg, E, N, smoke }) {
       mapId = id; W = buildWorld(E, MAPS[id], scene, Q, { ...gfx.worldOpts(), dynShadows: dsh ? P.shadows.cascades.length : 0 });
       const B = W.B;
       if (sky) { scene.remove(sky); sky = null; }
-      const lit = dressScene(scene, B, false, P.clouds); sunLight = lit.sun; sky = lit.sky; sunDir = lit.dir;
+      const lit = dressScene(scene, B, false, P.clouds, Q >= 1 ? 2048 : 1024); sunLight = lit.sun; sky = lit.sky; sunDir = lit.dir;
+      sky.userData.onPhoto = () => { if (envRT) setEnv(B); };   // reflections pick up the real sky once it's in
       vmHemi.color.set(B.amb[0]); vmHemi.groundColor.set(B.amb[1]); vmSun.color.set(B.sunColor);
       if (P.env) setEnv(B);
       // occlusion culling: the map's precompiled visibility set, if it was compiled from this exact map (pvs.js)

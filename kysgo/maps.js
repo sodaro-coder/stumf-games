@@ -84,6 +84,7 @@ function dust() {
   B.prop('goat', 96, 24, {}).prop('goat', 20, 92, {}).prop('palm', 56, 110, {}).prop('palm', 86, 124, {}).prop('palm', 100, 92, {})
     .prop('tv', 10, 18, { rot: Math.PI / 2 }).prop('barrel', 74, 30, {}).prop('barrel', 120, 96, {}).prop('palm', 30, 10, {});
   B.sky = 0x6f9fd8; B.fog = 0xd9cdb4; B.sunColor = 0xffeed2; B.amb = [0xc4d8f2, 0x9c7c54]; B.sunDir = [0.62, 0.66, 0.42]; B.sunI = 2.7; B.ambI = 1.15;
+  B.photo = 'day';   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 
@@ -144,6 +145,7 @@ function nuke() {
   B.prop('dummy', 20, 34, {}).prop('dummy', 52, 22, {}).prop('dummy', 8, 44, {}).prop('dummy', 64, 6, {}).prop('duck', 36, 46, {})
     .prop('tree', 6, 6, {}).prop('tree', 66, 46, {}).prop('lamp', 27, 2.5, {}).prop('lamp', 45, 49, {});
   B.sky = 0x5f9be0; B.fog = 0xcfe2f4; B.sunColor = 0xfff6e6; B.amb = [0xd2e4fa, 0x6a7a52]; B.sunDir = [0.5, 0.72, -0.45]; B.sunI = 2.6; B.ambI = 1.15;
+  B.photo = 'noon';   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 
@@ -171,6 +173,7 @@ function ship() {
   B.sign(20, 2.05, 3.2, 0, 'SHITMENT\nyou will respawn in 0.2 seconds', 8, 1.4, '#20262e', '#f0f4f8');
   B.prop('lamp', 2.5, 20, {}).prop('lamp', 37.5, 20, {}).prop('barrel', 24, 10, {}).prop('barrel', 10, 27, {});
   B.sky = 0x7a8aa0; B.fog = 0x9aa4b2; B.sunColor = 0xeef2fa; B.amb = [0xd6e0ee, 0x5a5a60]; B.sunDir = [0.45, 0.8, 0.5]; B.sunI = 1.5; B.ambI = 1.6;
+  B.photo = 'overcast';   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 
@@ -228,7 +231,8 @@ function town() {
   B.sign(36.05, 30, 0.3, Math.PI / 2, 'HOT TUB (do not)', 1.6, 0.5, '#222', '#f60');
   B.prop('lamp', 25, 25, {}).prop('lamp', 39, 39, {}).prop('lamp', 39, 25, {}).prop('lamp', 25, 39, {}).prop('barrel', 26, 45, {}).prop('barrel', 38, 18, {})
     .prop('tree', 3, 26, {}).prop('tree', 61, 38, {});
-  B.sky = 0x46405a; B.fog = 0x6a4a44; B.sunColor = 0xffa860; B.amb = [0xb8a8c0, 0x4a3430]; B.sunDir = [0.75, 0.38, 0.3]; B.sunI = 2.4; B.ambI = 1.0;
+  B.sky = 0x46405a; B.fog = 0x6a4a44; B.sunColor = 0xffa860; B.amb = [0xb8a8c0, 0x4a3430]; B.sunDir = [0.75, 0.38, 0.3]; B.sunI = 2.5; B.ambI = 1.3;
+  B.photo = 'dusk';   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 
@@ -267,6 +271,7 @@ function crust() {
   B.sign(29.95, 7.5, 2.2, -Math.PI / 2, 'OUTHOUSE →\n(it\'s the whole shack)', 3, 1, '#3a2a1a', '#ffd98a');
   B.prop('barrel', 33, 9, {}).prop('barrel', 15, 33, {}).prop('barrel', 35, 35, {}).prop('lamp', 16, 18, {}).prop('lamp', 32, 30, {});
   B.sky = 0x86a8cc; B.fog = 0xd6c4a0; B.sunColor = 0xffe6c0; B.amb = [0xc4d0e0, 0x8a7050]; B.sunDir = [0.5, 0.62, 0.6]; B.sunI = 2.6; B.ambI = 1.1;
+  B.photo = 'day';   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 
@@ -308,6 +313,7 @@ function yacht() {
   B.sign(62, 12.95, 3.4, 0, 'HOT TUB\n0% chlorine 100% pee', 3, 0.9, '#2a6aff', '#fff');
   B.prop('lamp', 25, 8, {}).prop('lamp', 25, 22, {}).prop('palm', 9, 21, {}).prop('duck', 13, 15, {});
   B.sky = 0x5aa0e8; B.fog = 0xbcd8f0; B.sunColor = 0xfff4e0; B.amb = [0xcfe4fa, 0x4a7a9a]; B.sunDir = [0.55, 0.7, -0.4]; B.sunI = 2.7; B.ambI = 1.2;
+  B.photo = 'noon';   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 
@@ -350,6 +356,7 @@ function range() {
   for (const z of [20.5, 23.5, 26.5, 29.5, 32]) B.prop('dummy', 56, z, {});
   B.prop('tree', 4, 44, {}).prop('tree', 68, 6, {}).prop('tree', 30, 48, {}).prop('lamp', 46, 20, {}).prop('lamp', 46, 32, {}).prop('barrel', 20, 14, {}).prop('barrel', 47, 36, {});
   B.sky = 0x6a9ad8; B.fog = 0xc8d4c0; B.sunColor = 0xfff0d8; B.amb = [0xc8daf0, 0x6a6a4a]; B.sunDir = [-0.5, 0.68, 0.5]; B.sunI = 2.5; B.ambI = 1.15;
+  B.photo = 'day';   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 
@@ -393,6 +400,7 @@ function barracks(night = false) {
   B.sign(52, 37.95, 3.0, Math.PI, 'ARMORY\nsign out every gun\n(Ricky: ONE glock)', 3.4, 1.1, '#2a2a2a', '#ffd23a');
   B.prop('lamp', 20, 17, {}).prop('lamp', 44, 37, {}).prop('lamp', 20, 37, {}).prop('lamp', 44, 17, {}).prop('tree', 4, 22, {}).prop('tree', 60, 32, {}).prop('tree', 26, 50, {})
     .prop('barrel', 25, 40, {}).prop('barrel', 47, 20, {}).prop('tv', 8, 9, {});
+  B.photo = night ? 'night' : 'sunrise'; if (night) B.photoTint = [0.5, 0.6, 1.0];   // the real sky over it
   if (night) { B.sky = 0x0b1230; B.fog = 0x141c34; B.sunColor = 0x9fb4ff; B.amb = [0x3a4a78, 0x14121a]; B.sunDir = [0.3, 0.75, -0.4]; B.sunI = 1.25; B.ambI = 1.05; }
   else { B.sky = 0xf0b878; B.fog = 0xe8c8a0; B.sunColor = 0xffd8a8; B.amb = [0xf0d0b0, 0x6a5a4a]; B.sunDir = [-0.7, 0.35, 0.3]; B.sunI = 2.2; B.ambI = 1.1; }   // dawn
   return B;
@@ -441,6 +449,7 @@ function hospital() {
   B.sign(54.5, 30.05, 2.9, 0, 'BLOOD DRIVE\nO NEGATIVE NEEDED', 3.4, 0.9, '#b01818', '#fff');
   B.prop('lamp', 26, 54, {}).prop('lamp', 44, 54, {}).prop('tv', 36, 34, {}).prop('palm', 25, 33, {}).prop('palm', 45, 33, {}).prop('barrel', 66, 54, {});
   B.sky = 0x8ab0d8; B.fog = 0xd8e0e8; B.sunColor = 0xfff8f0; B.amb = [0xe8f0ff, 0x8a8a90]; B.sunDir = [0.4, 0.8, 0.3]; B.sunI = 2.0; B.ambI = 1.35;
+  B.photo = 'misty';   // the real sky over it (sky_<name>_*.jpg)
   B.wet = 3.2;   // screen-space reflections: polished hospital tile
   return B;
 }
@@ -470,6 +479,7 @@ function stadium() {
   B.sign(45, 9.05, 3.2, 0, 'BLAST TANK\nauthorised personnel only', 4, 1, '#b01818', '#fff');
   B.prop('lamp', 6, 30, {}).prop('lamp', 84, 30, {}).prop('lamp', 6, 44, {}).prop('lamp', 84, 44, {}).prop('tv', 45, 60, {});
   B.sky = 0x241a3a; B.fog = 0x3a2a4a; B.sunColor = 0xffc890; B.amb = [0x8a70b0, 0x302030]; B.sunDir = [-0.5, 0.45, 0.4]; B.sunI = 1.8; B.ambI = 1.0;   // dusk
+  B.photo = 'sunset'; B.photoTint = [0.95, 0.8, 1.0];   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 
@@ -505,6 +515,7 @@ function wienerHouse() {
   B.sign(29.95, 14, 2.2, -Math.PI / 2, '14 MUSTARD ST', 1.8, 0.5, '#2a2a2a', '#e8c070');
   B.prop('tv', 24, 13, {}).prop('lamp', 34, 20, {}).prop('tree', 36, 6, {}).prop('tree', 3, 34, {}).prop('barrel', 18, 6, {});
   B.sky = 0x1c1626; B.fog = 0x2a2030; B.sunColor = 0xffb070; B.amb = [0xffb878, 0x3a2418]; B.sunDir = [0.5, 0.5, 0.3]; B.sunI = 1.2; B.ambI = 1.15; B.fogNear = 20; B.fogFar = 90;
+  B.photo = 'night'; B.photoTint = [0.55, 0.62, 0.95];   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 
@@ -557,6 +568,7 @@ function club() {
     .prop('speaker', 24, 12).prop('speaker', 38, 12).prop('speaker', 43, 27).prop('speaker', 19.5, 27);
   for (let z = 10; z <= 18; z += 2) B.prop('stool', 44.6, z + 0.5);
   B.sky = 0x140a1e; B.fog = 0x2a1434; B.sunColor = 0xffc8f0; B.amb = [0xf4c0f4, 0x7a4a80]; B.sunDir = [0.3, 0.8, 0.2]; B.sunI = 1.7; B.ambI = 2.1; B.fogNear = 18; B.fogFar = 80;
+  B.photo = 'night'; B.photoTint = [0.55, 0.62, 0.95];   // the real sky over it (sky_<name>_*.jpg)
   B.wet = 3.4;   // screen-space reflections: a polished dance floor
   return B;
 }
@@ -592,6 +604,7 @@ function mansion() {
   B.sign(16, 21.95, 2.4, Math.PI, 'NOT FOR SALE', 2.4, 0.6, '#1c1c20', '#d8b060');
   B.prop('lamp', 30, 46, {}).prop('lamp', 40, 46, {}).prop('lamp', 10, 50, {}).prop('lamp', 60, 50, {}).prop('tree', 6, 36, {}).prop('tree', 66, 38, {}).prop('palm', 26, 34, {}).prop('palm', 44, 34, {}).prop('tv', 36, 28, {});
   B.sky = 0x0a0e1e; B.fog = 0x10142a; B.sunColor = 0x9aaeff; B.amb = [0x46507a, 0x16121a]; B.sunDir = [0.4, 0.7, 0.3]; B.sunI = 1.1; B.ambI = 1.0; B.fogNear = 30; B.fogFar = 150;
+  B.photo = 'night'; B.photoTint = [0.55, 0.62, 0.95];   // the real sky over it (sky_<name>_*.jpg)
   B.wet = 3.0;   // screen-space reflections: marble and lacquered wood
   return B;
 }
@@ -617,6 +630,7 @@ function outpost() {
   for (const [x, z] of [[4, 68], [8, 72], [12, 76], [5, 76], [14, 68], [10, 70], [86, 60], [80, 64], [88, 70], [18, 22], [70, 40], [36, 70]]) B.prop('tree', x, z, {});
   B.sign(66.95, 15, 2.2, Math.PI / 2, 'POST 7', 1.4, 0.5, '#3a3a2a', '#e8e8e0');
   B.sky = 0xc8ccd4; B.fog = 0xdfe4ea; B.sunColor = 0xe8eef8; B.amb = [0xd8e0ec, 0x8a90a0]; B.sunDir = [0.2, 0.8, 0.3]; B.sunI = 1.3; B.ambI = 1.45; B.fogNear = 6; B.fogFar = 62;
+  B.photo = 'overcast';   // the real sky over it (sky_<name>_*.jpg)
   return B;
 }
 

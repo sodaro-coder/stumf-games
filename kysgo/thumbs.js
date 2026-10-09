@@ -9,7 +9,8 @@ import * as THREE from '../sdk/three.module.min.js';
 import { makeGun, makeKnife, makeFingerGun, makePlayer, posePlayer, skinTexture, setTpGun, animateGlow } from './models.js';
 import { itemInfo, AGENT_BY_ID, ITEM_BY_ID, EMOTE_BY_ID } from './skins.js';
 import { loadChars, charsReady, makeSoldier, poseSoldier } from './chars.js';
-import { LIGHT } from './world.js';
+import { LIGHT, loadTx } from './world.js';
+import { skyDome } from './fx.js';
 
 // ---- the studio --------------------------------------------------------------------------------------------------------
 // what shiny surfaces reflect: a graded backdrop with two big soft boxes (key above-left, strip on the right) and a
@@ -212,25 +213,52 @@ export function stage(canvas, look) {
   let r3;
   try { r3 = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'low-power' }); } catch (e) { return { set() {}, stop() {} }; }
   r3.setPixelRatio(Math.min(1, devicePixelRatio || 1));
-  r3.toneMapping = THREE.ACESFilmicToneMapping; r3.toneMappingExposure = 1.05;
-  const sc = new THREE.Scene(); sc.background = new THREE.Color(0x1a1e24); sc.fog = new THREE.Fog(0x1a1e24, 7, 22);
+  r3.toneMapping = THREE.ACESFilmicToneMapping; r3.toneMappingExposure = 0.9;
+  r3.shadowMap.enabled = true; r3.shadowMap.type = THREE.PCFSoftShadowMap;
+  // a corner of a sun-baked desert courtyard at golden hour: the game's own scanned surfaces, a real sky, a low warm sun
+  const haze = 0x8a7a80, sc = new THREE.Scene(); sc.background = new THREE.Color(haze); sc.fog = new THREE.Fog(haze, 16, 60);
   const env = studioEnv(r3); sc.environment = env.texture;
-  sc.add(new THREE.HemisphereLight(0xffe8c8, 0x2a2018, 1.0));
-  const sun = new THREE.DirectionalLight(0xffd8a8, 1.8); sun.position.set(-3, 5, 4); sc.add(sun);
-  const rim = new THREE.DirectionalLight(0x6a9aff, 1.1); rim.position.set(3, 3, -4); sc.add(rim);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshLambertMaterial({ color: 0x8a7350 })); floor.rotation.x = -Math.PI / 2; sc.add(floor);
-  const wallM = new THREE.MeshLambertMaterial({ color: 0xb89a68 }), crateM = new THREE.MeshLambertMaterial({ color: 0x7a5a32 });
-  for (const [x, z, w, h, d, m] of [[-4, -5, 6, 4, 1, wallM], [3.5, -6, 5, 5, 1, wallM], [-6.5, -1, 1, 3.5, 8, wallM], [1.8, -2.2, 1.1, 1.1, 1.1, crateM], [2.6, -2.6, 0.9, 0.9, 0.9, crateM], [1.9, -2.3, 0.8, 0.8, 0.8, crateM]]) {
-    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, h / 2 + (m === crateM && w < 0.9 ? 1.1 : 0), z); sc.add(b);
-  }
-  const shadow = contactShadow(0.6); shadow.position.set(0.9, 0.01, 0); sc.add(shadow);
-  const cam3 = new THREE.PerspectiveCamera(32, 1, 0.1, 60);
+  sc.add(new THREE.HemisphereLight(0xa8b8e0, 0x4a3428, 0.55));
+  const sunD = [-0.6, 0.48, 0.64], sun = new THREE.DirectionalLight(0xffc48a, 2.4); sun.position.set(sunD[0] * 20, sunD[1] * 20, sunD[2] * 20);
+  sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 50 }); sun.shadow.bias = -0.0006; sun.shadow.radius = 3; sc.add(sun);
+  const rim = new THREE.DirectionalLight(0x7aa0ff, 1.4); rim.position.set(4, 3, -5); sc.add(rim);
+  const sky = skyDome(sc, haze, 0x50608a, sunD, 0xffc890, false, { name: 'dusk', size: 2048 });
+  // the world's photo surfaces: colour + packed normal (xy) / roughness (b), read by a lightly patched standard material
+  const surf = (k, rough = 1) => {
+    const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: rough, metalness: 0 });
+    loadTx(`tx_${k}_1024.jpg`, true, 8).then((t) => { if (t) { m.map = t; m.needsUpdate = true; } });
+    loadTx(`tx_${k}_1024n.jpg`, false, 8).then((t) => { if (t) { m.normalMap = t; m.roughnessMap = t; m.needsUpdate = true; } });
+    m.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <normal_fragment_maps>', THREE.ShaderChunk.normal_fragment_maps.replace('vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;', 'vec3 mapN = vec3( texture2D( normalMap, vNormalMapUv ).xy * 2.0 - 1.0, 0.0 ); mapN.z = sqrt( max( 0.0, 1.0 - dot( mapN.xy, mapN.xy ) ) );'))
+        .replace('#include <roughnessmap_fragment>', THREE.ShaderChunk.roughnessmap_fragment.replace('texelRoughness.g', 'texelRoughness.b'));
+    };
+    return m;
+  };
+  // a box whose texture keeps its real-world size on every face (tile = metres per texture repeat)
+  const box = (w, h, d, m, tile, x, y, z, ry = 0) => {
+    const g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv, fs = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+    for (let f = 0; f < 6; f++) for (let i = 0; i < 4; i++) { const j = f * 4 + i; uv.setXY(j, uv.getX(j) * fs[f][0] / tile, uv.getY(j) * fs[f][1] / tile); }
+    const b = new THREE.Mesh(g, m); b.position.set(x, y + h / 2, z); b.rotation.y = ry; b.castShadow = b.receiveShadow = true; sc.add(b); return b;
+  };
+  const sand = surf('sand'), wall = surf('sandwall'), trim = surf('trim'), crate = surf('crate'), wood = surf('darkwood'), metal = surf('metal', 0.6);
+  { const g = new THREE.PlaneGeometry(60, 60), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 20, uv.getY(i) * 20);
+    const f = new THREE.Mesh(g, sand); f.rotation.x = -Math.PI / 2; f.receiveShadow = true; sc.add(f); }
+  box(9, 3.2, 0.8, wall, 3, -4.5, 0, -7.5); box(9.2, 0.25, 1.0, trim, 2, -4.5, 3.2, -7.5);      // the back wall, its coping
+  box(0.8, 4.4, 9, wall, 3, -8.6, 0, -3.4); box(1.0, 0.25, 9.2, trim, 2, -8.6, 4.4, -3.4);      // the tall side wall
+  box(6, 2.4, 0.8, wall, 3, 5.5, 0, -10); box(1.2, 0.08, 2.2, metal, 1, -6, 2.6, -6.6);         // a far wall across the yard, an awning
+  box(1.4, 2.3, 0.12, wood, 2, -3.2, 0, -7.06);                                                  // a door set into the back wall
+  box(1.15, 1.15, 1.15, crate, 1, 2.2, 0, -2.6, 0.12); box(1.0, 1.0, 1.0, crate, 1, 3.4, 0, -3.1, -0.2); box(0.9, 0.9, 0.9, crate, 1, 2.5, 1.15, -2.7, 0.35);
+  box(0.6, 0.9, 0.6, metal, 1, -6.8, 0, -5.8);                                                   // a barrel-height junction box
+  const shadow = contactShadow(0.6); shadow.position.set(0.9, 0.01, 0); sc.add(shadow); void sky;
+  const cam3 = new THREE.PerspectiveCamera(32, 1, 0.1, 400);
   let rig = null, t = 0, raf = 0, stopped = false, last = performance.now();
   let cur = look;
   const set = (lk, team, wid) => {
     cur = { look: lk, team, wid };
     if (rig) sc.remove(rig.g);
     rig = charsReady() ? makeSoldier(lk, team, true) : makePlayer(lk, team);   // the realistic soldier once it has loaded
+    rig.g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     setTpGun(rig, wid || (team === 'CT' ? 'm4a4' : 'ak47')); rig.g.position.set(0.9, 0, 0); rig.g.rotation.y = (rig.soldier ? Math.PI : 0) + 0.5; sc.add(rig.g);
   };
   set(look.look, look.team, look.wid);

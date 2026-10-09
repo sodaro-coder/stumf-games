@@ -68,7 +68,17 @@ export function textPop(scene, x, y, z, text, color = '#ffd23a') {
 // on in the same pass (no full-screen transparent layer: that alone halved the frame rate on weak machines), and the sun.
 // It follows the camera (position it there each frame), so it never gets clipped.
 let cloudT = null;
-export function skyDome(scene, horizon, zenith, sunDir = [0.6, 0.7, 0.4], sunColor = 0xffffff, clouds = true) {
+// a real photographed sky (sky_<name>_<size>.jpg: the upper half of an HDR panorama, sun in the middle column), turned so
+// its sun sits where the map's sun is; the painted gradient shows until it has loaded (and stays without it)
+const skyTexCache = new Map();
+export function skyTexture(name, size = 2048) {
+  const key = name + size;
+  if (!skyTexCache.has(key)) skyTexCache.set(key, new Promise((res) => new THREE.TextureLoader().load(`sky_${name}_${size}.jpg`, (t) => {
+    t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; res(t);
+  }, undefined, () => res(null))));
+  return skyTexCache.get(key);
+}
+export function skyDome(scene, horizon, zenith, sunDir = [0.6, 0.7, 0.4], sunColor = 0xffffff, clouds = true, photo = null) {
   const g = new THREE.Group();
   const geo = new THREE.SphereGeometry(300, 32, 16), col = [], a = new THREE.Color(horizon), b = new THREE.Color(zenith), sc = new THREE.Color(sunColor);
   const pos = geo.attributes.position, sd = new THREE.Vector3(...sunDir).normalize(), v = new THREE.Vector3();
@@ -82,11 +92,17 @@ export function skyDome(scene, horizon, zenith, sunDir = [0.6, 0.7, 0.4], sunCol
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   if (clouds && !cloudT) { cloudT = new THREE.CanvasTexture(cloudCanvas(256)); cloudT.wrapS = cloudT.wrapT = THREE.RepeatWrapping; }
   const mat = new THREE.ShaderMaterial({
-    uniforms: { cloudTex: { value: cloudT }, cloudsOn: { value: clouds ? 1 : 0 }, drift: { value: new THREE.Vector2() } },
+    uniforms: { cloudTex: { value: cloudT }, cloudsOn: { value: clouds ? 1 : 0 }, drift: { value: new THREE.Vector2() },
+      photo: { value: null }, photoOn: { value: 0 }, sunAz: { value: Math.atan2(sd.z, sd.x) }, haze: { value: a.clone() }, tint: { value: new THREE.Color(1, 1, 1) } },
     vertexShader: `attribute vec3 color; varying vec3 vCol; varying vec3 vDir; void main() { vCol = color; vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: `uniform sampler2D cloudTex; uniform float cloudsOn; uniform vec2 drift; varying vec3 vCol; varying vec3 vDir;
+      uniform sampler2D photo; uniform float photoOn; uniform float sunAz; uniform vec3 haze; uniform vec3 tint;
       void main() { vec3 c = vCol; vec3 d = normalize(vDir);
-        if (cloudsOn > 0.5 && d.y > 0.02) { vec4 cl = texture2D(cloudTex, d.xz / (d.y + 0.15) * 0.35 + drift); c = mix(c, cl.rgb, cl.a * 0.85 * smoothstep(0.02, 0.3, d.y)); }
+        if (photoOn > 0.5) {
+          float u = fract((atan(d.z, d.x) - sunAz) / 6.2831853 + 0.5 + drift.x * 0.05), v = asin(clamp(d.y, 0.0, 1.0)) / 1.5707963;
+          vec3 p = texture2D(photo, vec2(u, max(v, 0.004))).rgb * tint;
+          c = mix(haze, p, smoothstep(-0.03, 0.16, d.y));   // the horizon fades into the map's own haze, so far walls sit in it
+        } else if (cloudsOn > 0.5 && d.y > 0.02) { vec4 cl = texture2D(cloudTex, d.xz / (d.y + 0.15) * 0.35 + drift); c = mix(c, cl.rgb, cl.a * 0.85 * smoothstep(0.02, 0.3, d.y)); }
         gl_FragColor = vec4(c, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -100,6 +116,11 @@ export function skyDome(scene, horizon, zenith, sunDir = [0.6, 0.7, 0.4], sunCol
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(disk), fog: false, depthWrite: false, transparent: true }));
   sun.position.copy(sd).multiplyScalar(280); sun.scale.setScalar(50); g.add(sun);
   g.userData.drift = mat.uniforms.drift.value;
+  if (photo && photo.name) skyTexture(photo.name, photo.size || 2048).then((t) => {
+    if (!t) return;
+    const u = mat.uniforms; u.photo.value = t; u.photoOn.value = 1; if (photo.tint) u.tint.value.setRGB(...photo.tint);
+    g.userData.photo = t; if (g.userData.onPhoto) g.userData.onPhoto(t);
+  });
   scene.add(g); return g;
 }
 
