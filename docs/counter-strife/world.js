@@ -386,7 +386,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   side(1, 0); side(-1, 0); side(0, 1); side(0, -1);
   // set dressing (windows, lintels, beams, pipes, sand drifts, rooftop clutter): extra geometry per material
   const extra = new Map();
-  if (!headless && (opt.dress ?? quality >= 0.75)) dressWorld({ B, hr, mat, flag, faces, matName: (m) => MAT_LIST[m], ts: (k) => 1 / ((MATS[k] || { s: 2 }).s), add: (k, g) => { g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3()), key = k + '|' + tileOf(c.x, c.z); if (!extra.has(key)) extra.set(key, []); extra.get(key).push(g); } });
+  if (!headless && (opt.dress ?? quality >= 0.75)) dressWorld({ B, hr, mat, flag, faces, detail: quality, matName: (m) => MAT_LIST[m], ts: (k) => 1 / ((MATS[k] || { s: 2 }).s), add: (k, g) => { g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3()), key = k + '|' + tileOf(c.x, c.z); if (!extra.has(key)) extra.set(key, []); extra.get(key).push(g); } });
 
   // --- baked light: for every 1/K m of floor, how high the sun's shadow reaches there, plus ambient occlusion ---
   // One small texture gives soft sun shadows on every floor, wall and player and darkened corners, for the price of a
