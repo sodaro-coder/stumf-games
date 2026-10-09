@@ -212,17 +212,17 @@ export function viewer(canvas, item, opt = {}) {
 export function stage(canvas, look) {
   let r3;
   try { r3 = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'low-power' }); } catch (e) { return { set() {}, stop() {} }; }
-  r3.setPixelRatio(Math.min(1, devicePixelRatio || 1));
+  r3.setPixelRatio(Math.min(1.75, devicePixelRatio || 1));   // sharp on phones and high-DPI screens
   r3.toneMapping = THREE.ACESFilmicToneMapping; r3.toneMappingExposure = 0.9;
   r3.shadowMap.enabled = true; r3.shadowMap.type = THREE.PCFSoftShadowMap;
-  // a corner of a sun-baked desert courtyard at golden hour: the game's own scanned surfaces, a real sky, a low warm sun
-  const haze = 0x8a7a80, sc = new THREE.Scene(); sc.background = new THREE.Color(haze); sc.fog = new THREE.Fog(haze, 16, 60);
+  // a corner of a sun-baked desert courtyard on a clear afternoon: the game's own scanned surfaces, a real sky, a low warm sun
+  const haze = 0xc8ccd0, sc = new THREE.Scene(); sc.background = new THREE.Color(haze); sc.fog = new THREE.Fog(haze, 16, 60);
   const env = studioEnv(r3); sc.environment = env.texture;
-  sc.add(new THREE.HemisphereLight(0xa8b8e0, 0x4a3428, 0.55));
-  const sunD = [-0.6, 0.48, 0.64], sun = new THREE.DirectionalLight(0xffc48a, 2.4); sun.position.set(sunD[0] * 20, sunD[1] * 20, sunD[2] * 20);
+  sc.add(new THREE.HemisphereLight(0xc8d8f0, 0x8a7458, 0.9));
+  const sunD = [-0.55, 0.62, 0.56], sun = new THREE.DirectionalLight(0xfff1e0, 2.3); sun.position.set(sunD[0] * 20, sunD[1] * 20, sunD[2] * 20);
   sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 50 }); sun.shadow.bias = -0.0006; sun.shadow.radius = 3; sc.add(sun);
-  const rim = new THREE.DirectionalLight(0x7aa0ff, 1.4); rim.position.set(4, 3, -5); sc.add(rim);
-  const sky = skyDome(sc, haze, 0x50608a, sunD, 0xffc890, false, { name: 'dusk', size: 2048 });
+  const rim = new THREE.DirectionalLight(0xbcd0ff, 1.0); rim.position.set(4, 3, -5); sc.add(rim);
+  const sky = skyDome(sc, haze, 0x6f9fd8, sunD, 0xfff1e0, false, { name: 'day', size: 2048 });
   // the world's photo surfaces: colour + packed normal (xy) / roughness (b), read by a lightly patched standard material
   const surf = (k, rough = 1) => {
     const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: rough, metalness: 0 });
