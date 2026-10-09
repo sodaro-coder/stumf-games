@@ -53,13 +53,13 @@ export const AGENTS = [
   { id: 'a_ct_plasma', name: 'Plasma Daddy', team: 'CT', tier: 6, look: { body: '#1c1f30', legs: '#14161f', head: '#e0b896', hat: 'helmet', hatColor: '#151826', glow: '#2ad8ff', glowT: 'hex' } },
   { id: 'a_t_lava', name: 'Hot Lava Larry', team: 'T', tier: 6, look: { body: '#2a1a14', legs: '#1c120e', head: '#b48264', hat: 'shemagh', hatColor: '#3a2418', glow: '#ff6a1a', glowT: 'web' } },
   // more fashion disasters
-  { id: 'a_t_log', name: 'Tung Tung Log Boi', team: 'T', tier: 6, look: { model: 'log', body: '#8a5a34', legs: '#6a4426', head: '#8a5a34', hat: 'none' } },   // an original wooden-log brainrot guy with a bat
+  { id: 'a_t_log', name: 'Tung Tung Tung Sahur', team: 'T', tier: 6, look: { model: 'log', body: '#8a5a34', legs: '#6a4426', head: '#8a5a34', hat: 'none' } },   // an original wooden-log brainrot guy with a bat
   { id: 'a_t_florida', name: 'Florida Man', team: 'T', tier: 3, look: { body: '#e8e2d0', legs: '#3a5a8a', head: '#e0a080', hat: 'mullet', hatColor: '#8a5a2a' } },
   { id: 'a_t_gamer', name: 'Mountain Dew Gamer', team: 'T', tier: 2, look: { body: '#3a8a2a', legs: '#1a1a1a', head: '#f0d0b0', hat: 'headset', hatColor: '#111' } },
   { id: 'a_ct_chef', name: 'Angry Chef', team: 'CT', tier: 3, look: { body: '#f4f4f0', legs: '#222', head: '#e8b898', hat: 'toque', hatColor: '#ffffff' } },
   { id: 'a_ct_karen', name: 'Manager Karen', team: 'CT', tier: 4, look: { body: '#c8a0c8', legs: '#4a4a5a', head: '#f0c8a8', hat: 'bob', hatColor: '#e8d080' } },
   { id: 'a_ct_cone', name: 'Traffic Cone Carl', team: 'CT', tier: 2, look: { body: '#ff7a1a', legs: '#2a2a2a', head: '#e0b896', hat: 'cone', hatColor: '#ff6a10', stripes: true } },
-  { id: 'a_ct_void', name: 'Void Boi 9000', team: 'CT', tier: 6, look: { body: '#16121f', legs: '#0f0c16', head: '#d8a888', hat: 'helmet', hatColor: '#0f0c16', visor: true, glow: '#c04aff', glowT: 'galaxy' } },
+  { id: 'a_ct_void', name: 'Void Walker 9000', team: 'CT', tier: 6, look: { body: '#16121f', legs: '#0f0c16', head: '#d8a888', hat: 'helmet', hatColor: '#0f0c16', visor: true, glow: '#c04aff', glowT: 'galaxy' } },
 ];
 
 // ---- emotes (everyone in the match sees them; your camera pulls back to third person while it plays) ----
@@ -285,7 +285,7 @@ export function rollCrate(crate, rnd = Math.random) {
 let uidN = 0;
 export const newItem = (def, float, st, seed) => ({ uid: Date.now().toString(36) + (uidN++).toString(36) + Math.floor(Math.random() * 1e6).toString(36), def, float: +float.toFixed(5), st: !!st, seed, kills: 0, t: Date.now() });
 // what players see for some old finish names (the stored ids keep the original names, so owned items never change)
-const SHOWN = { 'Touch Grass': 'Never Showered', 'Main Character': 'Sweaty Pits', 'Ranked Anxiety': 'Mom Said Bedtime', 'Smurf Account': "Ur Mom's Account",
+const SHOWN = { 'Thicc Boi': 'Gyatt', 'Touch Grass': 'Never Showered', 'Main Character': 'Sweaty Pits', 'Ranked Anxiety': 'Mom Said Bedtime', 'Smurf Account': "Ur Mom's Account",
   'Diamond Hands': 'Sticky Fingers', 'Synergy': 'Butt Dial', 'Reply All': 'Reply All Fart', 'Team Building': 'Office Fart', 'Unpaid Overtime': 'Toilet Break',
   'Casual Friday': 'No Pants Friday', 'Micromanager': 'Bathroom Camper', 'CEO Bonus': 'Golden Toilet', 'Participation Trophy': 'Last Place Loser',
   'Grass Toucher': 'Booger Picker', 'Touch Grass Pro': 'Mouth Breather', 'Sweaty Palms': 'Swamp Ass', 'Crumpet': 'Crumpet Crumbs', 'Corgi': 'Corgi Butt',

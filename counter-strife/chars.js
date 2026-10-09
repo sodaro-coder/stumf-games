@@ -310,7 +310,7 @@ function emotePose(r, e, right) {
   }
 }
 
-// the Log Boi: an original brainrot character riding the soldier's skeleton. A bark-covered log for a body with a
+// Tung Tung Tung Sahur: an original brainrot character riding the soldier's skeleton. A bark-covered log for a body with a
 // wide-eyed face, stick arms and legs, and a baseball bat slung on its back. Parts hang off the bones, so every
 // animation (walk, run, crouch, die, emotes) moves it, janky stick limbs and all.
 let logMats = null;
