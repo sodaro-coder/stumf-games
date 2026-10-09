@@ -77,7 +77,8 @@ export class Profile {
       if (p.rank) this.d.rank = { rr: p.rank.rr | 0, n: p.rank.n | 0, w: p.rank.w | 0, best: p.rank.best | 0 };
       this.d.pass = Array.isArray(p.pass) ? p.pass : []; if (p.guns && typeof p.guns === 'object') this.d.guns = p.guns;
       this.tag = p.tag || null; this.username = p.username || null; this.admin = !!p.admin; this.dep = p.dep || null;
-      this.d.inventory = (p.items || []).map((i) => ({ uid: i.uid, def: i.def, float: i.float, st: i.st, seed: i.seed, kills: i.kills || 0, t: Date.parse(i.created) || 0, listed: i.listed || null, grade: i.grade ?? null, acquired: Date.parse(i.acquired) || Date.parse(i.created) || 0, owners: i.owners || 1 }));
+      this.d.inventory = (p.items || []).map((i) => ({ uid: i.uid, def: i.def, float: i.float, st: i.st, seed: i.seed, kills: i.kills || 0, t: Date.parse(i.created) || 0, listed: i.listed || null, grade: i.grade ?? null, acquired: Date.parse(i.acquired) || Date.parse(i.created) || 0, owners: i.owners || 1, nft: i.nft || null, mint: i.mint || null }));
+      this.wallet = p.wallet || null; this.nftcfg = p.nftcfg || { rpc: '', trees: [], canopy: 0, on: false };
       this.online = true; this.changed(); return true;
     } catch (e) { this.online = false; this.err = String(e.message || e); return false; }
   }
@@ -107,6 +108,10 @@ export class Profile {
   // the market screen in one call: player listings, the house stock, and the prize pool
   market() { return this.rpc('cs_market'); }
   async houseBuy(id) { await this.rpc('cs_ai_buy', { p_id: id }); await this.sync(); }
+  // NFTs: the PIN-locked wallet box is stored with the account (only ever the encrypted key), mint requests, admin settings
+  async saveWallet(box) { await this.rpc('cs_wallet_save', { p_address: box.address, p_box: box }); this.wallet = { address: box.address, box }; this.changed(); }
+  async mintNft(uid) { const r = await this.rpc('cs_nft_request', { p_uid: uid }); await this.sync(); return r; }
+  adminNftCfg(c) { return this.rpc('cs_admin_nft_cfg', { p_rpc: c.rpc ?? null, p_trees: c.trees ?? null, p_canopy: c.canopy ?? null, p_on: c.on ?? null }); }
   poolStatus() { return this.signedIn ? this.rpc('cs_pool_status') : Promise.resolve(null); }
   // ---- friends, trades, gifts (accounts only; every check runs on the server) ----
   async setName(n) {

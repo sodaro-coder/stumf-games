@@ -7,6 +7,7 @@ import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_I
 import { MAPS } from './maps.js';
 import { thumb, stage, viewer } from './thumbs.js';
 import { cardInto, cardImage, gradeBadge } from './cards.js';
+import * as WAL from './wallet.js';
 import { VOICE_PACKS } from './voices.js';
 import { ATTACH, slotsFor, optionsFor, gunLevel, xpForLevel, GUN_MAX } from './guns.js';
 import { topUp as sdkTopUp } from '../sdk/topup.js';
@@ -252,6 +253,8 @@ export function drawItem(canvas, item) {
   return canvas;
 }
 // today's prize pool: size, the stat it ranks by, time left, the top five and your standing; yesterday's payout
+// copy text without the clipboard API (the kit's rules keep games away from device APIs): a selected text box + copy
+function copyText(t) { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(a); a.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; } a.remove(); return ok; }
 const POOL_STAT = { kills: 'kills', mvps: 'MVPs', wins: 'wins' };
 function poolCard(p) {
   if (!p) return '';
@@ -459,6 +462,7 @@ export class Menu {
       <div class="cs-small cs-mut" style="text-align:center;margin:-6px 0 6px">drag to turn · scroll or pinch to zoom</div>
       <div class="cs-small cs-mut">${esc(info.rarity.name)}${info.wear ? ` · ${esc(info.wear.name)} · float ${it.float.toFixed(5)} · pattern ${it.seed}` : ''}${it.st ? ` · StatTrak™ kills: ${it.kills | 0}` : ''} · worth ~${info.value} coins</div>
       <div class="cs-row" style="margin-top:12px">${teams.map((t) => `<button class="cs-btn sm" data-eq="${t}">Equip ${t === 'T' ? 'Terrorist' : 'Counter-Terrorist'}</button>`).join('')}
+        ${P.signedIn && (P.nftcfg || {}).on ? (it.nft ? '<span class="cs-chip">◎ NFT · vaulted</span>' : it.mint ? `<span class="cs-chip">◎ NFT ${esc(it.mint)}</span>` : '<button class="cs-btn alt sm" data-mint>◎ Mint as NFT</button>') : ''}
         <button class="cs-btn alt sm" data-sell>Sell instantly (${Math.round(info.value * 0.8)} coins)</button>
         ${P.signedIn ? (it.listed ? '<button class="cs-btn alt sm" data-unlist>Remove listing</button>' : '<input type="number" min="1" id="lp" placeholder="price" style="width:100px"><button class="cs-btn alt sm" data-list>List on market</button>') : ''}</div></div>`;
     document.body.appendChild(m);
@@ -472,6 +476,11 @@ export class Menu {
       const hint = $('canvas', m).nextElementSibling; if (hint) hint.style.display = card ? 'none' : '';
       if (card && !$('[data-card]', m).firstChild) cardInto($('[data-card]', m), it);
     }));
+    const mb = $('[data-mint]', m); if (mb) mb.onclick = async () => {
+      if (!P.wallet) { this.h.toast('Create your wallet first: Profile > Wallet'); return; }
+      if (!confirm(`Mint ${info.label} as an NFT to your wallet? It stays yours to equip, but from then on it trades on-chain, not in the game market.`)) return;
+      try { const r = await P.mintNft(uid); this.h.toast('NFT ' + (r.status || 'queued')); close(); this.render(); } catch (e) { this.h.toast(e.message); }
+    };
     $('[data-png]', m).onclick = async () => { const c = await cardImage(it); if (!c) return; const a = document.createElement('a'); a.download = info.label.replace(/[^\w-]+/g, '_') + '.png'; a.href = c.toDataURL('image/png'); a.click(); };
     m.onclick = (e) => { if (e.target === m) close(); };
     $('[data-x]', m).onclick = close;
@@ -639,6 +648,15 @@ export class Menu {
   async tab_admin(B) {
     const P = this.P; if (!P.admin) { B.innerHTML = ''; return; }
     const defs = Object.values(ITEM_BY_ID).filter((d) => d.kind !== 'emote' || true).sort((a, b) => b.tier - a.tier);
+    const nc = P.nftcfg || { rpc: '', trees: [], canopy: 0, on: false };
+    setTimeout(() => { const x = document.createElement('div'); x.className = 'cs-panel2'; x.style.marginTop = '14px';
+      x.innerHTML = `<h3>NFT minting</h3><div class="bd"><div class="cs-small cs-mut">Compressed NFTs on Solana. The minter runs on STUMF (switched off there too until you fund it). RPC: a DAS-capable URL (a free Helius key works). Trees: the Merkle tree address(es) the minter created.</div>
+        <div class="cs-row" style="margin-top:8px"><input id="nRpc" placeholder="RPC URL" style="flex:1" value="${esc(nc.rpc)}"></div>
+        <div class="cs-row" style="margin-top:6px"><input id="nTrees" placeholder="Tree addresses, comma separated" style="flex:1" value="${esc((nc.trees || []).join(','))}"><input id="nCan" type="number" min="0" max="17" style="width:90px" value="${nc.canopy | 0}" title="canopy depth"></div>
+        <div class="cs-row" style="margin-top:6px"><label class="cs-small"><input type="checkbox" id="nOn" ${nc.on ? 'checked' : ''}> Minting open to players</label><span style="flex:1"></span><button class="cs-btn sm" id="nSave">Save</button></div></div>`;
+      B.appendChild(x);
+      $('#nSave', x).onclick = async () => { try { await P.adminNftCfg({ rpc: $('#nRpc', x).value.trim(), trees: $('#nTrees', x).value.split(',').map((t) => t.trim()).filter(Boolean), canopy: +$('#nCan', x).value || 0, on: $('#nOn', x).checked }); await P.sync(); this.h.toast('Saved'); } catch (e) { this.h.toast(e.message); } };
+    }, 0);
     B.innerHTML = `<div class="cs-panel2"><h3>Admin · give coins and items</h3><div class="bd">
       <div class="cs-row"><input id="aQ" placeholder="Search players by name" style="flex:1"><button class="cs-btn" id="aFind">Search</button></div><div id="aRes" style="margin-top:10px"></div>
       <div class="cs-row" style="margin-top:12px"><input id="aCoins" type="number" placeholder="Coins (+/-)" style="width:160px"><select id="aDef" style="flex:1"><option value="">(no item)</option>${defs.map((d) => `<option value="${esc(d.id)}">[${esc(RARITY[d.tier].name)}] ${esc(itemInfo({ def: d.id, float: 0, seed: 0 }).label)}</option>`).join('')}</select><input id="aN" type="number" value="1" min="1" max="100" style="width:80px"></div>
@@ -692,6 +710,58 @@ export class Menu {
     B.querySelectorAll('[data-att]').forEach((e) => (e.onclick = async () => { const [slot, id] = e.dataset.att.split(':'); try { await P.gunEquip(sel, slot, id); this.h.sound('buy'); } catch (err) { this.h.toast(err.message); } this.render(); }));
   }
   // ---- PROFILE ----
+  // ---- the player's Solana wallet (for item NFTs): created here, PIN-locked, export to Phantom / Jupiter ----
+  async walletPanel(W) {
+    const P = this.P, cfg = P.nftcfg || {}, short = (a) => a.slice(0, 4) + '…' + a.slice(-4);
+    const head = '<div class="cs-row"><b style="font-size:16px">◎ Wallet</b><span class="cs-chip">Solana · for your item NFTs</span></div>';
+    if (!P.signedIn) { W.innerHTML = head + '<div class="cs-mut cs-small" style="margin-top:6px">Sign in to get your own wallet for item NFTs.</div>'; return; }
+    if (!(await WAL.walletSupported())) { W.innerHTML = head + '<div class="cs-mut cs-small" style="margin-top:6px">This browser can\'t create a Solana wallet (it needs Ed25519). Update it, or use Chrome / Safari / Firefox.</div>'; return; }
+    const pinOk = (p) => /^\d{6,12}$/.test(p);
+    if (!P.wallet) {
+      W.innerHTML = head + `<div class="cs-mut cs-small" style="margin:6px 0">Your wallet is made on this device and locked with a PIN only you know. Only the locked copy is saved to your account (so it works on your other devices); without the PIN nobody can use it, including us. <b>Forget the PIN and the wallet is gone</b>, so export a backup.</div>
+        <div class="cs-row"><input id="wP1" type="password" inputmode="numeric" placeholder="PIN (6-12 digits)" style="width:170px"><input id="wP2" type="password" inputmode="numeric" placeholder="PIN again" style="width:150px"><button class="cs-btn" id="wNew">Create wallet</button></div>`;
+      $('#wNew', W).onclick = async () => {
+        const p1 = $('#wP1', W).value, p2 = $('#wP2', W).value;
+        if (!pinOk(p1)) return this.h.toast('PIN: 6 to 12 digits'); if (p1 !== p2) return this.h.toast('The PINs don\'t match');
+        try { const kp = await WAL.newKeypair(); await P.saveWallet(await WAL.lock(kp, p1)); this.kp = kp; this.h.toast('Wallet created'); } catch (e) { this.h.toast(e.message); }
+        this.walletPanel(W);
+      };
+      return;
+    }
+    const addr = P.wallet.address, kp = this.kp && this.kp.address === addr ? this.kp : null, net = cfg.rpc ? WAL.rpc(cfg.rpc) : null;
+    W.innerHTML = head + `<div class="cs-row" style="margin-top:8px"><code style="font-size:12px;word-break:break-all">${esc(addr)}</code><button class="cs-btn alt sm" id="wCopy">Copy address</button><span class="cs-small cs-mut" id="wBal"></span></div>
+      ${kp ? `<div class="cs-row" style="margin-top:8px"><button class="cs-btn alt sm" id="wExp">Export key</button><button class="cs-btn alt sm" id="wLock">Lock</button></div>
+        <div id="wNft" style="margin-top:10px" class="cs-small cs-mut">${net ? 'Loading your NFTs…' : 'NFTs show here once the game\'s NFT network is set up.'}</div>`
+      : `<div class="cs-row" style="margin-top:8px"><input id="wPin" type="password" inputmode="numeric" placeholder="PIN" style="width:150px"><button class="cs-btn" id="wOpen">Unlock</button></div>`}`;
+    $('#wCopy', W).onclick = () => { copyText(addr) ? this.h.toast('Address copied') : prompt('Your address', addr); };
+    if (net) net.balance(addr).then((b) => { const el = $('#wBal', W); if (el) el.textContent = b.toFixed(4) + ' SOL'; }).catch(() => {});
+    if (!kp) { $('#wOpen', W).onclick = async () => { try { this.kp = await WAL.unlock(P.wallet.box, $('#wPin', W).value); } catch (e) { return this.h.toast(e.message); } this.walletPanel(W); }; return; }
+    $('#wLock', W).onclick = () => { this.kp = null; this.walletPanel(W); };
+    $('#wExp', W).onclick = async () => {
+      const pin = prompt('Export your private key\n\nAnyone with this key owns everything in the wallet. Never share it or paste it into a website. In Phantom or Jupiter: Add / Import wallet > Import private key.\n\nEnter your PIN to show it:'); if (!pin) return;
+      let k; try { k = await WAL.unlock(P.wallet.box, pin); } catch (e) { return this.h.toast(e.message); }
+      const m = document.createElement('div'); m.className = 'cs cs-modal';
+      m.innerHTML = `<div class="cs-card"><b>Private key (Phantom / Jupiter / Solflare format)</b><div class="cs-small" style="color:#ff8a7a;margin:6px 0">Keep it secret. Anyone with it controls this wallet.</div>
+        <textarea readonly style="width:100%;height:84px;font:12px monospace">${esc(WAL.exportKey(k))}</textarea><div class="cs-row" style="margin-top:8px"><button class="cs-btn sm" data-c>Copy</button><button class="cs-btn alt sm" data-x>Done</button></div></div>`;
+      document.body.appendChild(m);
+      $('[data-c]', m).onclick = () => { const t = $('textarea', m); t.select(); if (document.execCommand('copy')) this.h.toast('Copied: paste it straight into your wallet app'); };
+      $('[data-x]', m).onclick = () => m.remove();
+    };
+    if (!net) return;
+    let list = []; try { list = (await net.nfts(addr)).filter((a) => !cfg.trees || !cfg.trees.length || cfg.trees.includes(a.compression && a.compression.tree)); } catch (e) { $('#wNft', W).textContent = 'Could not load NFTs: ' + e.message; return; }
+    const N = $('#wNft', W); if (!N) return;
+    N.className = '';
+    N.innerHTML = `<div class="cs-row"><b>${list.length} NFT${list.length === 1 ? '' : 's'}</b><span style="flex:1"></span>${list.length ? '<input id="wTo" placeholder="Send to address (Phantom, Jupiter…)" style="width:280px"><button class="cs-btn alt sm" id="wAll">Send all</button>' : ''}</div>
+      ${list.map((a) => `<div class="cs-row" style="margin-top:6px"><span style="flex:1">${esc((a.content && a.content.metadata && a.content.metadata.name) || a.id)}</span><button class="cs-btn sm" data-send="${esc(a.id)}">Send</button></div>`).join('') || '<div class="cs-mut cs-small">None yet. Mint an item from its window in your inventory.</div>'}`;
+    const send = async (ids) => {
+      const to = ($('#wTo', W).value || '').trim(); if (!to) return this.h.toast('Paste the address to send to');
+      if (!confirm(`Send ${ids.length} NFT${ids.length === 1 ? '' : 's'} to ${short(to)}? This can't be undone.`)) return;
+      let ok = 0; for (const id of ids) { try { await net.sendNft(this.kp, id, to, cfg.canopy || 0); ok++; } catch (e) { this.h.toast(e.message); break; } }
+      this.h.toast(`Sent ${ok} of ${ids.length}`); setTimeout(() => this.walletPanel(W), 4000);
+    };
+    N.querySelectorAll('[data-send]').forEach((b) => (b.onclick = () => send([b.dataset.send])));
+    const all = $('#wAll', W); if (all) all.onclick = () => send(list.map((a) => a.id));
+  }
   tab_profile(B) {
     const P = this.P, s = P.d.stats;
     B.innerHTML = `<div class="cs-card" style="margin-bottom:12px" id="pfAcct"></div><div class="cs-card"><div class="cs-row"><b style="font-size:20px" id="pfN"></b><span class="cs-chip cs-lvl">Level ${P.level}</span></div>
@@ -699,6 +769,7 @@ export class Menu {
       <div class="cs-row" style="margin-top:8px"><input id="pfUser" maxlength="16" placeholder="Username (friends add you by this)"><button class="cs-btn alt sm" id="pfUserSave">Save username</button></div>
       <div class="cs-grid" style="margin-top:12px">${[['Matches', s.matches], ['Wins', s.wins], ['Kills', s.k], ['Deaths', s.d], ['K/D', (s.k / Math.max(1, s.d)).toFixed(2)], ['Headshot %', Math.round(s.hs / Math.max(1, s.k) * 100) + '%'], ['MVPs', s.mvp]]
         .map(([n, v]) => `<div class="cs-card"><div class="cs-mut cs-small">${n}</div><b style="font-size:20px">${v}</b></div>`).join('')}</div></div>`;
+    const wl = document.createElement('div'); wl.className = 'cs-card'; wl.style.marginTop = '12px'; B.appendChild(wl); this.walletPanel(wl);
     $('#pfN', B).textContent = P.d.name || 'Player'; $('#pfName', B).value = P.d.name || ''; $('#pfUser', B).value = P.username || '';
     $('#pfUserSave', B).onclick = async () => { try { const u = await P.setUsername($('#pfUser', B).value); this.h.toast('Username saved: @' + u); } catch (e) { this.h.toast(e.message); } this.render(); };
     $('#pfSave', B).onclick = async () => { try { const n = await P.setName($('#pfName', B).value); this.h.toast('Name saved: ' + n + (P.tag ? '#' + P.tag : '')); } catch (e) { this.h.toast(e.message); } this.render(); };

@@ -785,7 +785,9 @@ begin
   return (select json_build_object('name', p.name, 'username', p.username, 'tag', p.tag, 'dep', p.dep_code, 'admin', cs_is_admin(), 'guns', coalesce(p.guns, '{}'::jsonb) - '_day', 'coins', p.coins, 'xp', p.xp, 'equipped', p.equipped, 'stats', p.stats, 'pass', p.pass_claimed,
     'rank', json_build_object('rr', p.rr, 'n', p.ranked_n, 'w', p.ranked_w, 'best', p.ranked_best),
     'items', coalesce((select json_agg(json_build_object('uid', i.uid, 'def', i.def, 'float', i.float, 'st', i.st, 'seed', i.seed, 'kills', i.kills,
-      'created', i.created, 'grade', i.grade, 'acquired', i.acquired, 'owners', i.owners, 'listed', (select l.price from cs_listings l where l.uid = i.uid)) order by i.created desc) from cs_items i where i.owner = me), '[]'::json))
+      'created', i.created, 'grade', i.grade, 'acquired', i.acquired, 'owners', i.owners, 'nft', i.nft_asset, 'mint', (select q.status from cs_nft_queue q where q.item_uid = i.uid), 'listed', (select l.price from cs_listings l where l.uid = i.uid)) order by i.created desc) from cs_items i where i.owner = me), '[]'::json),
+    'wallet', (select json_build_object('address', w.address, 'box', w.box) from cs_wallets w where w.uid = me),
+    'nftcfg', (select json_build_object('rpc', c.rpc, 'trees', c.trees, 'canopy', c.canopy, 'on', c."on") from cs_nft_cfg c where c.id = 1))
     from cs_profiles p where p.id = me);
 end $$;
 
@@ -1357,3 +1359,71 @@ create trigger cs_items_card before insert or update on cs_items for each row ex
 -- items that existed before cards: grade them once
 update cs_items i set grade = case when c.tier = 3 then (case when random() < 0.7 then 8 else 9 end) when c.tier = 4 then (case when random() < 0.12 then 10 else 9 end) when c.tier >= 5 then 10 end
   from cs_catalog c where c.def = i.def and i.grade is null and c.tier >= 3;
+
+-- ===== NFTs: the in-game wallet (PIN-locked, created on the player's device) and the mint queue =====================
+-- cs_wallets holds only the address and the PIN-encrypted key blob; nobody can read another player's row. Minting
+-- is switched on by the admin (cs_nft_cfg.on) once a tree is funded; the minter (STUMF, off by default) takes queued
+-- requests, mints a compressed NFT of the item's card to the player's wallet, and keeps in-game ownership in step
+-- with whoever holds the NFT on-chain. A minted item is "vaulted": still yours to equip, but traded on-chain only.
+create table if not exists cs_wallets (uid uuid primary key references auth.users on delete cascade, address text not null, box jsonb not null, created timestamptz default now());
+create table if not exists cs_nft_cfg (id int primary key default 1 check (id = 1), rpc text not null default '', trees text[] not null default '{}', canopy int not null default 0, "on" boolean not null default false);
+insert into cs_nft_cfg (id) values (1) on conflict do nothing;
+create table if not exists cs_nft_queue (id bigserial primary key, item_uid text unique not null references cs_items on delete cascade, owner uuid not null, address text not null,
+  status text not null default 'queued' check (status in ('queued', 'minting', 'minted', 'failed')), asset_id text, sig text, error text, created timestamptz default now(), minted timestamptz);
+alter table cs_items add column if not exists nft_asset text;
+alter table cs_wallets enable row level security; alter table cs_nft_cfg enable row level security; alter table cs_nft_queue enable row level security;
+drop policy if exists cs_wal on cs_wallets; create policy cs_wal on cs_wallets for select using (auth.uid() = uid);
+drop policy if exists cs_ncfg on cs_nft_cfg; create policy cs_ncfg on cs_nft_cfg for select using (true);
+drop policy if exists cs_nq on cs_nft_queue; create policy cs_nq on cs_nft_queue for select using (auth.uid() = owner);
+-- keep the wallet's address public-safe: an address is 32-44 base58 characters; the box is the encrypted key only
+create or replace function cs_wallet_save(p_address text, p_box jsonb) returns void language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid();
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  if p_address !~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$' then raise exception 'bad address'; end if;
+  if not (p_box ? 'enc' and p_box ? 'salt' and p_box ? 'iv') or p_box->>'address' <> p_address then raise exception 'bad wallet box'; end if;
+  if exists (select 1 from cs_nft_queue q join cs_wallets w on w.uid = q.owner where q.owner = me and w.address <> p_address) then
+    raise exception 'This account already has NFTs in its wallet: export that wallet instead of making a new one';
+  end if;
+  insert into cs_wallets (uid, address, box) values (me, p_address, p_box) on conflict (uid) do update set address = excluded.address, box = excluded.box;
+end $$;
+-- ask for an item to be minted (only when minting is on, the item is yours, Epic+ items and outfits/emotes alike)
+create or replace function cs_nft_request(p_uid text) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); w text;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  if not (select "on" from cs_nft_cfg where id = 1) then raise exception 'NFT minting is not open yet'; end if;
+  select address into w from cs_wallets where uid = me; if w is null then raise exception 'Create your wallet first (Profile > Wallet)'; end if;
+  if not exists (select 1 from cs_items where uid = p_uid and owner = me) then raise exception 'not yours'; end if;
+  if exists (select 1 from cs_listings where uid = p_uid) then raise exception 'Take it off the market first'; end if;
+  insert into cs_nft_queue (item_uid, owner, address) values (p_uid, me, w) on conflict (item_uid) do nothing;
+  return (select json_build_object('status', status, 'asset', asset_id) from cs_nft_queue where item_uid = p_uid);
+end $$;
+create or replace function cs_admin_nft_cfg(p_rpc text, p_trees text[], p_canopy int, p_on boolean) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not cs_is_admin() then raise exception 'admin only'; end if;
+  update cs_nft_cfg set rpc = coalesce(p_rpc, rpc), trees = coalesce(p_trees, trees), canopy = coalesce(p_canopy, canopy), "on" = coalesce(p_on, "on") where id = 1;
+end $$;
+-- vaulted items: an NFT can't be sold, listed or traded inside the game (only the minter moves it, following the chain)
+create or replace function cs_items_vault() returns trigger language plpgsql set search_path = public as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.nft_asset is not null then raise exception 'This item is an NFT now: trade it from your wallet'; end if;
+    return old;
+  end if;
+  if old.nft_asset is not null and new.owner is distinct from old.owner and current_setting('cs.minter', true) is distinct from 'on' then
+    raise exception 'This item is an NFT now: trade it from your wallet';
+  end if;
+  return new;
+end $$;
+drop trigger if exists cs_items_vault on cs_items;
+create trigger cs_items_vault before update or delete on cs_items for each row execute function cs_items_vault();
+create or replace function cs_items_nolist() returns trigger language plpgsql set search_path = public as $$
+begin
+  if exists (select 1 from cs_items where uid = new.uid and nft_asset is not null) then raise exception 'This item is an NFT now: trade it from your wallet'; end if;
+  return new;
+end $$;
+drop trigger if exists cs_listings_nonft on cs_listings;
+create trigger cs_listings_nonft before insert on cs_listings for each row execute function cs_items_nolist();
+revoke all on function cs_wallet_save(text, jsonb), cs_nft_request(text), cs_admin_nft_cfg(text, text[], int, boolean) from public, anon;
+grant execute on function cs_wallet_save(text, jsonb), cs_nft_request(text), cs_admin_nft_cfg(text, text[], int, boolean) to authenticated;
