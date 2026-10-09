@@ -99,7 +99,7 @@ const CSS = `
 .cs-hud .chat{position:absolute;left:14px;bottom:120px;width:min(420px,60vw);font-size:13px;display:flex;flex-direction:column;gap:2px}
 .cs-hud .chat div{background:rgba(0,0,0,.35);padding:2px 6px;border-radius:3px}
 .cs-hud .dmgdir{position:absolute;left:50%;top:50%;width:180px;height:180px;margin:-90px;border-radius:50%;border-top:6px solid rgba(255,40,40,.8);opacity:0;transition:opacity .5s}
-.cs-xh{position:absolute;left:50%;top:50%;width:0;height:0}.cs-xh i{position:absolute;background:var(--xc,#5f5);box-shadow:0 0 0 1px rgba(0,0,0,var(--xo,.6))}
+.cs-xh{position:absolute;left:50%;top:50%;width:0;height:0}.cs-hm{position:fixed;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:31;opacity:0}.cs-hm i{position:absolute;width:11px;height:2px;background:#fff;box-shadow:0 0 2px #000;left:-5.5px;top:-1px}.cs-hm i:nth-child(1){transform:rotate(45deg) translateX(-12px)}.cs-hm i:nth-child(2){transform:rotate(135deg) translateX(-12px)}.cs-hm i:nth-child(3){transform:rotate(225deg) translateX(-12px)}.cs-hm i:nth-child(4){transform:rotate(315deg) translateX(-12px)}.cs-hm.head i{background:#ffd54a}.cs-hm.kill i{background:#ff3b3b;width:14px}.cs-hm.on{animation:csHm .26s ease-out}@keyframes csHm{0%{opacity:1;transform:scale(1.35)}35%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.9)}}.cs-xh i{position:absolute;background:var(--xc,#5f5);box-shadow:0 0 0 1px rgba(0,0,0,var(--xo,.6))}
 .cs-scope{position:fixed;inset:0;z-index:19;pointer-events:none;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 34vh,#000 34.2vh)}
 .cs-scope.ret:before,.cs-scope.ret:after{display:none}
 .cs-ads{position:fixed;inset:0;z-index:18;pointer-events:none;display:none}
@@ -871,6 +871,7 @@ export class Hud {
       <div class="bl"><div class="stat" id="hHp"><span class="ic">✚</span><span>100</span></div><div class="stat" id="hAr"><span class="ic">⛨</span><span>0</span></div></div>
       <div class="br"><div class="slots"></div><div class="ammo"></div></div><div class="cs-xh"></div>`;
     document.body.appendChild(this.el);
+    this.hm = document.createElement('div'); this.hm.className = 'cs-hm'; this.hm.innerHTML = '<i></i><i></i><i></i><i></i>'; document.body.appendChild(this.hm);
     this.scope = document.createElement('div'); this.scope.className = 'cs-scope'; document.body.appendChild(this.scope);
     this.ads = document.createElement('div'); this.ads.className = 'cs-ads'; document.body.appendChild(this.ads);
     this.flash = document.createElement('div'); this.flash.className = 'cs-flash'; document.body.appendChild(this.flash);
@@ -894,6 +895,8 @@ export class Hud {
     const icons = (list, col) => list.map((a) => `<i style="background:${col}" class="${a ? '' : 'dead'}"></i>`).join('');
     this.set('tT', '#hT', icons(teams.T, 'var(--tt)'), 'innerHTML'); this.set('tCT', '#hCT', icons(teams.CT, 'var(--ct)'), 'innerHTML');
   }
+  // a hit landed: the X flashes round the crosshair (yellow on a headshot, red on the kill)
+  hitmark(kind = '') { const h = this.hm; if (!h) return; h.className = 'cs-hm'; void h.offsetWidth; h.className = 'cs-hm on ' + kind; }
   xh(spread, show) { const b = this.q('.cs-xh'); b.style.display = show ? '' : 'none'; const k = Math.round(spread); if (this.last.xs === k && this.last.xS === this.S) return; this.last.xs = k; drawXh(b, this.S, k); }
   setScope(on, ret = 'duplex') {
     this.scope.style.display = on ? 'block' : 'none';

@@ -25,7 +25,7 @@ import { line, sfxFor, hasLine } from './voices.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
-import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent } from './chars.js';
+import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear } from './chars.js';
 import { setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
@@ -125,7 +125,8 @@ function makeAudio(getVol) {
     land: (v, p) => { burst(0.1, 500, v * 0.55, p); tone('sine', 120, 60, 0.1, v * 0.3, p); },
     knife: (v, p) => burst(0.13, 5200, v * 0.4, p, 2, 'highpass'), stab: (v, p) => { burst(0.08, 2400, v * 0.6, p, 1); tone('sine', 300, 120, 0.08, v * 0.3, p); },
     zeus: (v, p) => { tone('sawtooth', 1800, 200, 0.35, v * 0.35, p, 0, 0, 40); burst(0.3, 6000, v * 0.4, p, 1, 'highpass'); },
-    hit: (v) => { burst(0.04, 1800, v * 0.4, 0, 1.5, 'bandpass'); tone('sine', 220, 120, 0.05, v * 0.25, 0); },
+    pin: (v) => { tone('triangle', 2400, 3100, 0.04, v * 0.22, 0); burst(0.03, 5200, v * 0.25, 0, 3, 'highpass'); },   // the pin and spoon
+    hit: (v) => { burst(0.05, 1800, v * 0.8, 0, 1.5, 'bandpass'); tone('sine', 240, 110, 0.07, v * 0.5, 0); tone('square', 1900, 1700, 0.025, v * 0.22, 0); },   // the body-hit thud with a clear tick on top
     head: (v) => { tone('square', 2600, 2400, 0.05, v * 0.25, 0); tone('sine', 4200, 3900, 0.14, v * 0.2, 0); burst(0.05, 3000, v * 0.3, 0, 3, 'bandpass'); },
     armor: (v) => { tone('triangle', 1500, 1200, 0.06, v * 0.25, 0); burst(0.04, 2500, v * 0.3, 0, 4, 'bandpass'); },
     hurt: (v) => { burst(0.12, 900, v * 0.6, 0); tone('sine', 160, 90, 0.12, v * 0.3, 0); },
@@ -284,6 +285,10 @@ export default function start({ cfg, E, N, smoke }) {
     const vmHemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2), vmSun = new THREE.DirectionalLight(0xffffff, 1.6); vmSun.position.set(1, 2, 1);
     const vmFill = new THREE.DirectionalLight(0xfff2e0, 0.5); vmFill.position.set(-0.3, 0.6, 1);   // soft fill from the viewer's side: the gun always reads, like any shooter's viewmodel
     vmScene.add(vmHemi, vmSun, vmFill);
+    // a knife slash leaves a quick bright arc across the view (a stab: a short streak straight ahead)
+    const slashMesh = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.47, 28, 1, Math.PI * 0.18, Math.PI * 0.64), new THREE.MeshBasicMaterial({ color: 0xdfe8f0, transparent: true, opacity: 0, depthTest: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+    slashMesh.position.set(0, -0.08, -0.55); slashMesh.renderOrder = 9; vmScene.add(slashMesh); let slashT = 0;
+    const slashFx = (dir) => { slashT = 0.16; slashMesh.rotation.set(dir ? 0 : Math.PI / 2, 0, dir ? (dir > 0 ? -0.35 : Math.PI + 0.35) : 0); slashMesh.scale.set(dir ? 1 : 0.35, 1, 1); };
     // the final look (Medium and up, graphics.js decides what's in it): the frame is drawn in HDR (2x MSAA on Medium,
     // 4x on High), then ONE composite pass does all of it: screen-space ambient occlusion from the depth buffer (High),
     // a soft bloom on the brightest things (muzzle flashes, the sun, glowing skins), ACES filmic tone mapping, a gentle
@@ -639,6 +644,22 @@ export default function start({ cfg, E, N, smoke }) {
     const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     const _rv = new THREE.Vector3(), _rv2 = new THREE.Vector3();
     const EYE_RELIEF = { reddot: 0.15, holo: 0.16, acog: 0.12, iron: 0.34 };   // how far the sight sits in front of your eye when aimed in (metres)
+    // every gun reloads its own way: how far it tilts, where the old mag goes, and how (and whether) it is charged.
+    // charge: 'pull' (AR charging handle), 'side' (AK bolt on the right), 'slap' (the HK slap), 'bolt' (bolt-action),
+    // 'slide' (pistol slide release), 'none'. Rounds left in the gun (a tactical reload) means no charge at all.
+    const RSTYLE = {
+      ak47: { tilt: 0.3, rock: 0.35, charge: 'side' }, galil: { tilt: 0.32, rock: 0.3, charge: 'side' },
+      m4a4: { tilt: 0.42, charge: 'pull' }, m4a1s: { tilt: 0.42, charge: 'pull' }, scar20: { tilt: 0.4, charge: 'pull' }, sg553: { tilt: 0.4, charge: 'side' },
+      famas: { tilt: 0.22, pitch: -0.25, charge: 'pull' }, aug: { tilt: 0.24, pitch: -0.3, charge: 'side' },
+      mp5: { tilt: 0.36, charge: 'slap' }, ump: { tilt: 0.36, charge: 'slap' }, g3sg1: { tilt: 0.38, charge: 'slap' },
+      mp7: { tilt: 0.3, charge: 'pull' }, mp9: { tilt: 0.3, charge: 'pull' }, mac10: { tilt: 0.45, flick: true, charge: 'pull' }, tec9: { tilt: 0.4, flick: true, charge: 'slide' },
+      bizon: { tilt: 0.3, charge: 'side' }, p90: { tilt: 0.2, pitch: 0.25, top: true, charge: 'side' },
+      ssg08: { tilt: 0.35, charge: 'bolt' }, awp: { tilt: 0.38, charge: 'bolt' },
+      m249: { tilt: 0.55, cover: true, charge: 'none' }, negev: { tilt: 0.55, cover: true, charge: 'none' },
+      deagle: { tilt: 0.38, charge: 'slide', heavy: true }, r8: { tilt: 0.7, cyl: true, charge: 'none' }, dualies: { tilt: 0.3, charge: 'slide', dual: true },
+      mag7: { tilt: 0.4, charge: 'none' },
+    };
+    const reloadStyle = (id) => RSTYLE[id] || ((W_BY_ID[id] || {}).cat === 'pistol' ? { tilt: 0.25, charge: 'slide' } : { tilt: 0.42, charge: 'pull' });
     function reloadPose(vm, w, k) {
       const ud = vm.userData, arm = ud.leftArm, mg = ud.magGroup;
       if (k < 0 || !w) { arm.position.set(0, 0, 0); arm.rotation.set(0, 0, 0); if (mg) { mg.position.set(0, 0, 0); mg.rotation.set(0, 0, 0); mg.visible = true; } if (arm.userData.shell) arm.userData.shell.visible = false; return; }
@@ -649,16 +670,27 @@ export default function start({ cfg, E, N, smoke }) {
         arm.position.set(0.02 * c, -0.08 * Math.max(0, dip) + 0.03 * c, 0.03 * c); if (arm.userData.shell) arm.userData.shell.visible = k > 0.15 && k < 0.6;
         return;
       }
-      const tilt = sm(0, 0.14, k) * (1 - sm(0.82, 1, k)), pistol = w.cat === 'pistol';
-      vm.rotation.z += (pistol ? 0.25 : 0.42) * tilt; vm.rotation.x += 0.12 * tilt; vm.position.y -= 0.025 * tilt;
-      const atMag = _rv.copy(ud.magPos).add(_rv2.set(0, -0.03, 0.02)), below = ud.magPos.clone().add(_rv2.set(0.05, -0.38, 0.12));
+      const S = reloadStyle(w.id), pistol = w.cat === 'pistol', tilt = sm(0, 0.14, k) * (1 - sm(0.82, 1, k)), rack = me.reloadEmpty && S.charge !== 'none';
+      vm.rotation.z += S.tilt * tilt; vm.rotation.x += (0.12 + (S.pitch || 0)) * tilt; vm.position.y -= 0.025 * tilt;
+      if (S.rock) vm.rotation.x += S.rock * Math.sin(Math.PI * sm(0.36, 0.62, k)) * 0.35;   // an AK mag rocks in front-first
+      if (S.flick) vm.rotation.z += 0.35 * Math.exp(-Math.pow((k - 0.2) / 0.05, 2));       // flick the empty out
+      if (S.cover) { vm.rotation.z += 0.18 * Math.sin(Math.PI * sm(0.05, 0.9, k)); vm.position.x -= 0.02 * tilt; }
+      if (S.cyl) { vm.rotation.z += 0.3 * tilt; vm.rotation.x -= 0.25 * Math.exp(-Math.pow((k - 0.3) / 0.06, 2)); }   // swing out, tip up to drop the empties
+      if (S.dual) vm.position.y -= 0.03 * tilt;
+      const atMag = _rv.copy(ud.magPos).add(_rv2.set(0, -0.03, 0.02)), below = ud.magPos.clone().add(S.top ? _rv2.set(0.06, 0.3, 0.05) : S.cover ? _rv2.set(0.12, -0.3, 0.1) : _rv2.set(0.05, -0.38, 0.12));
       let tgt;
       if (k < 0.12) tgt = hand.clone().lerp(atMag, sm(0, 0.12, k));
       else if (k < 0.3) tgt = atMag.clone().lerp(below, sm(0.12, 0.3, k));
       else if (k < 0.36) tgt = below.clone();
       else if (k < 0.6) tgt = below.clone().lerp(atMag, sm(0.36, 0.6, k));
-      else if (k < 0.7 || !ud.charge || pistol) tgt = atMag.clone().lerp(hand, sm(0.6, 0.78, k));
-      else { const ch = ud.charge.clone(), pulled = ch.clone().add(_rv2.set(0, 0, 0.07)); tgt = k < 0.78 ? atMag.clone().lerp(ch, sm(0.7, 0.78, k)) : k < 0.86 ? ch.lerp(pulled, sm(0.78, 0.84, k)) : pulled.lerp(hand, sm(0.86, 0.98, k)); }
+      else if (k < 0.7 || !rack || S.charge === 'slide') tgt = atMag.clone().lerp(hand, sm(0.6, 0.78, k));
+      else {   // charging it: each kind of gun has its own handle in its own place and its own motion
+        const ch = S.charge === 'pull' && ud.charge ? ud.charge.clone() : S.charge === 'side' ? ud.magPos.clone().add(_rv2.set(0.07, 0.08, 0.02)) : S.charge === 'slap' ? ud.magPos.clone().add(_rv2.set(-0.02, 0.09, -0.13)) : S.charge === 'bolt' ? ud.magPos.clone().add(_rv2.set(0.07, 0.06, 0.13)) : (ud.charge ? ud.charge.clone() : ud.magPos.clone().add(_rv2.set(0, 0.08, 0.1)));
+        const p1 = S.charge === 'slap' ? ch.clone().add(_rv2.set(0, 0, 0.05)) : S.charge === 'bolt' ? ch.clone().add(_rv2.set(0, 0.04, 0)) : ch.clone().add(_rv2.set(0, 0, 0.07));
+        const p2 = S.charge === 'slap' ? ch.clone().add(_rv2.set(0, -0.05, 0.05)) : S.charge === 'bolt' ? p1.clone().add(_rv2.set(0, 0, 0.1)) : p1;
+        tgt = k < 0.76 ? atMag.clone().lerp(ch, sm(0.7, 0.76, k)) : k < 0.82 ? ch.clone().lerp(p1, sm(0.76, 0.81, k)) : k < 0.88 ? p1.clone().lerp(p2, sm(0.82, 0.86, k)) : (S.charge === 'bolt' ? p2.clone().lerp(ch, sm(0.88, 0.93, k)).lerp(hand, sm(0.93, 0.99, k)) : p2.clone().lerp(hand, sm(0.88, 0.98, k)));
+        if (S.charge === 'bolt') vm.rotation.z -= 0.25 * Math.sin(Math.PI * sm(0.72, 0.98, k));   // the rifle rolls in toward the bolt hand
+      }
       arm.position.copy(tgt).sub(hand);
       if (mg) {   // the old mag falls away; the fresh one rides up in the hand and seats with a click
         if (k < 0.12) mg.position.set(0, 0, 0);
@@ -666,7 +698,7 @@ export default function start({ cfg, E, N, smoke }) {
         else if (k < 0.6) { mg.visible = true; mg.position.copy(tgt).sub(atMag); mg.rotation.set(0.2 * (1 - sm(0.36, 0.6, k)), 0, 0); }
         else { mg.position.set(0, 0, 0); mg.rotation.set(0, 0, 0); mg.visible = true; }
       }
-      const jolt = Math.exp(-Math.pow((k - 0.61) / 0.02, 2)) * 0.012 + (pistol || !ud.charge ? 0 : Math.exp(-Math.pow((k - 0.85) / 0.025, 2)) * 0.02);
+      const jolt = Math.exp(-Math.pow((k - 0.61) / 0.02, 2)) * (S.heavy ? 0.02 : 0.012) + (!rack ? 0 : S.charge === 'slide' ? Math.exp(-Math.pow((k - 0.72) / 0.02, 2)) * 0.025 : S.charge === 'slap' ? Math.exp(-Math.pow((k - 0.84) / 0.015, 2)) * 0.03 : Math.exp(-Math.pow((k - 0.85) / 0.025, 2)) * 0.02);   // the mag seats, then the action slams home
       vm.position.z += jolt;
     }
 
@@ -869,7 +901,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (m.hp <= 0) me.alive = false;
     }
     const dmgFrom = new Map(), dmgTo = new Map();
-    function onHitConfirm(m) { { const r = rigs.get(m.id); if (r && r.soldier) soldierEvent(r, 'hit'); } if (me.lastGun && performance.now() - (me.lastShotAt || 0) < 600) addXp(me.lastGun, (m.dmg | 0) * XP_RULES.dmg); audio.play(m.group === 'head' ? 'head' : 'hit'); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); }
+    function onHitConfirm(m) { { const r = rigs.get(m.id); if (r && r.soldier) soldierEvent(r, 'hit'); } if (me.lastGun && performance.now() - (me.lastShotAt || 0) < 600) addXp(me.lastGun, (m.dmg | 0) * XP_RULES.dmg); audio.play(m.group === 'head' ? 'head' : 'hit', 1.25); if (hud.hitmark) hud.hitmark(m.group === 'head' ? 'head' : ''); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); }
     function onFire(m) {
       if (m.id === myId) return;
       const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
@@ -927,7 +959,7 @@ export default function start({ cfg, E, N, smoke }) {
             : w2.cat === 'sniper' && w2.zoom && !me.lastScoped ? 'noscope' : data.wallbang ? 'wallbang' : data.weapon === 'knife' ? 'knife' : data.head ? 'headshot' : firstDone !== st.round ? 'first' : null;
           firstDone = st.round; if (ev) announceEv(ev);
         }
-        if (data.kid === myId && data.vteam !== me.team) { addXp(data.weapon, XP_RULES.kill + (data.head ? XP_RULES.head : 0)); stats.k++; if (data.head) stats.hs++; const w = W_BY_ID[data.weapon]; if (w && w.cat === 'pistol') stats.pistol++; if (w && w.cat === 'smg') stats.smg++; if (data.weapon === 'knife') stats.knife++; if (G_BY_ID[data.weapon]) stats.nade++; bumpStatTrak(data.weapon); }
+        if (data.kid === myId && data.vteam !== me.team) { if (hud.hitmark) hud.hitmark('kill'); addXp(data.weapon, XP_RULES.kill + (data.head ? XP_RULES.head : 0)); stats.k++; if (data.head) stats.hs++; const w = W_BY_ID[data.weapon]; if (w && w.cat === 'pistol') stats.pistol++; if (w && w.cat === 'smg') stats.smg++; if (data.weapon === 'knife') stats.knife++; if (G_BY_ID[data.weapon]) stats.nade++; bumpStatTrak(data.weapon); }
         if (data.vid === myId) {
           stats.d++; me.alive = false; firstDone = st.round; setTimeout(() => announceEv('died'), 300);
           const k = data.kid ? st.players.get(data.kid) : null, took = data.kid ? (dmgFrom.get(data.kid) || 0) : 0, gave = data.kid ? (dmgTo.get(data.kid) || 0) : 0;
@@ -1031,7 +1063,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (id === myId) { me.hp = hp; if (me.alive && !alive) me.alive = false; me.armor = armor; me.helmet = !!helmet; me.money = money; me.planting = plant; continue; }
         let p = st.players.get(id); if (!p) st.players.set(id, (p = { id, x, y, z, tx: x, ty: y, tz: z }));
         if (Math.hypot(x - p.x, z - p.z) > 4) { p.x = x; p.y = y; p.z = z; }
-        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.rl = !!rl; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.money = money; p.team = (st.roster.get(id) || {}).team; p.scale = (st.roster.get(id) || {}).scale || 1;
+        p.tx = x; p.ty = y; p.tz = z; p.yaw = yaw; p.pitch = pitch; p.crouch = crouch; p.lean = +lean || 0; p.prone = +prone || 0; p.rl = !!rl; p.hp = hp; p.alive = !!alive; p.wid = wid; p.c4 = c4; p.planting = plant; p.armor = armor; p.helmet = !!helmet; p.money = money; p.team = (st.roster.get(id) || {}).team; p.scale = (st.roster.get(id) || {}).scale || 1;
       }
       for (const id of [...st.players.keys()]) if (!s.p.some((a) => a[0] === id)) st.players.delete(id);
       if (s.b) st.bomb = { s: s.b.s, x: s.b.x, y: s.b.y, z: s.b.z, t: s.b.t, d: s.b.d, site: s.b.site }; else if (st.bomb && st.bomb.s !== 'exploded' && st.bomb.s !== 'defused') st.bomb = null;
@@ -1129,11 +1161,19 @@ export default function start({ cfg, E, N, smoke }) {
       if (it.ammo === 0 && it.reserve > 0) setTimeout(() => { if (me.inv[me.cur] === it && it.ammo === 0) startReload(); }, 250);
     }
     function knife(heavy) {
-      me.cd = heavy ? 1.1 : 0.45; me.knifeSwing = 0.25;
-      const eye = { x: me.x, y: me.y + eyeHeight(me), z: me.z }, d = { x: -Math.sin(me.yaw) * Math.cos(me.pitch), y: Math.sin(me.pitch), z: -Math.cos(me.yaw) * Math.cos(me.pitch) };
-      const tr = traceShot(W, shotTargets(), myId, eye, d, W_BY_ID.knife, heavy ? 1.5 : 1.9);
-      const h = tr.hits[0]; if (h) { const p = st.players.get(h.id); if (p) puff(p.x, p.y + 1.2, p.z); }
-      const wall = !h && tr.wallHits.length > 0;
+      me.cd = heavy ? 1.0 : 0.42; me.knifeSwing = heavy ? 0.36 : 0.25; me.knifeHeavy = !!heavy; me.knifeDir = heavy ? 0 : -(me.knifeDir || 1);   // slashes alternate sides; the heavy one is a straight stab
+      if (slashFx) slashFx(heavy ? 0 : me.knifeDir);
+      const eye = { x: me.x, y: me.y + eyeHeight(me), z: me.z };
+      // the blade sweeps an arc in front of you (a stab is a narrow lunge): the closest body anywhere on that arc is hit
+      const fan = heavy ? [-0.08, 0, 0.08] : [-0.42, -0.28, -0.14, 0, 0.14, 0.28, 0.42], reach = heavy ? 2.0 : 2.3;
+      let h = null, hd = Infinity, wallAny = false;
+      for (const a of fan) {
+        const yw = me.yaw + a * (heavy ? 1 : me.knifeDir), d = { x: -Math.sin(yw) * Math.cos(me.pitch), y: Math.sin(me.pitch), z: -Math.cos(yw) * Math.cos(me.pitch) };
+        const tr = traceShot(W, shotTargets(), myId, eye, d, W_BY_ID.knife, reach), t = tr.hits[0];
+        if (t) { const p = st.players.get(t.id), dd = p ? Math.hypot(p.x - me.x, p.z - me.z) + Math.abs(a) : 9; if (dd < hd) { hd = dd; h = t; } } else if (tr.wallHits.length) wallAny = true;
+      }
+      if (h) { const p = st.players.get(h.id); if (p) { puff(p.x, p.y + 1.2, p.z); if (parts) parts.emit(p.x, p.y + 1.2, p.z, { n: 10, colors: ['#8a0d0d', '#5a0505'], speed: 2.2, up: 0.8, size: 0.035, life: 0.5 }); } }
+      const wall = !h && wallAny;
       audio.play(shotSound('knife', (loadout[me.team] || {}).knife, !!h || wall), 0.7);
       toHost('shot', { w: 'knife', h: h ? [{ id: h.id, group: 'chest', pen: 1, heavy: !!heavy }] : [], o: [eye.x, eye.y, eye.z], e: null, wh: wall });
     }
@@ -1144,16 +1184,22 @@ export default function start({ cfg, E, N, smoke }) {
       const sp = lob ? 8 : 17.5;
       const vel = { x: d.x * sp + me.vx, y: d.y * sp + (lob ? 3 : 1.5) + Math.max(0, me.vy) * 0.8, z: d.z * sp + me.vz };
       const pos = { x: eye.x + d.x * 0.3, y: eye.y - 0.05, z: eye.z + d.z * 0.3 };
-      toHost('nade', { type, pos, vel }); me.cd = 0.8;
+      toHost('nade', { type, pos, vel }); me.cd = 0.8; audio.play('pin', 0.8);
+      // the arm follows through before the hand comes back empty: each kind is thrown its own way
+      me.throwK = 0.42; me.throwStyle = lob ? 'under' : ({ he: 'over', flash: 'flick', smoke: 'lob', molotov: 'hurl', incendiary: 'hurl', decoy: 'under' })[type] || 'over';
       me.nades.splice(me.nadeSel, 1); me.nadeSel = 0;
-      if (!me.nades.length) { me.cur = me.last && me.inv[me.last] ? me.last : me.inv[1] ? 1 : me.inv[2] ? 2 : 3; }
-      setViewModel();
+      setTimeout(() => { me.throwK = 0; if (me.cur !== 4 || !me.nades.length) { if (!me.nades.length && me.cur === 4) me.cur = me.last && me.inv[me.last] ? me.last : me.inv[1] ? 1 : me.inv[2] ? 2 : 3; } setViewModel(); }, 420);
     }
     function startReload() {
       const it = me.inv[me.cur], w = curWeapon(); if (!it || !w || w.cat === 'knife' || w.cat === 'zeus' || me.reload > 0 || it.ammo >= w.mag || it.reserve <= 0) return;
-      me.reload = w.reload; me.scoped = 0;
+      me.reload = w.reload; me.scoped = 0; me.reloadEmpty = it.ammo === 0;   // a tactical reload (rounds left) skips the rack
       if (w.shellReload) audio.play('shell', 0.6);
-      else { const it0 = it; audio.play('magout', 0.6); setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play('magin', 0.6); }, w.reload * 600); if (w.cat !== 'pistol') setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play('bolt', 0.6); }, w.reload * 850); }
+      else {
+        const it0 = it, st = reloadStyle(w.id), at = (f, n, v = 0.6) => setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play(n, v); }, w.reload * f * 1000);
+        if (st.cover) { at(0.08, 'bolt', 0.4); at(0.22, 'magout'); at(0.55, 'magin'); at(0.72, 'bolt', 0.5); }   // belt-fed: cover up, box off, box on, belt, cover shut
+        else if (st.cyl) { at(0.1, 'bolt', 0.35); at(0.3, 'shell', 0.5); at(0.6, 'magin', 0.5); at(0.8, 'bolt', 0.4); }   // a revolver: swing out, punch the empties, speed-loader, snap it shut
+        else { audio.play('magout', 0.6); at(0.6, 'magin'); if (me.reloadEmpty && st.charge !== 'none') at(st.charge === 'bolt' ? 0.8 : 0.85, 'bolt'); }
+      }
     }
     function switchTo(slot) {
       me.adsToggle = false;
@@ -1183,7 +1229,7 @@ export default function start({ cfg, E, N, smoke }) {
         for (const p of match.players.values()) {
           if (p.id === myId) { me.hp = p.hp; me.alive = p.alive; me.money = p.money; me.armor = p.armor; me.helmet = p.helmet; me.planting = p.planting ? p.planting / BOMB.plant : 0; if (p.team !== me.team) { me.team = p.team; vmKey = ''; setViewModel(); } continue; }
           let q = st.players.get(p.id); if (!q) st.players.set(p.id, (q = { id: p.id }));
-          Object.assign(q, { x: p.x, y: p.y, z: p.z, tx: p.x, ty: p.y, tz: p.z, yaw: p.yaw, pitch: p.pitch, crouch: p.crouch, hp: p.hp, alive: p.alive, wid: (p.inv[p.cur] || {}).wid || 'knife', c4: !!p.inv[5], planting: p.planting ? p.planting / BOMB.plant : 0, team: p.team, money: p.money, scale: p.scale || 1 });
+          Object.assign(q, { x: p.x, y: p.y, z: p.z, tx: p.x, ty: p.y, tz: p.z, yaw: p.yaw, pitch: p.pitch, crouch: p.crouch, hp: p.hp, alive: p.alive, wid: (p.inv[p.cur] || {}).wid || 'knife', c4: !!p.inv[5], planting: p.planting ? p.planting / BOMB.plant : 0, team: p.team, money: p.money, scale: p.scale || 1, armor: p.armor, helmet: !!p.helmet });
         }
         for (const id of [...st.players.keys()]) if (!match.players.has(id)) st.players.delete(id);
         if (st.roster.size !== match.players.size || (match.rosterVer || 0) !== hostRosterVer || [...match.players.values()].some((p) => (st.roster.get(p.id) || {}).team !== p.team)) { hostRosterVer = match.rosterVer || 0; setRoster([...match.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: ((p.loadout || {})[p.team] || {}).att || null, char: p.squad ? p.char : null, boss: p.boss ? p.bossKey || 'ballin' : null, look: p.lookAs || null, scale: p.scale || 1 }))); }
@@ -1330,7 +1376,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (me.unscopeAfterShot && me.cd > 0) { me.scoped = 0; me.unscopeAfterShot = false; me.rescope = true; }
       if (me.rescope && me.cd <= 0) { me.rescope = false; }
       me.flash = Math.max(0, me.flash - dt);
-      me.inspect = Math.max(0, me.inspect - dt); me.knifeSwing = Math.max(0, me.knifeSwing - dt);
+      me.inspect = Math.max(0, me.inspect - dt); me.knifeSwing = Math.max(0, me.knifeSwing - dt); me.throwK = Math.max(0, (me.throwK || 0) - dt); slashT = Math.max(0, slashT - dt); slashMesh.material.opacity = slashT > 0 ? Math.sin(slashT / 0.16 * Math.PI) * 0.55 : 0; slashMesh.visible = slashT > 0;
       if (flashT > 0) { flashT -= dt; if (flashT <= 0 && vm && vm.userData.flash) vm.userData.flash.visible = false; }
       if (!me.alive && (pressed.has('M0') || E.input.touch.tapped.has('fire'))) specNext = true;
       pressed.clear(); E.input.touch.tapped.clear();   // a tap counts once, however many logic steps this frame runs
@@ -1389,6 +1435,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
         if (r.soldier && p.rl && !r.wasRl) soldierEvent(r, 'reload'); r.wasRl = !!p.rl;
+        if (r.soldier) setGear(r, p.armor || 0, p.helmet);
         if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0, prone: p.prone || 0 });
         else posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
         if (!r.soldier && r.torso && p.lean) r.torso.rotation.z -= p.lean * 0.35;
@@ -1405,10 +1452,10 @@ export default function start({ cfg, E, N, smoke }) {
       const selfRig = me.emote || (cine && !povShot) || rigs.has(myId) ? rigFor(myId) : null;
       if (selfRig) {
         selfRig.g.visible = (!!me.emote || (!!cine && !povShot)) && me.alive; if (selfRig.blob) selfRig.blob.visible = selfRig.g.visible;
-        if (cine && !povShot && !me.emote && me.alive) { selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw; setTpGun(selfRig, (curWeapon() || {}).id || 'knife', null); if (selfRig.soldier) poseSoldier(selfRig, { dt, vx: 0, vz: 0, vy: 0, yaw: me.yaw, crouch: 0, pitch: 0 }); else posePlayer(selfRig, { speed: 0, t: selfRig.t, crouch: 0, pitch: 0 }); }
+        if (cine && !povShot && !me.emote && me.alive) { selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw; setTpGun(selfRig, (curWeapon() || {}).id || 'knife', null); if (selfRig.soldier) setGear(selfRig, me.armor || 0, me.helmet); if (selfRig.soldier) poseSoldier(selfRig, { dt, vx: 0, vz: 0, vy: 0, yaw: me.yaw, crouch: 0, pitch: 0 }); else posePlayer(selfRig, { speed: 0, t: selfRig.t, crouch: 0, pitch: 0 }); }
         if (me.emote) {
           selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw;
-          if (selfRig.soldier) poseSoldier(selfRig, { dt, yaw: me.yaw, emote: me.emote }); else posePlayer(selfRig, { t: selfRig.t, emote: me.emote });
+          if (selfRig.soldier) setGear(selfRig, me.armor || 0, me.helmet); if (selfRig.soldier) poseSoldier(selfRig, { dt, yaw: me.yaw, emote: me.emote }); else posePlayer(selfRig, { t: selfRig.t, emote: me.emote });
           const k = Math.min(1, me.emote.t * 2.5, (me.emote.dur - me.emote.t) * 2.5), ang = me.yaw + 0.5;   // out in front, slightly to the side: you see your own face
           let dist = 3.2 * k;
           const o = { x: me.x, y: me.y + 1.5, z: me.z }, d = { x: -Math.sin(ang), y: 0.18, z: -Math.cos(ang) }, L = Math.hypot(d.x, d.y, d.z); d.x /= L; d.y /= L; d.z /= L;
@@ -1435,8 +1482,23 @@ export default function start({ cfg, E, N, smoke }) {
         const base = vm.userData.base, sp = speedOf(me);
         const animReload = !!(vm.userData.leftArm && (vm.userData.magGroup || (w && w.shellReload)));
         const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
-        vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.12 : 0));
-        vm.rotation.set(rel * 2 + camKick * 2 + (me.knifeSwing > 0 ? -Math.sin(me.knifeSwing / 0.25 * Math.PI) * 0.6 : 0), (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
+        vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4);
+        vm.rotation.set(rel * 2 + camKick * 2, (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
+        if (me.throwK > 0) {   // a throw: wind up, then release; the grenade leaves the hand at the snap
+          const tk = 1 - me.throwK / 0.42, wind = Math.sin(Math.min(1, tk / 0.35) * Math.PI / 2) * (1 - sm(0.35, 0.55, tk)), go = sm(0.35, 0.6, tk) * (1 - sm(0.75, 1, tk));
+          const S = me.throwStyle;
+          if (S === 'over') { vm.position.y += wind * 0.12 - go * 0.1; vm.position.z += wind * 0.12 - go * 0.25; vm.rotation.x += wind * 0.9 - go * 1.2; }
+          else if (S === 'hurl') { vm.position.y += wind * 0.15 - go * 0.08; vm.position.x += wind * 0.06; vm.position.z += wind * 0.16 - go * 0.3; vm.rotation.x += wind * 1.1 - go * 1.4; vm.rotation.z += go * 0.6; }   // a bottle: a big overhand heave
+          else if (S === 'flick') { vm.position.x += wind * 0.1 - go * 0.12; vm.position.z -= go * 0.2; vm.rotation.y += wind * 0.8 - go * 0.9; vm.rotation.z -= go * 0.5; }   // a quick sidearm pop around the corner
+          else if (S === 'lob') { vm.position.y -= wind * 0.08 - go * 0.14; vm.position.z += wind * 0.06 - go * 0.22; vm.rotation.x -= wind * 0.5 - go * 0.9; }   // a smoke goes up in a high arc
+          else { vm.position.y -= wind * 0.14 - go * 0.06; vm.position.z += wind * 0.05 - go * 0.2; vm.rotation.x -= wind * 0.7 - go * 0.6; }   // underhand
+          vm.visible = vm.visible && tk < 0.55;
+        }
+        if (me.knifeSwing > 0) {   // the blade: a slash sweeps across from one side to the other, a stab lunges straight in
+          const kd = me.knifeHeavy ? 0.36 : 0.25, kp = 1 - me.knifeSwing / kd, ka = Math.sin(kp * Math.PI), dir = me.knifeDir || 1;
+          if (me.knifeHeavy) { vm.position.z -= ka * 0.15; vm.position.y += ka * 0.03; vm.rotation.x -= ka * 0.22; }
+          else { const sw = kp * 2 - 1; vm.position.x += dir * sw * 0.17 * ka; vm.position.z -= ka * 0.09; vm.rotation.y += dir * sw * 0.9 * ka; vm.rotation.z += dir * 0.75 * ka; vm.rotation.x -= ka * 0.2; }
+        }
         me.sprintK = (me.sprintK || 0) + ((me.sprinting ? 1 : 0) - (me.sprintK || 0)) * Math.min(1, dt * 10);
         { // the feel of holding a real gun: it lags behind your aim, breathes, tilts as you strafe, dips when you land,
           // and each shot kicks it back and up with a little roll before it settles
@@ -1589,6 +1651,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

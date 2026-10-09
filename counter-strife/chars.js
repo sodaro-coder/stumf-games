@@ -143,10 +143,15 @@ export function makeSoldier(look, team, hq = true) {
   const tpGun = new THREE.Group(); g.add(tpGun);
   const head = new THREE.Group(); g.add(head);
   hat(head, L);
-  const r = { soldier: true, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, tpKey: '', over: null, t: 0, dieDone: false };
+  // the gear you bought, worn on top of the uniform: a plate carrier with its pouches, a ballistic helmet
+  const chest = new THREE.Group(); chest.visible = false; g.add(chest);
+  const vest = gearMesh(vestParts(team)); chest.add(vest);
+  const helm = gearMesh(helmetParts(team)); helm.visible = false; head.add(helm);
+  const r = { soldier: true, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, tpKey: '', over: null, t: 0, dieDone: false };
   // where the head and hand sit relative to their bones at rest: lets props follow the animated bones
   g.updateMatrixWorld(true);
   r.headCorr = byName.Head.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
+  r.chestCorr = byName.Spine2.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
   return r;
 }
 // swap the looping base animation with a short cross-fade
@@ -281,6 +286,10 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
   }
   if (r.reloadT > 0) r.reloadT -= dt;
   // head props follow the head bone
+  if (B.Spine2 && r.chest.visible) {   // the vest rides the upper spine
+    B.Spine2.getWorldPosition(_v); r.g.worldToLocal(_v); r.chest.position.copy(_v);
+    B.Spine2.getWorldQuaternion(_q).multiply(r.chestCorr); r.g.getWorldQuaternion(_q2).invert(); r.chest.quaternion.copy(_q2.multiply(_q));
+  }
   if (B.Head && r.head.children.length) {
     B.Head.getWorldPosition(_v); r.g.worldToLocal(_v); r.head.position.copy(_v).add(new THREE.Vector3(0, -0.12, 0));
     B.Head.getWorldQuaternion(_q).multiply(r.headCorr); r.g.getWorldQuaternion(_q2).invert(); r.head.quaternion.copy(_q2.multiply(_q));
@@ -414,4 +423,62 @@ function betaTag() {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.085), betaMat);
   m.position.set(0, 0.35, -0.098); m.rotation.order = 'YXZ'; m.rotation.set(-0.235, Math.PI, 0);   // faces forward (-z), leaning back with the cone
   return m;
+}
+
+// ---- bought gear: kevlar (a plate carrier) and a helmet, shown only while the player has them ----
+export function setGear(r, armor, helmet) { if (!r || !r.chest) return; r.chest.visible = armor > 0; r.helm.visible = !!helmet && armor > 0; }
+let gearMat = null;
+function rbox(w, h, d, rad = 0.012) {   // a box with rounded edges (pads and plates aren't sharp)
+  const sh = new THREE.Shape(), x = w / 2 - rad, y = h / 2 - rad;
+  sh.moveTo(-x, -h / 2); sh.lineTo(x, -h / 2); sh.quadraticCurveTo(w / 2, -h / 2, w / 2, -y); sh.lineTo(w / 2, y); sh.quadraticCurveTo(w / 2, h / 2, x, h / 2);
+  sh.lineTo(-x, h / 2); sh.quadraticCurveTo(-w / 2, h / 2, -w / 2, y); sh.lineTo(-w / 2, -y); sh.quadraticCurveTo(-w / 2, -h / 2, -x, -h / 2);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.002, d - rad * 2), bevelEnabled: true, bevelThickness: rad, bevelSize: rad * 0.8, bevelSegments: 2, curveSegments: 3 });
+  g.translate(0, 0, -(d - rad * 2) / 2); return g;
+}
+function gearMesh(parts) {
+  if (!gearMat) gearMat = litPatch(new THREE.MeshLambertMaterial({ vertexColors: true }), 'dyn');
+  let n = 0; const flat = parts.map((p) => (p.index ? p.toNonIndexed() : p)); for (const p of flat) n += p.attributes.position.count;
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
+  for (const p of flat) { if (!p.attributes.normal) p.computeVertexNormals(); const k = p.attributes.position.count; pos.set(p.attributes.position.array, o * 3); nor.set(p.attributes.normal.array, o * 3); col.set(p.attributes.color.array, o * 3); o += k; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const m = new THREE.Mesh(g, gearMat); m.castShadow = true; return m;
+}
+function painted(geo, col, x, y, z, rx = 0, ry = 0, rz = 0) {
+  geo.applyMatrix4(_m.compose(_v.set(x, y, z), _q.setFromEuler(new THREE.Euler(rx, ry, rz)), _s.set(1, 1, 1)));
+  const n = geo.attributes.position.count, c = new THREE.Color(col), arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { const k = 0.92 + ((i * 7919) % 17) / 170; arr.set([c.r * k, c.g * k, c.b * k], i * 3); }   // a little unevenness: worn fabric, not plastic
+  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3)); return geo;
+}
+const GEAR = { T: { cloth: '#7d6d50', dark: '#4e4433', strap: '#3a3226', metal: '#2a2a28' }, CT: { cloth: '#3f4a3a', dark: '#2a3127', strap: '#22281f', metal: '#1e2124' } };
+// local frame: the upper spine bone, rig facing -z; y up
+function vestParts(team) {
+  const C = GEAR[team] || GEAR.CT, P = [];
+  P.push(painted(rbox(0.3, 0.33, 0.05, 0.018), C.cloth, 0, 0.0, -0.14));            // front plate bag
+  P.push(painted(rbox(0.3, 0.34, 0.05, 0.018), C.cloth, 0, 0.0, 0.135));            // back plate bag
+  for (const sd of [-1, 1]) {
+    P.push(painted(rbox(0.05, 0.19, 0.24, 0.012), C.dark, sd * 0.165, -0.06, 0));   // cummerbund
+    P.push(painted(rbox(0.065, 0.025, 0.29, 0.01), C.strap, sd * 0.1, 0.17, 0));    // shoulder straps
+    P.push(painted(rbox(0.07, 0.06, 0.05, 0.01), C.dark, sd * 0.13, 0.14, -0.15));  // shoulder pads
+  }
+  for (const x of [-0.085, 0, 0.085]) {                                              // three rifle mags up front
+    P.push(painted(rbox(0.075, 0.115, 0.055, 0.012), C.cloth, x, -0.09, -0.185));
+    P.push(painted(rbox(0.078, 0.025, 0.06, 0.008), C.dark, x, -0.025, -0.186));     // the flap
+  }
+  P.push(painted(rbox(0.2, 0.07, 0.03, 0.01), C.dark, 0, 0.085, -0.172));            // admin pouch
+  for (let k = 0; k < 4; k++) P.push(painted(rbox(0.27, 0.008, 0.006, 0.002), C.strap, 0, -0.14 + k * 0.03, -0.167 + (k < 3 ? -0.0 : 0)));   // MOLLE webbing rows
+  P.push(painted(rbox(0.07, 0.15, 0.05, 0.012), C.dark, -0.09, 0.02, 0.18));         // radio on the back
+  P.push(painted(new THREE.CylinderGeometry(0.005, 0.005, 0.22, 5), C.metal, -0.1, 0.17, 0.19));   // its antenna
+  P.push(painted(rbox(0.11, 0.08, 0.04, 0.01), C.cloth, 0.07, -0.08, 0.175));        // hydration / GP pouch
+  return P;
+}
+// local frame: the head bone, the same as the joke hats
+function helmetParts(team) {
+  const C = GEAR[team] || GEAR.CT, P = [];
+  P.push(painted(new THREE.SphereGeometry(0.162, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.47), C.cloth, 0, 0.165, 0.012));   // the shell (high cut over the ears)
+  P.push(painted(new THREE.TorusGeometry(0.16, 0.009, 5, 28), C.dark, 0, 0.17, 0.012, Math.PI / 2));                      // edge trim
+  for (const sd of [-1, 1]) P.push(painted(rbox(0.012, 0.035, 0.12, 0.004), C.metal, sd * 0.158, 0.2, 0.01, 0, 0, sd * 0.15));   // side rails
+  P.push(painted(rbox(0.05, 0.035, 0.02, 0.006), C.metal, 0, 0.28, -0.135, -0.5));   // NVG shroud
+  P.push(painted(rbox(0.07, 0.03, 0.03, 0.006), C.strap, 0, 0.27, 0.15, 0.4));       // counterweight pouch
+  P.push(painted(new THREE.TorusGeometry(0.118, 0.006, 4, 16, Math.PI), C.strap, 0, 0.12, 0.0, 0, Math.PI / 2, Math.PI));   // chin strap
+  return P;
 }

@@ -54,7 +54,7 @@ export const WEAPONS = [
   W('g3sg1', 'G3-Autonoob', 'sniper', 'T', 5000, 80, 0.825, 240, 20, 90, 4.7, 215, 300, { rm: 0.98, pen: 2.5, auto: true, zoom: [40, 15], inacc: [0.04, 0.15, 0.3], scopedInacc: 0.002, kick: 0.03 }),
   W('scar20', 'SCAR-20 Autonoob', 'sniper', 'CT', 5000, 80, 0.825, 240, 20, 90, 3.1, 215, 300, { rm: 0.98, pen: 2.5, auto: true, zoom: [40, 15], inacc: [0.04, 0.15, 0.3], scopedInacc: 0.002, kick: 0.03 }),
   // knife, taser
-  W('knife', 'Knife', 'knife', 'both', 0, 40, 0.85, 150, 0, 0, 0, 250, 1500, { range: 1.6, heavy: 65, backstab: [90, 180] }),
+  W('knife', 'Knife', 'knife', 'both', 0, 40, 0.85, 150, 0, 0, 0, 250, 1500, { range: 2.3, heavy: 65, backstab: [90, 180] }),
   W('zeus', 'Zap-27', 'zeus', 'both', 200, 500, 1.0, 30, 1, 0, 0, 220, 0, { range: 4.5, inacc: [0.01, 0.02, 0.05], kick: 0.02 }),
 ];
 
