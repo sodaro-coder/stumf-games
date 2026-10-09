@@ -165,6 +165,57 @@ function pump() {
   else pumping = false;
 }
 
+// ---- cases: a hard-shell weapon case in the case's own colours, rendered once in the studio ----------------------------
+function rshape(w, h, r) {
+  const s = new THREE.Shape(), x = w / 2 - r, y = h / 2 - r;
+  s.moveTo(-x, -h / 2); s.lineTo(x, -h / 2); s.quadraticCurveTo(w / 2, -h / 2, w / 2, -y); s.lineTo(w / 2, y); s.quadraticCurveTo(w / 2, h / 2, x, h / 2);
+  s.lineTo(-x, h / 2); s.quadraticCurveTo(-w / 2, h / 2, -w / 2, y); s.lineTo(-w / 2, -y); s.quadraticCurveTo(-w / 2, -h / 2, -x, -h / 2); return s;
+}
+function slab(w, h, d, r, bev = 0.012) {   // a rounded, bevelled slab, d deep, centred
+  const g = new THREE.ExtrudeGeometry(rshape(w, h, r), { depth: d - bev * 2, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 3, curveSegments: 8 });
+  g.translate(0, 0, -(d - bev * 2) / 2); return g;
+}
+function caseModel(crate) {
+  const cols = [...new Set(crate.items.filter((i) => i.paint).map((i) => i.paint.c[0]))];
+  const a = new THREE.Color(cols[0] || '#3a4656'), b = new THREE.Color(cols[1] || '#20262e'), acc = cols[2] || '#f2a33a';
+  const shellC = a.clone().lerp(new THREE.Color('#2a2e34'), 0.45), lidC = shellC.clone().multiplyScalar(1.08);
+  const plastic = (c, r = 0.42) => new THREE.MeshPhysicalMaterial({ color: c, roughness: r, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.35 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xd8dce2, roughness: 0.18, metalness: 1 });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.85 });
+  const g = new THREE.Group(), W = 1.0, H = 0.42;
+  const base = new THREE.Mesh(slab(W, H, 0.09, 0.06), plastic(shellC)); base.position.z = -0.05; g.add(base);
+  const lid = new THREE.Mesh(slab(W, H, 0.08, 0.06), plastic(lidC)); lid.position.z = 0.045; g.add(lid);
+  const seam = new THREE.Mesh(slab(W + 0.012, H + 0.012, 0.014, 0.065, 0.004), rubber); seam.position.z = -0.003; g.add(seam);   // the gasket line
+  for (const y of [-0.12, 0.0, 0.12]) { const rib = new THREE.Mesh(slab(W - 0.16, 0.035, 0.022, 0.015, 0.006), plastic(lidC.clone().multiplyScalar(0.92))); rib.position.set(0, y, 0.088); g.add(rib); }   // moulded ribs
+  for (const x of [-0.3, 0.3]) {   // chrome draw latches on the front edge
+    const l = new THREE.Mesh(slab(0.075, 0.05, 0.03, 0.01, 0.005), chrome); l.position.set(x, -H / 2 - 0.012, 0.0); g.add(l);
+    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.1, 12), chrome); hinge.rotation.z = Math.PI / 2; hinge.position.set(x, H / 2 + 0.004, 0); g.add(hinge);
+  }
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.016, 10, 24, Math.PI), rubber); handle.position.set(0, -H / 2 - 0.02, 0); handle.rotation.set(0, 0, Math.PI); g.add(handle);
+  // the label: the case's name over a band in its colours
+  const lc = document.createElement('canvas'); lc.width = 512; lc.height = 128; const x = lc.getContext('2d');
+  const gr = x.createLinearGradient(0, 0, 512, 0); gr.addColorStop(0, '#' + a.getHexString()); gr.addColorStop(1, '#' + b.getHexString());
+  x.fillStyle = '#111418'; x.fillRect(0, 0, 512, 128); x.fillStyle = gr; x.fillRect(0, 0, 512, 22); x.fillStyle = acc; x.fillRect(0, 22, 512, 6);
+  x.fillStyle = '#f2f2f2'; x.font = 'bold 46px system-ui, sans-serif'; x.textAlign = 'center'; x.fillText(crate.name.toUpperCase(), 256, 86, 480);
+  x.fillStyle = 'rgba(255,255,255,.45)'; x.font = '18px system-ui, sans-serif'; x.fillText('KYS:GO  WEAPON CASE', 256, 116);
+  const lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace; lt.anisotropy = 4;
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.125), new THREE.MeshStandardMaterial({ map: lt, roughness: 0.6 })); label.position.set(0, -0.06, 0.1); g.add(label);
+  return g;
+}
+const caseCache = new Map();
+export function caseShot(crate) {
+  if (caseCache.has(crate.id)) return caseCache.get(crate.id);
+  if (!init()) return null;
+  const o = caseModel(crate), holder = new THREE.Group(); holder.add(o); S.sc.add(holder);
+  o.rotation.set(-1.05, 0, 0); holder.rotation.set(0, -0.42, 0);   // lying on its back, three-quarter on, lid up to the light
+  R.toneMappingExposure = 0.92; R.setClearColor(0x000000, 0);
+  cam.position.set(0, 0.55, 1.6); cam.lookAt(0, -0.02, 0);
+  studioRender(R, S.sc, cam);
+  const url = R.domElement.toDataURL('image/png');
+  S.sc.remove(holder); o.traverse((m) => { if (m.geometry) m.geometry.dispose(); if (m.material) { if (m.material.map) m.material.map.dispose(); m.material.dispose(); } });
+  caseCache.set(crate.id, url); return url;
+}
+
 // ---- the inspect viewer (click an item) ----------------------------------------------------------------------------------
 // Live 3D on the modal's canvas: guns turn slowly and can be spun round by dragging (see both sides, the finish
 // catching the soft boxes); outfits stand idling with their gun and turn on drag; emotes play on a loop. Mythics glow.

@@ -691,10 +691,37 @@ R('r8', (G) => { pistol(G, { slide: [-0.08, -0.01], sh: 0.04 }); G('steel', tube
 R('zeus', (G) => { G('body', ext([[-0.06, -0.02], [0.1, -0.02], [0.12, 0.02], [-0.05, 0.03]], 0.035, 0.006)); G('dark', ext([[-0.05, -0.02], [-0.02, -0.02], [-0.03, -0.1], [-0.07, -0.1]], 0.03)); G('metal', blk(0.1, 0.13, -0.01, 0.015, 0.025)); return { grip: [-0.045, -0.06], fore: null }; });
 const DEFAULT_BODY = { ak47: 'metal', galil: 'dark', awp: 'green', aug: 'olive', famas: 'dark', deagle: 'steel', dualies: 'steel', fiveseven: 'dark', zeus: 'yellow', sawedoff: 'metal', p90: 'dark', r8: 'steel', ssg08: 'dark', mag7: 'dark' };
 
-// first-person arms: a gloved hand at each hold point and a sleeve running back out of view
+// first-person arms: the human agent's own arm (charbuild.py: glove, bare forearm, rolled sleeve, fingers closed
+// round a grip), placed at each hold point; a plain capsule hand until that has loaded (or without it)
+let VMH = null;
+if (typeof fetch === 'function') fetch('vmhand.json').then((r) => (r.ok ? r.json() : null)).then((d) => {
+  if (!d) return;
+  const pos = new Float32Array(d.pos), nor = new Float32Array(d.nor), mat = d.mat, idx = d.idx;
+  VMH = [0, 1, 2].map((k) => {   // one indexed geometry per material: glove, skin, sleeve
+    const tris = []; for (let i = 0; i < idx.length; i += 3) if (mat[idx[i]] === k) tris.push(idx[i], idx[i + 1], idx[i + 2]);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setIndex(tris);
+    return g;
+  });
+}).catch(() => {});
+const SKIN_VM = '#c08c6a';
+const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _az = new THREE.Vector3(), _am = new THREE.Matrix4();
 function vmArm(parts, hand, dir, sleeve, glove, len = 0.55, two = false) {
   const d = new THREE.Vector3(...dir).normalize(), h = new THREE.Vector3(...hand);
   const at = (k) => { const p = h.clone().addScaledVector(d, k); return [p.x, p.y, p.z]; };
+  if (VMH) {
+    const left = d.x < 0;
+    _ax.copy(d);
+    _ay.set(left ? 0.9 : -1, left ? 0.6 : 0.25, 0).addScaledVector(_ax, -(left ? 0.9 * d.x + 0.6 * d.y : -d.x + 0.25 * d.y)).normalize();   // the palm: inwards onto the grip, the support hand from below
+    _az.crossVectors(_ax, _ay); if (left) _az.negate();   // the left arm is the right one mirrored
+    _am.makeBasis(_ax, _ay, _az).setPosition(h);
+    VMH.forEach((g0, k) => {
+      const g = g0.clone().applyMatrix4(_am);
+      if (left) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; } g.computeVertexNormals(); }
+      parts.push([g, k === 0 ? glove : k === 1 ? SKIN_VM : sleeve]);
+    });
+    parts.push([span(CYL(0.058, 0.066, len, 10), at(0.36), at(0.36 + len)), sleeve]);   // the shirt sleeve on up the arm, out of view
+    return;
+  }
   parts.push([span(CAP(0.034, 0.05, 8), at(-0.01), at(0.04)), glove]);                    // hand
   parts.push([place(CAP(0.02, 0.06, 6), [h.x, h.y - 0.01, h.z], [0, 0, Math.PI / 2]), glove]);   // fingers wrapped over
   parts.push([span(CYL(0.04, 0.042, 0.05, 10), at(0.05), at(0.1)), glove]);               // cuff

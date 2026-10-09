@@ -6,7 +6,7 @@ import { WEAPONS, W_BY_ID, G_BY_ID, GEAR_BY_ID, BUY_MENU, MODES, BOT_LEVELS, RAD
 import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_ID, ITEM_BY_ID, PASS, PASS_TIERS, EMOTE_BY_ID } from './skins.js';
 import { MAPS } from './maps.js';
 import { CHAPTERS, MISSIONS, CHARACTERS, SQUAD, STORY_DIFF } from './story.js';
-import { thumb, stage, viewer } from './thumbs.js';
+import { thumb, stage, viewer, caseShot } from './thumbs.js';
 import { cardInto, cardImage, gradeBadge } from './cards.js';
 import * as WAL from './wallet.js';
 import { VOICE_PACKS } from './voices.js';
@@ -320,6 +320,9 @@ function drawCase(c, crate) {
   g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(x, y, w, 4); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(x, y + h * 0.42, w, h * 0.16);
   g.fillStyle = cols[2] || '#f2a33a'; g.fillRect(x + w * 0.42, y + h * 0.36, w * 0.16, h * 0.28);
   g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 2; g.strokeRect(x, y, w, h);
+  // then the real one: a 3D hard case in the studio (drawn once per case, cached)
+  setTimeout(() => { let url = null; try { url = caseShot(crate); } catch (e) { url = null; } if (!url || !c.isConnected) return;
+    const im = new Image(); im.onload = () => { g.clearRect(0, 0, W, H); const s = Math.min(W / im.width, H / im.height) * 1.15, iw = im.width * s, ih = im.height * s; g.drawImage(im, (W - iw) / 2, (H - ih) / 2, iw, ih); }; im.src = url; }, 40);
 }
 
 // ======================================================================================================================

@@ -260,6 +260,16 @@ function turnWorld(b, axis, ang) {
   b.parent.getWorldQuaternion(_q); _ax.copy(axis).applyQuaternion(_q.invert()).normalize();
   b.quaternion.premultiply(_q2.setFromAxisAngle(_ax, ang)); b.updateMatrixWorld(true);
 }
+// close a hand's fingers: each joint turns about the axis across the knuckles, towards the palm
+const _cA = new THREE.Vector3(), _cB = new THREE.Vector3(), _cC = new THREE.Vector3(), _cN = new THREE.Vector3();
+function curlHand(r, side, amt) {
+  const B = r.bones, hand = B[side + 'Hand'], mid = B[side + 'HandMiddle1'], th = B[side + 'HandThumb1'], idx = B[side + 'HandIndex1'], pin = B[side + 'HandPinky1'];
+  if (!hand || !mid || !idx || !pin || !th) return;
+  hand.getWorldPosition(_cA); mid.getWorldPosition(_cB); const f = _cB.sub(_cA).normalize();       // along the fingers
+  idx.getWorldPosition(_cC); pin.getWorldPosition(_cN); const across = _cC.sub(_cN).normalize();     // index to pinky
+  const axis = _cN.crossVectors(f, across).cross(f).normalize().cross(f).normalize();               // across the knuckles, square to the fingers
+  for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b) turnWorld(b, axis, amt * (side === 'Left' ? -1 : 1) * (k === 1 ? 0.9 : 1.1)); }
+}
 // per frame: pick the base animation from how the player moves, then aim, gun and props
 export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
   r.t += dt;
@@ -380,6 +390,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
     }
   }
+  if (r.human && !r.dead && !emote && (tg.userData || {}).cat !== 'knife') curlHand(r, 'Left', 0.55);   // the support hand closes round the handguard
   if (r.reloadT > 0) r.reloadT -= dt;
   // head props follow the head bone
   if (B.Spine2 && r.chest.visible) {   // the vest rides the upper spine
