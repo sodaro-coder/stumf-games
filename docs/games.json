@@ -1,6 +1,6 @@
 [
  {
-  "slug": "counter-strife",
+  "slug": "kysgo",
   "title": "KYS:GO",
   "tagline": "Tactical bomb defusal, crude skins, cursed knives. Free.",
   "kit": "tactical3d"
@@ -28,10 +28,5 @@
   "title": "Turbo Loop",
   "tagline": "Arcade racer with drift and boost.",
   "kit": "racer3d"
- },
- {
-  "slug": "docs",
-  "title": "Docs",
-  "tagline": ""
  }
 ]

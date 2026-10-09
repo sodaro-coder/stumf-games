@@ -1,28 +1,4 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' blob: data:; connect-src 'self' wss: https:; frame-src 'none'; form-action 'none'; base-uri 'none'"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>Loading…</title>
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;font-family:system-ui,sans-serif}canvas{display:block}
-#bdErr{position:fixed;left:8px;bottom:8px;right:8px;color:#f88;font:12px monospace;z-index:999;white-space:pre-wrap;pointer-events:none}</style>
-</head><body>
-<div id="bdErr"></div>
-<script>
-// any crash is shown on screen and kept for STUMF's smoke test (document.title starts with ERR)
-addEventListener('error', (e) => { document.title = 'ERR ' + e.message; document.getElementById('bdErr').textContent += e.message + '\n'; });
-addEventListener('unhandledrejection', (e) => { document.title = 'ERR ' + (e.reason && e.reason.message || e.reason); });
-</script>
-<script type="module">
-import * as E from '../sdk/engine.js';
-import * as N from '../sdk/net.js';
-import start from './game.js';
-const cfg = await (await fetch('./config.json')).json();
-document.title = cfg.title;
-if (cfg.menu) {  // games with their own menus (and lobby) take over from here
-  start({ cfg, E, N, smoke: new URLSearchParams(location.search).has('smoke') });
-} else if (new URLSearchParams(location.search).has('smoke')) {  // STUMF's headless test: straight into a solo game
-  start({ cfg, E, N, session: null, name: 'Test', solo: true });
-} else {
-  N.lobbyUI(cfg.id, cfg.title, { maxPlayers: cfg.maxPlayers || 8, onStart: (session, info) => start({ cfg, E, N, session, ...info }) });
-}
-</script>
-</body></html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Moved</title>
+<meta name="robots" content="noindex"><link rel="canonical" href="../kysgo/">
+<script>location.replace('../kysgo/' + location.search + location.hash);</script>
+<meta http-equiv="refresh" content="0; url=../kysgo/"></head><body><a href="../kysgo/">This game moved: continue</a></body></html>
