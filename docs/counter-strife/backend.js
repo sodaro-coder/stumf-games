@@ -110,6 +110,13 @@ export class Profile {
   async houseBuy(id) { await this.rpc('cs_ai_buy', { p_id: id }); await this.sync(); }
   // NFTs: the PIN-locked wallet box is stored with the account (only ever the encrypted key), mint requests, admin settings
   async saveWallet(box) { await this.rpc('cs_wallet_save', { p_address: box.address, p_box: box }); this.wallet = { address: box.address, box }; this.changed(); }
+  // the card picture the NFT will show goes up first (public bucket "cards", into the player's own folder)
+  async uploadCard(itemUid, blob) {
+    const b = this.cfg.backend, me = this.sess && this.sess.user && this.sess.user.id; if (!me) throw new Error('sign in first');
+    const r = await fetch(b.url.replace(/\/$/, '') + `/storage/v1/object/cards/${me}/${encodeURIComponent(itemUid)}.png`, { method: 'POST', body: blob,
+      headers: { apikey: b.anonKey, Authorization: 'Bearer ' + this.sess.access_token, 'Content-Type': 'image/png', 'x-upsert': 'true' } });
+    if (!r.ok) throw new Error('Card upload failed (' + r.status + ')');
+  }
   async mintNft(uid) { const r = await this.rpc('cs_nft_request', { p_uid: uid }); await this.sync(); return r; }
   adminNftCfg(c) { return this.rpc('cs_admin_nft_cfg', { p_rpc: c.rpc ?? null, p_trees: c.trees ?? null, p_canopy: c.canopy ?? null, p_on: c.on ?? null }); }
   poolStatus() { return this.signedIn ? this.rpc('cs_pool_status') : Promise.resolve(null); }

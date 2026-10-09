@@ -479,7 +479,11 @@ export class Menu {
     const mb = $('[data-mint]', m); if (mb) mb.onclick = async () => {
       if (!P.wallet) { this.h.toast('Create your wallet first: Profile > Wallet'); return; }
       if (!confirm(`Mint ${info.label} as an NFT to your wallet? It stays yours to equip, but from then on it trades on-chain, not in the game market.`)) return;
-      try { const r = await P.mintNft(uid); this.h.toast('NFT ' + (r.status || 'queued')); close(); this.render(); } catch (e) { this.h.toast(e.message); }
+      try {
+        const c = await cardImage(it); if (!c) throw new Error('Could not draw the card');
+        await P.uploadCard(uid, await new Promise((res) => c.toBlob(res, 'image/png')));
+        const r = await P.mintNft(uid); this.h.toast('NFT ' + (r.status || 'queued') + ': it lands in your wallet shortly'); close(); this.render();
+      } catch (e) { this.h.toast(e.message); }
     };
     $('[data-png]', m).onclick = async () => { const c = await cardImage(it); if (!c) return; const a = document.createElement('a'); a.download = info.label.replace(/[^\w-]+/g, '_') + '.png'; a.href = c.toDataURL('image/png'); a.click(); };
     m.onclick = (e) => { if (e.target === m) close(); };

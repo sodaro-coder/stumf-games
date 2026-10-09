@@ -1427,3 +1427,30 @@ drop trigger if exists cs_listings_nonft on cs_listings;
 create trigger cs_listings_nonft before insert on cs_listings for each row execute function cs_items_nolist();
 revoke all on function cs_wallet_save(text, jsonb), cs_nft_request(text), cs_admin_nft_cfg(text, text[], int, boolean) from public, anon;
 grant execute on function cs_wallet_save(text, jsonb), cs_nft_request(text), cs_admin_nft_cfg(text, text[], int, boolean) to authenticated;
+-- the minter (STUMF, through the database owner's access) reports results here; players can't call these
+create or replace function cs_minter_done(p_id bigint, p_asset text, p_sig text) returns void language plpgsql security definer set search_path = public as $$
+declare q cs_nft_queue%rowtype;
+begin
+  select * into q from cs_nft_queue where id = p_id for update; if q.id is null then return; end if;
+  perform set_config('cs.minter', 'on', true);
+  update cs_items set nft_asset = p_asset where uid = q.item_uid;
+  update cs_nft_queue set status = 'minted', asset_id = p_asset, sig = p_sig, minted = now(), error = null where id = p_id;
+end $$;
+-- the NFT is now held by this wallet on-chain: if it belongs to a game account, the item moves there
+create or replace function cs_minter_move(p_asset text, p_wallet text) returns void language plpgsql security definer set search_path = public as $$
+declare who uuid;
+begin
+  select uid into who from cs_wallets where address = p_wallet; if who is null then return; end if;
+  perform set_config('cs.minter', 'on', true);
+  update cs_items set owner = who where nft_asset = p_asset and owner <> who;
+end $$;
+revoke all on function cs_minter_done(bigint, text, text), cs_minter_move(text, text) from public, anon, authenticated;
+-- the card pictures NFTs show: a public bucket; each player may only write into their own folder
+do $$ begin
+  insert into storage.buckets (id, name, public) values ('cards', 'cards', true) on conflict (id) do nothing;
+  drop policy if exists cs_cards_in on storage.objects;
+  create policy cs_cards_in on storage.objects for insert to authenticated with check (bucket_id = 'cards' and (storage.foldername(name))[1] = auth.uid()::text);
+  drop policy if exists cs_cards_up on storage.objects;
+  create policy cs_cards_up on storage.objects for update to authenticated using (bucket_id = 'cards' and (storage.foldername(name))[1] = auth.uid()::text);
+exception when others then raise notice 'storage not available here (%): card images need Supabase Storage', sqlerrm;
+end $$;
