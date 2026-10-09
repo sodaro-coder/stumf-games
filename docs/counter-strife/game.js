@@ -10,6 +10,7 @@ import { PVSCuller, decodePVS, mapHash } from './pvs.js';
 import { PVS_DATA } from './pvs_data.js';
 import { MAPS } from './maps.js';
 import { mobileControls } from './mobile.js';
+import { gamepadControls } from './gamepad.js';
 import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf, recoilAt, nadeStep, speedOf, aimDir } from './sim.js';
 import { Bots, botNames } from './bots.js';
 import { Profile } from './backend.js';
@@ -211,7 +212,7 @@ export default function start({ cfg, E, N, smoke }) {
     g.fillStyle = '#ff6a4a'; g.font = 'bold 13px system-ui'; for (const [n, r] of Object.entries(B.sites)) g.fillText(n, ox + (r[0] + r[2]) / 2 * s - 4, oz + (r[1] + r[3]) / 2 * s + 4);
   };
   let menu = null;
-  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate); } }); menu.show(); };
+  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
   if (smoke) { let m = 'dust'; try { const q = new URLSearchParams(location.search).get('map'); if (MAPS[q]) m = q; } catch (e) { /* no page */ } runMatch({ mode: '5v5', map: m, bot: 'normal', host: true, solo: true, smoke: true }); }
   else showMenu();
 
@@ -238,7 +239,7 @@ export default function start({ cfg, E, N, smoke }) {
     // online match everyone is told it's on, in chat, when you join: no secret advantage over friends.
     const touchPlayer = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
     // recoil help: phones always (thumbs vs a mouse); on PC only the admin account, switched in Settings or the pause menu
-    const rhK = () => (touchPlayer || (S.recoilHelp && profile.admin) ? 0.4 : 1);
+    const rhK = () => (touchPlayer || (typeof pad !== 'undefined' && pad.active) || (S.recoilHelp && profile.admin) ? 0.4 : 1);
     const hello = { name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
 
     // ---- renderer & scene ----
@@ -587,6 +588,8 @@ export default function start({ cfg, E, N, smoke }) {
     // raw mouse where the browser supports it (no OS acceleration, lower latency), else the plain lock
     const lock = () => { try { let r = null; try { r = renderer.domElement.requestPointerLock({ unadjustedMovement: true }); } catch (e1) { r = null; } if (r && r.catch) r = r.catch(() => renderer.domElement.requestPointerLock()); else if (!r && !document.pointerLockElement) r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock(['ControlLeft', 'KeyW', 'Tab']).catch(() => {}); };
     let mob = null; try { if (matchMedia('(pointer: coarse)').matches) mob = mobileControls(E.input); } catch (e) { /* no touch */ }
+    // controllers (consoles, TVs, PCs with a pad): drive the match while playing, the menus otherwise
+    const pad = gamepadControls(E.input, { playing: () => started && !uiOpen && !ended && !hud.chatIn, sens: () => S.touchSens || 1 });
     if (mob) { hud.el.classList.add('touch'); mob.setSens(S.touchSens || 1); }
     let mobShown = true;
     const kd = (c) => keys.has(c), kp = (c) => pressed.has(c);
@@ -1033,7 +1036,7 @@ export default function start({ cfg, E, N, smoke }) {
       const sens = S.sens * 0.022 * Math.PI / 180 * zoomK;
       // phones: light aim assist (thumbs vs a mouse): the view slows over an enemy and, while you shoot or aim, eases onto them
       let assist = null;
-      if (touchPlayer && me.alive && !uiOpen && W) {
+      if ((touchPlayer || pad.active) && me.alive && !uiOpen && W) {   // aim assist: phones and controllers
         const eye = eyePos(me); let best = 0.13;
         for (const p of st.players.values()) {
           if (!p.alive || p.team === me.team || p.id === myId) continue;

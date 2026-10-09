@@ -60,7 +60,7 @@ export class GraphicsSettingsManager {
     const nav = env.navigator || (typeof navigator !== 'undefined' ? navigator : {});
     let q = setting;
     if (this.auto) {
-      const saved = +(store.get('cs:autoq') || 0), weak = (nav.hardwareConcurrency || 4) <= 4 || (nav.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS/i.test(nav.userAgent || '');
+      const saved = +(store.get('cs:autoq') || 0), weak = (nav.hardwareConcurrency || 4) <= 4 || (nav.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS|Xbox|PlayStation|Nintendo|SMART-TV|SmartTV|Tizen|Web0S|webOS|CrKey|AFT[A-Z]/i.test(nav.userAgent || '');   // phones, Chromebooks, console and TV browsers start on Low
       q = QSTEPS.includes(saved) && saved < 2 ? saved : weak ? 0.75 : 1;
     }
     this.floatRT = true; this.maxAniso = 16; this.listeners = [];

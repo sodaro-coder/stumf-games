@@ -73,7 +73,8 @@ const CSS = `
 .cs-hud.touch canvas.radar{width:100px;height:100px}.cs-hud.touch .tl{left:calc(env(safe-area-inset-left,0px) + 8px);top:6px}
 .cs-hud.touch .loc{font-size:11px}.cs-hud.touch .money{font-size:15px}.cs-hud.touch .buyic{display:none}.cs-hud.touch .slots{display:none}
 .cs-hud.touch .bl{left:50%;bottom:6px;transform:translateX(-80%);gap:6px}.cs-hud.touch .stat{font-size:17px;min-width:58px;padding:2px 8px 2px 6px}.cs-hud.touch .stat .ic{font-size:13px}
-.cs-hud.touch .br{right:auto;left:calc(50% + 74px);bottom:6px}.cs-hud.touch .ammo{font-size:22px}.cs-hud.touch .ammo small{font-size:12px}
+.cs-hud.touch .br{right:auto;left:calc(50% + 74px);bottom:6px}
+@media (max-height:520px){.cs-hud.touch .bl{top:38px;bottom:auto;left:50%;transform:translateX(-100%) translateX(-6px)}.cs-hud.touch .br{top:38px;bottom:auto;left:calc(50% + 6px)}}   /* phones in landscape: health and ammo under the score, clear of the thumb buttons */.cs-hud.touch .ammo{font-size:22px}.cs-hud.touch .ammo small{font-size:12px}
 .cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:4px;transform:translateX(-50%) scale(.72);transform-origin:top center}
 .cs-hud.touch .banner{font-size:18px;padding:6px 14px}.cs-hud.touch .center{top:16%}
 .cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px}
@@ -129,7 +130,7 @@ const MENU_CSS = `
 .cs-vig{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(12,14,18,.92) 0,rgba(12,14,18,.55) 38%,rgba(12,14,18,0) 62%),linear-gradient(0deg,rgba(12,14,18,.85),rgba(12,14,18,0) 30%)}
 .cs-topnav{position:absolute;left:0;right:0;top:0;height:60px;display:flex;align-items:stretch;background:linear-gradient(180deg,rgba(20,23,28,.97),rgba(20,23,28,.88));border-bottom:1px solid #2e343d;z-index:3}
 .cs-brand{display:flex;align-items:center;padding:0 22px;font:900 24px "Segoe UI",system-ui;letter-spacing:.12em;border-right:1px solid #2e343d}.cs-brand i{color:#f2a33a;font-style:normal}
-.cs-nav{display:flex}.cs-nav button{border:0;background:transparent;color:#8d97a5;padding:0 18px;font:700 12px "Segoe UI",system-ui;letter-spacing:.16em;text-transform:uppercase;display:flex;align-items:center;gap:8px;border-bottom:3px solid transparent}
+.cs-nav{display:flex;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}.cs-nav::-webkit-scrollbar{display:none}.cs-nav button{flex:none}.cs-nav button{border:0;background:transparent;color:#8d97a5;padding:0 18px;font:700 12px "Segoe UI",system-ui;letter-spacing:.16em;text-transform:uppercase;display:flex;align-items:center;gap:8px;border-bottom:3px solid transparent}
 .cs-nav button:hover{color:#e6eaf0;background:rgba(255,255,255,.03)}.cs-nav button.on{color:#fff;border-bottom-color:#f2a33a;background:rgba(242,163,58,.06)}
 .cs-nav svg{width:18px;height:18px;fill:currentColor}
 .cs-acct{margin-left:auto;display:flex;align-items:center;gap:10px;padding:0 14px}
