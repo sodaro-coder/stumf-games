@@ -109,7 +109,7 @@ export const BOSS = {
 //   revive { who }  a squadmate is down: hold USE on them while the enemy pushes
 //   carry { who, zone }  that character carries the objective to the zone; everyone else keeps them alive
 // Speakers: the four characters, 'boss', and the extra voices in SPEAKERS.
-export const SPEAKERS = { command: 'Colonel Brisket (Command)', tape: 'Dale (on tape)', doctor: 'Dr. Adebayo', nurse: 'Nurse Kowalczyk', chef: 'The Chili Chef', captain: 'The Captain', bouncer: 'The Bouncer', recruit: 'New Recruit', squad: 'Everyone' };
+export const SPEAKERS = { command: 'Colonel Brisket (Command)', tape: 'Dale (on tape)', doctor: 'Dr. Adebayo', nurse: 'Nurse Kowalczyk', chef: 'The Chili Chef', captain: 'The Captain', bouncer: 'The Bouncer', recruit: 'New Recruit', squad: 'Everyone', credits: '' };
 
 export const CHAPTERS = [
   { id: 'c1', map: 'range', name: 'Boot Camp Is For Losers', hub: 'Four strangers, one hot dog, and a leak somewhere above them.', missions: [
@@ -370,7 +370,7 @@ export const CHAPTERS = [
           scene: [['wiener', 'Forty-one.'], ['wiener', 'Forty-two.'], ['igor', '(fires one bullet into the sky)'], ['recruit', 'Sergeant? Is there anywhere to get an expresso on this base?'], ['ricky', 'It\'s espresso. There\'s no X. There has never been an X.'], ['ricky', '(tapping his chest twice) Mess hall. Come on. I\'ll show you.']] },
       ],
       cut: { in: [['wiener', 'New recruit arrives today. Ricky, you\'re on welcome duty.'], ['ricky', 'Yes, Sergeant.']],
-        out: [['squad', 'TAPES FROM MY POPS'], ['squad', 'for Dale']] } },
+        out: [['credits', 'TAPES FROM MY POPS'], ['credits', 'for Dale']] } },
   ] },
 ];
 export const MISSIONS = CHAPTERS.flatMap((c, ci) => c.missions.map((m, mi) => ({ ...m, chapter: c.id, chapterIndex: ci, chapterName: c.name, map: m.map || c.map, last: mi === c.missions.length - 1, first: mi === 0 }))).map((m, i) => ({ ...m, index: i }));

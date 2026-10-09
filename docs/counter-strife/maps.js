@@ -393,7 +393,7 @@ function barracks(night = false) {
   B.sign(52, 37.95, 3.0, Math.PI, 'ARMORY\nsign out every gun\n(Ricky: ONE glock)', 3.4, 1.1, '#2a2a2a', '#ffd23a');
   B.prop('lamp', 20, 17, {}).prop('lamp', 44, 37, {}).prop('lamp', 20, 37, {}).prop('lamp', 44, 17, {}).prop('tree', 4, 22, {}).prop('tree', 60, 32, {}).prop('tree', 26, 50, {})
     .prop('barrel', 25, 40, {}).prop('barrel', 47, 20, {}).prop('tv', 8, 9, {});
-  if (night) { B.sky = 0x0b1230; B.fog = 0x141c34; B.sunColor = 0x9fb4ff; B.amb = [0x3a4a78, 0x14121a]; B.sunDir = [0.3, 0.75, -0.4]; B.sunI = 0.9; B.ambI = 0.75; }
+  if (night) { B.sky = 0x0b1230; B.fog = 0x141c34; B.sunColor = 0x9fb4ff; B.amb = [0x3a4a78, 0x14121a]; B.sunDir = [0.3, 0.75, -0.4]; B.sunI = 1.25; B.ambI = 1.05; }
   else { B.sky = 0xf0b878; B.fog = 0xe8c8a0; B.sunColor = 0xffd8a8; B.amb = [0xf0d0b0, 0x6a5a4a]; B.sunDir = [-0.7, 0.35, 0.3]; B.sunI = 2.2; B.ambI = 1.1; }   // dawn
   return B;
 }

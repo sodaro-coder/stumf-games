@@ -26,7 +26,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost }) {
   .sc-boss div{height:12px;background:#300;border:1px solid #f55;border-radius:6px;overflow:hidden;margin-top:4px}.sc-boss div i{display:block;height:100%;background:linear-gradient(90deg,#ff2e2e,#ff9a3c);transition:width .2s}
   .sc-cut{position:absolute;inset:0;display:none;pointer-events:auto;z-index:50}.sc-cut:before,.sc-cut:after{content:'';position:absolute;left:0;right:0;height:11vh;background:#000}.sc-cut:before{top:0}.sc-cut:after{bottom:0}
   .sc-line{position:absolute;left:50%;bottom:14vh;transform:translateX(-50%);width:min(760px,88vw);text-align:center;text-shadow:0 2px 6px #000,0 0 18px #000}
-  .sc-line b{display:block;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--c);margin-bottom:4px}.sc-line p{margin:0;font-size:21px;line-height:1.35}.sc-line p.dir{font-style:italic;color:#c8ccd4;font-size:18px}
+  .sc-line b{display:block;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--c);margin-bottom:4px}.sc-line p{margin:0;font-size:21px;line-height:1.35}.sc-line p.dir{font-style:italic;color:#c8ccd4;font-size:18px}.sc-line p.credits{font:900 34px system-ui;letter-spacing:.14em}
   .sc-skip{position:absolute;right:16px;bottom:calc(11vh + 10px);color:#8d97a5;font-size:12px}
   .sc-title{position:absolute;left:0;right:0;top:15vh;text-align:center;font:900 30px system-ui;letter-spacing:.08em;text-shadow:0 2px 12px #000}
   .sc-talk{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);width:min(680px,86vw);text-align:center;font-size:16px;opacity:0;transition:opacity .25s;text-shadow:0 1px 4px #000,0 0 12px #000}.sc-talk b{color:var(--c)}
@@ -76,13 +76,13 @@ export function storyClient({ scene, myId, audio, onSkip, isHost }) {
   }
 
   // ---- state ----
-  let S = null, cutQ = [], cutT = 0, talkQ = [], talkT = 0, barkT = 0, focusT = 0, groundAt = () => 0, lineIdx = 0, shotT = 0;
-  const say = (l) => { if (!stage(l.text) && audio && audio.say) { const v = VOICE[l.who] || [1, 1]; audio.say(String(l.text).replace(/\([^)]*\)|\*[^*]*\*/g, ''), v[0], v[1]); } };
+  let S = null, cutQ = [], cutT = 0, cutAll = [], cutT0 = 0, talkQ = [], talkT = 0, barkT = 0, focusT = 0, groundAt = () => 0, lineIdx = 0, shotT = 0;
+  const say = (l) => { if (!stage(l.text) && l.who !== 'credits' && audio && audio.say) { const v = VOICE[l.who] || [1, 1]; audio.say(String(l.text).replace(/\([^)]*\)|\*[^*]*\*/g, ''), v[0], v[1]); } };
   function showLine() {
     const l = cutQ[0]; document.body.classList.toggle('sc-cutting', !!l);
     if (!l) { $('.sc-cut').style.display = 'none'; return; }
     $('.sc-cut').style.display = 'block'; $('.sc-line').style.setProperty('--c', COLORS[l.who] || '#fff');
-    $('.sc-line b').textContent = stage(l.text) ? '' : l.name; const p = $('.sc-line p'); p.textContent = l.text; p.className = stage(l.text) ? 'dir' : '';
+    $('.sc-line b').textContent = stage(l.text) || l.who === 'credits' ? '' : l.name; const p = $('.sc-line p'); p.textContent = l.text; p.className = l.who === 'credits' ? 'credits' : stage(l.text) ? 'dir' : '';
     cutT = lineTime(l); lineIdx++; shotT = 0; say(l);
     if (lineIdx > 1) $('.sc-title').textContent = '';   // the title sits on the opening shot only
   }
@@ -128,7 +128,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost }) {
     const who = l.who === 'boss' ? (S && S.boss ? posOf(S.boss.id) : null) : (() => { const c = chars.find((q) => q.char === l.who && q.alive); return c ? posOf(c.id) : null; })();
     const title = !!$('.sc-title').textContent && lineIdx <= 1;   // cleared after the first line
     let p, look;
-    if (title || !who || stage(l.text)) {   // establishing or wide: a slow orbit around the squad
+    if (title || !who || stage(l.text) || /^\(radio\)/.test(l.text)) {   // radio voices: the squad listening, not a face   // establishing or wide: a slow orbit around the squad
       const r = title ? 11 : 6.5, h = title ? 6 : 2.6, a = now * (title ? 0.12 : 0.08) + lineIdx * 0.9;
       p = new THREE.Vector3(cx + Math.sin(a) * r, cy + h, cz + Math.cos(a) * r); look = new THREE.Vector3(cx, cy + 1.2, cz);
     } else if (lineIdx % 4 === 0 && squad.length > 1) {   // over the speaker's shoulder, towards the rest of the squad
@@ -146,7 +146,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost }) {
   const card = (small, h1, p, em, rw) => { const c = $('.sc-card'); $('.sc-card small').textContent = small || ''; $('.sc-card h1').textContent = h1 || ''; $('.sc-card p').textContent = p || ''; $('.sc-card em').textContent = em || ''; $('.sc-card .rw').textContent = rw || ''; c.style.display = 'grid'; c.style.opacity = 1; };
   return {
     onEvent(type, data) {
-      if (type === 'cut') { cutQ = (data.lines || []).slice(); lineIdx = 0; $('.sc-title').textContent = data.title || ''; $('.sc-skip').textContent = 'tap / Space / A: skip'; talkQ = []; talkT = 0; $('.sc-talk').style.opacity = 0; showLine(); }
+      if (type === 'cut') { cutAll = (data.lines || []).slice(); cutQ = cutAll.slice(); cutT0 = performance.now(); lineIdx = 0; $('.sc-title').textContent = data.title || ''; $('.sc-skip').textContent = 'tap / Space / A: skip'; talkQ = []; talkT = 0; $('.sc-talk').style.opacity = 0; showLine(); }
       if (type === 'cutSkip') endCut();
       if (type === 'skipVotes') $('.sc-skip').textContent = `skip: ${data.n} of ${data.need} want to skip`;
       if (type === 'talk') { talkQ.push(...(data.lines || [])); if (talkT <= 0) nextTalk(); }
@@ -191,7 +191,12 @@ export function storyClient({ scene, myId, audio, onSkip, isHost }) {
     reset() { S = null; cutQ = []; talkQ = []; talkT = 0; showLine(); $('.sc-talk').style.opacity = 0; for (const o of markerObjs.values()) grp.remove(o); markerObjs.clear(); beam.visible = false; balls.forEach((m) => { m.visible = false; }); $('.sc-boss').style.display = 'none'; for (const k of ['.sc-obj span', '.sc-obj b', '.sc-obj i']) $(k).textContent = ''; $('.sc-squad').innerHTML = ''; },
     tick(dt, ga, now) {
       groundAt = ga || groundAt;
-      if (cutQ.length) { cutT -= dt; shotT += dt; if (cutT <= 0) next(); }
+      if (cutQ.length) {   // paced by the clock since the scene arrived (not by frames), so every screen shows the same line
+        shotT += dt; const el = (performance.now() - cutT0) / 1000; let acc = 0, idx = cutAll.length;
+        for (let i = 0; i < cutAll.length; i++) { acc += lineTime(cutAll[i]); if (el < acc) { idx = i; break; } }
+        const cur = cutAll.length - cutQ.length;
+        if (idx >= cutAll.length) endCut(); else if (idx > cur) { cutQ = cutAll.slice(idx); if (idx > 0) $('.sc-title').textContent = ''; showLine(); }
+      }
       if (talkT > 0) { talkT -= dt; if (talkT <= 0) nextTalk(); }
       if (barkT > 0) { barkT -= dt; if (barkT <= 0) $('.sc-bark').style.opacity = 0; }
       if (focusT > 0) { focusT -= dt; if (focusT <= 0) $('.sc-focus').style.display = 'none'; }

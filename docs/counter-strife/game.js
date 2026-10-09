@@ -504,6 +504,7 @@ export default function start({ cfg, E, N, smoke }) {
         try { if (!MAPS[d.map]) throw new Error('unknown map'); if (mapId !== d.map) buildMap(d.map); resetLevel(); toHost('campReady', d.mission); SC.status('loaded · waiting for the squad…'); }
         catch (e) { d.tries = (d.tries || 0) + 1; if (d.tries < 3) { SC.status('loading failed, retrying…'); setTimeout(() => onCamp(d), 1500); } else { toast('Could not load the level'); quit(); } }
       }
+      if (d.mission != null && d.phase !== 'hub') camp.mission = d.mission | 0;
       if (d.phase === 'go') { camp.phase = 'level'; campHold = false; SC.hideCard(); SC.hub(null); lock(); }
       if (d.phase === 'hub') { camp.phase = 'hub'; camp.hubChapter = d.chapter; camp.party = new Map((d.party || []).map((p) => [p.id, p])); renderHub(d); }
     }
@@ -965,7 +966,7 @@ export default function start({ cfg, E, N, smoke }) {
     if (isHost) {
       buildMap(mapId);
       const margs = { W, mode, mapId, botLevel, send: (t, d, to) => { if (session) session.send(t, d, to); }, onLocal: local };
-      match = story ? new StoryMatch(margs, story) : new Match(margs); match.hostId = myId;
+      match = story ? new StoryMatch(margs, { ...story, runId: camp.runId }) : new Match(margs); match.hostId = myId;
       bots = new Bots(match);
       match.killFx = (by, weapon) => funnyKey(weapon === 'knife' ? (by.knife || {})[by.team] : (Object.values(by.inv).find((i) => i && i.wid === weapon) || {}).skin);
       const mp = match.add(myId, { ...hello, ...(ranked ? { team: 'T' } : {}), loadout: sanitizeLoadout(loadout), agent: sanitizeAgent(hello.agent), knife: sanitizeKnife(hello.knife) });
