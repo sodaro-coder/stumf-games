@@ -4,50 +4,8 @@ import { recoilPattern } from './guns.js';
 import { PHYS, ECON, BOMB, MODES, W_BY_ID, G_BY_ID, GEAR_BY_ID, MAX_GRENADES, slotOf, forTeam, itemPrice, damageFor, U } from './data.js';
 
 // ---- movement (classic ground accel/friction, air strafing, jumping, crouching, stepping up ledges) ---------------
-export function moveStep(W, p, inp, dt, maxSpeed) {
-  const wish = { x: 0, z: 0 };
-  const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw), rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
-  wish.x = fx * inp.f + rx * inp.s; wish.z = fz * inp.f + rz * inp.s;
-  const wl = Math.hypot(wish.x, wish.z); if (wl > 1e-6) { wish.x /= wl; wish.z /= wl; }
-  p.crouch = Math.max(0, Math.min(1, p.crouch + (inp.crouch ? 1 : -1) * dt * 8));
-  p.prone = Math.max(0, Math.min(1, (p.prone || 0) + (inp.prone ? 1 : -1) * dt * 2.6));   // going prone / getting up takes a moment
-  const sprint = inp.sprint && inp.f > 0.3 && p.crouch < 0.5 && !p.prone;   // sprint: forward only, standing only
-  let top = maxSpeed * (inp.walk ? PHYS.walk : 1) * (sprint ? PHYS.sprint : 1) * (p.crouch > 0.5 ? PHYS.crouch : 1);
-  if (p.prone) top *= 1 - p.prone * (1 - PHYS.prone);
-  p.sprinting = sprint && wl > 1e-6;
-  if (wl < 1e-6) top = 0;
-  const ground = W.groundAt(p.x, p.z, p.y);
-  const onGround = p.y <= ground + 0.02 && p.vy <= 0;
-  // jump buffer: a jump pressed up to 0.2 s before touching down (or held) happens on the landing frame with no ground
-  // friction, so a bunny-hop always connects and keeps its speed
-  if (inp.jump && !p.jumpHeld) p.jumpBuf = 0.2; else p.jumpBuf = Math.max(0, (p.jumpBuf || 0) - dt);
-  const hop = onGround && !p.prone && (p.jumpBuf > 0 || (inp.jump && (p.landT ?? 9) < 0.04));   // tapped early, or held through the landing
-  if (onGround) {
-    // friction (skipped on a hop's landing frame)
-    const sp = Math.hypot(p.vx, p.vz);
-    if (sp > 0 && !hop) { const ctl = Math.max(sp, PHYS.stop * (1 - (p.prone || 0) * 0.85)), drop = ctl * PHYS.friction * dt, ns = Math.max(0, sp - drop) / sp; p.vx *= ns; p.vz *= ns; }
-    // accelerate
-    const cur = p.vx * wish.x + p.vz * wish.z, add = top - cur;
-    if (add > 0) { const acc = Math.min(PHYS.accel * dt * Math.max(top, 0.1), add); p.vx += acc * wish.x; p.vz += acc * wish.z; }
-    if (hop) {
-      p.vy = PHYS.jump; p.jumpHeld = true; p.jumpBuf = 0; p.y = ground + 0.03;
-      const s2 = Math.hypot(p.vx, p.vz), cap = maxSpeed * 1.55; if (s2 > cap) { p.vx *= cap / s2; p.vz *= cap / s2; }   // hops carry speed, within reason
-    } else { p.y = ground; p.vy = 0; }
-  } else {
-    const wsp = Math.min(top, 30 * U), cur = p.vx * wish.x + p.vz * wish.z, add = wsp - cur;
-    if (add > 0 && wl > 0) { const acc = Math.min(PHYS.airAccel * dt * top, add); p.vx += acc * wish.x; p.vz += acc * wish.z; }
-    p.vy -= PHYS.gravity * dt;
-  }
-  if (!inp.jump) p.jumpHeld = false;
-  W.move(p, p.vx * dt, p.vz * dt, PHYS.radius, onGround ? PHYS.step : 0.05);
-  p.y += p.vy * dt;
-  const g2 = W.groundAt(p.x, p.z, p.y);
-  if (p.y < g2) { p.y = g2; p.vy = 0; }
-  // stepping smoothing for the camera
-  p.onGround = p.y <= g2 + 0.02;
-  p.landT = p.onGround ? (p.wasAirEnd ? 0 : (p.landT ?? 9) + dt) : 9; p.wasAirEnd = !p.onGround;
-  return p.onGround;
-}
+// movement lives in controller.js (Source/Quake kinematic controller, CS:GO cvars); re-exported for existing callers
+export { moveStep } from './controller.js';
 export const eyeHeight = (p) => { const e = PHYS.eye - (PHYS.eye - PHYS.crouchEye) * p.crouch; return e + (PHYS.proneEye - e) * (p.prone || 0); };
 export const speedOf = (p) => Math.hypot(p.vx, p.vz);
 
