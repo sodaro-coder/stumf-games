@@ -685,7 +685,8 @@ export default function start({ cfg, E, N, smoke }) {
     const sanitizeSkin = (s) => (s && typeof s === 'object' && ITEM_BY_ID[s.def] ? { def: s.def, float: Math.max(0, Math.min(1, +s.float || 0)), seed: (+s.seed | 0) % 1000, st: !!s.st, uid: String(s.uid || '').slice(0, 40) } : null);
     function sanitizeLoadout(l) { const out = {}; for (const t of ['T', 'CT']) { const x = (l && l[t]) || {}; const skins = {}; for (const [k, v] of Object.entries(x.skins || {}).slice(0, 50)) if (W_BY_ID[k]) { const s = sanitizeSkin(v); if (s && ITEM_BY_ID[s.def].weapon === k) skins[k] = s; } const att = {}; for (const [k, v] of Object.entries(x.att || {}).slice(0, 50)) if (W_BY_ID[k] && v && typeof v === 'object') { const a = {}; for (const slot of ['optic', 'muzzle', 'reticle']) if (ATTACH[v[slot]] && ATTACH[v[slot]].slot === slot) a[slot] = v[slot]; if (Object.keys(a).length) att[k] = a; }
       out[t] = { skins, att, ctPistol: x.ctPistol === 'p2000' ? 'p2000' : 'usp' }; } return out; }
-    const sanitizeAgent = (a) => ({ T: a && AGENT_BY_ID[a.T] && AGENT_BY_ID[a.T].team === 'T' ? a.T : null, CT: a && AGENT_BY_ID[a.CT] && AGENT_BY_ID[a.CT].team === 'CT' ? a.CT : null });
+    const agentOk = (id, team) => AGENT_BY_ID[id] && (AGENT_BY_ID[id].team === team || AGENT_BY_ID[id].team === 'any');
+    const sanitizeAgent = (a) => ({ T: a && agentOk(a.T, 'T') ? a.T : null, CT: a && agentOk(a.CT, 'CT') ? a.CT : null });
     const sanitizeKnife = (k) => ({ T: sanitizeSkin(k && k.T), CT: sanitizeSkin(k && k.CT) });
     function pickupFor(p, id) {
       if (!p.alive) return;

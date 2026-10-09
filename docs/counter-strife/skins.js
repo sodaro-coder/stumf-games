@@ -36,6 +36,8 @@ export const KNIFE_BY_ID = Object.fromEntries(KNIVES.map((k) => [k.id, k]));
 
 // ---- agents (player models). look = the body recipe models.js builds ----
 export const AGENTS = [
+  // promo: never drops from a case. Every account made before Dec 1 2026 gets one (supabase.sql cs_claim_beta). Either team.
+  { id: 'a_beta', name: 'Beta Tester', team: 'any', tier: 4, promo: true, look: { body: '#e8b820', legs: '#d4a417', arms: '#e8b820', head: '#e8b820', hat: 'dunce', hatColor: '#f4f0e6' } },
   { id: 'a_t_default', name: 'Desert Rebel', team: 'T', tier: -1, look: { body: '#7a6a4a', legs: '#4e4636', head: '#c89a74', hat: 'balaclava', hatColor: '#2c2a26', plain: true } },
   { id: 'a_ct_default', name: 'Task Force Gassy Gary', team: 'CT', tier: -1, look: { body: '#3c4e66', legs: '#2c3442', head: '#e0b896', hat: 'helmet', hatColor: '#2a3646', plain: true } },
   { id: 'a_t_ops', name: 'Sand-in-Crack Specialist', team: 'T', tier: 2, look: { body: '#8a5a3a', legs: '#3a3026', head: '#b48264', hat: 'shemagh', hatColor: '#d8c6a0' } },
@@ -233,7 +235,7 @@ const CRATE_LIST = [
   makeCrate('nuke', 'Nuclear Family Case', 'Glowing, radioactive, family friendly.', NUKE, 21, ['k_baguette', 'k_fish', 'k_banana'], 300),
   ...THEMES.map((t, n) => themedCrate(n, ...t, 250 + (n % 4) * 25)),
   { id: 'agents', name: 'Fashion Disaster Case', desc: 'Outfits that smell like they look.', price: 350,
-    items: [...AGENTS.filter((a) => a.tier >= 0).map((a) => ({ id: 'agents:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })),
+    items: [...AGENTS.filter((a) => a.tier >= 0 && !a.promo).map((a) => ({ id: 'agents:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })),
       ...EMOTES.filter((e) => !DEFAULT_EMOTES.includes(e.id)).map((e) => ({ id: 'agents:' + e.id, kind: 'emote', weapon: e.id, finish: e.name, tier: e.tier }))] },
 ];
 CRATE_LIST.forEach((c, n) => { const f = MYTHIC_FIN[c.id]; if (f) { const gun = MYTHIC_GUNS[n % MYTHIC_GUNS.length]; c.items.push({ id: `${c.id}:${gun}:${f.name}`, kind: 'skin', weapon: gun, finish: f.name, paint: f.paint, tier: MYTHIC }); } });
@@ -266,7 +268,9 @@ export const PASS = (() => {
 })();
 for (const em of EMOTES) if (!PASS.items.find((i) => i.weapon === em.id)) PASS.items.push({ id: 'pass:' + em.id, kind: 'emote', weapon: em.id, finish: em.name, tier: em.tier });
 export const CRATE_BY_ID = Object.fromEntries(CRATES.map((c) => [c.id, c]));
-export const ITEM_BY_ID = Object.fromEntries([...CRATES, PASS].flatMap((c) => c.items.map((i) => [i.id, i])));
+// rewards handed out, never sold in a case
+export const PROMO = { id: 'promo', name: 'Rewards', price: 0, hidden: true, items: AGENTS.filter((a) => a.promo).map((a) => ({ id: 'promo:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })) };
+export const ITEM_BY_ID = Object.fromEntries([...CRATES, PASS, PROMO].flatMap((c) => c.items.map((i) => [i.id, i])));
 export const AGENT_BY_ID = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
 
 // the odds a crate actually uses (tiers that exist in it, renormalised): shown before opening

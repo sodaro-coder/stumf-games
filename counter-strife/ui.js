@@ -348,7 +348,7 @@ export class Menu {
   topUp() { sdkTopUp(this.cfg, { who: this.P.tag ? `${this.P.d.name || 'Player'}#${this.P.tag}` : this.P.d.name, code: this.P.signedIn ? this.P.dep : null, game: 'kysgo', coins: 'coins' }); }
   stageLook() {  // the equipped T agent (else the default) holding the equipped AK skin's gun
     const lo = this.P.loadoutFor('T'), a = AGENT_BY_ID[lo.agent] || AGENT_BY_ID.a_t_default;
-    return { look: a.look, team: a.team, wid: 'ak47' };
+    return { look: a.look, team: a.team === 'any' ? 'T' : a.team, wid: 'ak47' };
   }
   hide() { if (this.stage) this.stage.stop(); this.stage = null; if (this.root) this.root.remove(); this.root = null; if (this.off) this.off(); if (this.lb) { this.lb.close(); this.lb = null; } }
   top() {
@@ -357,6 +357,7 @@ export class Menu {
     $('#mLvlN', this.root).textContent = lv; $('#mXp', this.root).style.width = Math.round((P.d.xp - prev) / (need - prev) * 100) + '%';
     $('#mName', this.root).textContent = (P.d.name || 'Player') + (P.tag ? '#' + P.tag : '') + (P.signedIn ? (P.online ? ' ☁' : ' (offline)') : '');
     $('#mCoins', this.root).textContent = `🪙 ${P.d.coins.toLocaleString()}`;
+    if (P.betaNew) { P.betaNew = false; this.h.toast('🧪 Beta Tester costume added to your inventory. Thanks for testing early!'); }
   }
   render() {
     if (!this.root) return;
@@ -485,7 +486,7 @@ export class Menu {
     const info = itemInfo(it), m = document.createElement('div'); m.className = 'cs cs-modal';
     if (info.kind === 'emote') return this.emoteModal(it, info);
     const slotKey = info.kind === 'agent' ? 'agent' : info.kind === 'knife' ? 'knife' : info.weapon;
-    const teams = info.kind === 'agent' ? [AGENT_BY_ID[info.weapon].team] : info.kind === 'knife' ? ['T', 'CT'] : ['T', 'CT'].filter((t) => forTeam(info.weapon, t));
+    const teams = info.kind === 'agent' ? (AGENT_BY_ID[info.weapon].team === 'any' ? ['T', 'CT'] : [AGENT_BY_ID[info.weapon].team]) : info.kind === 'knife' ? ['T', 'CT'] : ['T', 'CT'].filter((t) => forTeam(info.weapon, t));
     m.innerHTML = `<div class="cs-card"><div class="cs-row"><b style="font-size:18px;color:${info.rarity.color}">${esc(info.label)}</b><span style="flex:1"></span><button class="cs-btn alt sm" data-x>✕</button></div>
       <div class="cs-row" style="margin-top:8px"><button class="cs-btn sm" data-vw="3d">3D</button><button class="cs-btn alt sm" data-vw="card">Card</button><span style="flex:1"></span><button class="cs-btn alt sm" data-png style="display:none">Save card image</button></div>
       <div data-card style="display:none;padding:14px 0"></div>

@@ -761,6 +761,8 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('pass:e_sit','pass',3,'emote'),
 ('pass:e_lmao','pass',4,'emote')
 on conflict (def) do update set crate = excluded.crate, tier = excluded.tier, kind = excluded.kind;
+-- promo rewards (skins.js PROMO): handed out, never in a case
+insert into cs_catalog (def, crate, tier, kind) values ('promo:a_beta','promo',4,'agent') on conflict (def) do update set crate = excluded.crate, tier = excluded.tier, kind = excluded.kind;
 insert into cs_pass (tier, def) values (1,'pass1:glock:Participation Trophy'),(2,'pass2:usp:Grass Toucher'),(3,'pass3:e_dance'),(4,'pass4:ak47:Mom''s Basement'),(5,'pass5:a_t_banana'),(6,'pass6:e_dab'),(7,'pass7:m4a4:Gamer Fuel'),(8,'pass8:awp:Sweaty Palms'),(9,'pass9:e_cry'),(10,'pass10:a_ct_mime'),(11,'pass11:deagle:No Life'),(12,'pass12:e_flex'),(13,'pass13:mp9:Touch Grass Pro'),(14,'pass14:mac10:Hall of Shame'),(15,'pass15:a_t_speedo'),(16,'pass16:p90:Certified Clown'),(17,'pass17:galil:Rainbow Road Rage'),(18,'pass18:e_tpose'),(19,'pass19:famas:Participation Trophy'),(20,'pass20:a_ct_tighty'),(21,'pass21:e_floss'),(22,'pass22:nova:Grass Toucher'),(23,'pass23:ump:Mom''s Basement'),(24,'pass24:e_chicken'),(25,'pass25:k_hotdog:Ballpark Special'),(26,'pass26:ssg08:Gamer Fuel'),(27,'pass27:e_worm'),(28,'pass28:p250:Sweaty Palms'),(29,'pass29:m4a1s:No Life'),(30,'pass30:a_t_grandma'),(31,'pass31:sg553:Touch Grass Pro'),(32,'pass32:aug:Hall of Shame'),(33,'pass33:e_fart'),(34,'pass34:tec9:Certified Clown'),(35,'pass35:a_ct_pigeon'),(36,'pass36:e_twerk'),(37,'pass37:fiveseven:Rainbow Road Rage'),(38,'pass38:glock:Participation Trophy'),(39,'pass39:usp:Grass Toucher'),(40,'pass40:a_t_hotdog'),(41,'pass41:ak47:Mom''s Basement'),(42,'pass42:m4a4:Gamer Fuel'),(43,'pass43:awp:Sweaty Palms'),(44,'pass44:deagle:No Life'),(45,'pass45:a_ct_poo'),(46,'pass46:mp9:Touch Grass Pro'),(47,'pass47:mac10:Hall of Shame'),(48,'pass48:p90:Certified Clown'),(49,'pass49:galil:Rainbow Road Rage'),(50,'pass50:k_dildo:Gold Plated') on conflict (tier) do update set def = excluded.def;
 
 create or replace function cs_profile(p_name text) returns json language plpgsql security definer set search_path = public as $$
@@ -1454,3 +1456,18 @@ do $$ begin
   create policy cs_cards_up on storage.objects for update to authenticated using (bucket_id = 'cards' and (storage.foldername(name))[1] = auth.uid()::text);
 exception when others then raise notice 'storage not available here (%): card images need Supabase Storage', sqlerrm;
 end $$;
+
+-- ===== Beta Tester: every account made before 1 Dec 2026 gets the "Beta Tester" costume, once =====================
+create or replace function cs_claim_beta() returns boolean language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); made timestamptz;
+begin
+  if me is null then return false; end if;
+  select created_at into made from auth.users where id = me;
+  if made is null or made >= timestamptz '2026-12-01 00:00:00-05' then return false; end if;
+  if exists (select 1 from cs_items where owner = me and def = 'promo:a_beta') or exists (select 1 from cs_log where actor = me and action = 'beta_claim') then return false; end if;
+  insert into cs_items (uid, owner, def, float, st, seed) values (md5(random()::text || clock_timestamp()::text), me, 'promo:a_beta', 0, false, 0);
+  insert into cs_log (actor, action, detail) values (me, 'beta_claim', '{}'::jsonb);
+  return true;
+end $$;
+revoke all on function cs_claim_beta() from public, anon;
+grant execute on function cs_claim_beta() to authenticated;

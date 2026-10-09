@@ -384,6 +384,8 @@ function hat(head, L) {
     case 'headset': add(new THREE.TorusGeometry(0.135, 0.014, 6, 16, Math.PI), c, 0, 0.18, 0); for (const sd of [-1, 1]) add(new THREE.CylinderGeometry(0.05, 0.05, 0.035, 12), c, sd * 0.135, 0.13, 0, 0, 0, Math.PI / 2); add(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 6), c, -0.11, 0.08, -0.08, 0.9, 0, 0); break;
     case 'toque': add(new THREE.CylinderGeometry(0.115, 0.1, 0.12, 14), c, 0, 0.3, 0); add(new THREE.SphereGeometry(0.14, 14, 9), c, 0, 0.4, 0, 0, 0, 0, 1, 0.6, 1); break;   // tall chef's hat
     case 'bob': add(new THREE.SphereGeometry(0.15, 14, 10), c, 0, 0.16, 0.025, 0, 0, 0, 1.05, 1, 1.05); add(new THREE.BoxGeometry(0.2, 0.05, 0.06), c, 0.03, 0.24, -0.11, 0, 0, -0.25); break;   // can I speak to your manager
+    case 'dunce': add(new THREE.ConeGeometry(0.125, 0.52, 16), c, 0, 0.47, 0.01); add(new THREE.TorusGeometry(0.122, 0.018, 6, 18), '#e8b820', 0, 0.22, 0.01, Math.PI / 2);   // hazmat hood visor + a dunce cap; purely cosmetic (hitboxes are fixed boxes in weapons.js)
+      add(new THREE.BoxGeometry(0.2, 0.09, 0.03), '#1c2a30', 0, 0.14, -0.155); break;
     case 'cone': add(new THREE.ConeGeometry(0.11, 0.32, 14), c, 0, 0.38, 0); add(new THREE.CylinderGeometry(0.08, 0.09, 0.03, 14), '#ffffff', 0, 0.36, 0); add(new THREE.BoxGeometry(0.26, 0.02, 0.26), c, 0, 0.22, 0); break;
     case 'beret': add(new THREE.SphereGeometry(0.14, 14, 8), c, 0.02, 0.29, 0, 0, 0, 0.18, 1.12, 0.32, 1.1); break;
     case 'shemagh': if (L.plain) break; add(new THREE.SphereGeometry(0.15, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, 0.17, 0.005, 0, 0, 0, 1.04, 1, 1.06); add(new THREE.BoxGeometry(0.25, 0.085, 0.07), c, 0, 0.075, -0.115); add(new THREE.BoxGeometry(0.13, 0.2, 0.03), c, 0.02, 0.0, 0.13, 0.25, 0, 0.1); break;   // head wrap, face cloth, tail down the back
@@ -399,4 +401,17 @@ function hat(head, L) {
   for (const p of parts) { p.computeVertexNormals(); const k = p.attributes.position.count; pos.set(p.attributes.position.array, o * 3); nor.set(p.attributes.normal.array, o * 3); col.set(p.attributes.color.array, o * 3); o += k; }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   head.add(new THREE.Mesh(g, hatMat));
+  if (L.hat === 'dunce') head.add(betaTag());
+}
+// "BETA" on the front of the dunce cap
+let betaMat = null;
+function betaTag() {
+  if (!betaMat) {
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 64; const x = cv.getContext('2d');
+    x.fillStyle = '#f4f0e6'; x.fillRect(0, 0, 128, 64); x.fillStyle = '#c81e1e'; x.font = '900 46px system-ui,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('BETA', 64, 34);
+    betaMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, side: THREE.DoubleSide });
+  }
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.085), betaMat);
+  m.position.set(0, 0.35, -0.098); m.rotation.order = 'YXZ'; m.rotation.set(-0.235, Math.PI, 0);   // faces forward (-z), leaning back with the cone
+  return m;
 }

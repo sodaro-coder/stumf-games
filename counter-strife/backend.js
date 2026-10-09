@@ -71,6 +71,7 @@ export class Profile {
   async sync() {
     if (!this.signedIn) return false;
     try {
+      if (!this.betaTried) { this.betaTried = true; try { if (await this.rpc('cs_claim_beta', {}) === true) this.betaNew = true; } catch (e) { /* older database: run supabase.sql */ } }   // accounts made before Dec 1: the Beta Tester costume
       const p = await this.rpc('cs_profile', { p_name: this.d.name || 'Player' });
       this.d.coins = p.coins; this.d.xp = p.xp; this.d.equipped = p.equipped || this.d.equipped; this.d.stats = Object.assign(this.d.stats, p.stats || {});
       if (p.name) this.d.name = p.name;
