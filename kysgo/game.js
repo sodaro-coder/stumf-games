@@ -175,8 +175,30 @@ function makeAudio(getVol) {
   const loadVoices = () => { try { const all = speechSynthesis.getVoices(); const en = all.filter((v) => /^en[-_]/i.test(v.lang) || /^en$/i.test(v.lang)); voices = en.length ? en : all; } catch (e) { voices = []; } };
   try { if (window.speechSynthesis) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; setInterval(() => { try { if (speechSynthesis.speaking && speechSynthesis.paused) speechSynthesis.resume(); } catch (e) { /* gone */ } }, 4000); } } catch (e) { /* no speech */ }
   const voiceFor = (who) => { if (!voices.length) loadVoices(); if (!voices.length) return null; let h = 7; for (const c of String(who || 'announcer')) h = (h * 31 + c.charCodeAt(0)) >>> 0; const pref = voices.filter((v) => /Google|Microsoft|Daniel|Alex|Samantha|Fred|Arthur|Aaron|Karen/i.test(v.name)); const pool = pref.length >= 2 ? pref : voices; return pool[h % pool.length]; };
+  // recorded voices (voicebuild.py: a neural voice per character): every scripted line has a real recording in vo/;
+  // the browser's text-to-speech is only the fallback (players' typed radio chat, or before the index has loaded)
+  let VO = null, voNode = null, voUntil = 0;
+  const voBufs = new Map();
+  try { fetch('vo/index.json').then((r) => (r.ok ? r.json() : null)).then((d) => { VO = d; }).catch(() => {}); } catch (e) { /* offline */ }
+  const voGet = (id) => { if (!voBufs.has(id)) voBufs.set(id, fetch('vo/' + id + '.mp3').then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? ctx.decodeAudioData(b) : null)).catch(() => null)); return voBufs.get(id); };
+  const voSay = (text, o) => {
+    const id = VO && VO[(o.who || 'announcer:classic') + '|' + text]; if (!id || !ensure()) return false;
+    const scene = !!o.scene, now = performance.now();
+    if (!scene && (now < voUntil || now < sceneTalk)) return true;   // someone is talking: the line is skipped (it was recorded, so never robot-voiced)
+    if (scene) { try { if (voNode) voNode.stop(); } catch (e) { /* ended */ } try { speechSynthesis.cancel(); } catch (e) { /* none */ } }
+    voUntil = now + 400 + text.length * 60;   // until the clip reports its real length
+    voGet(id).then((buf) => {
+      if (!buf) return;
+      const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.value = 1.25;   // master already carries the volume setting
+      src.connect(g); g.connect(master); src.start(); voNode = src;
+      voUntil = performance.now() + buf.duration * 1000 + 150; if (scene) sceneTalk = voUntil;
+    });
+    return true;
+  };
   const say = (text, pitch = 0.75, rate = 1.05, o = {}) => { try {
-    if (!window.speechSynthesis || getVol() <= 0 || !text) return;
+    if (getVol() <= 0 || !text) return;
+    if (voSay(text, o)) return;
+    if (!window.speechSynthesis) return;
     const scene = !!o.scene; if (!scene && (performance.now() < sceneTalk || (speechSynthesis.speaking && o.noQueue))) return;
     const u = new SpeechSynthesisUtterance(text); u.volume = Math.min(1, getVol() * 1.3); u.pitch = pitch; u.rate = rate; const v = voiceFor(o.who); if (v) u.voice = v;
     if (scene) { speechSynthesis.cancel(); sceneTalk = performance.now() + 900 + text.length * 70; }
@@ -266,7 +288,7 @@ export default function start({ cfg, E, N, smoke }) {
     g.fillStyle = '#ff6a4a'; g.font = 'bold 13px system-ui'; for (const [n, r] of Object.entries(B.sites)) g.fillText(n, ox + (r[0] + r[2]) / 2 * s - 4, oz + (r[1] + r[3]) / 2 * s + 4);
   };
   let menu = null;
-  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
+  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
   if (smoke) { let m = 'dust'; try { const q = new URLSearchParams(location.search).get('map'); if (MAPS[q]) m = q; } catch (e) { /* no page */ } runMatch({ mode: '5v5', map: m, bot: 'normal', host: true, solo: true, smoke: true }); }
   else showMenu();
 
