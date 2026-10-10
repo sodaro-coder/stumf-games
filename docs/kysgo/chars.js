@@ -24,6 +24,7 @@ function build(j, bin) {
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bin, m.position, n * 3), 3));
     g.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(bin, m.normal, n * 3), 3, true));
     if (m.uv >= 0) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(bin, m.uv, n * 2), 2));
+    if (m.ao >= 0 && m.ao != null) g.setAttribute('ao', new THREE.BufferAttribute(new Uint8Array(bin, m.ao, n), 1, true));   // baked ambient occlusion (charbuild.py)
     g.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint8Array(bin, m.skinIndex, n * 4), 4));
     g.setAttribute('skinWeight', new THREE.BufferAttribute(new Uint8Array(bin, m.skinWeight, n * 4), 4, true));
     g.setIndex(new THREE.BufferAttribute(m.index32 ? new Uint32Array(bin, m.index, m.indexCount) : new Uint16Array(bin, m.index, m.indexCount), 1));
@@ -147,9 +148,20 @@ function humanMat(part, L, team, hq) {
   if (D.mats.has(key)) return D.mats.get(key);
   const rough = part === 'human_eye' || part === 'human_iris' || part === 'human_visor' ? 0.15 : part === 'human_skin' ? 0.55 : part === 'human_boot' ? 0.6 : part === 'human_helmet' ? 0.6 : 0.95;
   const m = new THREE.MeshStandardMaterial({ color: col, roughness: rough, metalness: part === 'human_visor' ? 0.4 : 0 });
+  if (part === 'human_boot') m.side = THREE.DoubleSide;   // the lofted boot's end caps
   litPatch(m, 'dyn');
+  { // baked ambient occlusion: creases, collars, under the plate carrier
+    const lit0 = m.onBeforeCompile;
+    m.onBeforeCompile = (sh, r) => {
+      lit0(sh, r);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;')
+        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;');
+    };
+    m.customProgramCacheKey = () => 'human-ao';
+  }
   if (cloth && hq) {
-    const lit = m.onBeforeCompile, det = clothTex(cloth), nrm = clothTex(cloth + 'n');
+    const lit = m.onBeforeCompile, det = clothTex(cloth), nrm = clothTex(cloth + 'n');   // (lighting + AO already patched in)
     const tile = { linen: 1 / 45, twill: 1 / 40, cordura: 1 / 34, knit: 1 / 26, leather: 1 / 36 }[cloth];   // cm per repeat (the scans are ~0.3-0.5 m across)
     m.onBeforeCompile = (sh, r) => {
       lit(sh, r);
@@ -165,7 +177,7 @@ vec4 tri3(sampler2D t, vec3 p, vec3 w) { return texture2D(t, p.yz * tileK) * w.x
 	vec3 tN = tri3(nrmTex, vRestP, tw).rgb;
 	diffuseColor.rgb *= 0.8 + hDet * 0.4;
 	if (plaidOn > 0.5) {   // a worn flannel check
-		vec2 g = fract(vec2(vRestP.x + vRestP.y * 0.3, vRestP.z) / 8.5);
+		vec2 g = fract(vec2(vRestP.x + vRestP.y * 0.3, vRestP.z) / 5.2);
 		float band = smoothstep(0.62, 0.66, g.x) * smoothstep(0.98, 0.94, g.x) + smoothstep(0.62, 0.66, g.y) * smoothstep(0.98, 0.94, g.y);
 		float thin = smoothstep(0.03, 0.0, abs(g.x - 0.3)) + smoothstep(0.03, 0.0, abs(g.y - 0.3));
 		diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55, clamp(band, 0.0, 1.0) * 0.8) + vec3(0.06, 0.05, 0.035) * thin;
@@ -312,6 +324,18 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
         rotateWorld(b, _t2.copy(d), _t3.copy(d).lerp(_t4.set(0, 1, 0), k).normalize());
       }
       if (B.Neck && B.Head) { _fw.set(0, 1, 0); turnWorld(B.Neck, _fw, -0.32); turnWorld(B.Head, _fw, -0.38); }
+      // feet planted shoulder-width apart, the left a half step ahead, knees forward (the clip's bladed stance crosses them)
+      const q = r.g.getWorldQuaternion(_q2.identity()), rtv = new THREE.Vector3(1, 0, 0).applyQuaternion(q), fwv = new THREE.Vector3(0, 0, -1).applyQuaternion(q), base = r.g.getWorldPosition(new THREE.Vector3());
+      for (const [side, sx, ahead] of [['Left', -1, 0.05], ['Right', 1, -0.04]]) {
+        const up = B[side + 'UpLeg'], lo = B[side + 'Leg'], ft = B[side + 'Foot']; if (!up || !lo || !ft) continue;
+        // swing the whole leg from the hip (no knee or hip bend, so the clip's straight standing leg is kept)
+        const hip = up.getWorldPosition(new THREE.Vector3()), foot = ft.getWorldPosition(new THREE.Vector3());
+        const tgt = base.clone().addScaledVector(rtv, sx * 0.105).addScaledVector(fwv, ahead); tgt.y = foot.y;
+        rotateWorld(up, foot.clone().sub(hip).normalize(), tgt.sub(hip).normalize());
+        const toe = B[side + 'ToeBase'];   // the foot points ahead (toes turned out just a touch), heel to toe level as before
+        if (toe) { const a = ft.getWorldPosition(new THREE.Vector3()), d = toe.getWorldPosition(new THREE.Vector3()).sub(a), h = Math.hypot(d.x, d.z);
+          const want = fwv.clone().addScaledVector(rtv, sx * 0.18).normalize().multiplyScalar(h); want.y = d.y; rotateWorld(ft, d.normalize(), want.normalize()); }
+      }
     }
     if (lean && !emote) {   // leaning (Q / E while aimed in): the spine rolls about the facing direction
       _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
