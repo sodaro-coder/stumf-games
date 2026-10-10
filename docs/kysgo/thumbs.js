@@ -114,8 +114,15 @@ function init() {
     R = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     R.setPixelRatio(1); R.setSize(640, 320, false);
     S = studio(R); cam = new THREE.PerspectiveCamera(24, 2, 0.01, 50);
-  } catch (e) { failed = true; R = null; }
+  } catch (e) { failed = true; R = null; setTimeout(() => { failed = false; }, 5000); }
   return !!R;
+}
+// let go of the item-picture renderer (browsers allow only a handful of WebGL contexts; the match needs one). Pictures
+// already made stay cached as images; it is re-created on demand back in the menu.
+export function releaseThumbs() {
+  if (!R) { failed = false; return; }
+  try { S.env.dispose(); R.dispose(); R.forceContextLoss(); } catch (e) { /* already gone */ }
+  R = null; S = null; failed = false;
 }
 // rendered at 640 x 320 (twice the card's canvas) so the downscale smooths every edge
 function render(item) {
@@ -163,7 +170,9 @@ function pump() {
   if (queue.length && !later.length) requestAnimationFrame(pump);
   else if (queue.length && charsReady()) setTimeout(() => requestAnimationFrame(pump), 150);   // waiting on textures
   else pumping = false;
+  if (!queue.length) { clearTimeout(idleT); idleT = setTimeout(() => { if (!queue.length && !pumping) releaseThumbs(); }, 15000); }   // idle: give the context back
 }
+let idleT = 0;
 
 // ---- cases: a hard-shell weapon case in the case's own colours, rendered once in the studio ----------------------------
 function rshape(w, h, r) {
@@ -262,8 +271,10 @@ export function viewer(canvas, item, opt = {}) {
 // ---- the main-menu stage: your equipped agent and gun, in a warm desert courtyard, slowly breathing ----
 export function stage(canvas, look) {
   let r3;
-  try { r3 = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' }); } catch (e) { return { set() {}, stop() {} }; }
+  try { r3 = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); } catch (e) { return { set() {}, stop() {} }; }
   r3.setPixelRatio(Math.min(1.75, devicePixelRatio || 1));   // sharp on phones and high-DPI screens
+  // a GPU reset or a lost context: stop drawing (the blurred backdrop stays), never take the page's WebGL down with it
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); stopped = true; cancelAnimationFrame(raf); }, false);
   r3.toneMapping = THREE.ACESFilmicToneMapping; r3.toneMappingExposure = 0.9;
   r3.shadowMap.enabled = true; r3.shadowMap.type = THREE.PCFSoftShadowMap;
   // a corner of a sun-baked desert courtyard on a clear afternoon: the game's own scanned surfaces, a real sky, a low warm sun

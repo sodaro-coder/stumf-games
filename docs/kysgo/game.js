@@ -21,6 +21,7 @@ import { MISSIONS, CHAPTERS, CHARACTERS, SQUAD, BOSS, STORY_LOOKS } from './stor
 const BOSS_LOOK = { body: BOSS.model.jersey, legs: BOSS.model.trim, head: '#a8805e', hat: 'cap', hatColor: BOSS.model.trim };
 import { Profile } from './backend.js';
 import { Menu, Hud, injectCss, esc, weaponIcon } from './ui.js';
+import { releaseThumbs } from './thumbs.js';
 import { line, sfxFor, hasLine } from './voices.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
@@ -200,6 +201,23 @@ function makeAudio(getVol) {
 const dy = (y, cam) => y - cam.position.y;
 
 // ======================================================================================================================
+// the match renderer, with fallbacks: the best settings first, then plainer ones (no MSAA, default GPU, then whatever the
+// browser will give even on a slow or blocklisted GPU), so the game starts wherever WebGL exists at all
+function makeRenderer(P) {
+  const tries = [{ antialias: P.msaa > 0, powerPreference: 'high-performance' }, { antialias: false, powerPreference: 'default' },
+    { antialias: false, powerPreference: 'low-power', failIfMajorPerformanceCaveat: false, depth: true, stencil: false }];
+  for (const o of tries) { try { const r = new THREE.WebGLRenderer(o); if (r.getContext()) return r; } catch (e) { /* next */ } }
+  return null;
+}
+function webglHelp() {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;inset:0;z-index:999;display:grid;place-items:center;background:#0b0e13;color:#eef;font:16px system-ui;padding:24px;text-align:center';
+  d.innerHTML = '<div style="max-width:560px"><h2 style="margin:0 0 12px">KYS:GO couldn\'t start 3D graphics</h2><p>Your browser didn\'t give the game a WebGL graphics context. Usually one of these fixes it:</p>' +
+    '<ol style="text-align:left;line-height:1.6"><li>Reload the page (Ctrl+F5).</li><li>Close other tabs with games, maps or 3D in them.</li>' +
+    '<li>Chrome / Edge: Settings → System → turn on <b>Use graphics acceleration when available</b>, then restart the browser.</li>' +
+    '<li>Update your graphics driver or browser.</li></ol><button id="whelp" style="margin-top:14px;padding:10px 18px;border:0;border-radius:8px;background:#f2a33a;font-weight:800">Try again</button></div>';
+  document.body.appendChild(d); d.querySelector('#whelp').onclick = () => location.reload();
+}
 export default function start({ cfg, E, N, smoke }) {
   injectCss();
   // installable app (Android / PC: Chrome or Edge install it; iPhone: Add to Home Screen): manifest, icon, offline cache
@@ -218,7 +236,7 @@ export default function start({ cfg, E, N, smoke }) {
   if (profile.justConfirmed) setTimeout(() => toast('Email confirmed. You\'re signed in.'), 900);
   // map tiles: a real 3D shot of the map (rendered once, cached), the flat plan meanwhile or without WebGL
   const mapShots = new Map();
-  let shotR = null;
+  let shotR = null, shotIdle = 0;
   const mapShot = (id) => {
     if (mapShots.has(id)) return mapShots.get(id);
     try {
@@ -232,8 +250,9 @@ export default function start({ cfg, E, N, smoke }) {
       shotR.render(sc, cam);
       const url = shotR.domElement.toDataURL('image/jpeg', 0.85);
       Wd.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-      mapShots.set(id, url); return url;
-    } catch (e) { mapShots.set(id, null); return null; }
+      mapShots.set(id, url); clearTimeout(shotIdle); shotIdle = setTimeout(() => { try { if (shotR) { shotR.dispose(); shotR.forceContextLoss(); } } catch (e) { /* gone */ } shotR = null; }, 4000);   // give the context back when idle
+      return url;
+    } catch (e) { try { if (shotR) shotR.dispose(); } catch (e2) { /* gone */ } shotR = null; return null; }   // not cached: tried again next time
   };
   const mapPreview = (c, id) => {
     flatPreview(c, id);
@@ -287,7 +306,11 @@ export default function start({ cfg, E, N, smoke }) {
     let Q = gfx.q, P = gfx.p;
     setModelQuality(P.hqModels ? 1 : 0.75);
     if (P.chars) loadChars();
-    const renderer = new THREE.WebGLRenderer({ antialias: P.msaa > 0, powerPreference: 'high-performance' });
+    // free every other WebGL context first (menu backdrop, map and item pictures): browsers cap how many can exist
+    try { if (shotR) { shotR.dispose(); shotR.forceContextLoss(); shotR = null; } } catch (e) { shotR = null; }
+    try { releaseThumbs(); } catch (e) { /* none */ }
+    const renderer = makeRenderer(P);
+    if (!renderer) { webglHelp(); return; }
     gfx.probe(renderer);
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
     renderer.domElement.style.cssText = 'position:fixed;inset:0;width:100%;height:100%';
