@@ -451,6 +451,8 @@ function ext(pts, depth, bevel = 0.0035, holes = null) {
   g.translate(0, 0, -d / 2); g.rotateY(Math.PI / 2);
   return HQ ? crease(g) : g;
 }
+// furniture (stocks, grips, handguards, magazines): a deep rounded bevel, so the cross-section is a soft oval, not a slab
+const soft = (pts, depth, k = 0.3, holes = null) => ext(pts, depth, HQ ? Math.min(0.016, depth * k) : 0.0035, holes);
 const tube = (r, u0, u1, v, x = 0, seg = 10, r1 = r) => { const g = CYL(r1, r, u1 - u0, seg); g.rotateX(-Math.PI / 2); g.translate(x, v, -(u0 + u1) / 2); return g; };
 // a block (u along the gun, v up, w across): on Medium+ with softly bevelled edges like a machined or moulded part
 const blk = (u0, u1, v0, v1, w, x = 0) => {
@@ -473,20 +475,20 @@ function rifle(G, o) {
   G('dark', blk(r1 - 0.13, r1 - 0.05, rt - 0.036, rt - 0.014, w + 0.004));   // ejection port
   G('metal', blk(r1 - 0.045, r1 - 0.025, rt - 0.03, rt - 0.016, w + 0.03, w / 2 + 0.012));   // charging handle
   // grip + trigger guard + trigger
-  G(o.gripMat ? 'f~' + o.gripMat : F, ext([[-0.04, rb + 0.004], [0.018, rb + 0.004], [-0.004, rb - 0.115], [-0.056, rb - 0.12], ['q', -0.064, rb - 0.06, -0.04, rb + 0.004]], w * 0.82));
+  G(o.gripMat ? 'f~' + o.gripMat : F, soft([[-0.04, rb + 0.004], [0.018, rb + 0.004], [-0.004, rb - 0.115], [-0.056, rb - 0.12], ['q', -0.064, rb - 0.06, -0.04, rb + 0.004]], w * 0.82, 0.32));
   G('metal', guard(0.012, 0.09, rb - 0.048, rb + 0.002)); G('metal', blk(0.04, 0.048, rb - 0.03, rb, 0.006));
   // magazine
   const m0 = o.mag0 ?? 0.11;
-  if (o.mag === 'curve') G('mag|' + (o.magMat || 'metal'), ext([[m0, rb + 0.005], [m0 + 0.075, rb + 0.005], ['q', m0 + 0.09, rb - 0.12, m0 + 0.15, rb - 0.205], [m0 + 0.085, rb - 0.235], ['q', m0 + 0.025, rb - 0.13, m0, rb + 0.005]], w * 0.72));
-  else if (o.mag === 'straight') G('mag|' + (o.magMat || 'dark'), ext([[m0, rb + 0.005], [m0 + 0.068, rb + 0.005], [m0 + 0.085, rb - 0.165], [m0 + 0.017, rb - 0.172]], w * 0.68));
+  if (o.mag === 'curve') G('mag|' + (o.magMat || 'metal'), soft([[m0, rb + 0.005], [m0 + 0.075, rb + 0.005], ['q', m0 + 0.09, rb - 0.12, m0 + 0.15, rb - 0.205], [m0 + 0.085, rb - 0.235], ['q', m0 + 0.025, rb - 0.13, m0, rb + 0.005]], w * 0.72, 0.18));
+  else if (o.mag === 'straight') G('mag|' + (o.magMat || 'dark'), soft([[m0, rb + 0.005], [m0 + 0.068, rb + 0.005], [m0 + 0.085, rb - 0.165], [m0 + 0.017, rb - 0.172]], w * 0.68, 0.15));
   else if (o.mag === 'box') G('mag|' + (o.magMat || 'dark'), ext([[m0, rb + 0.005], [m0 + 0.085, rb + 0.005], [m0 + 0.085, rb - 0.07], [m0, rb - 0.07]], w * 0.75));
   else if (o.mag === 'mg') { G('mag|dark', blk(m0, m0 + 0.13, rb - 0.13, rb + 0.005, w * 1.6, -0.02)); G('mag|olive', blk(m0 + 0.01, m0 + 0.12, rb - 0.125, rb - 0.04, w * 1.62, -0.02)); }
   // handguard
   const [h0, h1] = o.hg, hv = (rb + rt) / 2;
   if (o.hgType === 'ak') {
     const L = h1 - h0;   // lower handguard: a swell under the palm, finger grooves along the bottom edge
-    G(F, ext([[h0, rb + 0.004], [h0 + L * 0.2, rb - 0.004], ['q', h0 + L * 0.5, rb - 0.01, h0 + L * 0.8, rb - 0.002], [h1, rb + 0.008], [h1, hv + 0.004], [h0 + L * 0.5, hv + 0.006], [h0, hv + 0.008]], w * 1.12, 0.005));
-    G(F, ext([[h0 + 0.02, hv + 0.012], [h1 - 0.05, hv + 0.012], [h1 - 0.05, rt - 0.008], ['q', (h0 + h1) / 2, rt - 0.002, h0 + 0.02, rt - 0.006]], w * 0.9, 0.004));   // upper (gas tube cover)
+    G(F, soft([[h0, rb + 0.004], [h0 + L * 0.2, rb - 0.004], ['q', h0 + L * 0.5, rb - 0.01, h0 + L * 0.8, rb - 0.002], [h1, rb + 0.008], [h1, hv + 0.004], [h0 + L * 0.5, hv + 0.006], [h0, hv + 0.008]], w * 1.12, 0.34));
+    G(F, soft([[h0 + 0.02, hv + 0.012], [h1 - 0.05, hv + 0.012], [h1 - 0.05, rt - 0.008], ['q', (h0 + h1) / 2, rt - 0.002, h0 + 0.02, rt - 0.006]], w * 0.9, 0.3));   // upper (gas tube cover)
     G('metal', blk(h0 - 0.008, h0 + 0.004, rb, rt - 0.01, w * 1.16));   // rear retainer
     G('metal', blk(h1 - 0.006, h1 + 0.004, rb + 0.006, hv + 0.01, w * 1.18));   // front ferrule
     G('metal', tube(0.011, h1 - 0.05, h1 + 0.02, rt - 0.012));
@@ -502,7 +504,7 @@ function rifle(G, o) {
     G('metal', tube(0.036, h0 - 0.012, h0, hv, 0, 14)); G('metal', tube(0.032, h0 - 0.02, h0 - 0.012, hv, 0, 14));   // delta ring + its spring
   }
   else if (o.hgType === 'round') G(F, tube(o.hgR || 0.026, h0, h1, hv - 0.004, 0, 12));
-  else if (o.hgType === 'slab') G(F, ext([[h0, rb - 0.01], [h1, rb - 0.004], [h1, rt - 0.004], [h0, rt]], w * 1.15));
+  else if (o.hgType === 'slab') G(F, soft([[h0, rb - 0.01], [h1, rb - 0.004], [h1, rt - 0.004], [h0, rt]], w * 1.15));
   // barrel, front sight, muzzle
   const bv = o.bv ?? (hv + 0.006), bEnd = h1 + (o.blen || 0.12);
   G('metal', tube(o.br || 0.0105, h1 - 0.02, bEnd, bv));
@@ -521,10 +523,10 @@ function rifle(G, o) {
   muzzle(G, (G.att && G.att.muzzle && G.att.muzzle !== 'standard' && !o.noMuzzleAtt) ? G.att.muzzle : o.muzzle, bEnd, bv);
   // stock
   const so = o.stock;
-  if (so === 'ak') G(F, ext([[r0, rt - 0.008], [r0, rb + 0.004], [r0 - 0.27, rb - 0.075], [r0 - 0.3, rb - 0.078], [r0 - 0.305, rt - 0.03], ['q', r0 - 0.15, rt - 0.018, r0, rt - 0.008]], w * 0.9));
-  else if (so === 'm4') { G('dark', tube(0.017, r0 - 0.2, r0, rt - 0.028)); G(F, ext([[r0 - 0.11, rt - 0.004], [r0 - 0.245, rt - 0.004], [r0 - 0.262, rb - 0.075], [r0 - 0.205, rb - 0.075], ['q', r0 - 0.16, rb - 0.02, r0 - 0.11, rt - 0.05]], w * 0.86)); }
+  if (so === 'ak') G(F, soft([[r0, rt - 0.008], [r0, rb + 0.004], [r0 - 0.27, rb - 0.075], [r0 - 0.3, rb - 0.078], [r0 - 0.305, rt - 0.03], ['q', r0 - 0.15, rt - 0.018, r0, rt - 0.008]], w * 0.9));
+  else if (so === 'm4') { G('dark', tube(0.017, r0 - 0.2, r0, rt - 0.028)); G(F, soft([[r0 - 0.11, rt - 0.004], [r0 - 0.245, rt - 0.004], [r0 - 0.262, rb - 0.075], [r0 - 0.205, rb - 0.075], ['q', r0 - 0.16, rb - 0.02, r0 - 0.11, rt - 0.05]], w * 0.86)); }
   else if (so === 'skel') { G(F, blk(r0 - 0.24, r0, rt - 0.03, rt - 0.012, 0.022)); G(F, ext([[r0, rb + 0.01], [r0 - 0.012, rb - 0.01], [r0 - 0.24, rb - 0.055], [r0 - 0.24, rb - 0.035]], 0.022)); G(F, blk(r0 - 0.26, r0 - 0.235, rb - 0.06, rt - 0.01, w)); }
-  else if (so === 'thumb') G(B, ext([[r0, rt], [r0, rb - 0.01], [r0 - 0.05, rb - 0.035], [r0 - 0.32, rb - 0.08], [r0 - 0.34, rb - 0.08], [r0 - 0.345, rt + 0.005], [r0 - 0.2, rt + 0.012]], w * 1.05, 0.004, [[[r0 - 0.07, rb - 0.015], [r0 - 0.16, rb - 0.035], [r0 - 0.15, rt - 0.03], [r0 - 0.08, rt - 0.025]]]));
+  else if (so === 'thumb') G(B, soft([[r0, rt], [r0, rb - 0.01], [r0 - 0.05, rb - 0.035], [r0 - 0.32, rb - 0.08], [r0 - 0.34, rb - 0.08], [r0 - 0.345, rt + 0.005], [r0 - 0.2, rt + 0.012]], w * 1.05, 0.22, [[[r0 - 0.07, rb - 0.015], [r0 - 0.16, rb - 0.035], [r0 - 0.15, rt - 0.03], [r0 - 0.08, rt - 0.025]]]));
   else if (so === 'fold') G('dark', blk(r0 - 0.03, r0, rb + 0.01, rt - 0.01, w * 0.6));
   // top: rail / carry handle / scope / iron sights
   if (o.rail) for (let k = 0; k * 0.024 < (o.railLen || (r1 - r0 - 0.02)); k++) G('dark', blk(r0 + 0.01 + k * 0.024, r0 + 0.026 + k * 0.024, rt, rt + 0.011, w * 0.72));
