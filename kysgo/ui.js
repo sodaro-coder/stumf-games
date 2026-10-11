@@ -299,6 +299,46 @@ const MENU_CSS = `
  .cs-nav{scroll-behavior:auto}
  .cs-tile,.cs-tile:hover{transition:none;transform:none}
 }
+
+/* Visual consistency pass: clearer hierarchy, restrained depth, accessible states, and predictable control sizing. */
+.cs{--surface:#171c23;--surface-raised:#202631;--surface-hover:#272f3b;--stroke:#343d4b;--focus:#ffc36b;color-scheme:dark}
+.cs-menu{background:#101318}
+.cs-topnav{background:rgba(18,22,28,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom-color:rgba(255,255,255,.09)}
+.cs-brand{border-right-color:rgba(255,255,255,.08)}
+.cs-nav button{transition:background-color .16s ease,color .16s ease,border-color .16s ease}
+.cs-nav button.on{box-shadow:inset 0 -1px 0 rgba(242,163,58,.18)}
+.cs-coinbox,.cs-rank,.cs-ibtn{border-color:rgba(255,255,255,.1);box-shadow:0 2px 10px #0002}
+.cs-page{scrollbar-color:#46505e #15191f;scrollbar-width:thin}
+.cs-page::-webkit-scrollbar,.cs-panel::-webkit-scrollbar,.cs-modal>.cs-card::-webkit-scrollbar{width:10px;height:10px}
+.cs-page::-webkit-scrollbar-thumb,.cs-panel::-webkit-scrollbar-thumb,.cs-modal>.cs-card::-webkit-scrollbar-thumb{background:#46505e;border:3px solid #15191f;border-radius:10px}
+.cs-page::-webkit-scrollbar-track,.cs-panel::-webkit-scrollbar-track{background:#15191f}
+.cs-btn,.cs-go,.cs-menu button,.cs-menu select,.cs-menu input{transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,filter .16s ease}
+.cs-btn{min-height:38px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent}
+.cs-btn:not(:disabled):hover{filter:brightness(1.08);box-shadow:0 4px 14px #0003}
+.cs-btn:active:not(:disabled){transform:translateY(1px)}
+.cs-btn.alt{border-color:rgba(255,255,255,.08);background:#252c36}
+.cs-menu input,.cs-menu select,.cs input,.cs select,.cs textarea{min-height:40px;border-color:#384252;background:#11151b;transition:border-color .16s ease,box-shadow .16s ease}
+.cs-menu input:hover,.cs-menu select:hover,.cs input:hover,.cs select:hover,.cs textarea:hover{border-color:#566273}
+.cs-menu input:focus-visible,.cs-menu select:focus-visible,.cs input:focus-visible,.cs select:focus-visible,.cs textarea:focus-visible{outline:0;border-color:var(--focus);box-shadow:0 0 0 3px #ffc36b26}
+.cs-card,.cs-panel,.cs-panel2,.cs-tile,.cs-map,.cs-case{box-shadow:0 8px 24px rgba(0,0,0,.14)}
+.cs-card,.cs-panel2{background:linear-gradient(180deg,rgba(30,36,45,.96),rgba(22,27,34,.96));border-color:rgba(255,255,255,.09)}
+.cs-panel{border-color:rgba(255,255,255,.13);box-shadow:0 24px 80px #0009,0 2px 10px #0004}
+.cs-panel2 h3{background:rgba(255,255,255,.025);border-bottom-color:rgba(255,255,255,.08)}
+.cs-tile,.cs-map,.cs-case{border-color:rgba(255,255,255,.1);transition:border-color .16s ease,transform .16s ease,box-shadow .16s ease}
+.cs-tile:hover,.cs-map:hover,.cs-case:hover{border-color:#657184;box-shadow:0 10px 26px #0004}
+.cs-map.on{outline:2px solid #f2a33a;outline-offset:-2px;box-shadow:0 0 0 3px #f2a33a20}
+.cs-tabs button,.cs-seg button{transition:background-color .16s ease,color .16s ease,border-color .16s ease}
+.cs-tabs button:hover{color:#fff;background:rgba(255,255,255,.035)}
+.cs-seg{border-color:rgba(255,255,255,.13)}
+.cs-modal{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.cs-modal>.cs-card{box-shadow:0 24px 90px #000b}
+.cs-hud .stat,.cs-hud .ammo,.cs-hud .timer,.cs-hud .scoreb{backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.cs-hud .hint,.cs-hud .spec,.cs-hud .kf{border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.cs-hud .banner{max-width:calc(100vw - 24px);overflow-wrap:anywhere;border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 32px #0003}
+.cs button:disabled,.cs input:disabled,.cs select:disabled{cursor:not-allowed;opacity:.48}
+.cs button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.cs *, .cs *::before, .cs *::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
 `;
 export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS + MENU_CSS; document.head.appendChild(s); }
 
