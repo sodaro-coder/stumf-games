@@ -93,7 +93,7 @@ const UA = 0.29, FA = 0.27;  // upper arm, forearm (to the middle of the hand)
 // a rig: group at the feet. hip -> thighs -> shins; torso -> shoulders -> elbows; neck -> head; aim -> the gun
 export function makePlayer(look, team) {
   const L = look, g = new THREE.Group(), M = rigMat(L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null), ct = team === 'CT';
-  const skin = L.head, naked = !!L.speedo, jacket = L.body, pants = L.legs;
+  const skin = L.head, naked = !!L.speedo, wooden = L.model === 'log', jacket = L.body, pants = L.legs;
   const glove = naked ? skin : '#29292b', boot = naked ? skin : '#2e2822', gear = ct ? shade(jacket, 0.7) : '#4b4936', strap = ct ? '#1d2027' : '#3a3528';
   const bone = (parent, x, y, z) => { const b = new THREE.Group(); b.position.set(x, y, z); parent.add(b); return b; };
   const mesh = (b, parts) => { const m = new THREE.Mesh(merge(parts), M); b.add(m); return m; };
@@ -106,18 +106,20 @@ export function makePlayer(look, team) {
   const legs = [];
   for (const sd of [-1, 1]) {
     const thigh = bone(hip, sd * 0.095, -0.02, 0);
-    const tp = [[place(CAP(0.083, 0.3), [0, -0.21, 0]), naked ? skin : pants]];
+    const tp = [[place(wooden ? CYL(0.078, 0.07, 0.38, 10) : CAP(0.083, 0.3), [0, -0.21, 0]), wooden ? '#8b572f' : naked ? skin : pants]];
     if (!naked) tp.push([place(BOX(0.06, 0.1, 0.12), [sd * 0.075, -0.2, 0.01]), shade(pants, 0.85)]);   // cargo pocket
     mesh(thigh, tp);
     const shin = bone(thigh, 0, -0.44, 0);
-    const sp = [[place(CAP(0.066, 0.3), [0, -0.2, 0]), naked ? skin : pants], [place(BOX(0.12, 0.09, 0.26), [0, -0.44, -0.04]), boot], [place(CYL(0.07, 0.072, 0.1, 10), [0, -0.37, 0]), boot]];
+    const sp = [[place(wooden ? CYL(0.064, 0.058, 0.34, 10) : CAP(0.066, 0.3), [0, -0.2, 0]), wooden ? '#9a6337' : naked ? skin : pants], [place(BOX(0.12, 0.09, 0.26), [0, -0.44, -0.04]), wooden ? '#5b3a24' : boot], [place(CYL(0.07, 0.072, 0.1, 10), [0, -0.37, 0]), wooden ? '#a16b3c' : boot]];
     if (ct && !naked) sp.push([place(SPH(0.062, 10, 6), [0, -0.01, -0.05], [0, 0, 0], [1, 1.15, 0.7]), '#202226']);   // knee pad
     mesh(shin, sp);
     legs.push(thigh, shin);
   }
   // torso
   const torso = bone(g, 0, 0.95, 0);
-  const tp = [[place(CYL(0.18, 0.165, 0.26, 12), [0, 0.12, 0], [0, 0, 0], [1, 1, 0.66]), jacket], [place(CYL(0.215, 0.18, 0.3, 12), [0, 0.37, 0], [0, 0, 0], [1, 1, 0.62]), jacket],
+  const tp = wooden
+    ? [[place(CYL(0.19, 0.17, 0.68, 14), [0, 0.29, 0], [0, 0, 0], [1, 1, 0.78]), '#9a6337'], [place(CYL(0.195, 0.19, 0.045, 14), [0, 0.61, 0], [0, 0, 0], [1, 1, 0.78]), '#c28a4f'], [place(BOX(0.018, 0.47, 0.012), [-0.08, 0.29, -0.15], [0, 0, -0.06]), '#684023'], [place(BOX(0.014, 0.38, 0.012), [0.075, 0.27, -0.15], [0, 0, 0.08]), '#714629'], [place(BOX(0.22, 0.035, 0.018), [0, 0.49, -0.145]), '#bd8548']]
+    : [[place(CYL(0.18, 0.165, 0.26, 12), [0, 0.12, 0], [0, 0, 0], [1, 1, 0.66]), jacket], [place(CYL(0.215, 0.18, 0.3, 12), [0, 0.37, 0], [0, 0, 0], [1, 1, 0.62]), jacket],
     [place(SPH(0.1, 10, 7), [-0.2, 0.47, 0]), jacket], [place(SPH(0.1, 10, 7), [0.2, 0.47, 0]), jacket], [place(CYL(0.08, 0.11, 0.07, 10), [0, 0.53, 0]), jacket]];
   if (L.belly) tp.push([place(SPH(0.19, 12, 9), [0, 0.2, -0.06], [0, 0, 0], [1, 0.9, 0.85]), skin]);
   if (L.mustard) for (let k = 0; k < 5; k++) tp.push([place(BOX(0.05, 0.1, 0.02), [k % 2 ? 0.03 : -0.03, 0.12 + k * 0.08, -0.145], [0, 0, k % 2 ? 0.6 : -0.6]), '#f2d33c']);
@@ -138,9 +140,9 @@ export function makePlayer(look, team) {
   const arms = [];
   for (const sd of [-1, 1]) {
     const sh = bone(torso, sd * 0.235, 0.46, 0);
-    mesh(sh, [[place(CAP(0.064, 0.18), [0, -0.14, 0]), naked ? skin : jacket]]);
+    mesh(sh, [[place(wooden ? CYL(0.06, 0.055, 0.25, 10) : CAP(0.064, 0.18), [0, -0.14, 0]), wooden ? '#8b572f' : naked ? skin : jacket]]);
     const el = bone(sh, 0, -UA, 0);
-    const fp = [[place(CAP(0.054, 0.17), [0, -0.12, 0]), naked ? skin : jacket], [place(SPH(0.056, 10, 7), [0, -FA, -0.005], [0, 0, 0], [0.8, 1.15, 0.95]), glove]];
+    const fp = [[place(wooden ? CYL(0.052, 0.046, 0.22, 10) : CAP(0.054, 0.17), [0, -0.12, 0]), wooden ? '#9a6337' : naked ? skin : jacket], [place(SPH(0.056, 10, 7), [0, -FA, -0.005], [0, 0, 0], [0.8, 1.15, 0.95]), wooden ? '#8b572f' : glove]];
     if (!naked) fp.push([place(CYL(0.058, 0.056, 0.05, 10), [0, -0.215, 0]), glove]);
     mesh(el, fp);
     arms.push(sh, el);
@@ -161,7 +163,20 @@ function headParts(L, ct) {
   const face = () => { eyes(); P.push([place(SPH(0.02, 6, 5), [0, HY - 0.01, -0.112], [0, 0, 0], [0.8, 1, 1]), shade(skin, 0.92)], [place(SPH(0.026, 6, 5), [-0.104, HY, 0]), skin], [place(SPH(0.026, 6, 5), [0.104, HY, 0]), skin]); };
   const hair = (c = '#2a2018') => P.push([place(SPH(0.117, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.42), [0, HY + 0.008, 0.008], [0, 0, 0], HS), c]);
   P.push([place(CYL(0.052, 0.058, 0.1, 10), [0, 0.04, 0]), skin]);
-  switch (L.hat) {
+  if (L.model === 'log') {
+    // Tung Tung Tung Sahur: recognizable upright wooden log body, bark grain, carved face and expressive eyes.
+    P.push([place(CYL(0.094, 0.105, 0.34, 14), [0, HY + 0.005, 0], [0, 0, 0], [1, 1, 0.86]), '#a9703d'],
+      [place(CYL(0.098, 0.094, 0.025, 14), [0, HY + 0.18, 0], [0, 0, 0], [1, 1, 0.86]), '#d4a064'],
+      [place(BOX(0.012, 0.22, 0.012), [-0.048, HY, -0.082], [0, 0, -0.08]), '#684023'],
+      [place(BOX(0.01, 0.17, 0.012), [0.058, HY - 0.025, -0.083], [0, 0, 0.06]), '#704326'],
+      [place(SPH(0.027, 10, 8), [-0.038, HY + 0.018, -0.084], [0, 0, 0], [1, 1.18, 0.72]), '#fff4df'],
+      [place(SPH(0.027, 10, 8), [0.038, HY + 0.018, -0.084], [0, 0, 0], [1, 1.18, 0.72]), '#fff4df'],
+      [place(SPH(0.014, 8, 6), [-0.034, HY + 0.018, -0.106]), '#17110d'],
+      [place(SPH(0.014, 8, 6), [0.042, HY + 0.018, -0.106]), '#17110d'],
+      [place(CYL(0.023, 0.023, 0.014, 10), [0, HY - 0.045, -0.095], [Math.PI / 2, 0, 0]), '#3b2116'],
+      [place(BOX(0.026, 0.012, 0.008), [-0.038, HY + 0.065, -0.095], [0, 0, -0.2]), '#3a2416'],
+      [place(BOX(0.026, 0.012, 0.008), [0.038, HY + 0.065, -0.095], [0, 0, 0.2]), '#3a2416']);
+  } else switch (L.hat) {
     case 'balaclava': head(hc); band(skin, 1.28, 0.26); eyes(); break;
     case 'shemagh': head(hc, [0.97, 1.13, 1.04]); band(skin, 1.28, 0.24, 0.1175); eyes(); P.push([place(CYL(0.075, 0.1, 0.09, 10), [0, 0.03, 0]), hc], [place(BOX(0.12, 0.16, 0.02), [0, 0.0, 0.1], [0.3, 0, 0]), hc]); break;
     case 'helmet':
