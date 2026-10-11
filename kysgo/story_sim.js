@@ -267,7 +267,7 @@ export class StoryMatch extends Match {
         st.need = o.targets || 1; st.prog = 0;
         // the puzzle: the terminals carry shuffled numbers and must be worked in order; a wrong one sets off an alarm
         const order = Array.from({ length: st.need }, (_, k) => k + 1).sort(() => this.rng() - 0.5);
-        for (let k = 0; k < st.need; k++) { const q = this.zonePt(place + k, i * 10 + k); this.markers.push({ id: 't' + k, x: q[0], z: q[1], kind: 'terminal', label: o.puzzle ? String(order[k]) : 'USE', n: o.puzzle ? order[k] : 0, prog: 0 }); }
+        for (let k = 0; k < st.need; k++) { const q = this.zonePt(place, i * 10 + k); this.markers.push({ id: 't' + k, x: q[0], z: q[1], kind: 'terminal', label: o.puzzle ? String(order[k]) : 'USE', n: o.puzzle ? order[k] : 0, prog: 0 }); }
         st.next = 1; st.puzzle = !!o.puzzle; this.wave(2); break;
       }
       case 'defuse': { const q = this.zonePt('bomb' + this.mi, i); this.markers.push({ id: 'bomb', x: q[0], z: q[1], kind: 'bomb', label: 'Defuse', prog: 0 }); st.need = 7; this.waveT = 6; break; }
