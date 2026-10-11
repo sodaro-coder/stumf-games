@@ -422,6 +422,38 @@ const MENU_CSS = `
 @supports (height:100dvh){.cs-menu{min-height:100dvh}}
 @media (max-width:760px){.cs-home{grid-template-columns:minmax(0,1fr);gap:12px}.cs-home .cs-side2{display:none}.cs-hero{min-width:0}.cs-home>*{min-width:0}.cs-page{overflow-x:hidden}}
 
+
+/* Final phone sizing fix: prevent the launch page from behaving like a full-width desktop modal. */
+@media(max-width:600px){
+ .cs-page{padding:8px!important;overflow-x:hidden}
+ .cs-home{display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;gap:10px!important;min-height:0!important;height:auto!important;max-height:none!important;padding:0!important;overflow:visible!important;background:transparent!important}
+ .cs-home:before{content:none!important}
+ .cs-home>*{width:100%!important;max-width:100%!important;min-width:0!important}
+ .cs-hero{padding:14px 12px!important;margin:0!important;border-radius:12px}
+ .cs-hero h1,.cs-hero .title{font-size:clamp(30px,9vw,42px)!important;line-height:1!important;margin:4px 0 10px!important}
+ .cs-hero p,.cs-hero .sub{font-size:14px!important;line-height:1.4!important;margin:0 0 12px!important}
+ .cs-hero .cs-btn,.cs-hero .cs-go{width:100%!important;min-width:0!important;min-height:46px!important;padding:11px 14px!important;font-size:15px!important}
+ .cs-home .cs-card,.cs-home .cs-panel2{width:100%!important;max-width:100%!important;margin:0!important}
+ .cs-home .cs-h{margin:10px 0 6px!important}
+ .cs-home .cs-card{padding:10px!important}
+ .cs-home .cs-side2{display:none!important}
+}
+@media(max-width:380px){
+ .cs-top{gap:4px!important;padding:6px 8px!important}
+ .cs-logo{font-size:16px!important}
+ .cs-chip{font-size:10px!important;padding:4px 6px!important}
+ .cs-hero{padding:12px 10px!important}
+ .cs-hero h1,.cs-hero .title{font-size:30px!important}
+ .cs-home .cs-card{font-size:13px!important}
+}
+@media(orientation:landscape) and (max-height:500px) and (max-width:900px){
+ .cs-home{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;align-items:start!important;gap:8px!important}
+ .cs-home .cs-hero{padding:8px!important}
+ .cs-hero h1,.cs-hero .title{font-size:clamp(24px,5vh,34px)!important}
+ .cs-hero p,.cs-hero .sub{font-size:12px!important;margin-bottom:8px!important}
+ .cs-hero .cs-btn,.cs-hero .cs-go{min-height:38px!important;padding:7px 10px!important}
+}
+
 `;
 export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS + MENU_CSS; document.head.appendChild(s); }
 
