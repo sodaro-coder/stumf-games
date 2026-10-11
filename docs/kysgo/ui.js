@@ -454,6 +454,37 @@ const MENU_CSS = `
  .cs-hero .cs-btn,.cs-hero .cs-go{min-height:38px!important;padding:7px 10px!important}
 }
 
+
+/* Xbox / TV-browser polish: make the desktop interface legible at couch distance and stop navigation clipping. */
+@media (min-width:900px) and (max-width:1500px){
+ .cs-topnav{height:56px}
+ .cs-brand{padding:0 14px;font-size:21px;letter-spacing:.07em;white-space:nowrap}
+ .cs-nav{overflow-x:auto;flex:1 1 auto;min-width:0}
+ .cs-nav button{padding:0 10px;font-size:11px;letter-spacing:.09em;gap:6px;white-space:nowrap}
+ .cs-nav svg{width:16px;height:16px;flex:none}
+ .cs-acct{gap:6px;padding:0 8px;flex:0 0 auto}
+ .cs-page{top:56px;padding:14px 16px}
+ .cs-home{grid-template-columns:minmax(250px,.88fr) minmax(280px,1.05fr) minmax(210px,.78fr);gap:14px;height:auto;min-height:100%;align-items:start}
+ .cs-hero h1{font-size:clamp(36px,3.2vw,48px);margin:14px 0 8px;letter-spacing:.035em}
+ .cs-hero .sub{font-size:clamp(15px,1.2vw,18px);line-height:1.45;margin-bottom:18px}
+ .cs-go{min-height:52px;padding:14px 20px;font-size:clamp(17px,1.4vw,20px);justify-content:center}
+ .cs-panel2 h3{font-size:12px;padding:12px 14px}
+ .cs-panel2 .bd{padding:14px}
+ .cs-panel2,.cs-card{font-size:14px}
+ .cs-page,.cs-home,.cs-home>*{min-width:0}
+ .cs-home .cs-panel2,.cs-home .cs-card{max-width:100%}
+}
+@media (min-width:900px) and (max-width:1120px){
+ .cs-brand{padding:0 10px;font-size:18px}
+ .cs-nav button{padding:0 7px;font-size:10px;letter-spacing:.04em;gap:4px}
+ .cs-acct{gap:4px;padding:0 5px}
+ .cs-home{grid-template-columns:minmax(220px,.9fr) minmax(240px,1fr);gap:12px}
+ .cs-home>.cs-featured,.cs-home>.cs-right,.cs-home>.cs-side2{grid-column:2}
+}
+@media (min-width:1501px){
+ .cs-nav button{padding-left:14px;padding-right:14px}
+}
+
 `;
 export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS + MENU_CSS; document.head.appendChild(s); }
 
