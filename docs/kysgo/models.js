@@ -92,7 +92,7 @@ const rigMat = (glow) => {
 const UA = 0.29, FA = 0.27;  // upper arm, forearm (to the middle of the hand)
 // a rig: group at the feet. hip -> thighs -> shins; torso -> shoulders -> elbows; neck -> head; aim -> the gun
 export function makePlayer(look, team) {
-  const L = look, g = new THREE.Group(), M = rigMat(L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null), ct = team === 'CT';
+  const L = look || {}, g = new THREE.Group(), M = rigMat(L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null), ct = team === 'CT';
   const skin = L.head || '#b88768', naked = !!L.speedo, wooden = L.model === 'log', jacket = L.body || '#343b43', pants = L.legs || '#252a30';
   const glove = naked ? skin : '#29292b', boot = naked ? skin : '#2e2822', gear = ct ? shade(jacket, 0.7) : '#4b4936', strap = ct ? '#1d2027' : '#3a3528';
   const bone = (parent, x, y, z) => { const b = new THREE.Group(); b.position.set(x, y, z); parent.add(b); return b; };
@@ -158,7 +158,8 @@ export function makePlayer(look, team) {
   return { g, hip, legL: legs[0], shinL: legs[1], legR: legs[2], shinR: legs[3], torso, armL: arms[0], foreL: arms[1], armR: arms[2], foreR: arms[3], neck, aim, tpGun, tpKey: '' };
 }
 function headParts(L, ct) {
-  const skin = L.head, hc = L.hatColor || '#333', P = [];
+  L = L || {};
+  const skin = L.head || '#b88768', hc = L.hatColor || '#333', P = [];
   const HS = [0.93, 1.1, 1.0], HY = 0.165;
   const head = (c, sc = HS) => P.push([place(SPH(0.112, 14, 10), [0, HY, 0], [0, 0, 0], sc), c]);
   const band = (c, t0, tl, r = 0.1135) => P.push([place(SPH(r, 12, 3, Math.PI * 1.5 - 0.75, 1.5, t0, tl), [0, HY, 0], [0, 0, 0], HS), c]);   // a strip across the face
