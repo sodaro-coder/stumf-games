@@ -415,6 +415,13 @@ const MENU_CSS = `
 }
 @media(prefers-reduced-motion:reduce){.cs-menu *,.cs-menu *:before,.cs-menu *:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 
+/* Console-browser hardening: keyboard/gamepad focus, TV-distance readability, and no hover-only controls. */
+.cs button:focus-visible,.cs a:focus-visible,.cs select:focus-visible,.cs input:focus-visible{outline:3px solid #f2a33a;outline-offset:3px}
+@media (min-width:1500px) and (min-height:800px){.cs-menu{font-size:clamp(15px,1vw,20px)}.cs-topnav button{min-height:52px}.cs-btn{min-height:46px}}
+@media (hover:none),(pointer:coarse){.cs button,.cs a,.cs select{touch-action:manipulation}.cs button:hover,.cs a:hover{filter:none;transform:none}}
+@supports (height:100dvh){.cs-menu{min-height:100dvh}}
+@media (max-width:760px){.cs-home{grid-template-columns:minmax(0,1fr);gap:12px}.cs-home .cs-side2{display:none}.cs-hero{min-width:0}.cs-home>*{min-width:0}.cs-page{overflow-x:hidden}}
+
 `;
 export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS + MENU_CSS; document.head.appendChild(s); }
 

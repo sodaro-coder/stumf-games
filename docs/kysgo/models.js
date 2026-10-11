@@ -93,7 +93,7 @@ const UA = 0.29, FA = 0.27;  // upper arm, forearm (to the middle of the hand)
 // a rig: group at the feet. hip -> thighs -> shins; torso -> shoulders -> elbows; neck -> head; aim -> the gun
 export function makePlayer(look, team) {
   const L = look, g = new THREE.Group(), M = rigMat(L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null), ct = team === 'CT';
-  const skin = L.head, naked = !!L.speedo, wooden = L.model === 'log', jacket = L.body, pants = L.legs;
+  const skin = L.head || '#b88768', naked = !!L.speedo, wooden = L.model === 'log', jacket = L.body || '#343b43', pants = L.legs || '#252a30';
   const glove = naked ? skin : '#29292b', boot = naked ? skin : '#2e2822', gear = ct ? shade(jacket, 0.7) : '#4b4936', strap = ct ? '#1d2027' : '#3a3528';
   const bone = (parent, x, y, z) => { const b = new THREE.Group(); b.position.set(x, y, z); parent.add(b); return b; };
   const mesh = (b, parts) => { const m = new THREE.Mesh(merge(parts), M); b.add(m); return m; };
@@ -146,7 +146,7 @@ export function makePlayer(look, team) {
     mesh(sh, [[place(wooden ? CYL(0.06, 0.055, 0.25, 10) : CAP(0.064, 0.18), [0, -0.14, 0]), wooden ? '#8b572f' : naked ? skin : jacket]]);
     const el = bone(sh, 0, -UA, 0);
     const fp = [[place(wooden ? CYL(0.052, 0.046, 0.22, 10) : CAP(0.054, 0.17), [0, -0.12, 0]), wooden ? '#9a6337' : naked ? skin : jacket], [place(SPH(0.056, 10, 7), [0, -FA, -0.005], [0, 0, 0], [0.8, 1.15, 0.95]), wooden ? '#8b572f' : glove]];
-    if (!naked) fp.push([place(CYL(0.058, 0.056, 0.05, 10), [0, -0.215, 0]), glove]);
+    // One continuous glove silhouette avoids the detached finger/wrist artifact in the menu mannequin.
     mesh(el, fp);
     arms.push(sh, el);
   }
