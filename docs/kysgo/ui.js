@@ -339,6 +339,82 @@ const MENU_CSS = `
 .cs button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.cs *, .cs *::before, .cs *::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 
+
+/* KYS:GO premium launch-screen redesign + robust phone/tablet layouts */
+.cs-menu{grid-template-columns:clamp(62px,5.6vw,84px) minmax(0,1fr);background:radial-gradient(ellipse at 76% 18%,#364352 0%,#1a2029 35%,#090c11 78%)}
+.cs-side{padding:clamp(8px,1.5vh,18px) 6px;gap:8px;background:linear-gradient(180deg,#0d1118f5,#10151de8);border-right:1px solid #ffffff16}
+.cs-side button{width:100%;min-height:52px;height:auto;padding:8px 3px;border:1px solid transparent;border-radius:9px;letter-spacing:.08em}
+.cs-side button.on{background:linear-gradient(135deg,#f2a33a26,#f2a33a08);border-color:#f2a33a52;box-shadow:inset 3px 0 #f2a33a}
+.cs-top{min-height:68px;padding:12px clamp(14px,2vw,30px);background:#0b0f15eF;border-bottom:1px solid #ffffff18;box-shadow:0 8px 26px #0003}
+.cs-logo{font-size:clamp(19px,1.7vw,27px);letter-spacing:.1em}
+.cs-body{padding:clamp(12px,2vw,30px);scrollbar-gutter:stable}
+.cs-home{position:relative;isolation:isolate;min-height:100%;overflow:hidden;background:linear-gradient(90deg,#0b0e13 0%,#0b0e13ee 25%,#0b0e1390 48%,#0b0e1310 100%)}
+.cs-home:before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 76% 25%,#9d74442e,transparent 42%),linear-gradient(125deg,#161d27 0%,#0c1017 54%,#111721 100%);pointer-events:none}
+.cs-hero{max-width:min(780px,70%);padding:clamp(20px,4vw,64px) clamp(16px,3vw,46px);position:relative}
+.cs-hero h1,.cs-hero .title{font-size:clamp(40px,7vw,94px);line-height:.94;letter-spacing:-.055em;font-weight:950;text-wrap:balance;text-shadow:0 6px 30px #0008}
+.cs-hero p,.cs-hero .sub{max-width:570px;font-size:clamp(15px,1.65vw,22px);line-height:1.55;color:#b5c0cf}
+.cs-hero .cs-btn{min-height:58px;min-width:min(260px,100%);padding:16px 28px;font-size:clamp(15px,1.5vw,20px);letter-spacing:.12em;text-transform:uppercase;background:linear-gradient(180deg,#78bd3d,#4b8526);color:#fff!important;border:1px solid #a4e36b70;box-shadow:0 10px 30px #0005,inset 0 1px #ffffff45}
+.cs-hero .cs-btn:hover{filter:brightness(1.12);transform:translateY(-1px)}
+.cs-home .cs-card,.cs-home .cs-panel2{background:linear-gradient(145deg,#1b222dF2,#10151df2);border-color:#ffffff18;box-shadow:0 18px 48px #0004}
+.cs-view{background:radial-gradient(ellipse at 50% 34%,#596371 0%,#262e39 46%,#0d1118 100%);box-shadow:inset 0 0 0 1px #ffffff18,inset 0 -50px 80px #0008}
+.cs-item canvas{background:radial-gradient(ellipse at 50% 35%,#384250,#10151c 75%);border:1px solid #ffffff10;box-shadow:inset 0 0 35px #0005}
+.cs-item .n{font-size:13px;letter-spacing:.01em}.cs-item .w{font-size:11px;letter-spacing:.03em}
+.cs-item{min-width:0}
+.cs-modal{padding:clamp(8px,2vw,24px)}
+.cs-modal>.cs-card{width:min(760px,96vw);max-height:min(88dvh,900px);overscroll-behavior:contain}
+.cs-panel{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto;overscroll-behavior:contain}
+.cs-grid{grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr))}
+.cs-reel{max-width:100%}
+@media(max-width:900px){
+ .cs-menu{grid-template-columns:58px minmax(0,1fr)}
+ .cs-side button{font-size:9px;min-height:46px}
+ .cs-top{gap:8px;padding:10px 12px;flex-wrap:wrap}
+ .cs-chip{font-size:12px;padding:5px 8px}
+ .cs-body{padding:12px}
+ .cs-hero{max-width:88%;padding:24px 18px}
+ .cs-hero h1,.cs-hero .title{font-size:clamp(38px,8vw,68px)}
+}
+@media(max-width:600px){
+ .cs-menu{inset:0;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+ .cs-side{grid-row:2;flex-direction:row;justify-content:space-around;align-items:stretch;padding:5px 4px calc(5px + env(safe-area-inset-bottom,0px));gap:3px;border-right:0;border-top:1px solid #ffffff18;min-width:0}
+ .cs-side button{flex:1;width:auto;min-width:0;min-height:48px;padding:5px 1px;font-size:8px;letter-spacing:0;gap:3px}
+ .cs-side button b{font-size:18px}
+ .cs-main{grid-row:1;min-height:0;overflow:hidden}
+ .cs-top{padding:8px 10px;min-height:54px;gap:6px}
+ .cs-logo{font-size:18px}
+ .cs-top .sp{flex-basis:100%;height:0;display:none}
+ .cs-chip{font-size:11px;padding:4px 7px}
+ .cs-body{padding:10px;overflow:auto;min-height:0}
+ .cs-home{overflow:auto;background:linear-gradient(180deg,#0b0e13c7,#0b0e13f7 72%)}
+ .cs-home:before{background:radial-gradient(ellipse at 78% 12%,#9d74443a,transparent 40%),linear-gradient(180deg,#19212c 0%,#0b0e13 65%)}
+ .cs-hero{max-width:100%;width:100%;padding:clamp(18px,5vw,28px) 10px}
+ .cs-hero h1,.cs-hero .title{font-size:clamp(38px,12vw,58px);line-height:.96}
+ .cs-hero p,.cs-hero .sub{font-size:15px;line-height:1.45}
+ .cs-hero .cs-btn{width:100%;min-height:52px}
+ .cs-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .cs-card{padding:9px;min-width:0}
+ .cs-modal{place-items:end center;padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
+ .cs-modal>.cs-card{width:100%;max-height:86dvh;border-radius:14px}
+ .cs-panel{left:8px!important;right:8px!important;top:calc(env(safe-area-inset-top,0px) + 8px)!important;bottom:calc(env(safe-area-inset-bottom,0px) + 8px)!important;width:auto!important;min-width:0!important;max-width:none;max-height:none;overflow:auto}
+ .cs-panel>div{min-width:0!important;width:100%}
+ .cs-reel{height:126px}.cs-reel .cell{width:108px;height:108px}.cs-reel .cell canvas{height:64px}
+ .cs-hud.touch .tl{left:calc(env(safe-area-inset-left,0px) + 7px);top:calc(env(safe-area-inset-top,0px) + 7px)}
+ .cs-hud.touch canvas.radar{width:clamp(72px,22vw,100px);height:clamp(72px,22vw,100px)}
+ .cs-hud.touch .bl{bottom:calc(env(safe-area-inset-bottom,0px) + 7px);left:calc(env(safe-area-inset-left,0px) + 8px);transform:none;gap:4px}
+ .cs-hud.touch .br{right:calc(env(safe-area-inset-right,0px) + 8px);left:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 7px)}
+ .cs-hud.touch .stat{font-size:15px;min-width:0;padding:3px 6px}.cs-hud.touch .ammo{font-size:22px;padding:3px 7px}
+ .cs-hud.touch .top{top:calc(env(safe-area-inset-top,0px) + 5px);transform:translateX(-50%) scale(.78)}
+}
+@media(max-height:520px) and (max-width:900px){
+ .cs-side button{min-height:40px}
+ .cs-top{min-height:44px;padding:5px 10px}
+ .cs-hero{padding-top:12px;padding-bottom:12px}
+ .cs-hero h1,.cs-hero .title{font-size:clamp(30px,7vh,52px)}
+ .cs-modal>.cs-card{max-height:94dvh}
+ .cs-hud.touch .tl{top:36px}
+}
+@media(prefers-reduced-motion:reduce){.cs-menu *,.cs-menu *:before,.cs-menu *:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
 `;
 export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS + MENU_CSS; document.head.appendChild(s); }
 
