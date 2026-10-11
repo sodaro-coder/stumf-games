@@ -48,6 +48,66 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   body.sc-cutting .kc-t,body.sc-cutting .cs-hud,body.sc-cutting .sc-squad,body.sc-cutting .sc-obj,body.sc-cutting .sc-boss{visibility:hidden}
   @media (max-height:520px){.sc-obj{top:44px;padding:4px 10px 4px 20px}.sc-obj span{font-size:13px}.sc-squad{bottom:auto;top:96px;left:auto;right:calc(env(safe-area-inset-right,0px) + 12px);gap:2px}.sc-m{min-width:118px;font-size:10px;padding:1px 6px}.sc-m .bar{width:40px}
     .sc-line p{font-size:16px}.sc-title{font-size:18px;top:13vh}.sc-line{bottom:13vh}.sc-talk{bottom:96px;font-size:13px}.sc-card h1{font-size:26px}.sc-card p{font-size:15px}}`;
+
+  /* Viewport-aware cinematic UI: clamp text, respect notches, and keep every overlay usable in short windows. */
+  css.textContent += `
+  .sc-ui{width:100%;height:100%;height:100dvh;overflow:hidden;isolation:isolate;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  .sc-obj{top:clamp(44px,7vh,76px);right:calc(env(safe-area-inset-right,0px) + clamp(8px,1.5vw,18px));max-width:min( min(390px,44vw), calc(100vw - 24px));overflow-wrap:anywhere}
+  .sc-obj span{font-size:clamp(12px,1.1vw,15px);line-height:1.3}
+  .sc-squad{left:calc(env(safe-area-inset-left,0px) + clamp(8px,1.2vw,14px));bottom:calc(env(safe-area-inset-bottom,0px) + clamp(64px,9vh,100px));max-width:min(32vw,290px)}
+  .sc-m{min-width:0;width:100%;max-width:100%}.sc-m em{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sc-boss{top:clamp(42px,6vh,64px);width:min(560px,calc(100vw - 28px))}
+  .sc-cut{inset:0;overflow:hidden}
+  .sc-cut:before,.sc-cut:after{height:clamp(28px,9vh,11vh)}
+  .sc-line{bottom:calc(env(safe-area-inset-bottom,0px) + clamp(44px,12vh,100px));width:min(760px,calc(100vw - 32px));max-height:46vh;overflow:hidden}
+  .sc-line p{font-size:clamp(15px,2.1vw,21px);line-height:1.35;overflow-wrap:anywhere}
+  .sc-line p.dir{font-size:clamp(13px,1.8vw,18px)}
+  .sc-line b{font-size:clamp(10px,1.3vw,13px)}
+  .sc-title{top:clamp(44px,15vh,150px);padding-inline:12px;font-size:clamp(20px,4vw,30px);overflow-wrap:anywhere}
+  .sc-skip{right:calc(env(safe-area-inset-right,0px) + 12px);bottom:calc(env(safe-area-inset-bottom,0px) + clamp(32px,10vh,86px))}
+  .sc-talk{bottom:calc(env(safe-area-inset-bottom,0px) + clamp(90px,16vh,150px));width:min(680px,calc(100vw - 32px));font-size:clamp(13px,1.8vw,16px)}
+  .sc-bark{bottom:calc(env(safe-area-inset-bottom,0px) + clamp(70px,12vh,120px));max-width:calc(100vw - 24px);overflow-wrap:anywhere}
+  .sc-card,.sc-hub{padding:calc(12px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) calc(12px + env(safe-area-inset-left,0px));overflow:auto;overscroll-behavior:contain}
+  .sc-card>div{width:min(720px,100%);max-height:100%;overflow:auto}
+  .sc-card h1{font-size:clamp(24px,5vw,40px);overflow-wrap:anywhere}
+  .sc-card p{font-size:clamp(14px,2.2vw,18px)}
+  .sc-hub>div{width:min(640px,100%);margin:auto}
+  .sc-hub h2{font-size:clamp(22px,4vw,28px);overflow-wrap:anywhere}
+  .sc-hub .p{min-width:0;flex-wrap:wrap;gap:6px}
+  .sc-hub .p b{overflow-wrap:anywhere}
+  .sc-hub button{max-width:100%;white-space:normal}
+  .sc-unlock{width:min(420px,calc(100vw - 24px));max-width:calc(100vw - 24px);padding:clamp(12px,3vw,18px);overflow-wrap:anywhere}
+  @media(max-width:760px){
+    .sc-obj{top:calc(env(safe-area-inset-top,0px) + 48px);max-width:min(58vw,300px);padding:6px 8px 6px 14px}
+    .sc-squad{bottom:calc(env(safe-area-inset-bottom,0px) + 72px);max-width:42vw}
+    .sc-m{gap:4px;padding:3px 5px;font-size:10px}
+    .sc-m .bar{width:clamp(28px,8vw,48px)}
+    .sc-boss{top:calc(env(safe-area-inset-top,0px) + 50px);width:min(74vw,440px)}
+    .sc-line{width:calc(100vw - 24px);bottom:calc(env(safe-area-inset-bottom,0px) + 54px)}
+    .sc-line p{font-size:clamp(14px,3.7vw,18px)}
+    .sc-line p.dir{font-size:clamp(12px,3.2vw,15px)}
+    .sc-talk{bottom:calc(env(safe-area-inset-bottom,0px) + 104px)}
+    .sc-card h1{font-size:clamp(24px,7vw,34px)}
+    .sc-hub>div{margin:0 auto}
+    .sc-hub .chars{display:flex;flex-wrap:wrap;gap:6px}
+    .sc-hub button{padding:9px 11px;margin:3px}
+  }
+  @media(max-height:520px){
+    .sc-obj{top:calc(env(safe-area-inset-top,0px) + 42px);max-width:38vw}
+    .sc-squad{top:calc(env(safe-area-inset-top,0px) + 86px);bottom:auto;right:calc(env(safe-area-inset-right,0px) + 8px);left:auto;max-width:25vw}
+    .sc-m{font-size:9px;padding:1px 4px}
+    .sc-m .bar{width:32px}
+    .sc-boss{top:calc(env(safe-area-inset-top,0px) + 42px)}
+    .sc-line{bottom:calc(env(safe-area-inset-bottom,0px) + 28px);max-height:50vh}
+    .sc-line p{font-size:clamp(13px,3vh,16px)}
+    .sc-title{top:calc(env(safe-area-inset-top,0px) + 36px);font-size:clamp(18px,5vh,24px)}
+    .sc-skip{bottom:calc(env(safe-area-inset-bottom,0px) + 18px)}
+    .sc-card h1{font-size:clamp(22px,6vh,28px)}
+    .sc-card p{font-size:clamp(13px,3vh,15px)}
+  }
+  @media(prefers-reduced-motion:reduce){.sc-line,.sc-card,.sc-vis,.sc-talk,.sc-bark{transition:none}}
+  `;
+
   document.head.appendChild(css);
   const ui = document.createElement('div'); ui.className = 'sc-ui';
   ui.innerHTML = `<div class="sc-vis"></div><div class="sc-watch"></div><div class="sc-unlock"></div><div class="sc-focus"></div><div class="sc-obj"><b></b><span></span><i></i></div><div class="sc-squad"></div><div class="sc-boss"><b></b><div><i></i></div><em></em></div>

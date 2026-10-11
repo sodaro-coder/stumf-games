@@ -199,6 +199,106 @@ const MENU_CSS = `
 @media (pointer:coarse) and (max-height:500px) and (min-width:761px){.cs-menu #pGo{position:fixed;right:16px;bottom:14px;width:220px;z-index:6;box-shadow:0 6px 24px rgba(0,0,0,.6)}.cs-topnav{height:50px}.cs-page{top:50px}}
 .cs-acctf{flex-wrap:wrap}.cs-acctf input{flex:1 1 200px;min-width:0}
 .cs-signup{margin-top:16px;max-width:380px;padding:14px;border:1px solid #f2a33a;border-radius:4px;background:rgba(242,163,58,.08)}
+
+/* Responsive UI pass: consistent sizing, safe-area support, and layouts that adapt to the actual viewport. */
+.cs-menu{width:100%;height:100vh;height:100dvh;min-width:0;overflow:hidden;isolation:isolate}
+.cs-menu,.cs-menu *{min-width:0}
+.cs-topnav{padding-left:clamp(0px,1vw,16px);padding-right:clamp(0px,1vw,16px);gap:clamp(4px,.8vw,12px)}
+.cs-brand{flex:0 0 auto;white-space:nowrap;padding-inline:clamp(10px,1.4vw,22px);font-size:clamp(17px,1.5vw,24px)}
+.cs-nav{overscroll-behavior-x:contain;scroll-behavior:smooth}
+.cs-nav button{padding-inline:clamp(8px,1.15vw,18px);white-space:nowrap}
+.cs-acct{flex:0 0 auto;gap:clamp(4px,.7vw,10px);padding-inline:clamp(4px,1vw,14px)}
+.cs-page{overscroll-behavior:contain;scrollbar-gutter:stable;overflow-x:hidden;padding:clamp(12px,1.6vw,26px)}
+.cs-page>*{max-width:100%}
+.cs-home{min-height:100%;height:auto;grid-template-columns:minmax(240px,.9fr) minmax(260px,1.5fr) minmax(220px,.8fr);align-items:center;gap:clamp(12px,1.6vw,22px)}
+.cs-home>*{min-width:0}
+.cs-hero h1{font-size:clamp(34px,4vw,54px);line-height:1.02;overflow-wrap:anywhere}
+.cs-panel,.cs-modal>.cs-card{width:min(760px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);overflow:auto;overscroll-behavior:contain}
+.cs-buy{width:min(1100px,calc(100vw - 32px))}
+.cs-buy .cats{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cs-sb{width:min(900px,calc(100vw - 32px));overflow:auto}
+.cs-sb table{min-width:520px}
+.cs-hud{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.cs-hud canvas.radar{width:clamp(88px,13vw,190px);height:clamp(88px,13vw,190px)}
+.cs-hud .stat{font-size:clamp(17px,2vw,28px);min-width:clamp(66px,8vw,110px)}
+.cs-hud .ammo{font-size:clamp(21px,2.4vw,32px)}
+.cs-hud .top{max-width:calc(100vw - 24px);gap:clamp(4px,.8vw,10px)}
+.cs-hud .feed{max-width:min(38vw,420px)}
+.cs-hud .kf{max-width:100%;overflow-wrap:anywhere}
+.cs-panel{left:50%;top:50%;transform:translate(-50%,-50%);margin:0}
+.cs input,.cs select,.cs textarea,.cs button{max-width:100%}
+.cs button:focus-visible,.cs input:focus-visible,.cs select:focus-visible,.cs textarea:focus-visible{outline:2px solid #f2a33a;outline-offset:2px}
+@media (min-width:1200px) and (min-height:700px){
+ .cs-topnav{height:clamp(60px,7vh,76px)}
+ .cs-page{top:clamp(60px,7vh,76px)}
+ .cs-home{max-height:100%;padding-block:clamp(0px,2vh,28px)}
+}
+@media (max-width:1100px){
+ .cs-home{grid-template-columns:minmax(220px,.85fr) minmax(240px,1.15fr)}
+ .cs-home .cs-side2{display:none}
+ .cs-nav button{padding-inline:10px;letter-spacing:.08em}
+ .cs-brand{letter-spacing:.08em}
+ .cs-rank{display:none}
+}
+@media (max-width:760px){
+ .cs-menu{height:100vh;height:100dvh}
+ .cs-topnav{left:0;right:0;height:54px;padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);gap:4px}
+ .cs-brand{padding-inline:10px;font-size:clamp(15px,4vw,19px);letter-spacing:.06em}
+ .cs-acct{margin-left:auto;gap:4px;padding-inline:4px}
+ .cs-acct #mTop{font-size:10px;padding:6px 7px;letter-spacing:0}
+ .cs-acct #mCoins{font-size:11px;padding:6px 7px}
+ .cs-nav{bottom:0}
+ .cs-page{top:54px;bottom:calc(60px + env(safe-area-inset-bottom,0px));padding:12px;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+ .cs-home{display:grid;grid-template-columns:minmax(0,1fr);height:auto;min-height:100%;gap:14px;align-content:start}
+ .cs-hero h1{font-size:clamp(34px,9vw,48px);margin-top:10px}
+ .cs-hero .sub{margin-bottom:16px;font-size:14px}
+ .cs-go{justify-content:center;padding:14px 18px;font-size:16px}
+ .cs-grid,.cs-tiles,.cs-maps{grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:8px}
+ .cs-buy{width:calc(100vw - 20px);max-width:calc(100vw - 20px);padding:12px}
+ .cs-buy .cats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .cs-panel{width:calc(100vw - 20px);max-width:calc(100vw - 20px);max-height:calc(100dvh - 20px);padding:12px}
+ .cs-modal{padding:10px}
+ .cs-modal>.cs-card{width:100%;max-width:100%;max-height:calc(100dvh - 20px)}
+ .cs-sb{width:calc(100vw - 20px)}
+ .cs-hud .tl{left:calc(env(safe-area-inset-left,0px) + 8px);top:calc(env(safe-area-inset-top,0px) + 8px)}
+ .cs-hud .feed{right:calc(env(safe-area-inset-right,0px) + 8px);top:calc(env(safe-area-inset-top,0px) + 8px);max-width:44vw}
+ .cs-hud .chat{left:calc(env(safe-area-inset-left,0px) + 8px);width:min(68vw,360px)}
+}
+@media (max-width:420px){
+ .cs-brand{font-size:14px;padding-inline:7px}
+ .cs-acct #mTop{font-size:9px;padding:5px}
+ .cs-acct #mCoins{font-size:10px;padding:5px}
+ .cs-menu .cs-nav button{flex-basis:58px}
+ .cs-menu .cs-nav button span{font-size:8px}
+ .cs-buy .cats{grid-template-columns:minmax(0,1fr)}
+ .cs-hud .team i{width:11px;height:16px}
+ .cs-hud .timer{font-size:16px;min-width:54px;padding-inline:6px}
+ .cs-hud .scoreb{font-size:16px;min-width:24px;padding-inline:3px}
+}
+@media (max-height:620px) and (min-width:761px){
+ .cs-topnav{height:48px}
+ .cs-page{top:48px;padding:12px 18px}
+ .cs-home{align-items:start}
+ .cs-hero h1{font-size:clamp(30px,5vh,44px);margin-top:12px}
+ .cs-panel{max-height:calc(100dvh - 16px)}
+ .cs-hud canvas.radar{width:clamp(72px,16vh,128px);height:clamp(72px,16vh,128px)}
+ .cs-hud .bl,.cs-hud .br{bottom:8px}
+}
+@media (orientation:landscape) and (max-height:500px){
+ .cs-topnav{height:42px}
+ .cs-page{top:42px;padding:8px 12px}
+ .cs-menu .cs-nav button{padding-inline:8px;font-size:10px}
+ .cs-menu .cs-brand{font-size:16px}
+ .cs-page{bottom:0}
+ .cs-menu .cs-nav{position:static;height:auto;padding:0;background:transparent;border:0}
+ .cs-menu .cs-nav button span{display:inline}
+ .cs-menu .cs-nav button{flex-direction:row;flex:0 0 auto}
+ .cs-home{grid-template-columns:minmax(190px,.8fr) minmax(220px,1.2fr);gap:10px}
+}
+@media (prefers-reduced-motion:reduce){
+ .cs-nav{scroll-behavior:auto}
+ .cs-tile,.cs-tile:hover{transition:none;transform:none}
+}
 `;
 export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS + MENU_CSS; document.head.appendChild(s); }
 
