@@ -93,9 +93,19 @@ const P = {
     const r = Math.floor(v * planks), pv = v * planks - r, seam = 1 - sm(0.02, 0.08, Math.min(pv, 1 - pv));
     const tone = 0.82 + hash(r, 3, 61) * 0.3, sh = hash(r, 1, 62) * 50;
     const grain = vnoise(u * 4, pv * 14 + sh, 4, 63, 64) * 0.55 + vnoise(u * 12, pv * 40 + sh, 12, 64, 64) * 0.45;
+    // cathedral streaks: long undulating dark bands like real sawn lumber
+    const warp = fbm(u, pv, 3, 3, 68), cath = Math.pow(Math.abs(Math.sin((pv * 2.2 + warp * 3.0 + sh * 0.05) * Math.PI)), 0.6);
     const knot = cell(u, frac(v + hash(r, 2, 67)), 5, 65 + r, C)[0] < 0.07 ? 0.72 : 1;
-    const k = tone * (0.84 + grain * 0.28) * knot * (1 - seam * 0.65);
-    o[0] = c[0] * k; o[1] = c[1] * k; o[2] = c[2] * k; o[3] = 0.7 - seam * 0.7 + grain * 0.12;
+    const pore = vnoise(u * 90, pv * 90, 90, 69);   // open grain pores
+    const k = tone * (0.84 + grain * 0.22 + cath * 0.14) * knot * (1 - seam * 0.65) * (0.94 + pore * 0.1);
+    o[0] = c[0] * k; o[1] = c[1] * k; o[2] = c[2] * k; o[3] = 0.7 - seam * 0.7 + grain * 0.1 + cath * 0.08;
+  },
+  brushed(u, v, o, c = [150, 154, 160]) {   // brushed metal: fine directional grain, for world props
+    const line = hash(Math.floor(v * 340), 7, 75), soft = fbm(u, v, 24, 2, 76);
+    const macro = fbm(u, v, 4, 4, 77), k = 0.82 + (line - 0.5) * 0.22 + (soft - 0.5) * 0.1 + (macro - 0.5) * 0.16;
+    const scuff = sm(0.75, 0.95, fbm(u * 2, v * 2, 3, 3, 78)) * 0.25;   // scuffed patches
+    o[0] = c[0] * k * (1 - scuff * 0.3); o[1] = c[1] * k * (1 - scuff * 0.3); o[2] = c[2] * k * (1 - scuff * 0.28);
+    o[3] = 0.5 + (line - 0.5) * 0.3;
   },
   crate(u, v, o) {   // a crate face: framed edges, a diagonal brace, horizontal boards, nails
     const fr = 0.1, eu = Math.min(u, 1 - u), ev = Math.min(v, 1 - v), dd = (u - v) / Math.SQRT2;
@@ -127,6 +137,11 @@ const P = {
     if (seam) { r *= 0.72; g *= 0.72; b *= 0.72; h = 0.2; }
     if (Math.hypot(su - 0.5, frac(v * 4) - 0.5) < 0.04) { r *= 0.6; g *= 0.6; b *= 0.6; h = 0.1; }  // form-tie holes
     if (hash(Math.floor(u * 256), Math.floor(v * 256), 83) < 0.02) { r *= 0.7; g *= 0.7; b *= 0.7; h = 0.3; }
+    // exposed aggregate: tiny pebbles and sand grains caught in the surface
+    cell(u, v, 90, 84, C);
+    if (C[0] < 0.09) { const t = 0.75 + C[2] * 0.6; r *= t; g *= t; b *= t; h += 0.25 * (1 - C[0] / 0.09); }
+    const stain = fbm(u * 1.5 + 3.7, v * 1.5, 3, 3, 85);   // weather staining
+    r *= 1 - stain * 0.14; g *= 1 - stain * 0.14; b *= 1 - stain * 0.1;
     o[0] = r; o[1] = g; o[2] = b; o[3] = h;
   },
   asphalt(u, v, o) {
