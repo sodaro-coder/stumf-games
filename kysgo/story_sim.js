@@ -19,6 +19,7 @@ export class StoryMatch extends Match {
     this.mission = MISSIONS[story.mission] || MISSIONS[0]; this.mi = story.mission | 0;
     this.diff = STORY_DIFF[story.diff] || STORY_DIFF.normal; this.diffKey = STORY_DIFF[story.diff] ? story.diff : 'normal';
     this.botLevel = this.diff.bot; this.wantChar = story.host || 'wiener';
+    if (story.solo && this.mission.lead) this.wantChar = this.mission.lead;   // solo: you ARE the level's main character; AI squadmates still fill in (fillSquad is untouched)
     this.obj = -1; this.state = null; this.markers = []; this.enemies = new Set(); this.npc = null; this.boss = null; this.beams = []; this.balls = [];
     this.cutT = 0; this.failT = 0; this.result = null; this.eid = 1; this.waveT = 0; this.alarm = 0; this.lastSend = 0; this.zoneCache = new Map();
     this.abilityT = new Map(); this.nadeUsed = new Set(); this.focusT = new Map(); this.kills = 0;
