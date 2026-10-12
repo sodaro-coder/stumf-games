@@ -46,7 +46,7 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, dmgNums: 1 };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, dmgNums: 1, colorblind: 'none' };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // ---- rebindable keybinds (action -> list of e.code / mouse codes). S.keys overrides; legacy S.crouchKey migrates in.
@@ -299,6 +299,7 @@ export default function start({ cfg, E, N, smoke }) {
     addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__installPrompt = e; });
   }
   let S = loadSet();
+  if (window.__CB__) __CB__.set(S.colorblind || 'none');   // apply saved colorblind mode before anything renders
   refreshKeys();
   const profile = new Profile(cfg);
   if (profile.signedIn) profile.sync();
@@ -334,10 +335,10 @@ export default function start({ cfg, E, N, smoke }) {
     g.fillStyle = '#0b0e13'; g.fillRect(0, 0, c.width, c.height);
     const ox = (c.width - B.w * s) / 2, oz = (c.height - B.d * s) / 2;
     for (let z = 0; z < B.d; z++) for (let x = 0; x < B.w; x++) { const i = z * B.w + x; if (B.flag[i] === 2 || B.flag[i] === 3) { g.fillStyle = B.flag[i] === 3 ? '#c43' : `hsl(35,${20 + B.h[i] * 5}%,${44 + B.h[i] * 6}%)`; g.fillRect(ox + x * s, oz + z * s, Math.ceil(s), Math.ceil(s)); } }
-    g.fillStyle = '#ff6a4a'; g.font = 'bold 13px system-ui'; for (const [n, r] of Object.entries(B.sites)) g.fillText(n, ox + (r[0] + r[2]) / 2 * s - 4, oz + (r[1] + r[3]) / 2 * s + 4);
+    g.fillStyle = window.__CB__ ? __CB__.site() : '#ff6a4a'; g.font = 'bold 13px system-ui'; for (const [n, r] of Object.entries(B.sites)) g.fillText(n, ox + (r[0] + r[2]) / 2 * s - 4, oz + (r[1] + r[3]) / 2 * s + 4);
   };
   let menu = null;
-  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); refreshKeys(); }, keybinds: () => keybindAPI({ get: () => S, save: (s) => { S = s; saveSet(s); }, toast }), announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
+  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); refreshKeys(); if (window.__CB__) __CB__.set(s.colorblind || 'none'); }, keybinds: () => keybindAPI({ get: () => S, save: (s) => { S = s; saveSet(s); }, toast }), announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
   if (smoke) { let m = 'dust'; try { const q = new URLSearchParams(location.search).get('map'); if (MAPS[q]) m = q; } catch (e) { /* no page */ } runMatch({ mode: '5v5', map: m, bot: 'normal', host: true, solo: true, smoke: true }); }
   else showMenu();
 
@@ -753,7 +754,7 @@ export default function start({ cfg, E, N, smoke }) {
       r.blob = new THREE.Mesh(blobGeo, blobMat); r.blob.rotation.x = -Math.PI / 2; r.blob.renderOrder = 1; scene.add(r.blob); r.key = key; r.x = 0; r.y = 0; r.z = 0; r.t = Math.random() * 10; scene.add(r.g); rigs.set(id, r);
       if (id !== myId) {  // teammates' names float over their heads
         const c = document.createElement('canvas'); c.width = 256; c.height = 48; const g = c.getContext('2d');
-        g.font = 'bold 28px system-ui,sans-serif'; g.textAlign = 'center'; g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.8)'; g.fillStyle = team === 'CT' ? '#9cc4ff' : '#ffd27a';
+        g.font = 'bold 28px system-ui,sans-serif'; g.textAlign = 'center'; g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.8)'; g.fillStyle = window.__CB__ ? __CB__.tag(team) : (team === 'CT' ? '#9cc4ff' : '#ffd27a');
         const nm = String(info.name || '').slice(0, 18); g.strokeText(nm, 128, 34); g.fillText(nm, 128, 34);
         const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
         sp.scale.set(1.3, 0.25, 1); sp.position.y = 2.15; sp.renderOrder = 5; r.g.add(sp); r.tag = sp;
@@ -1050,7 +1051,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (m.hp <= 0) me.alive = false;
     }
     const dmgFrom = new Map(), dmgTo = new Map();
-    function onHitConfirm(m) { const r = rigs.get(m.id); if (r && r.soldier) soldierEvent(r, 'hit'); if (me.lastGun && performance.now() - (me.lastShotAt || 0) < 600) addXp(me.lastGun, (m.dmg | 0) * XP_RULES.dmg); audio.play(m.group === 'head' ? 'head' : 'hit', 1.25); if (hud.hitmark) hud.hitmark(m.group === 'head' ? 'head' : ''); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); if (S.dmgNums && r && r.g) { const head = m.group === 'head', armored = !head && (m.armor | 0) > 0; const col = head ? '#ff4b4b' : armored ? '#5ec8ff' : '#ffffff'; const sc = 1 + Math.min(0.45, (m.dmg | 0) / 220); textPop(scene, r.g.position.x + (Math.random() - 0.5) * 0.7, r.g.position.y + (head ? 1.75 : 1.25), r.g.position.z + (Math.random() - 0.5) * 0.7, String(m.dmg | 0), col, sc); } }
+    function onHitConfirm(m) { const r = rigs.get(m.id); if (r && r.soldier) soldierEvent(r, 'hit'); if (me.lastGun && performance.now() - (me.lastShotAt || 0) < 600) addXp(me.lastGun, (m.dmg | 0) * XP_RULES.dmg); audio.play(m.group === 'head' ? 'head' : 'hit', 1.25); if (hud.hitmark) hud.hitmark(m.group === 'head' ? 'head' : ''); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); if (S.dmgNums && r && r.g) { const head = m.group === 'head', armored = !head && (m.armor | 0) > 0; const col = window.__CB__ ? __CB__.dmg(head, armored) : (head ? '#ff4b4b' : armored ? '#5ec8ff' : '#ffffff'); const sc = 1 + Math.min(0.45, (m.dmg | 0) / 220); textPop(scene, r.g.position.x + (Math.random() - 0.5) * 0.7, r.g.position.y + (head ? 1.75 : 1.25), r.g.position.z + (Math.random() - 0.5) * 0.7, String(m.dmg | 0), col, sc); } }
     function onFire(m) {
       if (m.id === myId) return;
       const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
