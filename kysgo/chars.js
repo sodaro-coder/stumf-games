@@ -489,20 +489,20 @@ function emotePose(r, e, rightIn) {
   }
 }
 
-// Tung Tung Tung Sahur: an original brainrot character riding the soldier's skeleton. A bark-covered log for a body with a
-// wide-eyed face, stick arms and legs, and a baseball bat slung on its back. Parts hang off the bones, so every
-// animation (walk, run, crouch, die, emotes) moves it, janky stick limbs and all.
+// Tung Tung Tung Sahur: an original brainrot character riding the soldier's skeleton. A smooth, polished wooden log for a body with
+// huge bulging cartoon eyes, a wide creepy smile, thin stick arms and legs, and flat bare feet. Parts hang off the bones, so every
+// animation (walk, run, crouch, die, emotes) moves it, janky stick limbs and all. The game's weapon system puts a gun in his hands.
 let logMats = null;
 function logBody(B, hq) {
   if (!logMats) {
-    const bark = hq ? new THREE.MeshStandardMaterial({ color: '#7a5030', roughness: 0.9, metalness: 0 }) : new THREE.MeshLambertMaterial({ color: '#7a5030' });
-    if (hq) gunSurface(bark, 'gwood', { tile: 4, albedo: 1.4, normal: 1.6 });
+    const wood = hq ? new THREE.MeshStandardMaterial({ color: '#c98f52', roughness: 0.5, metalness: 0 }) : new THREE.MeshLambertMaterial({ color: '#c98f52' });
+    if (hq) gunSurface(wood, 'gwood', { tile: 2, albedo: 0.8, normal: 0.7 });
     const end = new THREE.MeshLambertMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); x.fillStyle = '#d8b07a'; x.fillRect(0, 0, 128, 128);
       for (let r = 6; r < 64; r += 5 + Math.random() * 3) { x.strokeStyle = `rgba(120,80,40,${0.25 + Math.random() * 0.3})`; x.lineWidth = 1.5; x.beginPath(); x.arc(64 + Math.random() * 2, 64 + Math.random() * 2, r, 0, 7); x.stroke(); }
       x.strokeStyle = '#6a4424'; x.lineWidth = 6; x.beginPath(); x.arc(64, 64, 61, 0, 7); x.stroke(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })() });
-    logMats = { bark, end, white: new THREE.MeshLambertMaterial({ color: '#f6f2ea' }), black: new THREE.MeshBasicMaterial({ color: '#0a0806' }), stick: bark, bat: hq ? new THREE.MeshStandardMaterial({ color: '#c8a070', roughness: 0.45 }) : new THREE.MeshLambertMaterial({ color: '#c8a070' }) };
+    logMats = { wood, end, white: new THREE.MeshLambertMaterial({ color: '#f6f2ea' }), black: new THREE.MeshBasicMaterial({ color: '#0a0806' }), stick: wood };
     for (const m of [logMats.end, logMats.white]) litPatch(m, 'dyn');
-    if (!hq) litPatch(logMats.bark, 'dyn');
+    if (!hq) litPatch(logMats.wood, 'dyn');
   }
   const M = logMats, wp = (b) => b.getWorldPosition(new THREE.Vector3());
   const add = (bone, mesh) => { if (bone) bone.attach(mesh); };
@@ -512,26 +512,23 @@ function logBody(B, hq) {
   };
   // the log: from the hips to well above the head, ends showing growth rings
   const hip = wp(B.Hips), top = wp(B.Head).add(new THREE.Vector3(0, 0.28, 0)), H = top.y - hip.y + 0.12;
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.215, H, 18, 1, true), M.bark); body.position.set(hip.x, hip.y - 0.12 + H / 2, hip.z); add(B.Spine, body);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.215, H, 18, 1, true), M.wood); body.position.set(hip.x, hip.y - 0.12 + H / 2, hip.z); add(B.Spine, body);
   for (const [y, rx] of [[hip.y - 0.12 + H, -Math.PI / 2], [hip.y - 0.12, Math.PI / 2]]) { const e = new THREE.Mesh(new THREE.CircleGeometry(0.2, 18), M.end); e.position.set(hip.x, y, hip.z); e.rotation.x = rx; add(B.Spine, e); }
-  for (let k = 0; k < 3; k++) { const kn = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), M.bark); kn.scale.set(1, 0.6, 0.5); kn.position.set(hip.x + (k - 1) * 0.12, hip.y + 0.2 + k * 0.22, hip.z + 0.19 * (k === 1 ? -1 : 1)); add(B.Spine, kn); }   // knots
-  // the face, on the front (players face -z)
+  // the face, on the front (players face -z): huge bulging cartoon eyes and a wide creepy smile
   const hd = wp(B.Head), fz = -0.2;
   for (const sd of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.058, 14, 10), M.white); eye.scale.set(1, 1.25, 0.6); eye.position.set(hd.x + sd * 0.075, hd.y + 0.08, hd.z + fz); add(B.Spine2 || B.Spine, eye);
-    const pu = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), M.black); pu.position.set(hd.x + sd * 0.07, hd.y + 0.075, hd.z + fz - 0.035); add(B.Spine2 || B.Spine, pu);
-    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.016, 0.02), M.black); brow.position.set(hd.x + sd * 0.075, hd.y + 0.17, hd.z + fz - 0.01); brow.rotation.z = sd * 0.35; add(B.Spine2 || B.Spine, brow);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.105, 18, 14), M.white); eye.scale.set(1, 1.25, 0.55); eye.position.set(hd.x + sd * 0.115, hd.y + 0.1, hd.z + fz); add(B.Spine2 || B.Spine, eye);
+    const pu = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 10), M.black); pu.position.set(hd.x + sd * 0.105, hd.y + 0.095, hd.z + fz - 0.055); add(B.Spine2 || B.Spine, pu);
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), M.white); glint.position.set(hd.x + sd * 0.115, hd.y + 0.115, hd.z + fz - 0.085); add(B.Spine2 || B.Spine, glint);
   }
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 6, 14, Math.PI), M.black); mouth.position.set(hd.x, hd.y - 0.06, hd.z + fz - 0.005); mouth.rotation.z = Math.PI; add(B.Spine2 || B.Spine, mouth);
-  // stick limbs and stubby hands/feet
+  const smile = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.016, 8, 24, Math.PI * 0.85), M.black); smile.position.set(hd.x, hd.y - 0.07, hd.z + fz + 0.01); smile.rotation.z = Math.PI + (Math.PI - Math.PI * 0.85) / 2; smile.scale.x = 1.5; add(B.Spine2 || B.Spine, smile);
+  // thin stick limbs, small hands, flat bare feet
   for (const s of ['Left', 'Right']) {
-    between(B[s + 'Arm'], B[s + 'ForeArm'], 0.026, M.stick, 0.02); between(B[s + 'ForeArm'], B[s + 'Hand'], 0.022, M.stick, 0.02);
-    between(B[s + 'UpLeg'], B[s + 'Leg'], 0.034, M.stick, 0.02); between(B[s + 'Leg'], B[s + 'Foot'], 0.03, M.stick, 0.02);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), M.stick); hand.position.copy(wp(B[s + 'Hand'])); add(B[s + 'Hand'], hand);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.16), M.stick); foot.position.copy(wp(B[s + 'Foot'])).add(new THREE.Vector3(0, -0.03, -0.04)); add(B[s + 'Foot'], foot);
+    between(B[s + 'Arm'], B[s + 'ForeArm'], 0.018, M.stick, 0.02); between(B[s + 'ForeArm'], B[s + 'Hand'], 0.015, M.stick, 0.02);
+    between(B[s + 'UpLeg'], B[s + 'Leg'], 0.024, M.stick, 0.02); between(B[s + 'Leg'], B[s + 'Foot'], 0.02, M.stick, 0.02);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), M.stick); hand.position.copy(wp(B[s + 'Hand'])); add(B[s + 'Hand'], hand);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.22), M.stick); foot.position.copy(wp(B[s + 'Foot'])).add(new THREE.Vector3(0, -0.03, -0.05)); add(B[s + 'Foot'], foot);
   }
-  // the bat, slung across the back
-  const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.016, 0.8, 12), M.bat); bat.position.set(hd.x - 0.05, hd.y - 0.35, hd.z + 0.25); bat.rotation.z = 0.7; add(B.Spine1 || B.Spine, bat);
 }
 
 // joke agents keep their signature headgear, worn over the soldier's helmet (local origin = the head bone)
