@@ -236,14 +236,20 @@ import { Particles } from './fx.js';
   // --------------------------------------------------------------------------
   // Part 2: richer smoke everywhere (muzzle wisps, impact dust, grenades)
   // --------------------------------------------------------------------------
+  // Tier-aware: ultra gets thick lingering smoke; low tiers get a lighter touch for perf.
+  function smokeTier() { try { return (window.__cs && window.__cs.gfx && window.__cs.gfx.tier) || 'medium'; } catch (e) { return 'medium'; } }
+  const SMOKE_BOOST = { potato: 0, low: 0, medium: 1, high: 1, ultra: 2 };
   const origSmoke = Pcls.prototype.smoke;
   Pcls.prototype.smoke = function (x, y, z, o) {
     o = o || {};
     try {
+      var boost = SMOKE_BOOST[smokeTier()] || 1;
       o = Object.assign({}, o);
-      o.n = Math.min(6, (o.n == null ? 1 : o.n) + 1);
-      o.alpha = Math.min(0.72, (o.alpha == null ? 0.45 : o.alpha) * 1.22);
-      o.life = (o.life == null ? 1.0 : o.life) * 1.22;
+      if (boost > 0) {
+        o.n = Math.min(8, (o.n == null ? 1 : o.n) + boost);
+        o.alpha = Math.min(0.75, (o.alpha == null ? 0.45 : o.alpha) * (1 + 0.22 * boost));
+        o.life = (o.life == null ? 1.0 : o.life) * (1 + 0.22 * boost);
+      }
     } catch (e) {}
     return origSmoke.call(this, x, y, z, o);
   };
