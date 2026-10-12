@@ -77,9 +77,9 @@ const CSS = `
 .cs-hud.touch .bl{left:50%;bottom:6px;transform:translateX(-80%);gap:6px}.cs-hud.touch .stat{font-size:17px;min-width:58px;padding:2px 8px 2px 6px}.cs-hud.touch .stat .ic{font-size:13px}
 .cs-hud.touch .br{right:auto;left:calc(50% + 74px);bottom:6px}
 @media (max-height:520px){.cs-hud.touch .bl{top:38px;bottom:auto;left:50%;transform:translateX(-100%) translateX(-6px)}.cs-hud.touch .br{top:38px;bottom:auto;left:calc(50% + 6px)}}   /* phones in landscape: health and ammo under the score, clear of the thumb buttons */.cs-hud.touch .ammo{font-size:22px}.cs-hud.touch .ammo small{font-size:12px}
-.cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:4px;transform:translateX(-50%) scale(.72);transform-origin:top center}
+.cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:calc(4px + env(safe-area-inset-top,0px));transform:translateX(-50%) scale(.72);transform-origin:top center;max-width:calc(100vw - 8px)}
 .cs-hud.touch .banner{font-size:18px;padding:6px 14px}.cs-hud.touch .center{top:16%}
-.cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px}
+.cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 16px);top:calc(8px + env(safe-area-inset-top,0px))}
 .cs-hud .team{display:flex;gap:3px}.cs-hud .team i{width:16px;height:22px;border-radius:3px;display:block}
 .cs-hud .team i.dead{opacity:.25}
 .cs-hud .scoreb{font-size:22px;min-width:34px;text-align:center;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.45)}
@@ -660,6 +660,8 @@ export class Menu {
     B.classList.toggle('solid', this.tab !== 'home');
     if (this.P.admin !== this.adminShown) { this.adminShown = this.P.admin; this.hide(); this.show(); return; }
     if (this.tab !== 'play' && this.tab !== 'home' && this.lb) { this.lb.close(); this.lb = null; }
+    // keep the main-menu 3D agent showcase in sync with the equipped agent
+    if (this.stage && this.stage.set) { try { this.stage.set(this.stageLook()); } catch (e) {} }
     this['tab_' + this.tab](B);
   }
   // ---- HOME: the stage, a big GO, and the side panels ----
@@ -1130,6 +1132,7 @@ export class Menu {
         <div class="cs-card" style="display:grid;place-items:center;min-height:90px;background:#3a4a3a"><div class="cs-xh" style="position:relative;left:auto;top:auto;width:1px;height:1px" id="xPrev"></div></div></div>
       <div class="cs-h">Graphics</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Quality</div><select data-k="quality"><option value="0">Auto (keeps 40+ fps)</option><option value="0.5">Potato (fastest)</option><option value="0.75">Low</option><option value="1">Medium</option><option value="1.5">High</option><option value="2">Ultra (4K, gaming PCs)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Show FPS</div><select data-k="fps"><option value="0">Off</option><option value="1">On</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Damage numbers</div><select data-k="dmgNums"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
