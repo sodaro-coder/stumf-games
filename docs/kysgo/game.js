@@ -1488,10 +1488,10 @@ export default function start({ cfg, E, N, smoke }) {
         if (kpA('emote') && me.alive) { radioOpen = 'emote'; hud.emoteWheel(profile.wheel().map((id) => EMOTE_BY_ID[id]).filter(Boolean), (e) => toHost('emote', e.id)); }
         { const ckL = ((KB.crouch[0] || 'ControlLeft').replace(/^Key/, '')).toLowerCase(); for (const k of ['v', 'x', 'c'].filter((l) => l !== ckL)) if (kp('Key' + k.toUpperCase()) && !kdA('crouch')) { radioOpen = k; hud.radio(k, me.team, (t) => toHost('chat', { text: '📻 ' + t, team: true })); } }
       } else if (uiOpen === 'buy') {
-        if (kp('KeyB') || kp('Escape')) closeBuy();
+        if (kpA('buy') || kp('Escape')) closeBuy();
         if (!canBuy()) closeBuy();
       }
-      showSb = kd('Tab') || E.input.touch.buttons.has('score');
+      showSb = kdA('score') || E.input.touch.buttons.has('score');
       if (mob) { const sh = !uiOpen && !ended; if (sh !== mobShown) { mobShown = sh; mob.show(sh); } mob.setAiming(me.ads > 0.5); }
       // movement (frozen in freeze time)
       { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || me.adsToggle); if (!wantAds && !mouseBtn[2] && (me.reload > 0 || !adsOptic || !me.alive)) me.adsToggle = false; me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0;
@@ -1501,10 +1501,10 @@ export default function start({ cfg, E, N, smoke }) {
         if (want && W) { const sgn = Math.sign(want), o = { x: me.x, y: me.y + eyeHeight(me), z: me.z }, dr = { x: Math.cos(me.yaw) * sgn, y: 0, z: -Math.sin(me.yaw) * sgn }, hit = W.ray(o, dr, LEAN + 0.2, 0); if (hit) want = sgn * Math.max(0, Math.min(1, (hit.t - 0.2) / LEAN)); }
         me.lean += (want - me.lean) * Math.min(1, dt * 9); if (Math.abs(me.lean) < 0.002) me.lean = 0; }
       const w0 = curWeapon(), wspeed = (w0 ? (me.scoped && w0.scopedSpeed ? w0.scopedSpeed : w0.speed) : 245) * U * (1 - 0.2 * me.ads) * (mineStory().speed || 1);
-      const mv = typing || uiOpen === 'pause' ? { x: 0, y: 0 } : (() => { let x = (kd('KeyD') ? 1 : 0) - (kd('KeyA') ? 1 : 0), y = (kd('KeyW') ? 1 : 0) - (kd('KeyS') ? 1 : 0); if (E.input.touch.active && (E.input.touch.move.x || E.input.touch.move.y)) { x = E.input.touch.move.x; y = E.input.touch.move.y; } return { x, y }; })();
-      if (me.emote) { me.emote.t += dt; if (me.emote.t > me.emote.dur || !me.alive || mv.x || mv.y || mouseBtn[0] || kd('Space')) me.emote = null; }
+      const mv = typing || uiOpen === 'pause' ? { x: 0, y: 0 } : (() => { let x = (kdA('right') ? 1 : 0) - (kdA('left') ? 1 : 0), y = (kdA('forward') ? 1 : 0) - (kdA('back') ? 1 : 0); if (E.input.touch.active && (E.input.touch.move.x || E.input.touch.move.y)) { x = E.input.touch.move.x; y = E.input.touch.move.y; } return { x, y }; })();
+      if (me.emote) { me.emote.t += dt; if (me.emote.t > me.emote.dur || !me.alive || mv.x || mv.y || mouseBtn[0] || kdA('jump')) me.emote = null; }
       if (me.alive) {
-        const inp = { f: frozen ? 0 : mv.y, s: frozen ? 0 : mv.x, jump: !frozen && !typing && (kd('Space') || E.input.touch.buttons.has('jump')), crouch: !typing && !me.proneWant && (S.crouchKey === 'c' ? kd('KeyC') : (kd('ControlLeft') || kd('ControlRight'))) || E.input.touch.buttons.has('crouch'), prone: !!me.proneWant, sprint: !typing && (kd('ShiftLeft') || kd('ShiftRight') || E.input.touch.buttons.has('sprint')) && me.ads < 0.3 };
+        const inp = { f: frozen ? 0 : mv.y, s: frozen ? 0 : mv.x, jump: !frozen && !typing && (kdA('jump') || E.input.touch.buttons.has('jump')), crouch: (!typing && !me.proneWant && kdA('crouch')) || E.input.touch.buttons.has('crouch'), prone: !!me.proneWant, sprint: !typing && (kdA('sprint') || E.input.touch.buttons.has('sprint')) && me.ads < 0.3 };
         if (inp.jump && me.proneWant) { me.proneWant = false; inp.jump = false; }   // jump gets you up
         if (me.walkTo) { const dx = me.walkTo[0] - me.x, dz = me.walkTo[1] - me.z; if (Math.hypot(dx, dz) < 0.4 || !(SC && SC.cutscene)) me.walkTo = null; else { me.yaw = Math.atan2(-dx, -dz); inp.f = 1; inp.s = 0; inp.walk = true; } }   // a scene walking you somewhere
         const wasG = me.onGround;
