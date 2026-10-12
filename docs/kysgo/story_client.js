@@ -282,7 +282,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     if (!S) return;
     $('.sc-obj b').textContent = `Objective ${Math.min(S.obj + 1, S.n)} / ${S.n}`; $('.sc-obj span').textContent = S.hint || '';
     const pct = (k) => `${Math.round(((S.markers[k] || {}).prog || 0) * 100)}%`;
-    const tl = S.kind === 'defend' || S.kind === 'survive' ? `${Math.max(0, S.need - S.have)}s left` : S.kind === 'defuse' ? `${pct(0)} · hold USE` : S.kind === 'revive' ? `${pct(0)} · hold USE on them` : ['stealth', 'carry', 'reach'].includes(S.kind) ? '' : `${S.have} / ${S.need}`;
+    const tl = S.kind === 'defend' || S.kind === 'survive' ? `${Math.max(0, S.need - S.have)}s left` : S.kind === 'defuse' ? `${pct(0)} · hold USE` : S.kind === 'revive' ? `${pct(0)} · hold USE on them` : S.kind === 'interact' ? `${pct(0)} · hold USE` : ['stealth', 'carry', 'reach'].includes(S.kind) ? '' : `${S.have} / ${S.need}`;
     $('.sc-obj i').textContent = (S.need ? tl : '') + (S.next ? ` · next: #${S.next}` : '');
     $('.sc-squad').innerHTML = (S.chars || []).map((c) => { const C = CHARACTERS[c.char] || CHARACTERS.ricky, ab = C.ability; return `<div class="sc-m${c.alive ? '' : ' dead'}" style="--c:${COLORS[c.char] || '#fff'}"><em>${esc(C.short)}${c.id === myId ? ' (you)' : ''}</em><span class="bar"><i style="width:${Math.max(0, Math.min(100, c.hp / (c.max || 100) * 100))}%"></i></span><small>${ab ? (c.lock ? '🔒' : ab.id === 'cancer_nade' ? (c.nade ? 'G' : '–') : c.cd ? c.cd + 's' : 'G') : ''}</small></div>`; }).join('');
     const b = S.boss; $('.sc-boss').style.display = b ? 'block' : 'none';
@@ -400,7 +400,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
       if (type === 'cutSkip') { flushCut(); endCut(); }
       if (type === 'skipVotes') $('.sc-skip').textContent = `skip: ${data.n} of ${data.need} want to skip`;
       if (type === 'talk') { talkQ.push(...(data.lines || [])); if (talkT <= 0) nextTalk(); }
-      if (type === 'story') { S = data; render(); }
+      if (type === 'story') { S = data; window.__storyState = S; render(); }
       if (type === 'obj' && audio) audio.play('radio');
       if (type === 'bark' && !talkT) { const el = $('.sc-bark'); el.style.setProperty('--c', COLORS[data.who] || '#fff'); el.innerHTML = `<b>${esc(data.name)}:</b> ${esc(data.text)}`; el.style.opacity = 1; barkT = 3.2; }
       if (type === 'focus') { focusT = data.dur || 15; $('.sc-focus').style.display = 'block'; }
