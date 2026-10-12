@@ -26,13 +26,8 @@ import { releaseThumbs } from './thumbs.js';
 import { line, sfxFor, hasLine } from './voices.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { initGore, bloodHit, goreKill } from './gore.js';
-let Voice;
-try {
-  Voice = (await import('./voice.js')).Voice;
-} catch (e) {
-  // voice.js not yet deployed — stub it out so the game loads
-  Voice = { setWanted: () => {}, micTest: () => {}, setHearMode: () => {}, attach: () => {}, speakers: () => [], isTalking: () => false, onChange: () => () => {}, setVol: () => {}, isWanted: () => false, setTalking: () => {}, mutedMap: () => ({}), speakingMap: () => ({}), toggleMute: () => {} };
-}
+// Voice chat disabled temporarily — voice.js not yet deployed to Pages
+const Voice = { setWanted: () => {}, micTest: () => {}, setHearMode: () => {}, attach: () => {}, speakers: () => [], isTalking: () => false, onChange: () => () => {}, setVol: () => {}, isWanted: () => false, setTalking: () => {}, mutedMap: () => ({}), speakingMap: () => ({}), toggleMute: () => {} };
 import { playerToken, saveRejoin, clearRejoin, sweepSlots, sanitizeToken, SLOT_TTL } from './reconnect.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
