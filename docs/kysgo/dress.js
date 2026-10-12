@@ -63,7 +63,8 @@ export function dressWorld({ B, hr, mat, flag, faces, matName, add, ts, detail =
           if (wy + 0.8 > f.top - 0.3) continue;
           const ww = 0.9 + hash(seed, s, 3) * 0.4, wh = 1.15;
           const [cx, cz] = at(f, s, 0.012);
-          box('glassdark', cx, wy, cz, ww, wh, 0.02, ry);
+          const lit = (B.litWindows || 0) > 0 && hash(seed, Math.round(s * 4) + Math.round(wy * 2), 12) < (B.litWindows || 0);
+          box(lit ? 'glasslit' : 'glassdark', cx, wy, cz, ww, wh, 0.02, ry);
           for (const [ox, oy, sx, sy] of [[0, wh / 2 + 0.06, ww + 0.24, 0.12], [-ww / 2 - 0.06, 0, 0.12, wh], [ww / 2 + 0.06, 0, 0.12, wh]]) {
             const [px, pz] = at(f, s + ox, 0.05); box('trim', px, wy + oy, pz, sx, sy, 0.1, ry);
           }
@@ -180,7 +181,8 @@ export function dressWorld({ B, hr, mat, flag, faces, matName, add, ts, detail =
     // a blind arch: a recessed panel under a half-round stone arch
     if (len >= 4 && (M === 'sandwall' || M === 'plaster' || M === 'brick') && hash(seed, 2, 103) < 0.3) {
       const sp = f.s0 + 1.2 + hash(seed, 2, 104) * (len - 2.4), [x, , z] = local(f, sp, 0.03, 0), wR = 0.55 + hash(seed, 2, 105) * 0.3;
-      put('glassdark', new THREE.PlaneGeometry(wR * 2 - 0.1, 1.5), x, f.bot + 0.75, z, 0, ry);
+      const archLit = (B.litWindows || 0) > 0 && hash(seed, 7, 106) < (B.litWindows || 0) * 0.7;
+      put(archLit ? 'glasslit' : 'glassdark', new THREE.PlaneGeometry(wR * 2 - 0.1, 1.5), x, f.bot + 0.75, z, 0, ry);
       put('trim', new THREE.TorusGeometry(wR, 0.07, 4, 12, Math.PI), x, f.bot + 1.5, z, 0, ry);
       for (const sd of [-1, 1]) { const [px, , pz] = local(f, sp + sd * wR, 0.03, 0); put('trim', new THREE.CylinderGeometry(0.07, 0.08, 1.5, 8), px, f.bot + 0.75, pz); }
     }
