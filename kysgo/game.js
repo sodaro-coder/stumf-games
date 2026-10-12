@@ -46,7 +46,7 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, dmgNums: 1, colorblind: 'none' };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, dmgNums: 1, colorblind: 'none', killcam: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // ---- rebindable keybinds (action -> list of e.code / mouse codes). S.keys overrides; legacy S.crouchKey migrates in.
@@ -1043,7 +1043,7 @@ export default function start({ cfg, E, N, smoke }) {
       setViewModel();
     }
     function onTp(m) { if (!m || ![m.x, m.y, m.z].every(Number.isFinite)) return; me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vy = me.vz = 0; me.walkTo = null; if (Number.isFinite(m.yaw)) { me.yaw = m.yaw; me.pitch = 0; } }   // a story scene puts this player somewhere
-    function onSpawn(m) { dmgFrom.clear(); dmgTo.clear(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
+    function onSpawn(m) { dmgFrom.clear(); dmgTo.clear(); endKillcam(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
     function onHurt(m) {
       me.hp = m.hp; me.armor = m.armor; audio.play('hurt'); if (m.by) dmgFrom.set(m.by, (dmgFrom.get(m.by) || 0) + (m.dmg | 0));
       const ang = m.from ? angDiff(me.yaw, Math.atan2(-(m.from[0] - me.x), -(m.from[1] - me.z))) : null;
@@ -1051,6 +1051,88 @@ export default function start({ cfg, E, N, smoke }) {
       if (m.hp <= 0) me.alive = false;
     }
     const dmgFrom = new Map(), dmgTo = new Map();
+    // ---- killcam: replay the killer's last seconds from their eyes (CS2-style) ----
+    // a 20Hz ring buffer of every opponent's pose; on death we replay the killer's last ~4s
+    let kc = null;                            // active killcam: { kid, frames, t, dur, killer, weapon, ... }
+    const kcHist = new Map();                 // playerId -> { frames: [[t,x,y,z,yaw,pitch,crouch], ...] }
+    let kcRound = -1, kcRecT = 0, kcEl = null;
+    const KC_SECS = 6, KC_DUR = 4;
+    function kcRecord(dt) {                   // call every render frame; both host and client paths feed st.players
+      if (kcRound !== st.round) { kcRound = st.round; kcHist.clear(); }
+      kcRecT += dt; if (kcRecT < 0.05 || !st || st.phase === 'warmup' || ended) return;
+      kcRecT = 0;
+      const now = performance.now() / 1000, cutoff = now - KC_SECS - 0.5;
+      for (const p of st.players.values()) {
+        if (p.id === myId || !p.alive) continue;
+        let h = kcHist.get(p.id); if (!h) kcHist.set(p.id, (h = { frames: [] }));
+        const f = h.frames;
+        f.push([now, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +(p.yaw || 0).toFixed(3), +(p.pitch || 0).toFixed(3), +(p.crouch || 0).toFixed(2)]);
+        while (f.length && f[0][0] < cutoff) f.shift();
+      }
+    }
+    function kcCss() {
+      if (document.getElementById('kcCss')) return;
+      const s = document.createElement('style'); s.id = 'kcCss';
+      s.textContent = `.cs-kc{position:fixed;inset:0;z-index:60;pointer-events:none;font-family:inherit}
+.cs-kc .kc-bar-t,.cs-kc .kc-bar-b{position:absolute;left:0;right:0;height:6vh;background:#000;opacity:.92}
+.cs-kc .kc-bar-t{top:0}.cs-kc .kc-bar-b{bottom:0}
+.cs-kc .kc-top{position:absolute;top:calc(6vh + 10px);left:0;right:0;text-align:center;color:#fff;font-weight:800;letter-spacing:4px;font-size:15px;text-shadow:0 2px 8px #000}
+.cs-kc .kc-rec{display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff3b3b;margin-right:8px;animation:kcblink 1s steps(2) infinite;box-shadow:0 0 8px #ff3b3b}
+@keyframes kcblink{50%{opacity:.25}}
+.cs-kc .kc-card{position:absolute;left:14px;bottom:calc(6vh + 14px);background:rgba(8,10,14,.78);border:1px solid rgba(255,255,255,.14);border-left:3px solid #ff3b3b;border-radius:8px;padding:10px 14px;color:#fff;backdrop-filter:blur(4px);max-width:min(340px,80vw)}
+.cs-kc .kc-who{font-weight:800;font-size:17px}
+.cs-kc .kc-what{color:#ffb04a;font-size:13px;margin-top:2px;font-weight:600}
+.cs-kc .kc-dmg{color:#9fb3c8;font-size:12px;margin-top:4px}
+.cs-kc .kc-skip{position:absolute;right:14px;bottom:calc(6vh + 14px);pointer-events:auto;background:rgba(8,10,14,.78);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:8px;padding:10px 18px;font-weight:800;letter-spacing:2px;font-size:14px;cursor:pointer}
+.cs-kc .kc-skip:hover{background:rgba(40,46,56,.9)}
+.cs-kc .kc-prog{position:absolute;left:0;right:0;bottom:6vh;height:3px;background:rgba(255,255,255,.15)}
+.cs-kc .kc-prog i{display:block;height:100%;width:0;background:#ff3b3b}`;
+      document.head.appendChild(s);
+    }
+    function startKillcam(data) {
+      if (!S.killcam || !data.kid || data.kid === myId) return;
+      const h = kcHist.get(data.kid);
+      if (!h || h.frames.length < 15) return;      // need ~0.75s of history or the replay is meaningless
+      const frames = h.frames.slice();
+      const span = frames[frames.length - 1][0] - frames[0][0];
+      kc = { kid: data.kid, frames, t: 0, dur: Math.min(KC_DUR, Math.max(1.2, span)),
+        killer: String(data.killer || '???').slice(0, 20), weapon: itemName(data.weapon) || String(data.weapon || ''),
+        head: !!data.head, wallbang: !!data.wallbang,
+        gave: dmgTo.get(data.kid) || 0, took: dmgFrom.get(data.kid) || 0, wantSkip: false };
+      kcCss();
+      endKillcamEl();
+      kcEl = document.createElement('div'); kcEl.className = 'cs-kc';
+      kcEl.innerHTML = `<div class="kc-bar-t"></div><div class="kc-bar-b"></div>
+        <div class="kc-top"><span class="kc-rec"></span>KILLCAM</div>
+        <div class="kc-card"><div class="kc-who"></div><div class="kc-what"></div><div class="kc-dmg"></div></div>
+        <button class="kc-skip">SKIP ⏭</button><div class="kc-prog"><i></i></div>`;
+      kcEl.querySelector('.kc-who').textContent = '☠ ' + kc.killer;
+      kcEl.querySelector('.kc-what').textContent = kc.weapon + (kc.head ? ' · HEADSHOT' : '') + (kc.wallbang ? ' · WALLBANG' : '');
+      kcEl.querySelector('.kc-dmg').textContent = `You dealt ${kc.gave} · took ${kc.took}`;
+      kcEl.querySelector('.kc-skip').onclick = (e) => { e.stopPropagation(); if (kc && kc.t > 0.35) kc.wantSkip = true; };
+      document.body.appendChild(kcEl);
+    }
+    function endKillcamEl() { if (kcEl) { kcEl.remove(); kcEl = null; } }
+    function endKillcam() { kc = null; endKillcamEl(); }
+    function updateKillcam(dt) {              // owns the camera while the replay runs; false = hand back to spectate
+      if (!kc) return false;
+      if (me.alive || ended) { endKillcam(); return false; }
+      kc.t += dt;
+      if (kc.t > 0.35 && kc.wantSkip) { endKillcam(); return false; }
+      const fr = kc.frames, t0 = fr[0][0], span = fr[fr.length - 1][0] - t0;
+      const rt = t0 + Math.min(kc.t, Math.min(kc.dur, span));
+      let i = 0; while (i < fr.length - 2 && fr[i + 1][0] <= rt) i++;
+      const a = fr[i], b = fr[Math.min(i + 1, fr.length - 1)];
+      const seg = b[0] - a[0], k = seg > 0 ? Math.min(1, Math.max(0, (rt - a[0]) / seg)) : 1;
+      const x = a[1] + (b[1] - a[1]) * k, y = a[2] + (b[2] - a[2]) * k, z = a[3] + (b[3] - a[3]) * k;
+      let dyw = b[4] - a[4]; dyw = Math.atan2(Math.sin(dyw), Math.cos(dyw));
+      const yaw = a[4] + dyw * k, pitch = a[5] + (b[5] - a[5]) * k, crouch = a[6] + (b[6] - a[6]) * k;
+      cam.position.set(x, y + eyeHeight({ crouch, prone: 0 }), z);
+      cam.rotation.set(pitch, yaw, 0);
+      if (kcEl) { const bar = kcEl.querySelector('.kc-prog i'); if (bar) bar.style.width = Math.min(100, (kc.t / kc.dur) * 100) + '%'; }
+      if (kc.t >= kc.dur + 0.7) { endKillcam(); return false; }   // hold the last frame briefly, then spectate
+      return true;
+    }
     function onHitConfirm(m) { const r = rigs.get(m.id); if (r && r.soldier) soldierEvent(r, 'hit'); if (me.lastGun && performance.now() - (me.lastShotAt || 0) < 600) addXp(me.lastGun, (m.dmg | 0) * XP_RULES.dmg); audio.play(m.group === 'head' ? 'head' : 'hit', 1.25); if (hud.hitmark) hud.hitmark(m.group === 'head' ? 'head' : ''); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); if (S.dmgNums && r && r.g) { const head = m.group === 'head', armored = !head && (m.armor | 0) > 0; const col = window.__CB__ ? __CB__.dmg(head, armored) : (head ? '#ff4b4b' : armored ? '#5ec8ff' : '#ffffff'); const sc = 1 + Math.min(0.45, (m.dmg | 0) / 220); textPop(scene, r.g.position.x + (Math.random() - 0.5) * 0.7, r.g.position.y + (head ? 1.75 : 1.25), r.g.position.z + (Math.random() - 0.5) * 0.7, String(m.dmg | 0), col, sc); } }
     function onFire(m) {
       if (m.id === myId) return;
@@ -1114,6 +1196,7 @@ export default function start({ cfg, E, N, smoke }) {
           stats.d++; me.alive = false; firstDone = st.round; setTimeout(() => announceEv('died'), 300);
           const k = data.kid ? st.players.get(data.kid) : null, took = data.kid ? (dmgFrom.get(data.kid) || 0) : 0, gave = data.kid ? (dmgTo.get(data.kid) || 0) : 0;
           hud.banner('You died', data.killer ? `${data.killer} · ${itemName(data.weapon)}${data.head ? ' · headshot' : ''}${k ? ` · they had ${Math.max(0, k.hp | 0)} HP` : ''} · you dealt ${gave}, took ${took}` : '', 4000);
+          startKillcam(data);
         }
         if (data.assist === myName) stats.a++;
         const r = rigs.get(data.vid); if (r) { r.dieT = 0.001; const kp2 = data.kid === myId ? me : st.players.get(data.kid), vp = st.players.get(data.vid); if (kp2 && vp) { const dx = vp.x - kp2.x, dz = vp.z - kp2.z, L = Math.hypot(dx, dz) || 1; r.fall = { x: dx / L, z: dz / L, side: Math.random() < 0.5 ? -1 : 1 }; } }
@@ -1532,7 +1615,8 @@ export default function start({ cfg, E, N, smoke }) {
       me.flash = Math.max(0, me.flash - dt);
       me.inspect = Math.max(0, me.inspect - dt); me.knifeSwing = Math.max(0, me.knifeSwing - dt); me.throwK = Math.max(0, (me.throwK || 0) - dt); slashT = Math.max(0, slashT - dt); slashMesh.material.opacity = slashT > 0 ? Math.sin(slashT / 0.16 * Math.PI) * 0.55 : 0; slashMesh.visible = slashT > 0;
       if (flashT > 0) { flashT -= dt; if (flashT <= 0 && vm && vm.userData.flash) vm.userData.flash.visible = false; }
-      if (!me.alive && (pressed.has('M0') || E.input.touch.tapped.has('fire'))) specNext = true;
+      if (kc && kc.t > 0.35 && (pressed.has('M0') || pressed.has('Space') || E.input.touch.tapped.has('fire'))) kc.wantSkip = true;
+      if (!me.alive && !kc && (pressed.has('M0') || E.input.touch.tapped.has('fire'))) specNext = true;
       pressed.clear(); E.input.touch.tapped.clear();   // a tap counts once, however many logic steps this frame runs
 
       // grenades in flight (visual)
@@ -1544,10 +1628,12 @@ export default function start({ cfg, E, N, smoke }) {
     }, (alpha, dt) => {
       if (!W) return;
       gov(dt); fpsM(dt); autoCheck(dt);
+      kcRecord(dt);   // killcam ring buffer: every opponent's pose, 20Hz, last 6s
       // ---- camera: own eyes, or spectate a teammate ----
       const lo = leanOff(me); let viewYaw = me.yaw, viewPitch = me.pitch + me.punch * 0.35 + camKick, ex = me.x + lo.x, ey = me.y + eyeHeight(me) * (mineStory().scale || 1) - Math.abs(me.lean) * 0.05, ez = me.z + lo.z, viewRoll = -me.lean * 0.2;
       let spectating = null;
-      if (!me.alive && (st.phase !== 'warmup')) {
+      const kcActive = updateKillcam(dt);   // killcam replay owns the camera while it runs
+      if (!kcActive && !me.alive && (st.phase !== 'warmup')) {
         const mates = [...st.players.values()].filter((p) => p.alive && p.team === me.team && !String(p.id).startsWith('actor_'));   // not the story's bystanders
         if (mates.length) { if (!specTarget || !mates.find((p) => p.id === specTarget)) specTarget = mates[0].id; if (specNext) { specNext = false; const i = mates.findIndex((p) => p.id === specTarget); specTarget = mates[(i + 1) % mates.length].id; } const p = st.players.get(specTarget); spectating = p;
           if (specId !== p.id) { specId = p.id; specYaw = p.yaw || 0; specPitch = p.pitch || 0; svmKey = ''; }
@@ -1557,6 +1643,7 @@ export default function start({ cfg, E, N, smoke }) {
           viewYaw = specYaw; viewPitch = specPitch + specKick; viewRoll = -(p.lean || 0) * 0.2; }
         else { viewPitch = -0.5; ey = me.y + 3.5; }
       }
+      if (!kcActive) {   // killcam replay already placed the camera; don't overwrite it
       viewY += (ey - viewY) * Math.min(1, dt * 18); if (Math.abs(ey - viewY) > 1.5) viewY = ey;
       const shake = camShake > 0 ? (Math.random() - 0.5) * camShake * 0.05 : 0; camShake = Math.max(0, camShake - dt * 2);
       cam.position.set(ex, viewY + (spectating ? 0 : Math.sin(bob * 2) * 0.012), ez); cam.rotation.set(viewPitch + shake, viewYaw + shake, viewRoll);
@@ -1568,6 +1655,7 @@ export default function start({ cfg, E, N, smoke }) {
         svm.position.set(b.x + Math.sin(specBob) * 0.008 * Math.min(1, sp / 4), b.y + Math.abs(Math.cos(specBob)) * 0.006 * Math.min(1, sp / 4) - (spectating.crouch || 0) * 0.01, b.z + specKick * 1.4);
         svm.rotation.set(specKick * 2, svm.userData.ry || 0, 0);
         specFlashT -= dt; if (svm.userData.flash) { svm.userData.flash.visible = specFlashT > 0; if (specFlashT > 0) svm.userData.flash.rotation.z = Math.random() * 6.3; }
+      }
       }
       const w = curWeapon();
       const zoomFov = me.scoped && w && w.zoom ? w.zoom[me.scoped - 1] : S.fov / (1 + (((ATTACH[vm && vm.userData && vm.userData.optic] || {}).zoom || 1) - 1) * me.ads);
@@ -1596,7 +1684,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (r.blob) { r.blob.visible = r.g.visible; const gy = W.groundAt(p.x, p.z, p.y + 0.1); r.blob.position.set(p.x, gy + 0.02, p.z); const k = Math.max(0.2, 1 - (p.y - gy) * 0.8); r.blob.scale.setScalar(0.95 * k); }
         { const gf = r.tpGun.children[0]; if (gf && gf.userData.flash) { r.flashT = (r.flashT || 0) - dt; gf.userData.flash.visible = r.flashT > 0; if (r.flashT > 0) gf.userData.flash.rotation.z = Math.random() * 6.3; } }
         if (r.dieT && r.fall && !r.soldier) { const k = Math.min(1, r.dieT * 3); r.g.position.x += r.fall.x * 0.5 * k; r.g.position.z += r.fall.z * 0.5 * k; r.g.rotation.z = r.fall.side * 0.35 * k; r.g.rotation.y = Math.atan2(-r.fall.x, -r.fall.z) + Math.PI; }
-        if (spectating && p.id === spectating.id) { r.g.visible = false; if (r.blob) r.blob.visible = false; }
+        if ((spectating && p.id === spectating.id) || (kc && p.id === kc.kid)) { r.g.visible = false; if (r.blob) r.blob.visible = false; }   // never render the head you're inside (spectate target or killcam killer)
         if (culler && r.g.visible && !culler.visibleAt(p.x, p.z)) { r.g.visible = false; if (r.blob) r.blob.visible = false; }   // behind solid walls: not drawn
       }
       // own body while emoting: camera swings out in front, you see yourself
@@ -1759,7 +1847,7 @@ export default function start({ cfg, E, N, smoke }) {
         else { const d = me.alive && nearestDrop(); if (d) hint = `E: pick up ${itemName(d.wid)}`; }
         if (match && !started && session) hint = 'Lobby: start the match from the panel';
         hud.hint(hint);
-        hud.spec(spectating ? `Spectating ${(st.roster.get(spectating.id) || {}).name || ''} · ${itemName(spectating.wid) || ''} · ${mob ? 'tap' : 'click'} for next` : !me.alive && st.phase !== 'warmup' ? 'You are dead' : '');
+        hud.spec(kc ? 'Killcam · click / Space to skip' : spectating ? `Spectating ${(st.roster.get(spectating.id) || {}).name || ''} · ${itemName(spectating.wid) || ''} · ${mob ? 'tap' : 'click'} for next` : !me.alive && st.phase !== 'warmup' ? 'You are dead' : '');
       }
       if (radarT > 0.1) {
         radarT = 0;
@@ -1799,7 +1887,7 @@ export default function start({ cfg, E, N, smoke }) {
       set(`+${res.coins} coins · +${res.xp} XP${res.coins === 0 && profile.signedIn ? ' (daily coin limit reached)' : ''}${lv.length ? ' · ' + lv.join(' · ') : ''}${rk}`);
     }
     function quit(next) {
-      ended = true; saveGunXp();
+      ended = true; saveGunXp(); endKillcam(); kcHist.clear();
       try { loopH.stop(); } catch (e) { /* already stopped */ }
       if (hiddenTick) hiddenTick.terminate();
       try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* not locked */ }
