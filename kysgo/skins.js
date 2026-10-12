@@ -498,10 +498,40 @@ export function paintSkin(canvas, paint, seed = 1, float = 0.1, scale = 0) {
     g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = px * 1.5; for (const x of [W * 0.28, W * 0.52, W * 0.74]) { g.beginPath(); g.moveTo(x, H * 0.12); g.lineTo(x, H * 0.88); g.stroke(); }
     g.fillStyle = 'rgba(0,0,0,.35)'; for (const [x, y] of [[0.3, 0.2], [0.3, 0.8], [0.54, 0.5], [0.76, 0.25]]) { g.beginPath(); g.arc(W * x, H * y, px * 3, 0, 7); g.fill(); }
     g.fillStyle = 'rgba(255,255,255,.18)'; for (const [x, y] of [[0.3, 0.2], [0.3, 0.8], [0.54, 0.5], [0.76, 0.25]]) g.fillRect(W * x - px, H * y - px * 2, px * 2, px);
+    // a maker's badge stuck on the receiver flat: metallic, embossed, with a soft drop shadow so it reads as a
+    // physical sticker sitting on the paint, not part of the print. High-float badges peel at one corner.
+    if (!['hotdogs', 'poops', 'text'].includes(paint.t) && r() < 0.55) {
+      const ex = W * 0.47, ey = H * 0.44, er = H * 0.17;
+      g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(ex, ey + er * 0.16, er * 1.02, er * 0.9, 0, 0, 7); g.fill();
+      const mg = g.createRadialGradient(ex - er * 0.3, ey - er * 0.35, er * 0.1, ex, ey, er);
+      mg.addColorStop(0, '#f4f6f8'); mg.addColorStop(0.55, '#9aa0a8'); mg.addColorStop(1, '#4a4e55');
+      g.fillStyle = mg; g.beginPath(); g.arc(ex, ey, er, 0, 7); g.fill();
+      g.strokeStyle = 'rgba(20,22,26,.85)'; g.lineWidth = Math.max(px, er * 0.07); g.stroke();
+      const kind = Math.floor(r() * 3); g.fillStyle = '#2b2e34';
+      if (kind === 0) { g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? er * 0.32 : er * 0.62; g[k ? 'lineTo' : 'moveTo'](ex + Math.cos(a) * rr, ey + Math.sin(a) * rr); } g.closePath(); g.fill(); }
+      else if (kind === 1) { g.beginPath(); g.moveTo(ex + er * 0.18, ey - er * 0.6); g.lineTo(ex - er * 0.28, ey + er * 0.18); g.lineTo(ex + er * 0.02, ey + er * 0.18); g.lineTo(ex - er * 0.18, ey + er * 0.6); g.lineTo(ex + er * 0.28, ey - er * 0.14); g.lineTo(ex - er * 0.02, ey - er * 0.14); g.closePath(); g.fill(); }
+      else { g.beginPath(); g.arc(ex, ey - er * 0.08, er * 0.34, 0, 7); g.fill(); g.fillRect(ex - er * 0.34, ey + er * 0.12, er * 0.68, er * 0.26); }
+      g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = Math.max(px, er * 0.045); g.beginPath(); g.arc(ex, ey, er * 0.86, Math.PI * 1.05, Math.PI * 1.55); g.stroke();
+      g.strokeStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.arc(ex, ey, er * 0.9, Math.PI * 0.15, Math.PI * 0.6); g.stroke();
+      if (float > 0.25) { const pa = Math.PI * 0.78, cxp = ex + Math.cos(pa) * er * 0.92, cyp = ey + Math.sin(pa) * er * 0.92;
+        g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(cxp + er * 0.06, cyp + er * 0.1, er * 0.3, er * 0.14, pa, 0, 7); g.fill();
+        g.fillStyle = '#d7dbe0'; g.beginPath(); g.moveTo(cxp, cyp); g.lineTo(cxp + er * 0.34, cyp + er * 0.1); g.lineTo(cxp + er * 0.1, cyp - er * 0.3); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(90,94,102,.8)'; g.lineWidth = px; g.stroke(); }
+    }
+    if (float < 0.06) { const fg = g.createLinearGradient(0, 0, W, H); fg.addColorStop(0.42, 'rgba(255,255,255,0)'); fg.addColorStop(0.5, 'rgba(255,255,255,.10)'); fg.addColorStop(0.58, 'rgba(255,255,255,0)'); g.fillStyle = fg; g.fillRect(0, 0, W, H); }   // fresh clearcoat sheen on factory-new
   }
-  // wear: scratches, chips down to the metal and grime, all growing with the float (fine lines at full resolution)
+  // wear: scratches, chips down to the metal and grime, all growing with the float (fine lines at full resolution).
+  // scratches cluster where hands actually rub: the grip, the forend and around the ejection port (u along the
+  // barrel, v up, matching the hydro-dip UV layout), instead of speckling uniformly like noise.
   const n = Math.floor(float * 220 * Math.min(4, sc));
-  for (let i = 0; i < n; i++) { g.fillStyle = r() < 0.55 ? 'rgba(210,210,215,.45)' : 'rgba(30,25,20,.4)'; const x = r() * W, y = r() * H, len = 1 + r() * 4 * float; g.save(); g.translate(x, y); g.rotate((r() - 0.5) * 0.6); g.fillRect(0, 0, len, Math.max(px, 0.5 * px * sc / 2)); g.restore(); }
+  const zones = [[0.48, 0.02, 0.72, 0.35], [0.12, 0.25, 0.42, 0.55], [0.42, 0.5, 0.58, 0.78]];
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = r() < 0.55 ? 'rgba(210,210,215,.45)' : 'rgba(30,25,20,.4)';
+    let x, y;
+    if (r() < 0.65) { const z = zones[(r() * zones.length) | 0]; x = (z[0] + r() * (z[2] - z[0])) * W; y = (z[1] + r() * (z[3] - z[1])) * H; }
+    else { x = r() * W; y = r() * H; }
+    const len = 1 + r() * 4 * float; g.save(); g.translate(x, y); g.rotate((r() - 0.5) * 0.6); g.fillRect(0, 0, len, Math.max(px, 0.5 * px * sc / 2)); g.restore();
+  }
   if (float > 0.15) for (let i = 0; i < float * 40; i++) { const e = r() < 0.5 ? r() * H * 0.12 : H - r() * H * 0.12; g.fillStyle = 'rgba(150,150,155,.55)'; g.beginPath(); g.ellipse(r() * W, e, px * (2 + r() * 6), px * (1 + r() * 3), r() * 3, 0, 7); g.fill(); }   // edge chips
   if (float > 0.38) { g.fillStyle = `rgba(60,50,40,${(float - 0.38) * 0.5})`; g.fillRect(0, 0, W, H); }
   g.setTransform(1, 0, 0, 1, 0, 0);
