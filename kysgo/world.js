@@ -24,6 +24,7 @@ export const MATS = {  // surfaces (painted in textures.js): base colour (radar,
   trim: { c: [222, 204, 166], s: 2, d: 6 }, sill: { c: [158, 140, 112], s: 2, d: 6 },
   snow: { c: [236, 240, 246], s: 3, d: 6 },   // story only (new materials go last: map hashes and PVS data key on these indices)
   neon: { c: [255, 70, 200], s: 1, d: 1, glow: true }, velvet: { c: [74, 22, 64], s: 2, d: 6 },   // the club
+  glasslit: { c: [255, 186, 110], s: 1, d: 1, glow: true },   // lit windows at night (appended last: map hashes key on these indices)
 };
 export const MAT_LIST = Object.keys(MATS);
 const MAT_ID = Object.fromEntries(MAT_LIST.map((k, i) => [k, i]));
