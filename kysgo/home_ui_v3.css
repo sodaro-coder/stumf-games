@@ -14,7 +14,7 @@
    ============================================================================ */
 
 /* ---------- Design tokens ---------- */
-.cs.cs-menu{
+.cs-menu{
   --v3-bg0:#04070d;
   --v3-bg1:#0a111d;
   --v3-bg2:#101a2c;
@@ -33,17 +33,17 @@
   position:absolute; inset:0; z-index:0; pointer-events:none;
   opacity:.55;
 }
-.cs.cs-menu .cs-stage{ z-index:1; }
-.cs.cs-menu .cs-vig{ z-index:2; }
+.cs-menu .cs-stage{ z-index:1; }
+.cs-menu .cs-vig{ z-index:2; }
 
 /* ---------- Menu backdrop: deep navy command center ---------- */
-.cs.cs-menu{
+.cs-menu{
   background:
     radial-gradient(1200px 700px at 80% -10%, rgba(61,155,255,.10), transparent 60%),
     radial-gradient(900px 600px at 10% 110%, rgba(242,163,58,.05), transparent 60%),
     linear-gradient(180deg, #04070d 0%, #070d18 50%, #04070d 100%);
 }
-.cs.cs-menu .cs-vig{
+.cs-menu .cs-vig{
   background:
     linear-gradient(90deg, rgba(4,7,13,.96) 0, rgba(4,7,13,.72) 34%, rgba(4,7,13,.15) 62%, rgba(4,7,13,0) 80%),
     linear-gradient(0deg, rgba(4,7,13,.92), rgba(4,7,13,0) 30%),
@@ -51,52 +51,52 @@
 }
 
 /* ---------- Top nav: command bar ---------- */
-.cs.cs-menu .cs-topnav{
+.cs-menu .cs-topnav{
   background:linear-gradient(180deg, rgba(10,17,29,.98), rgba(6,10,18,.96));
   border-bottom:1px solid var(--v3-line);
   box-shadow:0 1px 0 rgba(124,192,255,.08), 0 12px 40px rgba(0,0,0,.55);
   -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
 }
-.cs.cs-menu .cs-brand{
+.cs-menu .cs-brand{
   font-size:27px; font-weight:900; letter-spacing:.04em;
   color:#fff;
   text-shadow:0 0 22px rgba(61,155,255,.5), 0 2px 8px rgba(0,0,0,.8);
 }
-.cs.cs-menu .cs-brand i{ color:var(--v3-blue-hi); font-style:normal; }
-.cs.cs-menu .cs-brand::after{
+.cs-menu .cs-brand i{ color:var(--v3-blue-hi); font-style:normal; }
+.cs-menu .cs-brand::after{
   content:" v3"; font-size:10px; color:var(--v3-blue);
   font-weight:800; margin-left:6px; vertical-align:super;
   text-shadow:0 0 10px rgba(61,155,255,.7);
 }
-.cs.cs-menu .cs-nav button{
+.cs-menu .cs-nav button{
   color:var(--v3-mut); font-weight:700; letter-spacing:.06em;
   border-bottom:2px solid transparent;
   transition:all .16s ease; position:relative;
 }
-.cs.cs-menu .cs-nav button:hover{ color:#fff; background:rgba(61,155,255,.07); }
-.cs.cs-menu .cs-nav button.on{
+.cs-menu .cs-nav button:hover{ color:#fff; background:rgba(61,155,255,.07); }
+.cs-menu .cs-nav button.on{
   color:#fff; border-bottom-color:var(--v3-blue);
   background:linear-gradient(180deg, rgba(61,155,255,.18), rgba(61,155,255,.04));
   text-shadow:0 0 16px rgba(61,155,255,.7);
   box-shadow:inset 0 -4px 14px rgba(61,155,255,.2);
 }
-.cs.cs-menu .cs-coinbox{
+.cs-menu .cs-coinbox{
   background:linear-gradient(180deg,#16233a,#0b1322);
   border:1px solid rgba(61,155,255,.3);
   box-shadow:inset 0 1px 0 rgba(124,192,255,.12), 0 4px 16px rgba(0,0,0,.45);
 }
-.cs.cs-menu .cs-rank{
+.cs-menu .cs-rank{
   background:linear-gradient(180deg,#16233a,#0b1322);
   border:1px solid rgba(61,155,255,.3);
   box-shadow:inset 0 1px 0 rgba(124,192,255,.12), 0 4px 16px rgba(0,0,0,.45);
 }
 
 /* ---------- HOME: restructured command center ---------- */
-.cs.cs-menu .cs-home{
+.cs-menu .cs-home{
   position:relative; isolation:isolate;
   background:linear-gradient(90deg, rgba(4,7,13,.92) 0%, rgba(4,7,13,.78) 30%, rgba(4,7,13,.25) 55%, transparent 75%);
 }
-.cs.cs-menu .cs-home::before{
+.cs-menu .cs-home::before{
   content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
   background:
     radial-gradient(700px 380px at 72% 30%, rgba(61,155,255,.09), transparent 60%),
@@ -104,14 +104,14 @@
 }
 
 /* Hero: massive display type */
-.cs.cs-menu .cs-hero{ max-width:min(820px,74%); padding:clamp(18px,3.5vw,54px) clamp(14px,2.5vw,40px); }
-.cs.cs-menu .cs-hero h1{
+.cs-menu .cs-hero{ max-width:min(820px,74%); padding:clamp(18px,3.5vw,54px) clamp(14px,2.5vw,40px); }
+.cs-menu .cs-hero h1{
   font-size:clamp(52px,6vw,88px); font-weight:900; letter-spacing:.01em; line-height:.94;
   margin:26px 0 12px; text-transform:uppercase;
   color:#fff;
   text-shadow:0 0 40px rgba(61,155,255,.35), 0 4px 18px rgba(0,0,0,.8);
 }
-.cs.cs-menu .cs-hero h1 i{
+.cs-menu .cs-hero h1 i{
   font-style:normal; color:transparent;
   -webkit-text-stroke:2px var(--v3-blue-hi);
   text-shadow:0 0 30px rgba(61,155,255,.5);
@@ -131,14 +131,14 @@
 }
 @keyframes ov3-blink{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
 
-.cs.cs-menu .cs-hero .sub{
+.cs-menu .cs-hero .sub{
   font-size:16px; color:#aeb9cc; max-width:52ch; line-height:1.55;
   border-left:3px solid var(--v3-blue); padding-left:14px; margin:0 0 24px;
   text-shadow:0 2px 8px rgba(0,0,0,.7);
 }
 
 /* PLAY button: CS2-style massive */
-.cs.cs-menu .cs-go{
+.cs-menu .cs-go{
   font-size:22px; font-weight:900; letter-spacing:.14em;
   padding:20px 64px; border-radius:8px;
   color:#04101f;
@@ -150,14 +150,14 @@
   transition:transform .12s ease, filter .15s ease;
   animation:ov3-breathe 3s ease-in-out infinite;
 }
-.cs.cs-menu .cs-go:hover{ filter:brightness(1.1); transform:translateY(-2px) scale(1.02); }
-.cs.cs-menu .cs-go:active{ transform:translateY(1px) scale(.99); }
-.cs.cs-menu .cs-go::after{
+.cs-menu .cs-go:hover{ filter:brightness(1.1); transform:translateY(-2px) scale(1.02); }
+.cs-menu .cs-go:active{ transform:translateY(1px) scale(.99); }
+.cs-menu .cs-go::after{
   content:''; position:absolute; inset:0; pointer-events:none;
   background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.5) 50%,transparent 60%);
   transform:translateX(-130%);
 }
-.cs.cs-menu .cs-go:hover::after{ animation:ov3-sweep .7s ease; }
+.cs-menu .cs-go:hover::after{ animation:ov3-sweep .7s ease; }
 @keyframes ov3-breathe{
   0%,100%{ box-shadow:0 16px 50px rgba(61,155,255,.45), inset 0 2px 0 rgba(255,255,255,.5), inset 0 -3px 8px rgba(0,40,90,.35); }
   50%{ box-shadow:0 16px 70px rgba(61,155,255,.7), inset 0 2px 0 rgba(255,255,255,.5), inset 0 -3px 8px rgba(0,40,90,.35); }
@@ -225,51 +225,51 @@
 .ov3-news .ni .ds{ font-size:12px; color:var(--v3-mut); line-height:1.5; }
 
 /* ---------- Restyle existing side panels to match ---------- */
-.cs.cs-menu .cs-panel2{
+.cs-menu .cs-panel2{
   background:linear-gradient(180deg, rgba(16,26,44,.96), rgba(8,13,24,.96));
   border:1px solid rgba(61,155,255,.22); border-radius:10px;
   box-shadow:0 16px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(124,192,255,.06);
 }
-.cs.cs-menu .cs-panel2 h3{
+.cs-menu .cs-panel2 h3{
   color:var(--v3-blue-hi); letter-spacing:.24em;
   background:linear-gradient(180deg, rgba(61,155,255,.13), rgba(61,155,255,.03));
   border-bottom:1px solid rgba(61,155,255,.2);
 }
-.cs.cs-menu .cs-signup{
+.cs-menu .cs-signup{
   background:linear-gradient(180deg, rgba(61,155,255,.13), rgba(61,155,255,.04));
   border:1px solid rgba(61,155,255,.45);
   box-shadow:0 0 30px rgba(61,155,255,.14), inset 0 1px 0 rgba(124,192,255,.12);
 }
 
 /* Buttons: blue primary */
-.cs.cs-menu .cs-btn{
+.cs-menu .cs-btn{
   background:linear-gradient(180deg,var(--v3-blue-hi),var(--v3-blue) 48%,var(--v3-blue-lo));
   border:1px solid rgba(140,200,255,.35); color:#04101f !important;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 5px rgba(0,40,90,.3), 0 6px 20px rgba(61,155,255,.3);
   text-shadow:0 1px 0 rgba(255,255,255,.35);
 }
-.cs.cs-menu .cs-btn:hover{ filter:brightness(1.1); box-shadow:inset 0 1px 0 rgba(255,255,255,.45), 0 10px 28px rgba(61,155,255,.45); }
-.cs.cs-menu .cs-btn.alt{
+.cs-menu .cs-btn:hover{ filter:brightness(1.1); box-shadow:inset 0 1px 0 rgba(255,255,255,.45), 0 10px 28px rgba(61,155,255,.45); }
+.cs-menu .cs-btn.alt{
   background:linear-gradient(180deg,#1b2942,#101a2c); color:#dbe7f7 !important;
   border:1px solid rgba(61,155,255,.25); text-shadow:0 1px 3px rgba(0,0,0,.5);
   box-shadow:inset 0 1px 0 rgba(124,192,255,.1), 0 6px 16px rgba(0,0,0,.4);
 }
 
 /* Section headers */
-.cs.cs-menu .cs-sec{ color:#c3d2e8; }
-.cs.cs-menu .cs-sec::before{
+.cs-menu .cs-sec{ color:#c3d2e8; }
+.cs-menu .cs-sec::before{
   background:linear-gradient(180deg,var(--v3-blue-hi),var(--v3-blue-lo));
   box-shadow:0 0 12px rgba(61,155,255,.6);
 }
 
 /* Scrollbars */
-.cs.cs-menu .cs-page::-webkit-scrollbar-thumb:hover{ background:var(--v3-blue); }
+.cs-menu .cs-page::-webkit-scrollbar-thumb:hover{ background:var(--v3-blue); }
 
 /* ---------- Mobile: stack everything, keep it bold ---------- */
 @media (max-width:760px){
-  .cs.cs-menu .cs-hero{ max-width:100%; padding:14px 12px; }
-  .cs.cs-menu .cs-hero h1{ font-size:clamp(40px,11vw,60px); margin-top:14px; }
-  .cs.cs-menu .cs-go{ width:100%; padding:18px 20px; font-size:19px; }
+  .cs-menu .cs-hero{ max-width:100%; padding:14px 12px; }
+  .cs-menu .cs-hero h1{ font-size:clamp(40px,11vw,60px); margin-top:14px; }
+  .cs-menu .cs-go{ width:100%; padding:18px 20px; font-size:19px; }
   .ov3-actions{ grid-template-columns:repeat(2, minmax(0,1fr)); max-width:100%; }
   .ov3-stats{ max-width:100%; }
   .ov3-stats .st{ padding:10px 8px; }
@@ -279,6 +279,6 @@
 
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce){
-  .cs.cs-menu .cs-go{ animation:none; }
+  .cs-menu .cs-go{ animation:none; }
   .ov3-ticker .dot{ animation:none; }
 }
