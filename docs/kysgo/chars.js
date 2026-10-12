@@ -293,16 +293,15 @@ const _cA = new THREE.Vector3(), _cB = new THREE.Vector3(), _cC = new THREE.Vect
 function curlHand(r, side, amt) {
   const B = r.bones, hand = B[side + 'Hand'], mid = B[side + 'HandMiddle1'], th = B[side + 'HandThumb1'], idx = B[side + 'HandIndex1'], pin = B[side + 'HandPinky1'];
   if (!hand || !mid || !idx || !pin || !th) return;
-  hand.getWorldPosition(_cA); mid.getWorldPosition(_cB); const f = _cB.sub(_cA).normalize();       // along the fingers
-  idx.getWorldPosition(_cC); pin.getWorldPosition(_cN); const across = _cC.sub(_cN).normalize();     // index to pinky
-  const axis = _cN.crossVectors(f, across).cross(f).normalize().cross(f).normalize();               // across the knuckles, square to the fingers
-  for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b) turnWorld(b, axis, amt * (side === 'Left' ? -1 : 1) * (k === 1 ? 0.9 : 1.1)); }
+  idx.getWorldPosition(_cC); pin.getWorldPosition(_cN); const across = _cC.sub(_cN).normalize();     // index to pinky: the knuckle axis the fingers hinge about
+  const axis = across;   // curl = rotate each joint about the knuckle line (fingers swing toward the palm)
+  for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b) turnWorld(b, axis, amt * (side === 'Left' ? 1 : -1) * (k === 1 ? 0.9 : 1.1)); }
 }
 // per frame: pick the base animation from how the player moves, then aim, gun and props
 export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
   r.t += dt;
   if (dead) {
-    if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
+    if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; if (!d) return; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
   } else {
     if (r.dead) { r.dead = false; r.act.die.stop(); r.base = ''; base(r, 'idle'); }
     const sp = Math.hypot(vx, vz), cy = Math.cos(yaw), sy = Math.sin(yaw);
@@ -394,7 +393,9 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       ik2(B.RightArm, B.RightForeArm, B.RightHand, grip, B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, 0.3).addScaledVector(fw, -0.45));
       const rh = B.RightHand.getWorldPosition(_t1);
       if (B.RightHandMiddle1) rh.lerp(B.RightHandMiddle1.getWorldPosition(_t2), 0.55);
-      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _t2.crossVectors(yA, zA);
+      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y);
+      if (yA.lengthSq() < 1e-6) yA.set(0, 0, 1);   // aiming straight up/down: pick any perpendicular for the frame
+      yA.normalize(); const xA = _t2.crossVectors(yA, zA);
       _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
       r.g.getWorldQuaternion(_q2).invert(); tg.quaternion.copy(_q2.multiply(_q));
       tg.position.copy(rh); r.g.worldToLocal(tg.position);
@@ -422,15 +423,18 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       if (dir.lengthSq() < 0.01) dir.set(0, Math.sin(ap), -Math.cos(ap)).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
       dir.normalize();
       // the gun's frame in world space: barrel (-z) along the hand line, up as close to world up as the barrel allows
-      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _fw.crossVectors(yA, zA);
+      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y);
+      if (yA.lengthSq() < 1e-6) yA.set(0, 0, 1);   // aiming straight up/down: pick any perpendicular for the frame
+      yA.normalize(); const xA = _fw.crossVectors(yA, zA);
       _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
       r.g.getWorldQuaternion(_q2).invert(); tg.quaternion.copy(_q2.multiply(_q));
       tg.position.copy(rh); r.g.worldToLocal(tg.position);
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
       if (pistol) {   // two-handed pistol: the support hand comes back from where the rifle's handguard would be onto the grip
-        const sup = tg.localToWorld(_t2.set(-0.045, -0.035, 0.01)), D = _t4.set(0, -1, 0);
-        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, sup, _t5.copy(B.LeftArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(rt, -0.35));
+        const sup = tg.localToWorld(_t2.set(-0.045, -0.035, 0.01));
+        const pole = _t1.copy(B.LeftArm.getWorldPosition(_t6)).addScaledVector(_t4.set(0, -1, 0), 0.6).addScaledVector(rt, -0.35);   // elbow down and slightly in
+        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, sup, pole);
       } else if (r.reloadT > 0 && B.Hips) {   // reload: the left hand drops to the mag pouch and brings a fresh one up
         const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(_t6).addScaledVector(rt, -0.18).add(_t4.set(0, 0.05, 0));
         ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, _t5.copy(lh).lerp(pouch, out), _t1.copy(B.LeftArm.getWorldPosition(_t1)).add(_t4.set(0, -0.6, 0)));
@@ -457,9 +461,10 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
   }
 }
 // emotes the clips don't cover: a few big readable poses built from world-axis bone turns
+const _eUp = new THREE.Vector3(0, 1, 0), _eRight = new THREE.Vector3(), _eFwd = new THREE.Vector3();
 function emotePose(r, e, rightIn) {
   // the poses were authored when the model stood turned round: keep their axes (forward = the body's front, "right" = its left side)
-  const right = rightIn.clone().negate(), B = r.bones, t = e.t, s = Math.sin, up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3().crossVectors(up, right).negate();
+  const right = _eRight.copy(rightIn).negate(), B = r.bones, t = e.t, s = Math.sin, up = _eUp, fwd = _eFwd.crossVectors(up, right).negate();
   switch (e.anim) {
     case 'wave': turnWorld(B.RightArm, fwd, -2.3); turnWorld(B.RightForeArm, fwd, -0.6 + s(t * 10) * 0.5); break;
     case 'salute': turnWorld(B.RightArm, fwd, -1.7); turnWorld(B.RightForeArm, up, 2.2); break;
@@ -519,7 +524,7 @@ function logBody(B, hq) {
   for (const sd of [-1, 1]) {
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.105, 18, 14), M.white); eye.scale.set(1, 1.25, 0.55); eye.position.set(hd.x + sd * 0.115, hd.y + 0.1, hd.z + fz); add(B.Spine2 || B.Spine, eye);
     const pu = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 10), M.black); pu.position.set(hd.x + sd * 0.105, hd.y + 0.095, hd.z + fz - 0.055); add(B.Spine2 || B.Spine, pu);
-    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), M.white); glint.position.set(hd.x + sd * 0.115, hd.y + 0.115, hd.z + fz - 0.085); add(B.Spine2 || B.Spine, glint);
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), M.white); glint.position.set(hd.x + sd * 0.118, hd.y + 0.112, hd.z + fz - 0.092); add(B.Spine2 || B.Spine, glint);   // catchlight on the pupil surface
   }
   const smile = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.016, 8, 24, Math.PI * 0.85), M.black); smile.position.set(hd.x, hd.y - 0.07, hd.z + fz + 0.01); smile.rotation.z = Math.PI + (Math.PI - Math.PI * 0.85) / 2; smile.scale.x = 1.5; add(B.Spine2 || B.Spine, smile);
   // thin stick limbs, small hands, flat bare feet
@@ -572,9 +577,10 @@ function hat(head, L) {
       for (let k = 0; k < 18; k++) {   // fuller head of locs: varied lengths, natural outward fall, some over shoulders
         const a = k / 18 * Math.PI * 2 + (k % 3) * 0.12, dx = Math.cos(a), dz = Math.sin(a);
         const len = 0.3 + ((k * 37) % 10) / 10 * 0.22, front = dz < -0.3;   // longer in back, some drape forward
-        const y0 = front ? -0.02 : 0.03;
-        add(new THREE.CylinderGeometry(0.026, 0.02, len, 7), dc[k % 4], dx * 0.108, y0 - len / 2 + 0.12, dz * 0.108 + 0.01, dz * 0.24, 0, -dx * 0.24);
-        add(new THREE.SphereGeometry(0.024, 7, 5), dc[(k + 1) % 4], dx * (0.108 + 0.24 * len * 0.5 * -dx * 0.1), y0 - len + 0.12, dz * 0.108 + 0.01 + 0.24 * len * 0.5 * dz * 0.1);   // rounded tips
+        const y0 = front ? -0.02 : 0.03, cy = y0 - len / 2 + 0.12;
+        add(new THREE.CylinderGeometry(0.026, 0.02, len, 7), dc[k % 4], dx * 0.108, cy, dz * 0.108 + 0.01, dz * 0.24, 0, -dx * 0.24);
+        const tip = new THREE.Vector3(0, -len / 2, 0).applyEuler(new THREE.Euler(dz * 0.24, 0, -dx * 0.24));   // the true end of the tilted lock
+        add(new THREE.SphereGeometry(0.024, 7, 5), dc[(k + 1) % 4], dx * 0.108 + tip.x, cy + tip.y, dz * 0.108 + 0.01 + tip.z);   // rounded tips
       }
       break;
     }
@@ -616,7 +622,7 @@ function hat(head, L) {
   const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
   for (const p of parts) { p.computeVertexNormals(); const k = p.attributes.position.count; pos.set(p.attributes.position.array, o * 3); nor.set(p.attributes.normal.array, o * 3); col.set(p.attributes.color.array, o * 3); o += k; }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  head.add(new THREE.Mesh(g, hatMat));
+  const hm = new THREE.Mesh(g, hatMat); hm.castShadow = true; head.add(hm);
   if (L.hat === 'dunce') head.add(betaTag());
 }
 // "BETA" on the front of the dunce cap
