@@ -185,115 +185,70 @@ function humanColors(L, team) {
     human_helmet: L.hat === 'helmet' ? (L.hatColor || '#2a3646') : (ct ? '#2a3646' : '#5e5944'), human_shemagh: L.hatColor || '#d8c6a0', human_visor: '#0c0e12',
   };
 }
-// ---- procedural detail textures: iris, sclera, skin (canvas-baked, no downloads) ----
-let irisTex = null, scleraTex = null, skinDetTex = null;
-function irisTexture() {
-  if (irisTex) return irisTex;
-  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
-  const cx = 128, cy = 128;
-  let g = x.createRadialGradient(cx, cy, 20, cx, cy, 128);   // iris: dark limbal ring -> warm brown -> deep collarette
-  g.addColorStop(0, '#2a1a0e'); g.addColorStop(0.28, '#5a3a1c'); g.addColorStop(0.62, '#7a5228');
-  g.addColorStop(0.88, '#3a2410'); g.addColorStop(0.97, '#14100a'); g.addColorStop(1, '#0a0806');
-  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
-  for (let k = 0; k < 220; k++) {   // radial fibers: the crypts and furrows of a real iris
-    const a = (k / 220) * Math.PI * 2 + Math.random() * 0.05, r0 = 34 + Math.random() * 8, r1 = 104 + Math.random() * 14;
-    x.strokeStyle = Math.random() < 0.5 ? `rgba(20,12,6,${0.15 + Math.random() * 0.25})` : `rgba(190,140,80,${0.1 + Math.random() * 0.2})`;
-    x.lineWidth = 1 + Math.random() * 1.6; x.beginPath();
-    x.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
-    x.lineTo(cx + Math.cos(a + (Math.random() - 0.5) * 0.1) * r1, cy + Math.sin(a + (Math.random() - 0.5) * 0.1) * r1); x.stroke();
-  }
-  x.strokeStyle = 'rgba(10,6,4,0.85)'; x.lineWidth = 10;   // limbal ring: the dark border of the iris
-  x.beginPath(); x.arc(cx, cy, 121, 0, 7); x.stroke();
-  x.fillStyle = '#050403'; x.beginPath(); x.arc(cx, cy, 33, 0, 7); x.fill();   // pupil
-  x.strokeStyle = 'rgba(120,80,40,0.5)'; x.lineWidth = 3;   // collarette around the pupil
-  x.beginPath(); x.arc(cx, cy, 38, 0, 7); x.stroke();
-  const cg = x.createRadialGradient(88, 78, 2, 88, 78, 26);   // catchlight: the wet glint
-  cg.addColorStop(0, 'rgba(255,255,255,0.95)'); cg.addColorStop(0.4, 'rgba(255,255,255,0.45)'); cg.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = cg; x.beginPath(); x.ellipse(88, 78, 26, 18, -0.5, 0, 7); x.fill();
-  irisTex = new THREE.CanvasTexture(c); irisTex.colorSpace = THREE.SRGBColorSpace; return irisTex;
-}
-function scleraTexture() {
-  if (scleraTex) return scleraTex;
-  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
-  x.fillStyle = '#e9e4d8'; x.fillRect(0, 0, 256, 256);
-  for (let k = 0; k < 16; k++) {   // faint blood vessels
-    x.strokeStyle = `rgba(170,80,70,${0.12 + Math.random() * 0.15})`; x.lineWidth = 1 + Math.random();
-    const y0 = Math.random() * 256; x.beginPath(); x.moveTo(-10, y0);
-    x.bezierCurveTo(70, y0 + (Math.random() - 0.5) * 60, 180, y0 + (Math.random() - 0.5) * 60, 266, y0 + (Math.random() - 0.5) * 40); x.stroke();
-  }
-  const g = x.createRadialGradient(128, 128, 90, 128, 128, 180);   // gentle edge darkening
-  g.addColorStop(0, 'rgba(120,110,100,0)'); g.addColorStop(1, 'rgba(120,110,100,0.25)');
-  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
-  scleraTex = new THREE.CanvasTexture(c); scleraTex.colorSpace = THREE.SRGBColorSpace; return scleraTex;
-}
-function skinDetailTexture() {
-  if (skinDetTex) return skinDetTex;
-  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
-  x.fillStyle = '#f4f4f4'; x.fillRect(0, 0, 256, 256);
-  for (let k = 0; k < 6; k++) {   // large soft blotches: skin is never one flat tone
-    const gx = Math.random() * 256, gy = Math.random() * 256, gr = 40 + Math.random() * 60;
-    const g = x.createRadialGradient(gx, gy, 4, gx, gy, gr);
-    const warm = Math.random() < 0.6;
-    g.addColorStop(0, warm ? 'rgba(210,170,150,0.10)' : 'rgba(170,180,190,0.08)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-    x.fillStyle = g; x.beginPath(); x.arc(gx, gy, gr, 0, 7); x.fill();
-  }
-  for (let k = 0; k < 2600; k++) {   // pores: fine speckle
-    x.fillStyle = `rgba(60,40,30,${0.03 + Math.random() * 0.05})`;
-    x.fillRect(Math.random() * 256, Math.random() * 256, 1.2, 1.2);
-  }
-  for (let k = 0; k < 14; k++) {   // sparse blemishes
-    const bx = Math.random() * 256, by = Math.random() * 256, br = 1.5 + Math.random() * 3;
-    const g = x.createRadialGradient(bx, by, 0.5, bx, by, br);
-    g.addColorStop(0, 'rgba(120,70,55,0.35)'); g.addColorStop(1, 'rgba(120,70,55,0)');
-    x.fillStyle = g; x.beginPath(); x.arc(bx, by, br, 0, 7); x.fill();
-  }
-  skinDetTex = new THREE.CanvasTexture(c); skinDetTex.colorSpace = THREE.NoColorSpace;
-  skinDetTex.wrapS = skinDetTex.wrapT = THREE.RepeatWrapping; skinDetTex.repeat.set(3, 3); return skinDetTex;
-}
-let gownTex = null;
-function gownTexture() {   // hospital gown: pale blue with a faint diamond print
-  if (gownTex) return gownTex;
-  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
-  x.fillStyle = '#bfd4e6'; x.fillRect(0, 0, 256, 256);
-  x.strokeStyle = 'rgba(90,120,160,0.4)'; x.lineWidth = 1.5;
-  for (let i = -8; i < 16; i++) {
-    x.beginPath(); x.moveTo(i * 32, 0); x.lineTo(i * 32 + 128, 128); x.lineTo(i * 32, 256); x.stroke();
-    x.beginPath(); x.moveTo(i * 32 + 128, 0); x.lineTo(i * 32, 128); x.lineTo(i * 32 + 128, 256); x.stroke();
-  }
-  for (let k = 0; k < 900; k++) {   // thin hospital cotton, slightly uneven
-    x.fillStyle = `rgba(255,255,255,${Math.random() * 0.07})`;
-    x.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
-  }
-  gownTex = new THREE.CanvasTexture(c); gownTex.colorSpace = THREE.SRGBColorSpace;
-  gownTex.wrapS = gownTex.wrapT = THREE.RepeatWrapping; return gownTex;
-}
+// ---- procedural micro-detail (shader-side, no UVs needed: the human meshes carry no UV attribute) ----
+// Eyes, skin and the hospital gown get their detail from onBeforeCompile injections further down,
+// computed from the bind-pose rest position. Canvas textures would need UVs the meshes don't have.
 function humanMat(part, L, team, hq) {
   const col = humanColors(L, team)[part] || '#888', cloth = CLOTH[part], plaid = (part === 'human_shirt' && team !== 'CT') || part === 'human_shemagh' ? 1 : 0;
   const key = `h|${part}|${col}|${hq}|${plaid}|${L.gown ? 'gown' : ''}`;
   if (D.mats.has(key)) return D.mats.get(key);
-  if (L.gown && part === 'human_shirt') {   // hospital gown instead of a shirt (Cancer): pale blue diamond print
-    const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, metalness: 0, map: gownTexture() });
+  if (L.gown && part === 'human_shirt') {   // hospital gown instead of a shirt (Cancer): pale blue diamond print, procedural (no UVs on the mesh)
+    const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, metalness: 0 });
     litPatch(m, 'dyn');
-    const lit0 = m.onBeforeCompile;   // baked-AO hook, own cache key (own map)
+    const lit0 = m.onBeforeCompile;   // baked-AO hook + procedural gown print, own cache key
     m.onBeforeCompile = (sh, r) => {
       lit0(sh, r);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;')
-        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;');
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;\nvarying vec3 vGownP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;\nvGownP = position;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;\nvarying vec3 vGownP;')
+        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;')
+        .replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          vec2 gp = vec2((vGownP.x + vGownP.y * 0.5) / 7.0, vGownP.z / 7.0);
+          float dia = abs(fract(gp.x + gp.y) - 0.5) + abs(fract(gp.x - gp.y) - 0.5);
+          vec3 gc = vec3(0.75, 0.83, 0.90);
+          if (dia < 0.09) gc = vec3(0.55, 0.68, 0.82);   // the diamond print
+          float fab = fract(sin(dot(floor(vGownP.xy * 4.0), vec2(12.9898, 78.233))) * 43758.5453);
+          gc *= 0.96 + fab * 0.07;   // thin cotton, slightly uneven
+          diffuseColor.rgb = gc;
+        }`);
     };
     m.customProgramCacheKey = () => 'human-gown';
     D.mats.set(key, m); return m;
   }
-  if (part === 'human_eye' || part === 'human_iris') {   // wet, glossy eyes: clearcoat cornea over a detailed iris
-    const m = new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.08, metalness: 0, clearcoat: 1.0, clearcoatRoughness: 0.06,
-      map: part === 'human_iris' ? irisTexture() : scleraTexture(), emissive: '#000000' });
+  if (part === 'human_eye' || part === 'human_iris') {   // wet, glossy eyes: clearcoat cornea + procedural iris (bind-space, faces +y)
+    const isIris = part === 'human_iris';
+    const m = new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.08, metalness: 0, clearcoat: 1.0, clearcoatRoughness: 0.06 });
     litPatch(m, 'dyn');
-    const lit0 = m.onBeforeCompile;   // same baked-AO hook as the other human materials, own cache key (physical shader)
+    const lit0 = m.onBeforeCompile;   // baked-AO hook + procedural eye detail, own cache key (physical shader)
     m.onBeforeCompile = (sh, r) => {
       lit0(sh, r);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;')
-        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;');
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;\nvarying vec3 vEyeP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;\nvEyeP = position;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;\nvarying vec3 vEyeP;')
+        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;')
+        .replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          vec2 ipc = vec2(abs(vEyeP.x) - 3.0, vEyeP.z - 174.7);   // nearest iris centre, disc plane (bind space, cm)
+          float ir = length(ipc);
+          float ang = atan(ipc.y, ipc.x + 1e-4);
+          if (${isIris}) {
+            float fib = sin(ang * 90.0 + sin(ang * 23.0) * 4.0 + ir * 22.0) * 0.5 + 0.5;   // radial iris fibers
+            vec3 irisC = mix(vec3(0.16, 0.10, 0.05), vec3(0.48, 0.32, 0.15), fib);
+            irisC *= 0.85 + 0.3 * smoothstep(1.0, 0.4, ir);
+            float pupil = 1.0 - smoothstep(0.30, 0.42, ir);
+            float limbal = smoothstep(0.86, 1.0, ir);   // dark limbal ring
+            vec3 c = mix(irisC, vec3(0.02, 0.015, 0.01), pupil);
+            c = mix(c, vec3(0.05, 0.035, 0.02), limbal * 0.9);
+            float glint = 1.0 - smoothstep(0.10, 0.22, length(ipc - vec2(0.35, 0.30)));   // catchlight
+            c = mix(c, vec3(1.0), glint * 0.9);
+            diffuseColor.rgb = c;
+          } else {
+            float veinN = abs(sin(vEyeP.x * 2.2 + sin(vEyeP.z * 1.7) * 3.0) * sin(vEyeP.z * 1.9 + vEyeP.x * 1.3));
+            float vein = smoothstep(0.93, 1.0, veinN);   // faint sclera vessels
+            vec3 c = vec3(0.91, 0.89, 0.84);
+            c = mix(c, vec3(0.72, 0.42, 0.38), vein * 0.4);
+            diffuseColor.rgb = c;
+          }
+        }`);
     };
     m.customProgramCacheKey = () => 'human-eye';
     D.mats.set(key, m); return m;
@@ -301,7 +256,6 @@ function humanMat(part, L, team, hq) {
   const rough = part === 'human_eye' || part === 'human_iris' || part === 'human_visor' ? 0.15 : part === 'human_skin' ? 0.55 : part === 'human_boot' ? 0.6 : part === 'human_helmet' ? 0.6 : 0.95;
   const m = new THREE.MeshStandardMaterial({ color: col, roughness: rough, metalness: part === 'human_visor' ? 0.4 : 0 });
   if (part === 'human_boot') m.side = THREE.DoubleSide;   // the lofted boot's end caps
-  if (part === 'human_skin') { m.map = skinDetailTexture(); m.roughness = 0.5; }   // pores, blotches, blemishes baked in
   litPatch(m, 'dyn');
   { // baked ambient occlusion: creases, collars, under the plate carrier
     const lit0 = m.onBeforeCompile;
@@ -312,6 +266,28 @@ function humanMat(part, L, team, hq) {
         .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;');
     };
     m.customProgramCacheKey = () => 'human-ao';
+  }
+  if (part === 'human_skin') {   // procedural pores, blotches, blemishes (bind-space; the mesh has no UVs)
+    const litS = m.onBeforeCompile;
+    m.onBeforeCompile = (sh, r) => {
+      litS(sh, r);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vSkinP;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSkinP = position;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vSkinP;')
+        .replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          float sp1 = fract(sin(dot(floor(vSkinP.xy * 3.0) + floor(vSkinP.zz * 3.0), vec2(12.9898, 78.233))) * 43758.5453);
+          float sp2 = fract(sin(dot(floor(vSkinP.xy * 7.0) + floor(vSkinP.yy * 7.0), vec2(39.346, 11.135))) * 24634.6345);
+          float blotch = sin(vSkinP.x * 0.5 + sin(vSkinP.z * 0.4) * 2.0) * sin(vSkinP.y * 0.45);   // skin is never one flat tone
+          float blem = step(0.988, fract(sin(dot(floor(vSkinP.xy * 0.9), vec2(12.9898, 78.233))) * 43758.5453));
+          diffuseColor.rgb *= 0.94 + sp1 * 0.06 + sp2 * 0.04;   // pores, two scales
+          diffuseColor.rgb *= 1.0 + blotch * 0.035;
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 0.5, 0.42), blem * 0.5);   // blemishes
+          float hollowS = 1.0 - vAO;   // baked AO marks the creases: scattered light pools warm there
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.08, 0.86, 0.78) + vec3(0.02, 0.004, 0.002), hollowS * 0.45);
+        }`);
+    };
+    m.customProgramCacheKey = () => 'human-skin';
   }
   if (cloth && hq) {
     const lit = m.onBeforeCompile, det = clothTex(cloth), nrm = clothTex(cloth + 'n');   // (lighting + AO already patched in)
