@@ -551,7 +551,7 @@ export default function start({ cfg, E, N, smoke }) {
     const hud = new Hud(S);
     // voice chat: speaking indicators on the HUD, kept in sync with voice state
     const refreshVoiceHud = () => { try { hud.voiceHUD(Voice.speakers(), Voice.isTalking(), myName); } catch (e) { /* hud gone */ } };
-    Voice.onChange(refreshVoiceHud); Voice.setVol(S.vol);
+    const unsubVoice = Voice.onChange(refreshVoiceHud); Voice.setVol(S.vol);
 
     let culler = null, lobbyPanel = null, sunLight = null, sky = null, parts = null, sunDir = [0.6, 0.7, 0.4];
     let W = null, mode = opt.mode, mapId = opt.map, botLevel = opt.bot || 'normal', match = null, bots = null, ended = false, started = false;
@@ -938,7 +938,7 @@ export default function start({ cfg, E, N, smoke }) {
 
     // ---- inputs ----
     const keys = new Set(), pressed = new Set();
-    let mouseBtn = [false, false, false], mdx = 0, mdy = 0, locked = false, uiOpen = null, showSb = false;
+    let mouseBtn = [false, false, false], mdx = 0, mdy = 0, locked = false, uiOpen = null, showSb = false, wasSb = false;
     const onKey = (e) => {
       if (e.target && e.target.tagName === 'INPUT') return;
       if (e.code === 'Tab' || e.code === 'Space' || (KB.jump || []).includes(e.code) || (KB.score || []).includes(e.code) || (e.ctrlKey && /Key[WSDAEQRTFGB]/.test(e.code))) e.preventDefault();
@@ -953,7 +953,7 @@ export default function start({ cfg, E, N, smoke }) {
     addEventListener('mousemove', onMove); renderer.domElement.addEventListener('mousedown', onDown); addEventListener('mouseup', onUp);
     addEventListener('contextmenu', (e) => e.preventDefault());
     addEventListener('wheel', (e) => { if (locked) pressed.add(e.deltaY > 0 ? 'WheelDown' : 'WheelUp'); }, { passive: true });
-    const onLock = () => { locked = document.pointerLockElement === renderer.domElement; if (!locked && !uiOpen && !ended && !smoke && !campHold && !loadMenu) openPause(); };   // the story hub / cards free the mouse on purpose
+    const onLock = () => { locked = document.pointerLockElement === renderer.domElement; if (!locked && !uiOpen && !ended && !smoke && !campHold && !loadMenu && !showSb) openPause(); };   // the story hub / cards free the mouse on purpose
     document.addEventListener('pointerlockchange', onLock);
     // raw mouse where the browser supports it (no OS acceleration, lower latency), else the plain lock
     const lock = () => { try { let r = null; try { r = renderer.domElement.requestPointerLock({ unadjustedMovement: true }); } catch (e1) { r = null; } if (r && r.catch) r = r.catch(() => renderer.domElement.requestPointerLock()); else if (!r && !document.pointerLockElement) r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock([...new Set([...(KB.forward || []), ...(KB.crouch || []), ...(KB.score || [])])]).catch(() => {}); };
@@ -1645,8 +1645,12 @@ export default function start({ cfg, E, N, smoke }) {
         if (!canBuy()) closeBuy();
       }
       showSb = kdA('score') || E.input.touch.buttons.has('score');
+      // voice chat: free the cursor while the scoreboard is open so mute buttons are clickable
+      if (showSb && !wasSb && session && locked && Voice.isWanted()) { try { document.exitPointerLock(); } catch (e) {} }
+      wasSb = showSb;
       // voice chat push-to-talk (mic live only while held)
-      Voice.setTalking(!typing && !uiOpen && (kdA('ptt') || E.input.touch.buttons.has('ptt')));
+      const pttMouse = (KB.ptt || []).some((c) => c[0] === 'M' && mouseBtn[+c.slice(1)]);
+      Voice.setTalking(!typing && !uiOpen && (kdA('ptt') || pttMouse || E.input.touch.buttons.has('ptt')));
       if (mob) { const sh = !uiOpen && !ended; if (sh !== mobShown) { mobShown = sh; mob.show(sh); } mob.setAiming(me.ads > 0.5); }
       // movement (frozen in freeze time)
       { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || me.adsToggle); if (!wantAds && !mouseBtn[2] && (me.reload > 0 || !adsOptic || !me.alive)) me.adsToggle = false; me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0;
@@ -1966,7 +1970,7 @@ export default function start({ cfg, E, N, smoke }) {
       try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* not locked */ }
       if (mob) mob.destroy(); removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('mousemove', onMove); removeEventListener('mouseup', onUp); removeEventListener('resize', resize);
       document.removeEventListener('pointerlockchange', onLock);
-      if (session) session.leave(); if (lobby) lobby.close(); Voice.detach();
+      if (session) session.leave(); if (lobby) lobby.close(); try { unsubVoice(); } catch (e) {} Voice.detach();
       if (lobbyPanel) { clearInterval(lobbyPanel.iv); lobbyPanel.remove(); }
       if (SC) { SC.dispose(); SC = null; }
       hud.destroy(); renderer.dispose(); renderer.domElement.remove();
