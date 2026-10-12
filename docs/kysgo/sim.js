@@ -277,11 +277,11 @@ export class Match {
       if (w.cat === 'knife') { const back = this.isBackstab(p, v); const base = h.heavy ? (back ? w.backstab[1] : w.heavy) : (back ? w.backstab[0] : w.dmg); r = damageFor({ ...w, dmg: base, rm: 1, headMult: 1 }, 0, 'chest', v.armor, v.helmet); }
       else r = damageFor(w, dist, h.group, v.armor, v.helmet, Math.max(0.1, Math.min(1, h.pen || 1)));
       v.armor = Math.max(0, v.armor - r.armor);
-      this.damage(v, p, r.hp, wid, h.group, (h.pen || 1) < 1);
+      this.damage(v, p, r.hp, wid, h.group, (h.pen || 1) < 1, false, r.armor);
     }
   }
   isBackstab(a, v) { const ang = Math.atan2(a.x - v.x, a.z - v.z), face = v.yaw; let d = Math.abs(((ang - face + Math.PI * 3) % (Math.PI * 2)) - Math.PI); return d < 1.0; }
-  damage(v, by, amount, weapon, group, wallbang, silent) {
+  damage(v, by, amount, weapon, group, wallbang, silent, armorDmg = 0) {
     if (!v.alive || amount <= 0) return;
     if (by && by.team === v.team && by !== v && weapon !== 'he' && weapon !== 'molotov' && weapon !== 'incendiary') return;  // no friendly fire from bullets
     const dealt = Math.min(v.hp, amount);
@@ -290,7 +290,7 @@ export class Match {
     if (by && by !== v) by.dmgDealt.set(v.id, (by.dmgDealt.get(v.id) || 0) + dealt);
     const info = { id: v.id, hp: Math.max(0, Math.round(v.hp)), armor: Math.round(v.armor), from: by ? [by.x, by.z] : null, by: by ? by.id : null, dmg: Math.round(dealt), group };
     if (v.local) this.onLocal('hurt', info); else if (!v.bot) this.send('hurt', info, v.id);
-    if (by && !by.bot && by !== v) { const m = { id: v.id, dmg: Math.round(dealt), group, kill: v.hp <= 0 }; if (by.local) this.onLocal('hitconfirm', m); else this.send('hitconfirm', m, by.id); }
+    if (by && !by.bot && by !== v) { const m = { id: v.id, dmg: Math.round(dealt), group, kill: v.hp <= 0, armor: Math.round(armorDmg || 0) }; if (by.local) this.onLocal('hitconfirm', m); else this.send('hitconfirm', m, by.id); }
     if (v.hp <= 0) this.kill(v, by, weapon, group === 'head', wallbang);
   }
   kill(v, by, weapon, head, wallbang) {
