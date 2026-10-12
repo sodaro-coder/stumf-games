@@ -347,7 +347,7 @@ export const CHAPTERS = [
     { id: 'm15', name: 'Hot Tub Time Bomb', tier: 4, intro: 'There is a bomb in the hot tub. Igor volunteers.',
       objectives: [
         { kind: 'defuse', puzzle: 'wires', hint: 'Defuse the bomb in the hot tub', say: [['igor', 'In my country, water is always this temperature. But frozen.']] },
-        { kind: 'clear', zone: 'deck', count: 20, hint: 'Clear the party deck',
+        { kind: 'clear', zone: 'Stern', count: 20, hint: 'Clear the party deck',
           scene: [['wiener', 'Where\'s Cancer?'], ['igor', 'Lower deck. On a phone. Whispering.'], ['wiener', 'Who carries a phone on a covert op?'], ['ricky', 'Leave him alone, man. Maybe it\'s a doctor.'], ['wiener', 'At midnight? On Ballin\'s yacht?']] },
       ],
       cut: { in: [['command', 'Bomb in the hot tub, team! Classic Ballin\'.']],
