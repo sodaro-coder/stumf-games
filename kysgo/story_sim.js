@@ -641,7 +641,7 @@ export class StoryMatch extends Match {
             if (this.alarm <= 0) { this.alarm = 6; this.event('banner', { text: 'WRONG ORDER', sub: `start with ${st.next}` }); this.wave(2); for (const q of this.markers) q.prog = 0; this.push(true); }
             continue;
           }
-          m.prog = Math.min(1, m.prog + dt / 1.6); if (m.prog >= 1) { m.done = true; st.have++; st.next++; this.event('sound', { s: 'pickup', x: m.x, z: m.z }); }
+          m.prog = Math.min(1, m.prog + dt / 1.6); if (m.prog >= 1) { m.done = true; st.have++; st.next++; this.event('sound', { s: 'pickup', x: m.x, z: m.z }); if (this.mission.id === 'm1' && o.zone === 'Armory') { for (const q of this.players.values()) if (q.squad && q.alive && !q.spectator) { this.give2(q, 'ak47'); this.give2(q, q.char === 'ricky' ? 'glock_sw' : 'p2000'); q.nades = ['he', 'flash']; q.armor = 100; q.helmet = true; this.sendInv(q); } this.event('banner', { text: 'ARMORY KIT ISSUED', sub: 'Rifle, sidearm, grenades and armor acquired' }); } }
           this.push();
         }
         this.alarm -= dt; done = st.have >= st.need; break;
