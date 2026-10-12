@@ -5,7 +5,7 @@
 //   - DEMAND: recent trade velocity, market views, wishlist adds; hot items → price climbs
 //   - TREND: momentum with mean-reversion so prices move like a real market, not random noise
 // Works offline (simulates the broader market) and online (folds in real aggregate data when available).
-import { RARITY } from './skins.js';
+// Standalone (no imports) to avoid circular dependencies with skins.js.
 
 const KEY = 'kysgo_market_econ_v1';
 // AI personality: how aggressively it moves prices
@@ -19,7 +19,7 @@ const CFG = {
   tickHours: 1,             // AI re-prices every hour
 };
 
-let S = null; // { finishes: { [defId]: { supply, demand, price, trend, updated } }, lastTick }
+let S = null; // { finishes: { [defId]: { supplyIdx, demand, price, trend, updated } }, lastTick }
 
 function load() {
   if (S) return S;
@@ -32,7 +32,7 @@ function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e
 
 function fin(defId) {
   const F = load().finishes;
-  if (!F[defId]) F[defId] = { supply: 0, demand: 1, price: 0, trend: 0, updated: 0 };
+  if (!F[defId]) F[defId] = { supplyIdx: 1, demand: 1, price: 0, trend: 0, updated: 0 };
   return F[defId];
 }
 
@@ -43,36 +43,36 @@ function rarityMult(odds) {
 }
 
 // The AI's fair-value estimate for a finish
-export function econFair(defId, tier) {
-  const base = RARITY[tier] ? RARITY[tier].value : 20;
-  const odds = RARITY[tier] ? RARITY[tier].odds : 69.8;
+export function econFair(defId, baseValue, odds) {
+  const base = baseValue || 20;
+  const o = odds || 69.8;
   const f = fin(defId);
-  // supply: expected circulation for this rarity vs actual; oversupply → cheaper
-  const expected = Math.max(1, 1000 * (odds / 100));
-  const supplyF = Math.pow(expected / Math.max(1, f.supply || expected * 0.5), CFG.supplyElasticity);
+  // supply: relative index (1.0 = baseline). More supply → cheaper, with diminishing impact.
+  // Initialized to 1.0; case openings nudge it up slightly.
+  const supplyF = Math.pow(1 / Math.max(0.2, f.supplyIdx || 1), CFG.supplyElasticity);
   // demand: 1.0 baseline; spikes push up
   const demandF = Math.pow(Math.max(0.2, f.demand), CFG.demandElasticity);
   // trend: momentum term, mean-reverts
   const trendF = 1 + f.trend * CFG.trendMomentum;
-  const fair = base * rarityMult(odds) * supplyF * demandF * trendF;
+  const fair = base * rarityMult(o) * supplyF * demandF * trendF;
   return Math.round(Math.min(base * CFG.maxUp, Math.max(base * CFG.maxDown, fair)));
 }
 
 // Current AI price (uses cached price if fresh, else fair value)
-export function econPrice(defId, tier, baseValue) {
+export function econPrice(defId, baseValue, odds) {
   const f = fin(defId);
   if (f.price > 0 && Date.now() - f.updated < CFG.tickHours * 3600e3) return f.price;
-  const p = econFair(defId, tier);
+  const p = econFair(defId, baseValue, odds);
   f.price = p; f.updated = Date.now(); save();
   return p;
 }
 
 // Feed the AI market events
-export function econEvent(type, defId, tier) {
+export function econEvent(type, defId, baseValue, odds) {
   const f = fin(defId);
   if (type === 'case_open') {
     // new copy enters circulation → supply up → gentle downward pressure
-    f.supply += 1;
+    f.supplyIdx = (f.supplyIdx || 1) * 1.015;
     f.demand = Math.max(0.2, f.demand * 0.99);
   } else if (type === 'trade') {
     // a trade = revealed demand → up pressure + momentum
@@ -85,11 +85,11 @@ export function econEvent(type, defId, tier) {
     f.demand = Math.min(5, f.demand + 0.03);
   }
   // re-price immediately on meaningful events
-  f.price = econFair(defId, tier); f.updated = Date.now(); save();
+  f.price = econFair(defId, baseValue, odds); f.updated = Date.now(); save();
 }
 
 // The AI's periodic market sweep: decay demand, mean-revert trends, simulate background market
-export function econTick(tierOf) {
+export function econTick(priceOf) {
   const s = load(), now = Date.now();
   if (now - s.lastTick < CFG.tickHours * 3600e3) return false;
   s.lastTick = now;
@@ -101,8 +101,8 @@ export function econTick(tierOf) {
     // background market noise: tiny random walk so the market feels alive
     f.trend += (Math.random() - 0.5) * 0.06;
     f.trend = Math.max(-1, Math.min(1, f.trend));
-    const tier = tierOf ? tierOf(id) : 0;
-    f.price = econFair(id, tier); f.updated = now;
+    const pb = priceOf ? priceOf(id) : null;
+    f.price = econFair(id, pb ? pb.base : 20, pb ? pb.odds : 69.8); f.updated = now;
   }
   save();
   return true;

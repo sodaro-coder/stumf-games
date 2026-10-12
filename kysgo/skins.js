@@ -3,6 +3,7 @@
 // Rarity: Common, Uncommon, Rare, Epic, Legendary, Funny and Mythic (the two rarest, same odds). Mythic finishes and
 // outfits glow and animate, and have their own inspect. Odds are shown on every crate. Crates open with coins earned in-game only.
 import { WEAPONS } from './data.js';
+import { econPrice, econEvent, econTrend } from './market_econ.js';
 
 export const RARITY = [  // index = tier; Funny and Mythic are the rarest
   { key: 'common', name: 'Common', color: '#b0c3d9', odds: 69.8, value: 20 },
@@ -430,9 +431,25 @@ export function itemInfo(it) {
   const d = ITEM_BY_ID[it.def]; if (!d) return null;
   const wpn = d.kind === 'skin' ? (WEAPONS.find((w) => w.id === d.weapon) || {}).name : d.kind === 'knife' ? KNIFE_BY_ID[d.weapon].name : d.kind === 'emote' ? 'Emote' : 'Agent';
   const wear = d.kind === 'agent' || d.kind === 'emote' ? null : wearOf(it.float);
-  const value = Math.round(RARITY[d.tier].value * (wear ? wear.mult : 1) * (it.st ? 2 : 1) * (d.kind === 'agent' ? 1.5 : d.kind === 'emote' ? 0.8 : 1));
+  // AI market economy: dynamic price based on rarity (odds) and supply/demand
+  const baseVal = RARITY[d.tier].value, odds = RARITY[d.tier].odds;
+  const aiPrice = econPrice(it.def, baseVal, odds);
+  const value = Math.round(aiPrice * (wear ? wear.mult : 1) * (it.st ? 2 : 1) * (d.kind === 'agent' ? 1.5 : d.kind === 'emote' ? 0.8 : 1));
   const finish = shownFinish(d.finish);
-  return { ...d, finish, wpn, wear, value, rarity: RARITY[d.tier], label: (it.st ? 'StatTrak™ ' : '') + `${wpn} | ${finish}` };
+  const trend = econTrend(it.def);
+  return { ...d, finish, wpn, wear, value, trend, rarity: RARITY[d.tier], label: (it.st ? 'StatTrak™ ' : '') + `${wpn} | ${finish}` };
+}
+
+// Record a case opening for the AI market (increases supply → gentle downward pressure)
+export function econCaseOpened(defId, tier) {
+  const baseVal = RARITY[tier] ? RARITY[tier].value : 20, odds = RARITY[tier] ? RARITY[tier].odds : 69.8;
+  econEvent('case_open', defId, baseVal, odds);
+}
+
+// Record a market trade for the AI market (revealed demand → upward pressure)
+export function econTraded(defId, tier) {
+  const baseVal = RARITY[tier] ? RARITY[tier].value : 20, odds = RARITY[tier] ? RARITY[tier].odds : 69.8;
+  econEvent('trade', defId, baseVal, odds);
 }
 
 // ---- painting: recipe -> canvas (deterministic by seed), then wear ----

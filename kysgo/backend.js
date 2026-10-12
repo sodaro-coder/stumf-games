@@ -4,7 +4,7 @@
 // apply), so a player can't just edit their way to a knife. The public key in the config is meant to be public.
 import { DEFAULT_ATT, gunLevel, attOK } from './guns.js';
 import { rankOf as RANKS_T } from './data.js';
-import { CRATE_BY_ID, CRATES, rollCrate, itemInfo, newItem, ITEM_BY_ID, PASS, DEFAULT_EMOTES, EMOTE_BY_ID } from './skins.js';
+import { CRATE_BY_ID, CRATES, rollCrate, itemInfo, newItem, ITEM_BY_ID, PASS, DEFAULT_EMOTES, EMOTE_BY_ID, econCaseOpened, econTraded } from './skins.js';
 
 const LS = 'cs:profile:v1', TOK = 'cs:session:v1';
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
@@ -93,8 +93,8 @@ export class Profile {
   async openCrate(id) {
     const c = CRATE_BY_ID[id]; if (!c) throw new Error('no such crate');
     if (this.d.coins < c.price) throw new Error('Not enough coins');
-    if (this.signedIn) { const it = await this.rpc('cs_open_crate_pooled', { p_crate: id }); /* the spin's coins go into today's prize pool */ const item = { uid: it.uid, def: it.def, float: it.float, st: it.st, seed: it.seed, kills: 0, t: Date.now() }; this.d.coins = it.coins; this.d.inventory.unshift(item); this.changed(); return item; }
-    const item = rollCrate(c); this.d.coins -= c.price; this.d.inventory.unshift(item); this.changed(); return item;
+    if (this.signedIn) { const it = await this.rpc('cs_open_crate_pooled', { p_crate: id }); /* the spin's coins go into today's prize pool */ const item = { uid: it.uid, def: it.def, float: it.float, st: it.st, seed: it.seed, kills: 0, t: Date.now() }; this.d.coins = it.coins; this.d.inventory.unshift(item); this.changed(); try { const d = ITEM_BY_ID[it.def]; if (d) econCaseOpened(it.def, d.tier); } catch (e) {} return item; }
+    const item = rollCrate(c); this.d.coins -= c.price; this.d.inventory.unshift(item); this.changed(); try { const d = ITEM_BY_ID[item.def]; if (d) econCaseOpened(item.def, d.tier); } catch (e) {} return item;
   }
   async sell(uid) {
     const it = this.d.inventory.find((x) => x.uid === uid); if (!it) return 0;
