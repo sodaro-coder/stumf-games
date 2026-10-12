@@ -30,6 +30,11 @@ import * as THREE from '../sdk/three.module.min.js';
   var isMobile = false;
   try { isMobile = window.matchMedia && window.matchMedia('(pointer: coarse)').matches; } catch (e) {}
 
+  // graphics tier (potato/low/medium/high/ultra) — ultra gets maximum everything
+  function tier() { try { return (window.__cs && window.__cs.gfx && window.__cs.gfx.tier) || 'medium'; } catch (e) { return 'medium'; } }
+  function isUltra() { return tier() === 'ultra'; }
+  function isHighPlus() { var t = tier(); return t === 'high' || t === 'ultra'; }
+
   var state = null;
 
   // ---- small helpers ---------------------------------------------------------
@@ -128,7 +133,10 @@ import * as THREE from '../sdk/three.module.min.js';
   var muzzleLight = null, muzzleT = 0;
   function setupMuzzleLight(scene) {
     try {
-      muzzleLight = new THREE.PointLight(0xffb347, 0, isMobile ? 12 : 18, 2);
+      // ultra: 24m range for dramatic room-filling flashes; desktop: 18; mobile: 12
+      var range = isMobile ? 12 : 18;
+      try { if (window.__cs && window.__cs.gfx && window.__cs.gfx.tier === 'ultra') range = 24; } catch (e) {}
+      muzzleLight = new THREE.PointLight(0xffb347, 0, range, 2);
       muzzleLight.visible = false;
       scene.add(muzzleLight);
       state.lights.push({ obj: muzzleLight, kind: 'muzzle' });
@@ -180,9 +188,11 @@ import * as THREE from '../sdk/three.module.min.js';
   var boomPool = [], boomIdx = 0;
   function setupExplosionPool(scene) {
     try {
-      var n = isMobile ? 2 : 3;
+      // ultra: 4 pooled lights for overlapping explosions; desktop: 3; mobile: 2
+      var n = isMobile ? 2 : (isUltra() ? 4 : 3);
+      var range = isMobile ? 25 : (isUltra() ? 50 : 40);
       for (var i = 0; i < n; i++) {
-        var L = new THREE.PointLight(0xff6a1a, 0, isMobile ? 25 : 40, 1.8);
+        var L = new THREE.PointLight(0xff6a1a, 0, range, 1.8);
         L.visible = false;
         scene.add(L);
         boomPool.push({ light: L, t: 0, dur: 0 });
@@ -296,7 +306,8 @@ import * as THREE from '../sdk/three.module.min.js';
   // Tiny particles drifting in the air that catch the light. Cheap Points.
   function setupDustMotes(scene) {
     try {
-      var N = isMobile ? 120 : 300;
+      // ultra: 450 motes for dense atmosphere; desktop: 300; mobile: 120
+      var N = isMobile ? 120 : (isUltra() ? 450 : 300);
       var geo = new THREE.BufferGeometry();
       var pos = new Float32Array(N * 3);
       var seed = new Float32Array(N);
@@ -368,8 +379,9 @@ import * as THREE from '../sdk/three.module.min.js';
   var beacons = [];
   function addBeacon(x, y, z) {
     try {
-      if (isMobile && beacons.length >= 2) return null;   // cap on mobile
-      if (beacons.length >= 4) return null;
+      // tier-aware cap: ultra 6, desktop 4, mobile 2
+      var cap = isMobile ? 2 : (isUltra() ? 6 : 4);
+      if (beacons.length >= cap) return null;
       var grp = new THREE.Group();
       grp.position.set(x, y, z);
       var lamp = new THREE.PointLight(0xff2211, 0, 20, 1.6);
@@ -410,9 +422,11 @@ import * as THREE from '../sdk/three.module.min.js';
     try {
       var tex = getShaftTex();
       if (!tex) return;
-      for (var i = 0; i < 3; i++) {
+      // ultra: 5 god-ray planes; desktop: 3
+      var count = isUltra() ? 5 : 3;
+      for (var i = 0; i < count; i++) {
         var mat = new THREE.MeshBasicMaterial({
-          map: tex, transparent: true, opacity: 0.10,
+          map: tex, transparent: true, opacity: isUltra() ? 0.13 : 0.10,
           blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
         });
         var m = new THREE.Mesh(new THREE.PlaneGeometry(3, 14), mat);
