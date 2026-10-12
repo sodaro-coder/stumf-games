@@ -1136,10 +1136,14 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
         <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · same as phones)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
+      <div class="cs-h">Accessibility</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Colorblind mode</div><select data-k="colorblind"><option value="none">Off</option><option value="deuteranopia">Deuteranopia (red-green · most common)</option><option value="protanopia">Protanopia (red-blind)</option><option value="tritanopia">Tritanopia (blue-yellow · rare)</option></select><div class="cs-small cs-mut" style="margin-top:8px">CT / T / alert preview</div><div id="cbPrev" style="display:flex;gap:6px;margin-top:4px"></div></label></div>
       <div class="cs-h">Keybinds <span style="flex:1"></span><button class="cs-btn alt sm" id="kbReset">Reset defaults</button></div>
       <div class="cs-small cs-mut" style="margin-bottom:8px">Click a key, then press the new key (or a mouse button). Esc cancels.</div>
       <div id="kbList"></div>`;
-    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'voicePack' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
+    const renderCbPrev = () => { const el = $('#cbPrev', B); if (!el || !window.__CB__) return; const p = __CB__.swatch(S.colorblind || 'none'); el.innerHTML = [p.ct, p.t, p.bombPlanted, p.hmHead].map((c) => `<span title="${c}" style="width:26px;height:18px;border-radius:4px;background:${c};border:1px solid #000"></span>`).join(''); };
+    if (window.__CB__) __CB__.set(S.colorblind || 'none');
+    renderCbPrev();
+    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'voicePack' || k === 'colorblind' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); if (k === 'colorblind' && window.__CB__) { __CB__.set(e.value); renderCbPrev(); } drawXh($('#xPrev', B), S, 0); }; });
     drawXh($('#xPrev', B), S, 0);
     $('#vTry', B).onclick = (e) => { e.preventDefault(); this.h.announce('planted'); };
     this.keybindUI(B);
@@ -1251,7 +1255,7 @@ export class Hud {
     const c = document.createElement('canvas'); c.width = W.w * 2; c.height = W.d * 2; const g = c.getContext('2d');
     for (let z = 0; z < W.d; z++) for (let x = 0; x < W.w; x++) { const i = z * W.w + x, open = W.flag[i] === 2 || W.flag[i] === 3; const h = W.h[i];
       g.fillStyle = W.flag[i] === 3 ? '#a33' : open ? `rgb(${120 + h * 20},${118 + h * 20},${108 + h * 18})` : h < 3 ? '#4a4d52' : '#1c1f24'; g.fillRect(x * 2, z * 2, 2, 2); }
-    g.font = 'bold 18px system-ui'; g.fillStyle = '#ff6a4a'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 18px system-ui'; g.fillStyle = window.__CB__ ? __CB__.site() : '#ff6a4a'; g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const [n, r] of Object.entries(W.B.sites)) g.fillText(n, (r[0] + r[2]), (r[1] + r[3]));
     this.base = c; this.W = W;
   }
@@ -1261,8 +1265,8 @@ export class Hud {
     g.translate(R / 2, R / 2); g.rotate(me.yaw); g.scale(scale / 2, scale / 2); g.translate(-me.x * 2, -me.z * 2);
     g.globalAlpha = 0.85; g.drawImage(this.base, 0, 0); g.globalAlpha = 1;
     const dot = (x, z, col, r = 5) => { g.fillStyle = col; g.beginPath(); g.arc(x * 2, z * 2, r, 0, 7); g.fill(); g.strokeStyle = '#000'; g.lineWidth = 1; g.stroke(); };
-    for (const p of list) if (p.alive) dot(p.x, p.z, p.team === 'CT' ? '#5d9cec' : '#e0a83a', p.spotted ? 4 : 4);
-    if (bomb) { g.fillStyle = bomb.s === 'planted' ? '#ff3a2a' : '#ffd45a'; g.fillRect(bomb.x * 2 - 4, bomb.z * 2 - 4, 8, 8); }
+    for (const p of list) if (p.alive) dot(p.x, p.z, window.__CB__ ? __CB__.team(p.team) : (p.team === 'CT' ? '#5d9cec' : '#e0a83a'), p.spotted ? 4 : 4);
+    if (bomb) { g.fillStyle = window.__CB__ ? __CB__.bomb(bomb.s) : (bomb.s === 'planted' ? '#ff3a2a' : '#ffd45a'); g.fillRect(bomb.x * 2 - 4, bomb.z * 2 - 4, 8, 8); }
     g.restore();
     g.fillStyle = '#fff'; g.beginPath(); g.moveTo(R / 2, R / 2 - 7); g.lineTo(R / 2 - 5, R / 2 + 5); g.lineTo(R / 2 + 5, R / 2 + 5); g.fill();
   }
