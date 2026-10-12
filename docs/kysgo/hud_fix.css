@@ -1,0 +1,16 @@
+/* HUD fix: prevent top bar cutoff on notched/mobile displays */
+.cs-top {
+  max-width: calc(100vw - 16px) !important;
+  top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+  left: 8px !important;
+  right: 8px !important;
+  box-sizing: border-box !important;
+}
+@media (pointer: coarse) {
+  .cs-top {
+    max-width: calc(100vw - 8px) !important;
+    top: calc(4px + env(safe-area-inset-top, 0px)) !important;
+    left: 4px !important;
+    right: 4px !important;
+  }
+}
