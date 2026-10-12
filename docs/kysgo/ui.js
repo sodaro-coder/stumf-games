@@ -100,7 +100,7 @@ const CSS = `
 .cs-hud .chat div{background:rgba(0,0,0,.35);padding:2px 6px;border-radius:3px}
 .cs-hud .dmgdir{position:absolute;left:50%;top:50%;width:180px;height:180px;margin:-90px;border-radius:50%;border-top:6px solid rgba(255,40,40,.8);opacity:0;transition:opacity .5s}
 .cs-xh{position:absolute;left:50%;top:50%;width:0;height:0}.cs-hm{position:fixed;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:31;opacity:0}.cs-hm i{position:absolute;width:11px;height:2px;background:#fff;box-shadow:0 0 2px #000;left:-5.5px;top:-1px}.cs-hm i:nth-child(1){transform:rotate(45deg) translateX(-12px)}.cs-hm i:nth-child(2){transform:rotate(135deg) translateX(-12px)}.cs-hm i:nth-child(3){transform:rotate(225deg) translateX(-12px)}.cs-hm i:nth-child(4){transform:rotate(315deg) translateX(-12px)}.cs-hm.head i{background:#ffd54a}.cs-hm.kill i{background:#ff3b3b;width:14px}.cs-hm.on{animation:csHm .26s ease-out}@keyframes csHm{0%{opacity:1;transform:scale(1.35)}35%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.9)}}.cs-xh i{position:absolute;background:var(--xc,#5f5);box-shadow:0 0 0 1px rgba(0,0,0,var(--xo,.6))}
-.cs-scope{position:fixed;inset:0;z-index:19;pointer-events:none;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 34vh,#000 34.2vh)}
+.cs-scope{position:fixed;inset:0;z-index:19;pointer-events:none;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 32.5vh,rgba(0,0,0,.35) 33.6vh,rgba(0,0,0,.96) 34.6vh,#000 35.5vh)}
 .cs-scope.ret:before,.cs-scope.ret:after{display:none}
 .cs-ads{position:fixed;inset:0;z-index:18;pointer-events:none;display:none;--ret-gain:1}
 .cs-ads .dot{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:radial-gradient(circle,#fff8f0 0%,#ff5040 35%,#ff2010 70%);box-shadow:0 0 2px 1px rgba(255,240,220,calc(.9*var(--ret-gain))),0 0 8px 3px rgba(255,45,35,calc(.75*var(--ret-gain))),0 0 20px 8px rgba(255,30,20,calc(.3*var(--ret-gain)))}
@@ -1239,6 +1239,13 @@ export class Hud {
   setAds(kind) {
     if (this.adsKind === kind) return; this.adsKind = kind;
     this.ads.style.display = kind ? 'block' : 'none'; this.ads.innerHTML = kind ? (ADS_RET[kind] || '') : ''; this.ads.className = 'cs-ads ' + (kind || '');
+  }
+  // reticle brightness follows the environment (brighter in daylight): 0.7 dim .. 1.4 bright
+  setReticleGain(g) {
+    const v = Math.max(0.5, Math.min(1.6, g || 1));
+    if (this.retGain === v) return; this.retGain = v;
+    this.ads.style.setProperty('--ret-gain', v.toFixed(2));
+  }
   }
   feed(e, mineId) {
     const box = this.q('.feed'), row = document.createElement('div'); row.className = 'kf' + (e.kid === mineId || e.vid === mineId ? ' mine' : '');
