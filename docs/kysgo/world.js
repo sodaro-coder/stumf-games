@@ -284,7 +284,6 @@ export function litPatch(mat, kind = 'dyn') {
 			reflectedLight.indirectDiffuse *= mix(vec3(1.0), pr.rgb * 2.0, bakeOn);
 		}`}
 	}`);
-    if (kind === 'dyn') f = f.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\t{ vec3 Vv = normalize(vViewPosition); float fr = pow(1.0 - clamp(dot(normalize(normal), Vv), 0.0, 1.0), 3.0); totalEmissiveRadiance += vec3(0.70, 0.78, 0.92) * (fr * 0.13); }   // fresnel rim: grazing angles catch a cool sheen so characters separate from dark backgrounds (ray-traced read, ~6 ALU)');
     sh.fragmentShader = f;
   };
   mat.customProgramCacheKey = () => 'lit-' + kind;
