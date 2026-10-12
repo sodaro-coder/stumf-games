@@ -3,6 +3,7 @@
 // Rarity: Common, Uncommon, Rare, Epic, Legendary, Funny and Mythic (the two rarest, same odds). Mythic finishes and
 // outfits glow and animate, and have their own inspect. Odds are shown on every crate. Crates open with coins earned in-game only.
 import { WEAPONS } from './data.js';
+import { econPrice, econEvent, econTrend } from './market_econ.js';
 
 export const RARITY = [  // index = tier; Funny and Mythic are the rarest
   { key: 'common', name: 'Common', color: '#b0c3d9', odds: 69.8, value: 20 },
@@ -153,17 +154,147 @@ function makeCrate(id, name, desc, theme, seed, knives, price) {
 // The other cases: a theme = palette + 15 finish names (5 Common, 4 Uncommon, 3 Rare, 2 Epic, 1 Legendary gun),
 // two classic knives (Legendary) and a joke knife (Funny). Ids are crate:weapon:finish, fixed forever once shipped.
 const PAT = [['camo', 'solid', 'checker', 'stripes', 'dots'], ['tiger', 'hex', 'circuit', 'marble', 'damascus'], ['geo', 'galaxy', 'flames', 'scales', 'web'], ['fade', 'wave'], ['wave']];
+// Finish overrides: corrected patterns/palettes so each finish looks like its name.
+// Generated from the skins audit (144 mismatches).
+const FINISH_OVERRIDES = {
+  'Abyssal': { t: 'solid' },
+  'Acid Rain': { t: 'stripes' },
+  'Alien Probe': { t: 'solid', c: ['#a8adb6', '#6a6e76'] },
+  'Asteroid Belt': { t: 'dots', c: ['#6a6a70', '#4a4a50', '#8a8a90'] },
+  'Ballroom': { t: 'checker', c: ['#1a1a1a', '#f4f0e0'] },
+  'Barnacle': { c: ['#9aa0a8', '#6a7078'] },
+  'Bat Cave': { c: ['#0a0a0a', '#141414'] },
+  'Beach Towel': { t: 'stripes' },
+  'Beef Jerky': { c: ['#7a3a1a', '#5a2a10', '#8a4a20'] },
+  'Big Top': { t: 'stripes' },
+  'Black Ice': { t: 'solid', c: ['#0a0f18', '#1a2433'] },
+  'Blizzard': { t: 'clouds' },
+  'Boardwalk': { t: 'stripes', c: ['#8a6a4a', '#6a4a2e'] },
+  'Bone Daddy': { t: 'solid', c: ['#e8e0d0', '#c8bca8'] },
+  'Bone Dry': { t: 'solid', c: ['#e8e0d0', '#c8bca8'] },
+  'Boombox': { t: 'solid', c: ['#1a1a1a', '#3a3a3a'] },
+  'Brown Stain': { t: 'smear', c: ['#8a5a2a', '#6a421e'] },
+  'Cave Painting': { t: 'marble' },
+  'Cheeto Dust': { c: ['#e8862a', '#c86a1a', '#a85418'] },
+  'Chem Spill': { t: 'smear' },
+  'Chicken Coop': { t: 'stripes' },
+  'Classified Intel': { t: 'stripes', c: ['#0a0a0a', '#1a1a1a'] },
+  'Cobweb': { t: 'web', c: ['#e8e8e8', '#c8c8c8'] },
+  'Coconut': { t: 'solid', c: ['#6a4a2a', '#f4f0e8'] },
+  'Coffee Stain': { t: 'smear', c: ['#6a4a2a', '#4a3018'] },
+  'Coral Bleach': { t: 'scales', c: ['#f4efe4', '#d8d0c0'] },
+  'County Fair': { t: 'dots' },
+  'Creepy Smile': { t: 'smear', c: ['#ffffff', '#ff4a4a'] },
+  'Crumpet Crumbs': { t: 'dots', c: ['#d8b878', '#c8a050'] },
+  'Dead Tamagotchi': { t: 'dots', c: ['#e8e8e8', '#a8a8a8'] },
+  'Dino Nuggets': { t: 'dots' },
+  'Disco Ball': { c: ['#c8ccd4', '#8a8f98', '#e8eaee'] },
+  'Dog Tags': { t: 'solid', c: ['#a8adb6', '#8a8f98'] },
+  'Drill Sergeant': { t: 'solid', c: ['#2a2a22', '#1a1a1a'] },
+  'Ectoplasm': { t: 'smear', c: ['#7aff4a', '#4ae82a'] },
+  'Face Melter': { c: ['#ff5a1a', '#ff2a1a', '#ffd23a'] },
+  'Fart Mixtape': { t: 'stripes', c: ['#1a1a1a', '#2a2a2a'] },
+  'Five Star': { t: 'dots', c: ['#e4ae39', '#c89628', '#8a6a1a'] },
+  'Floppy Disk': { t: 'solid', c: ['#1a1a1a', '#2a2a2a'] },
+  'Full Moon': { t: 'solid', c: ['#f4f0e0', '#e8e0c8'] },
+  'Gamer Pee Bottle': { c: ['#f8e040', '#e8b020', '#a87808'] },
+  'Gingerbread': { c: ['#8a5a2a', '#6a421e', '#a8743a'] },
+  'Glow Worm': { t: 'wave' },
+  'Golden Arches-ish': { t: 'solid', c: ['#f2d33c', '#e8b020'] },
+  'Golden Parachute': { c: ['#e4ae39', '#c89628', '#8a6a1a'] },
+  'Golden Temple': { c: ['#e8c040', '#c89628', '#8a6a1a'] },
+  'Golden Toilet': { c: ['#e4ae39', '#c89628', '#f4f0e0'] },
+  'Grim Reaper': { c: ['#0a0a0a', '#1a1a1a', '#2a2a2a'] },
+  'Hazard Tape': { t: 'stripes', c: ['#f2d33c', '#1a1a1a'] },
+  'Headset Hair': { t: 'smear' },
+  'Hen Party': { t: 'dots' },
+  'Jaguar': { t: 'dots' },
+  'Jet Ski': { t: 'solid', c: ['#2ad2ff', '#1a8ac8'] },
+  'Jurassic Spark': { c: ['#fff28a', '#ffd23a', '#ff9a1a'] },
+  'Kelp Forest': { t: 'wave' },
+  'Kevlar': { t: 'checker' },
+  'Kraken Ink': { t: 'clouds' },
+  'Lava Lamp': { t: 'marble' },
+  'Leather Jacket': { t: 'solid', c: ['#1a1a1a', '#0a0a0a'] },
+  'Long A': { t: 'damascus' },
+  'Lost Idol': { t: 'solid', c: ['#e8c040', '#c89628'] },
+  'Medal of Honor': { c: ['#1a2a5a', '#e4ae39', '#f4f0e0'] },
+  'Meltdown': { c: ['#ff5a1a', '#ff2a1a', '#ffd23a'] },
+  'Mermaid Scales': { t: 'scales' },
+  'Meteor Strike': { t: 'flames', c: ['#ff7a1a', '#ff3a1a', '#2a2a1a'] },
+  'Midnight Burrito': { t: 'smear', c: ['#d8b878', '#c8a050', '#a8823a'] },
+  'Milkshake Machine': { t: 'solid', c: ['#c8c8c8', '#8a8a8a'] },
+  'Mom Said Bedtime': { t: 'dots', c: ['#0d0d1f', '#1a1a3a', '#2a2a4a'] },
+  'Moo Point': { t: 'dots' },
+  'Mullet': { t: 'smear', c: ['#6a4a2a', '#8a5a2a'] },
+  'Napkin Dispenser': { t: 'solid', c: ['#f4f4f0', '#ffffff'] },
+  'Navy Night': { c: ['#0a1a3a', '#1a2a5a', '#2a4a8a'] },
+  'Nebula': { t: 'galaxy' },
+  'Night Vision': { c: ['#061206', '#39ff14', '#0a2a0a'] },
+  'Northern Lights': { t: 'wave' },
+  'Office Fart': { t: 'clouds', c: ['#7a9a4a', '#5a7a3a'] },
+  'Pie In The Face': { t: 'smear', c: ['#f4f0e0', '#e8e0d0'] },
+  'Pooped Pants': { c: ['#6b4423', '#4a2f18'] },
+  'Prize Pumpkin': { t: 'stripes' },
+  'Pterodactyl': { t: 'wave' },
+  'Purple Heart': { c: ['#5a2a8a', '#e4ae39', '#f4f0e0'] },
+  'Pyro': { t: 'flames', c: ['#1a0a06', '#ff5a1a', '#ffd23a'] },
+  'Quarterly Loss': { t: 'fade', c: ['#c8402a', '#8a2010'] },
+  'Rainforest': { t: 'camo' },
+  'Red Planet': { t: 'marble' },
+  'Reply All Fart': { t: 'clouds', c: ['#7a9a4a', '#8ab85a'] },
+  'Retina Damage': { t: 'flames' },
+  'Roller Grill': { t: 'stripes' },
+  'Rotten Tooth': { t: 'smear', c: ['#4a3a20', '#2a1f10'] },
+  'Satellite Dish': { t: 'solid', c: ['#8a8f98', '#5a5f68'] },
+  'Scarecrow': { t: 'checker' },
+  'Seagull Theft': { c: ['#e8e8e8', '#c8c8c8'] },
+  'Sewer Rat': { t: 'solid', c: ['#6a625a', '#4a443c'] },
+  'Space Junk': { c: ['#8a8f98', '#5a5f68'] },
+  'Spiked Collar': { t: 'dots', c: ['#1a1a1a', '#c8c8c8'] },
+  'Sticky Fingers': { c: ['#b8e8ff', '#e8f4ff', '#8ad2ff'] },
+  'Swamp Ass': { c: ['#4a5a2a', '#2a3a1a'] },
+  'Swamp Thing': { t: 'camo' },
+  'Sweatband': { t: 'stripes' },
+  'Sweaty Pits': { c: ['#d8cc80', '#b8a860', '#8a7a40'] },
+  'TPS Report': { t: 'solid', c: ['#f4f0e8', '#ffffff'] },
+  'Tan Lines': { t: 'stripes' },
+  'Tar Pit': { c: ['#0a0a0a', '#141414'] },
+  'Throne Room': { t: 'solid', c: ['#8a1a2a', '#e4ae39'] },
+  'Tiki Bar': { t: 'solid', c: ['#8a5a2a', '#6a421e'] },
+  'Toilet Break': { c: ['#f4f4f0', '#e8e8e8'] },
+  'Toilet Tax': { c: ['#6b4423', '#4a2f18'] },
+  'Totally Crusty': { c: ['#8a7a5a', '#6a5a40'] },
+  'Tractor Pull': { t: 'stripes' },
+  'Triple Stack': { t: 'stripes' },
+  'Truck Stop': { t: 'stripes' },
+  'Unicycle': { t: 'dots' },
+  'Uninstalled': { t: 'solid', c: ['#3a3a3a', '#2a2a2a'] },
+  'Used Napkin': { c: ['#e8e4d8', '#c8c4b8'] },
+  'VHS Tape': { t: 'solid', c: ['#101010', '#2a2a2a'] },
+  'Velvet Rope': { c: ['#8a1a2a', '#6a1220'] },
+  'Volcano': { t: 'flames', c: ['#8a2a1a', '#ff5a1a', '#2a0a0a'] },
+  'Willy\'s Factory': { c: ['#5a2a6a', '#8a5a2a', '#3a1a4a'] },
+  'Wood Panel': { t: 'stripes', c: ['#6a4a2a', '#5a3a1e', '#7a5632'] },
+  'Yeti': { t: 'camo' },
+};
+
 function themedCrate(n, id, name, desc, pal, names, knives, joke, price = 250) {
   const items = [], counts = [5, 4, 3, 2, 1];
   let k = 0;
   counts.forEach((c, tier) => {
     const pool = tier >= 3 ? STAR_GUNS : GUNS, guns = pick(pool, c, 101 + n * 17 + tier * 7);
     for (let j = 0; j < c; j++, k++) {
-      const t = PAT[tier][(j + n) % PAT[tier].length], c0 = pal[(j + tier) % pal.length], c1 = pal[(j + tier + 1) % pal.length], c2 = pal[(j + tier + 2) % pal.length];
-      items.push({ id: `${id}:${guns[j]}:${names[k]}`, kind: 'skin', weapon: guns[j], finish: names[k], paint: { t, c: tier >= 3 ? [c0, c1, c2] : [c0, c1, c2] }, tier });
+      const ov = FINISH_OVERRIDES[names[k]];
+      const t = (ov && ov.t) || PAT[tier][(j + n) % PAT[tier].length];
+      let cc;
+      if (ov && ov.c) cc = ov.c;
+      else { const c0 = pal[(j + tier) % pal.length], c1 = pal[(j + tier + 1) % pal.length], c2 = pal[(j + tier + 2) % pal.length]; cc = [c0, c1, c2]; }
+      items.push({ id: `${id}:${guns[j]}:${names[k]}`, kind: 'skin', weapon: guns[j], finish: names[k], paint: { t, c: cc }, tier });
     }
   });
-  const kf = [F('Vanilla', { t: 'solid', c: ['#a8adb6', '#6a6e76'] }), F(names[15] || 'Case Hardened', { t: 'fade', c: [pal[0], pal[1], pal[2]] }), F(names[16] || 'Night Shift', { t: 'web', c: [pal[3] || pal[0], '#111111'] })];
+  const kfDef = [['Vanilla', { t: 'solid', c: ['#a8adb6', '#6a6e76'] }], [names[15] || 'Case Hardened', { t: 'fade', c: [pal[0], pal[1], pal[2]] }], [names[16] || 'Night Shift', { t: 'web', c: [pal[3] || pal[0], '#111111'] }]];
+  const kf = kfDef.map(([nm, pt]) => { const ov = FINISH_OVERRIDES[nm]; return F(nm, ov ? { t: ov.t || pt.t, c: ov.c || pt.c } : pt); });
   for (const kn of knives) for (const f of kf) items.push({ id: `${id}:${kn}:${f.name}`, kind: 'knife', weapon: kn, finish: f.name, paint: f.paint, tier: 4 });
   for (const f of kf.slice(1)) items.push({ id: `${id}:${joke}:${f.name}`, kind: 'knife', weapon: joke, finish: f.name, paint: f.paint, tier: 5 });
   return { id, name, desc, price, items };
@@ -289,9 +420,9 @@ export function rollCrate(crate, rnd = Math.random) {
 let uidN = 0;
 export const newItem = (def, float, st, seed) => ({ uid: Date.now().toString(36) + (uidN++).toString(36) + Math.floor(Math.random() * 1e6).toString(36), def, float: +float.toFixed(5), st: !!st, seed, kills: 0, t: Date.now() });
 // what players see for some old finish names (the stored ids keep the original names, so owned items never change)
-const SHOWN = { 'Thicc Boi': 'Gyatt', 'Touch Grass': 'Never Showered', 'Main Character': 'Sweaty Pits', 'Ranked Anxiety': 'Mom Said Bedtime', 'Smurf Account': "Ur Mom's Account",
-  'Diamond Hands': 'Sticky Fingers', 'Synergy': 'Butt Dial', 'Reply All': 'Reply All Fart', 'Team Building': 'Office Fart', 'Unpaid Overtime': 'Toilet Break',
-  'Casual Friday': 'No Pants Friday', 'Micromanager': 'Bathroom Camper', 'CEO Bonus': 'Golden Toilet', 'Participation Trophy': 'Last Place Loser',
+const SHOWN = { 'Thicc Boi': 'Gyatt', 'Touch Grass': 'Never Showered', 'Main Character': 'Sweaty Pits', 'Ranked Anxiety': 'Mom Said Bedtime',
+  'Diamond Hands': 'Sticky Fingers', 'Reply All': 'Reply All Fart', 'Team Building': 'Office Fart', 'Unpaid Overtime': 'Toilet Break',
+  'Micromanager': 'Bathroom Camper', 'CEO Bonus': 'Golden Toilet', 'Participation Trophy': 'Last Place Loser',
   'Grass Toucher': 'Booger Picker', 'Touch Grass Pro': 'Mouth Breather', 'Sweaty Palms': 'Swamp Ass', 'Crumpet': 'Crumpet Crumbs', 'Corgi': 'Corgi Butt',
   'Tea Stain': 'Brown Stain', 'Fancy Napkin': 'Used Napkin', 'Peasant Tax': 'Toilet Tax', 'Mixtape': 'Fart Mixtape', 'Tamagotchi': 'Dead Tamagotchi',
   'Y2K Panic': 'Pooped Pants', 'Totally Radical': 'Totally Crusty', 'Gamer Fuel': 'Gamer Pee Bottle' };
@@ -300,9 +431,25 @@ export function itemInfo(it) {
   const d = ITEM_BY_ID[it.def]; if (!d) return null;
   const wpn = d.kind === 'skin' ? (WEAPONS.find((w) => w.id === d.weapon) || {}).name : d.kind === 'knife' ? KNIFE_BY_ID[d.weapon].name : d.kind === 'emote' ? 'Emote' : 'Agent';
   const wear = d.kind === 'agent' || d.kind === 'emote' ? null : wearOf(it.float);
-  const value = Math.round(RARITY[d.tier].value * (wear ? wear.mult : 1) * (it.st ? 2 : 1) * (d.kind === 'agent' ? 1.5 : d.kind === 'emote' ? 0.8 : 1));
+  // AI market economy: dynamic price based on rarity (odds) and supply/demand
+  const baseVal = RARITY[d.tier].value, odds = RARITY[d.tier].odds;
+  const aiPrice = econPrice(it.def, baseVal, odds);
+  const value = Math.round(aiPrice * (wear ? wear.mult : 1) * (it.st ? 2 : 1) * (d.kind === 'agent' ? 1.5 : d.kind === 'emote' ? 0.8 : 1));
   const finish = shownFinish(d.finish);
-  return { ...d, finish, wpn, wear, value, rarity: RARITY[d.tier], label: (it.st ? 'StatTrak™ ' : '') + `${wpn} | ${finish}` };
+  const trend = econTrend(it.def);
+  return { ...d, finish, wpn, wear, value, trend, rarity: RARITY[d.tier], label: (it.st ? 'StatTrak™ ' : '') + `${wpn} | ${finish}` };
+}
+
+// Record a case opening for the AI market (increases supply → gentle downward pressure)
+export function econCaseOpened(defId, tier) {
+  const baseVal = RARITY[tier] ? RARITY[tier].value : 20, odds = RARITY[tier] ? RARITY[tier].odds : 69.8;
+  econEvent('case_open', defId, baseVal, odds);
+}
+
+// Record a market trade for the AI market (revealed demand → upward pressure)
+export function econTraded(defId, tier) {
+  const baseVal = RARITY[tier] ? RARITY[tier].value : 20, odds = RARITY[tier] ? RARITY[tier].odds : 69.8;
+  econEvent('trade', defId, baseVal, odds);
 }
 
 // ---- painting: recipe -> canvas (deterministic by seed), then wear ----
