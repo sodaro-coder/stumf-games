@@ -1830,6 +1830,7 @@ export default function start({ cfg, E, N, smoke }) {
       hud.flashAmt(me.flash > 1.5 ? 1 : me.flash / 1.5);
       hud.setScope(me.alive && me.scoped > 0 && w && w.zoom, (w && myAtt(w.id) && myAtt(w.id).reticle) || 'duplex');
       hud.setAds(me.alive && me.ads > 0.85 && vm && vm.userData && ['acog', 'reddot', 'holo'].includes(vm.userData.optic) ? vm.userData.optic : null);   // every optic: the sight picture fills the view
+      if (W && W.B) hud.setReticleGain(0.72 + ((W.B.sunI || 2.4) + (W.B.ambI || 1.1)) / 7);   // reticle auto-brightness: brighter in daylight
       const spreadPx = (w ? spreadOf(w, me, me.scoped > 0, me.spray) : 0) * 600;
       hud.xh(spreadPx, me.alive && !(me.scoped && w && w.zoom) && !uiOpen && me.ads < 0.3);
       if (hudT > 0.066) {
