@@ -77,9 +77,9 @@ const CSS = `
 .cs-hud.touch .bl{left:50%;bottom:6px;transform:translateX(-80%);gap:6px}.cs-hud.touch .stat{font-size:17px;min-width:58px;padding:2px 8px 2px 6px}.cs-hud.touch .stat .ic{font-size:13px}
 .cs-hud.touch .br{right:auto;left:calc(50% + 74px);bottom:6px}
 @media (max-height:520px){.cs-hud.touch .bl{top:38px;bottom:auto;left:50%;transform:translateX(-100%) translateX(-6px)}.cs-hud.touch .br{top:38px;bottom:auto;left:calc(50% + 6px)}}   /* phones in landscape: health and ammo under the score, clear of the thumb buttons */.cs-hud.touch .ammo{font-size:22px}.cs-hud.touch .ammo small{font-size:12px}
-.cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:4px;transform:translateX(-50%) scale(.72);transform-origin:top center}
+.cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:calc(4px + env(safe-area-inset-top,0px));transform:translateX(-50%) scale(.72);transform-origin:top center;max-width:calc(100vw - 8px)}
 .cs-hud.touch .banner{font-size:18px;padding:6px 14px}.cs-hud.touch .center{top:16%}
-.cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px}
+.cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 16px);top:calc(8px + env(safe-area-inset-top,0px))}
 .cs-hud .team{display:flex;gap:3px}.cs-hud .team i{width:16px;height:22px;border-radius:3px;display:block}
 .cs-hud .team i.dead{opacity:.25}
 .cs-hud .scoreb{font-size:22px;min-width:34px;text-align:center;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.45)}
@@ -660,6 +660,8 @@ export class Menu {
     B.classList.toggle('solid', this.tab !== 'home');
     if (this.P.admin !== this.adminShown) { this.adminShown = this.P.admin; this.hide(); this.show(); return; }
     if (this.tab !== 'play' && this.tab !== 'home' && this.lb) { this.lb.close(); this.lb = null; }
+    // keep the main-menu 3D agent showcase in sync with the equipped agent
+    if (this.stage && this.stage.set) { try { this.stage.set(this.stageLook()); } catch (e) {} }
     this['tab_' + this.tab](B);
   }
   // ---- HOME: the stage, a big GO, and the side panels ----
@@ -1130,14 +1132,41 @@ export class Menu {
         <div class="cs-card" style="display:grid;place-items:center;min-height:90px;background:#3a4a3a"><div class="cs-xh" style="position:relative;left:auto;top:auto;width:1px;height:1px" id="xPrev"></div></div></div>
       <div class="cs-h">Graphics</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Quality</div><select data-k="quality"><option value="0">Auto (keeps 40+ fps)</option><option value="0.5">Potato (fastest)</option><option value="0.75">Low</option><option value="1">Medium</option><option value="1.5">High</option><option value="2">Ultra (4K, gaming PCs)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Show FPS</div><select data-k="fps"><option value="0">Off</option><option value="1">On</option></select></label>
-        <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Damage numbers</div><select data-k="dmgNums"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
         <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · same as phones)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
-      <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift sprint · Ctrl (or C) crouch · Z prone · Space jump · Mouse1 fire · Mouse2 scope / aim down sights (hold) · Q / E lean while aiming · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · V X C radio · T emotes · F inspect · Esc menu</div>`;
-    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
+      <div class="cs-h">Keybinds <span style="flex:1"></span><button class="cs-btn alt sm" id="kbReset">Reset defaults</button></div>
+      <div class="cs-small cs-mut" style="margin-bottom:8px">Click a key, then press the new key (or a mouse button). Esc cancels.</div>
+      <div id="kbList"></div>`;
+    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'voicePack' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
     drawXh($('#xPrev', B), S, 0);
     $('#vTry', B).onclick = (e) => { e.preventDefault(); this.h.announce('planted'); };
+    this.keybindUI(B);
+  }
+  keybindUI(B) {
+    const kb = this.h.keybinds && this.h.keybinds();
+    const list = $('#kbList', B);
+    if (!kb || !list) return;
+    const render = () => {
+      const cur = kb.cur();
+      list.innerHTML = kb.groups.map(([g, acts]) => `<div class="cs-h" style="margin:10px 0 6px">${g}</div><div class="cs-grid">` +
+        acts.map((a) => `<div class="cs-card"><div class="cs-row" style="align-items:center"><span class="cs-small" style="flex:1">${kb.labels[a]}</span><button class="cs-btn sm kb-btn" data-act="${a}" style="min-width:86px">${kb.name((cur[a] || [])[0] || '?')}</button></div></div>`).join('') + `</div>`).join('');
+      list.querySelectorAll('.kb-btn').forEach((b) => { b.onclick = () => capture(b); });
+    };
+    const capture = (b) => {
+      const act = b.dataset.act;
+      b.textContent = 'press key…'; b.classList.add('alt');
+      const done = () => { window.removeEventListener('keydown', onK, true); window.removeEventListener('mousedown', onM, true); render(); };
+      const apply = (code) => { const r = kb.set(act, code); if (!r.ok) this.h.toast(r.err === 'duplicate' ? `That key is already bound to ${r.other}` : r.err); done(); };
+      const onK = (e) => { e.preventDefault(); e.stopPropagation(); if (e.code === 'Escape') { done(); return; } if (e.target && e.target.tagName === 'INPUT') { done(); return; } apply(e.code); };
+      const onM = (e) => { e.preventDefault(); e.stopPropagation(); if (e.button > 2) { done(); return; } apply('M' + e.button); };
+      window.addEventListener('keydown', onK, true);
+      window.addEventListener('mousedown', onM, true);
+    };
+    const rs = $('#kbReset', B);
+    if (rs) rs.onclick = () => { kb.reset(); render(); this.h.toast('Keybinds reset to defaults'); };
+    render();
   }
 }
 
