@@ -69,7 +69,7 @@ function _textTex(text, color) {
   }
   return t;
 }
-export function textPop(scene, x, y, z, text, color = '#ffd23a') {
+export function textPop(scene, x, y, z, text, color = '#ffd23a', scale = 1) {
   let s = _textPool.sprites.pop();
   if (!s) {
     s = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
@@ -77,9 +77,9 @@ export function textPop(scene, x, y, z, text, color = '#ffd23a') {
   }
   s.material.map = _textTex(text, color);
   s.material.opacity = 1; s.material.needsUpdate = true;
-  s.position.set(x, y, z); s.scale.set(1.6, 0.6, 1); s.visible = true;
+  s.position.set(x, y, z); s.scale.set(1.6 * scale, 0.6 * scale, 1); s.visible = true;
   scene.add(s);
-  _textPool.active.push({ s, scene, y, t: 0 });
+  _textPool.active.push({ s, scene, y, t: 0, scale: scale || 1 });
 }
 export function textPopTick(dt) {
   const a = _textPool.active;
@@ -92,9 +92,10 @@ export function textPopTick(dt) {
       a.splice(i, 1);
       continue;
     }
+    const sc = q.scale || 1;
     q.s.position.y = q.y + k * 0.8;
     q.s.material.opacity = 1 - k * k;
-    q.s.scale.set(1.6 + k * 0.6, 0.6 + k * 0.22, 1);
+    q.s.scale.set((1.6 + k * 0.6) * sc, (0.6 + k * 0.22) * sc, 1);
   }
 }
 
