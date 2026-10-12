@@ -1,0 +1,447 @@
+/* ============================================================================
+   KYS:GO — UI Visual Overhaul
+   A premium AAA-style menu skin layered over the base injected CSS.
+   Scoped to .cs-menu / .cs-modal / .cs-panel so the in-game HUD is never
+   touched. Selectors intentionally beat the injected base rules on
+   specificity (ui_visual_overhaul.js also guarantees this file loads after
+   the injected #cs-css tag, so equal-specificity ties win too).
+   Mobile-safe: every override keeps the responsive layout intact.
+   ============================================================================ */
+
+/* ---------- 1. Design tokens ---------- */
+.cs.cs-menu{
+  --ov-accent:#f2a33a;
+  --ov-accent-hi:#ffc966;
+  --ov-accent-lo:#c9760d;
+  --ov-ink:#f2f5f9;
+  --ov-mut:#9aa4b2;
+  --ov-glow:0 0 26px rgba(242,163,58,.35);
+}
+
+/* ---------- 2. Menu backdrop: deeper, richer ---------- */
+.cs.cs-menu{
+  background:
+    radial-gradient(1100px 620px at 78% -10%, rgba(242,163,58,.08), transparent 60%),
+    radial-gradient(1400px 820px at 62% 22%, #242c39 0%, #12151c 55%, #07080b 100%);
+}
+.cs.cs-menu .cs-vig{
+  background:
+    linear-gradient(90deg, rgba(8,10,14,.94) 0, rgba(8,10,14,.6) 36%, rgba(8,10,14,0) 62%),
+    linear-gradient(0deg, rgba(8,10,14,.9), rgba(8,10,14,0) 32%),
+    radial-gradient(600px 300px at 20% 100%, rgba(242,163,58,.06), transparent 70%);
+}
+
+/* ---------- 3. Top navigation: glass bar ---------- */
+.cs.cs-menu .cs-topnav{
+  background:linear-gradient(180deg, rgba(26,31,40,.97), rgba(15,18,24,.94));
+  -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px);
+  box-shadow:0 1px 0 rgba(255,255,255,.06), 0 10px 34px rgba(0,0,0,.5);
+}
+.cs.cs-menu .cs-brand{
+  font-size:26px;
+  text-shadow:0 2px 14px rgba(242,163,58,.3);
+}
+.cs.cs-menu .cs-nav button{
+  position:relative;
+  transition:color .16s ease, background .16s ease, text-shadow .16s ease;
+}
+.cs.cs-menu .cs-nav button:hover{
+  color:#eef2f7;
+  background:linear-gradient(180deg, rgba(255,255,255,.05), transparent);
+}
+.cs.cs-menu .cs-nav button.on{
+  color:#fff;
+  border-bottom-color:var(--ov-accent);
+  background:linear-gradient(180deg, rgba(242,163,58,.16), rgba(242,163,58,.03));
+  text-shadow:0 0 14px rgba(242,163,58,.55);
+  box-shadow:inset 0 -3px 12px rgba(242,163,58,.18);
+}
+.cs.cs-menu .cs-coinbox{
+  background:linear-gradient(180deg,#262d38,#171c24);
+  border:1px solid rgba(255,212,90,.28);
+  border-radius:6px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 4px 14px rgba(0,0,0,.4);
+}
+.cs.cs-menu .cs-rank{
+  background:linear-gradient(180deg,#232a35,#161b22);
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:6px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 4px 14px rgba(0,0,0,.4);
+}
+.cs.cs-menu .cs-ibtn{
+  border-radius:6px;
+  background:linear-gradient(180deg,#242b36,#171c24);
+  border:1px solid rgba(255,255,255,.1);
+  transition:border-color .15s ease, color .15s ease, transform .1s ease;
+}
+.cs.cs-menu .cs-ibtn:hover{ border-color:rgba(242,163,58,.55); color:#fff; }
+.cs.cs-menu .cs-ibtn:active{ transform:scale(.94); }
+
+/* ---------- 4. Hero: display type + PLAY button ---------- */
+.cs.cs-menu .cs-hero h1{
+  font-size:clamp(46px,5.2vw,72px);
+  font-weight:900;
+  letter-spacing:.015em;
+  line-height:.98;
+  background:linear-gradient(180deg,#ffffff 25%,#cfd8e4 62%,#8d97a5 100%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  filter:drop-shadow(0 4px 22px rgba(0,0,0,.6));
+  margin:34px 0 10px;
+}
+.cs.cs-menu .cs-hero h1 i{
+  background:linear-gradient(180deg,#ffe1a1,#f2a33a 55%,#b96a0c);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  filter:drop-shadow(0 0 18px rgba(242,163,58,.45));
+}
+.cs.cs-menu .cs-hero .sub{
+  font-size:16px; color:#b3bdcb; max-width:48ch; line-height:1.5;
+  text-shadow:0 2px 8px rgba(0,0,0,.7);
+}
+.cs.cs-menu .cs-go{
+  position:relative; overflow:hidden;
+  background:linear-gradient(180deg,#93cf4f,#5d9c26 55%,#467a1b);
+  border:1px solid rgba(180,230,120,.45);
+  border-radius:6px;
+  box-shadow:0 12px 36px rgba(110,180,60,.4), inset 0 1px 0 rgba(255,255,255,.4), inset 0 -2px 6px rgba(0,0,0,.25);
+  text-shadow:0 2px 6px rgba(0,0,0,.45);
+  transition:transform .12s ease, filter .15s ease, box-shadow .2s ease;
+  animation:ov-breathe 2.8s ease-in-out infinite;
+}
+.cs.cs-menu .cs-go:hover{ filter:brightness(1.12); transform:translateY(-2px); }
+.cs.cs-menu .cs-go:active{ transform:translateY(1px) scale(.99); animation:none; }
+.cs.cs-menu .cs-go::after{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.4) 50%,transparent 58%);
+  transform:translateX(-130%);
+}
+.cs.cs-menu .cs-go:hover::after{ animation:ov-sweep .7s ease; }
+@keyframes ov-breathe{
+  0%,100%{ box-shadow:0 12px 36px rgba(110,180,60,.4), inset 0 1px 0 rgba(255,255,255,.4), inset 0 -2px 6px rgba(0,0,0,.25); }
+  50%{ box-shadow:0 12px 48px rgba(130,205,70,.62), inset 0 1px 0 rgba(255,255,255,.4), inset 0 -2px 6px rgba(0,0,0,.25); }
+}
+@keyframes ov-sweep{ to{ transform:translateX(130%); } }
+
+/* ---------- 5. Buttons ---------- */
+.cs.cs-menu .cs-btn, .cs.cs-modal .cs-btn{
+  position:relative; overflow:hidden;
+  background:linear-gradient(180deg,var(--ov-accent-hi),var(--ov-accent) 48%,var(--ov-accent-lo));
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:6px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4), inset 0 -2px 5px rgba(0,0,0,.22), 0 6px 20px rgba(242,163,58,.28);
+  text-shadow:0 1px 2px rgba(255,255,255,.25);
+  transition:transform .1s ease, filter .15s ease, box-shadow .18s ease;
+}
+.cs.cs-menu .cs-btn:hover, .cs.cs-modal .cs-btn:hover{
+  filter:brightness(1.08);
+  transform:translateY(-1px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4), inset 0 -2px 5px rgba(0,0,0,.22), 0 10px 28px rgba(242,163,58,.42);
+}
+.cs.cs-menu .cs-btn:active, .cs.cs-modal .cs-btn:active{ transform:translateY(1px) scale(.99); }
+.cs.cs-menu .cs-btn::after, .cs.cs-modal .cs-btn::after{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.32) 50%,transparent 58%);
+  transform:translateX(-130%);
+}
+.cs.cs-menu .cs-btn:hover::after, .cs.cs-modal .cs-btn:hover::after{ animation:ov-sweep .6s ease; }
+.cs.cs-menu .cs-btn.alt, .cs.cs-modal .cs-btn.alt{
+  background:linear-gradient(180deg,#364052,#222a36);
+  color:#eef2f7 !important;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 6px 16px rgba(0,0,0,.4);
+  text-shadow:0 1px 3px rgba(0,0,0,.5);
+}
+.cs.cs-menu .cs-btn.alt:hover, .cs.cs-modal .cs-btn.alt:hover{
+  border-color:rgba(242,163,58,.55);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 8px 22px rgba(0,0,0,.45), 0 0 18px rgba(242,163,58,.18);
+}
+.cs.cs-menu .cs-btn:disabled{ filter:grayscale(.7); transform:none; box-shadow:none; }
+
+/* click ripple (spawned by ui_visual_overhaul.js) */
+.ov-ripple{
+  position:absolute; border-radius:50%; pointer-events:none;
+  background:radial-gradient(circle,rgba(255,255,255,.4) 0%,rgba(255,255,255,0) 65%);
+  transform:scale(0); animation:ov-rip .55s ease-out forwards;
+}
+@keyframes ov-rip{ to{ transform:scale(1); opacity:0; } }
+
+/* ---------- 6. Cards & panels ---------- */
+.cs.cs-menu .cs-card{
+  background:linear-gradient(180deg, rgba(38,45,57,.97), rgba(22,27,35,.97));
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:8px;
+  box-shadow:0 12px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
+  transition:transform .15s ease, box-shadow .2s ease, border-color .15s ease;
+}
+.cs.cs-menu .cs-card.click:hover{
+  transform:translateY(-2px);
+  border-color:rgba(242,163,58,.5);
+  box-shadow:0 18px 40px rgba(0,0,0,.55), 0 0 24px rgba(242,163,58,.16), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.cs.cs-menu .cs-card.sel{
+  border-color:var(--ov-accent);
+  box-shadow:0 0 0 1px var(--ov-accent), 0 0 28px rgba(242,163,58,.3), 0 12px 30px rgba(0,0,0,.45);
+}
+.cs.cs-menu .cs-panel2{
+  background:linear-gradient(180deg, rgba(32,39,51,.96), rgba(20,24,31,.96));
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:8px; overflow:hidden;
+  box-shadow:0 14px 34px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.cs.cs-menu .cs-panel2 h3{
+  background:linear-gradient(180deg, rgba(242,163,58,.14), rgba(242,163,58,.03));
+  color:#dbe2ec; letter-spacing:.22em;
+  border-bottom:1px solid rgba(242,163,58,.18);
+}
+.cs.cs-menu .cs-signup{
+  background:linear-gradient(180deg, rgba(242,163,58,.16), rgba(242,163,58,.05));
+  border:1px solid rgba(242,163,58,.45);
+  border-radius:8px;
+  box-shadow:0 0 34px rgba(242,163,58,.14), inset 0 1px 0 rgba(255,255,255,.1);
+}
+.cs.cs-menu .cs-bar{
+  background:#0a0d12; border-radius:5px;
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.7), 0 1px 0 rgba(255,255,255,.05);
+}
+.cs.cs-menu .cs-bar i{
+  background:linear-gradient(90deg,#ffc966,#f28c1a);
+  box-shadow:0 0 10px rgba(242,163,58,.55);
+}
+
+/* ---------- 7. Section headers ---------- */
+.cs.cs-menu .cs-h, .cs.cs-menu .cs-sec{ color:#ccd5e1; letter-spacing:.22em; }
+.cs.cs-menu .cs-sec{ position:relative; padding-left:14px; }
+.cs.cs-menu .cs-sec::before{
+  content:''; position:absolute; left:0; top:1px; bottom:1px; width:3px; border-radius:2px;
+  background:linear-gradient(180deg,var(--ov-accent-hi),var(--ov-accent-lo));
+  box-shadow:0 0 12px rgba(242,163,58,.55);
+}
+
+/* ---------- 8. Inventory / market tiles ---------- */
+.cs.cs-menu .cs-tiles{ gap:14px; }
+.cs.cs-menu .cs-tile{
+  position:relative; overflow:hidden;
+  background:linear-gradient(180deg,#242b36,#171c24);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:8px;
+  box-shadow:0 10px 26px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
+  transition:transform .16s ease, box-shadow .22s ease, border-color .16s ease;
+}
+.cs.cs-menu .cs-tile:hover{
+  transform:translateY(-4px);
+  border-color:var(--rc,#f2a33a);
+  box-shadow:0 20px 44px rgba(0,0,0,.6), 0 0 28px rgba(150,150,150,.12), inset 0 1px 0 rgba(255,255,255,.06);
+  box-shadow:0 20px 44px rgba(0,0,0,.6), 0 0 30px color-mix(in srgb, var(--rc,#f2a33a) 38%, transparent), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.cs.cs-menu .cs-tile .img{
+  height:112px;
+  background:
+    radial-gradient(ellipse at 50% 62%, color-mix(in srgb, var(--rc,#4b69ff) 30%, transparent) 0, transparent 70%),
+    radial-gradient(ellipse at 50% 62%, var(--rc,#4b69ff) 0%, transparent 70%),
+    linear-gradient(180deg,#2b333f,#1a1f27);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.cs.cs-menu .cs-tile canvas{ height:112px; transition:transform .22s ease; }
+.cs.cs-menu .cs-tile:hover canvas{ transform:scale(1.07); }
+.cs.cs-menu .cs-tile .tx{ padding:9px 10px 11px; background:linear-gradient(180deg,rgba(255,255,255,.025),transparent); }
+.cs.cs-menu .cs-tile .n{ font-size:13.5px; }
+.cs.cs-menu .cs-tile .w{ color:#8f9aab; }
+.cs.cs-menu .cs-tile .pr{
+  font-size:13px; color:#ffd45a; margin-top:3px;
+  text-shadow:0 0 12px rgba(255,212,90,.4);
+}
+.cs.cs-menu .cs-tile .rb{
+  height:4px;
+  background:var(--rc);
+  box-shadow:0 0 12px var(--rc);
+}
+.cs.cs-menu .cs-tile .eq{
+  color:var(--ov-accent-hi);
+  text-shadow:0 0 10px rgba(242,163,58,.6);
+}
+
+/* ---------- 9. Cases ---------- */
+.cs.cs-menu .cs-case{
+  position:relative; overflow:hidden;
+  background:linear-gradient(180deg,#2b333f,#191e26);
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:8px;
+  box-shadow:0 12px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.07);
+  transition:transform .16s ease, box-shadow .22s ease, border-color .16s ease;
+}
+.cs.cs-menu .cs-case:hover{
+  transform:translateY(-4px);
+  border-color:rgba(242,163,58,.6);
+  box-shadow:0 20px 46px rgba(0,0,0,.6), 0 0 30px rgba(242,163,58,.22), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.cs.cs-menu .cs-case canvas{ transition:transform .22s ease; }
+.cs.cs-menu .cs-case:hover canvas{ transform:scale(1.05); }
+.cs.cs-menu .cs-case span{
+  color:#ffd45a; text-shadow:0 0 12px rgba(255,212,90,.4);
+}
+.cs.cs-menu .cs-reel{
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:10px;
+  background:radial-gradient(ellipse at 50% 50%, #1c232d 0%, #0b0e13 75%);
+  box-shadow:inset 0 4px 18px rgba(0,0,0,.7), 0 10px 30px rgba(0,0,0,.5);
+}
+.cs.cs-menu .cs-reel .mark{ box-shadow:0 0 18px #ffd45a, 0 0 4px #fff; }
+.cs.cs-menu .cs-reel .cell{
+  background:linear-gradient(180deg,#262d38,#181d25);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:8px;
+}
+
+/* ---------- 10. Maps ---------- */
+.cs.cs-menu .cs-maps{ gap:14px; }
+.cs.cs-menu .cs-map{
+  position:relative; overflow:hidden;
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:8px;
+  box-shadow:0 12px 30px rgba(0,0,0,.5);
+  transition:transform .16s ease, box-shadow .22s ease, border-color .16s ease;
+}
+.cs.cs-menu .cs-map:hover{ transform:translateY(-3px); border-color:rgba(255,255,255,.25); }
+.cs.cs-menu .cs-map canvas{ transition:transform .25s ease; }
+.cs.cs-menu .cs-map:hover canvas{ transform:scale(1.06); }
+.cs.cs-menu .cs-map.on{
+  outline:none;
+  border-color:var(--ov-accent);
+  box-shadow:0 0 0 2px rgba(242,163,58,.6), 0 0 30px rgba(242,163,58,.32), 0 12px 30px rgba(0,0,0,.5);
+}
+.cs.cs-menu .cs-map .nm{
+  font-size:15px;
+  background:linear-gradient(0deg,rgba(0,0,0,.94) 20%,transparent);
+  padding:30px 14px 11px;
+}
+.cs.cs-menu .cs-map .ck{ border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,.6); }
+
+/* ---------- 11. Tabs & segmented controls ---------- */
+.cs.cs-menu .cs-tabs{ gap:4px; }
+.cs.cs-menu .cs-tabs button{
+  position:relative;
+  transition:color .16s ease, text-shadow .16s ease, background .16s ease;
+  border-radius:6px 6px 0 0;
+}
+.cs.cs-menu .cs-tabs button:hover{ color:#e6ecf4; background:rgba(255,255,255,.03); }
+.cs.cs-menu .cs-tabs button.on{
+  color:#fff;
+  text-shadow:0 0 14px rgba(242,163,58,.55);
+  background:linear-gradient(180deg, rgba(242,163,58,.12), transparent);
+}
+.cs.cs-menu .cs-seg{
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:8px; overflow:hidden;
+  box-shadow:0 6px 16px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.cs.cs-menu .cs-seg button{ transition:background .15s ease, color .15s ease; }
+.cs.cs-menu .cs-seg button.on{
+  background:linear-gradient(180deg,var(--ov-accent-hi),var(--ov-accent) 60%,var(--ov-accent-lo));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  text-shadow:0 1px 2px rgba(255,255,255,.25);
+}
+
+/* ---------- 12. Inputs ---------- */
+.cs.cs-menu input, .cs.cs-menu select{
+  background:linear-gradient(180deg,#12161d,#0c0f15);
+  border:1px solid rgba(255,255,255,.11);
+  border-radius:8px;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.5);
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.cs.cs-menu input:focus, .cs.cs-menu select:focus{
+  border-color:rgba(242,163,58,.7);
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.5), 0 0 0 3px rgba(242,163,58,.2);
+  outline:none;
+}
+
+/* ---------- 13. Modal ---------- */
+.cs.cs-modal{
+  background:rgba(4,6,10,.8);
+  -webkit-backdrop-filter:blur(7px); backdrop-filter:blur(7px);
+  animation:ov-fade .18s ease;
+}
+.cs.cs-modal > .cs-card{
+  background:linear-gradient(180deg,#242b36,#151a21);
+  border:1px solid rgba(255,255,255,.11);
+  border-radius:10px;
+  box-shadow:0 34px 90px rgba(0,0,0,.75), 0 0 44px rgba(242,163,58,.09), inset 0 1px 0 rgba(255,255,255,.07);
+  animation:ov-pop .24s cubic-bezier(.2,.9,.3,1.18);
+}
+@keyframes ov-fade{ from{ opacity:0; } }
+@keyframes ov-pop{ from{ transform:scale(.93) translateY(12px); opacity:0; } }
+
+/* ---------- 14. Buy menu / scoreboard panels (in-game overlays) ---------- */
+body .cs-panel{
+  background:linear-gradient(180deg, rgba(26,32,42,.99), rgba(13,16,21,.99));
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;
+  box-shadow:0 34px 90px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.07);
+}
+body .cs-buy .it{
+  background:linear-gradient(180deg,#232a35,#181d25);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:6px;
+  transition:transform .12s ease, border-color .15s ease, background .15s ease;
+}
+body .cs-buy .it:hover{
+  border-color:rgba(242,163,58,.6);
+  background:linear-gradient(180deg,#2d3542,#20262f);
+  transform:translateX(3px);
+}
+body .cs-buy .it .p{ color:#8fe06a; text-shadow:0 0 10px rgba(126,217,87,.35); }
+body .cs-sb table{ border-collapse:separate; border-spacing:0; }
+body .cs-sb td, body .cs-sb th{ border-bottom:1px solid rgba(255,255,255,.05); }
+body .cs-sb tr.me td{ background:rgba(242,163,58,.14); }
+
+/* ---------- 15. 3D preview views ---------- */
+.cs.cs-menu .cs-view{
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:8px;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.04), inset 0 -30px 50px rgba(0,0,0,.4), 0 10px 26px rgba(0,0,0,.45);
+}
+.cs.cs-menu .cs-item canvas{
+  border:1px solid rgba(255,255,255,.07);
+  background:radial-gradient(ellipse at 50% 60%, #232b37 0%, #12161d 70%);
+  box-shadow:inset 0 3px 12px rgba(0,0,0,.5);
+}
+
+/* ---------- 16. Page entrance (replays on every tab render) ---------- */
+.cs.cs-menu .cs-page > *{ animation:ov-pagein .3s ease both; }
+@keyframes ov-pagein{ from{ opacity:0; transform:translateY(16px); } }
+
+/* ---------- 17. Scrollbars ---------- */
+.cs.cs-menu .cs-page::-webkit-scrollbar{ width:10px; }
+.cs.cs-menu .cs-page::-webkit-scrollbar-track{ background:rgba(0,0,0,.25); }
+.cs.cs-menu .cs-page::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,#3a4350,#262c36);
+  border-radius:6px; border:2px solid rgba(0,0,0,.25);
+}
+.cs.cs-menu .cs-page::-webkit-scrollbar-thumb:hover{ background:#f2a33a; }
+.cs.cs-menu .cs-nav::-webkit-scrollbar{ display:none; }
+
+/* ---------- 18. Mobile polish (keeps responsive layout intact) ---------- */
+@media (max-width:760px){
+  .cs.cs-menu .cs-topnav{
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    box-shadow:0 1px 0 rgba(255,255,255,.06), 0 8px 26px rgba(0,0,0,.55);
+  }
+  .cs.cs-menu .cs-nav button.on{
+    background:linear-gradient(180deg, rgba(242,163,58,.2), transparent 75%);
+    box-shadow:inset 0 3px 12px rgba(242,163,58,.22);
+  }
+  .cs.cs-menu .cs-hero h1{ margin-top:22px; }
+  .cs.cs-menu .cs-go{ padding:18px 34px; }
+  .cs.cs-menu .cs-tiles{ gap:10px; }
+  .cs.cs-menu .cs-tile:hover{ transform:translateY(-2px); }
+  .cs.cs-menu .cs-page > *{ animation-duration:.22s; }
+}
+
+/* ---------- 19. Reduced motion: kill the flair, keep the paint ---------- */
+@media (prefers-reduced-motion: reduce){
+  .cs.cs-menu *, .cs.cs-modal *, body .cs-panel *{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+  }
+  .cs.cs-menu .cs-go{ animation:none; }
+}
