@@ -533,6 +533,7 @@ function hat(head, L) {
       if (L.visor) add(new THREE.BoxGeometry(0.23, 0.07, 0.025), '#0e1014', 0, 0.13, -0.16, 0.12); break;
     case 'cap': add(new THREE.SphereGeometry(0.135, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.45), c, 0, 0.22, 0); add(new THREE.CylinderGeometry(0.1, 0.1, 0.014, 14), c, 0, 0.26, -0.11, 0, 0, 0, 1.05, 1, 1.1); break;
     case 'dreads': add(new THREE.SphereGeometry(0.135, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.17, 0.01); for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2, dx = Math.cos(a), dz = Math.sin(a); add(new THREE.CylinderGeometry(0.024, 0.019, 0.34, 8), '#17100c', dx * 0.105, 0.02, dz * 0.105 + 0.01, dz * 0.22, 0, -dx * 0.22); } break;   // dreadlocks hanging around the head
+    case 'ushanka': add(new THREE.SphereGeometry(0.145, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, 0.18, 0.01); add(new THREE.BoxGeometry(0.09, 0.14, 0.02), c, -0.12, 0.08, 0, 0, 0, 0.15); add(new THREE.BoxGeometry(0.09, 0.14, 0.02), c, 0.12, 0.08, 0, 0, 0, -0.15); add(new THREE.CylinderGeometry(0.028, 0.028, 0.012, 12), '#c22', 0, 0.24, -0.135, Math.PI / 2.3); break;   // Russian fur hat with ear flaps + red star
     default: break;
   }
   if (L.eyes) for (const sd of [-1, 1]) { add(new THREE.SphereGeometry(0.04, 10, 7), '#ffffff', sd * 0.05, 0.15, -0.13); add(new THREE.SphereGeometry(0.019, 8, 5), '#111111', sd * 0.05, 0.15, -0.168); }
