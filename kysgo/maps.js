@@ -236,6 +236,7 @@ function town() {
     .prop('tree', 3, 26, {}).prop('tree', 61, 38, {});
   B.sky = 0x46405a; B.fog = 0x6a4a44; B.sunColor = 0xffa860; B.amb = [0xb8a8c0, 0x4a3430]; B.sunDir = [0.75, 0.38, 0.3]; B.sunI = 2.5; B.ambI = 1.3;
   B.photo = 'dusk';   // the real sky over it (sky_<name>_*.jpg)
+  B.litWindows = 0.22;   // a few windows glow at dusk
   return B;
 }
 
@@ -406,7 +407,7 @@ function barracks(night = false) {
   B.prop('lamp', 20, 17, {}).prop('lamp', 44, 37, {}).prop('lamp', 20, 37, {}).prop('lamp', 44, 17, {}).prop('tree', 4, 22, {}).prop('tree', 60, 32, {}).prop('tree', 26, 50, {})
     .prop('barrel', 25, 40, {}).prop('barrel', 47, 20, {}).prop('tv', 8, 9, {});
   B.photo = night ? 'night' : 'sunrise'; if (night) B.photoTint = [0.5, 0.6, 1.0];   // the real sky over it
-  if (night) { B.sky = 0x0b1230; B.fog = 0x141c34; B.sunColor = 0x9fb4ff; B.amb = [0x3a4a78, 0x14121a]; B.sunDir = [0.3, 0.75, -0.4]; B.sunI = 1.25; B.ambI = 1.05; }
+  if (night) { B.litWindows = 0.55; B.sky = 0x0b1230; B.fog = 0x141c34; B.sunColor = 0x9fb4ff; B.amb = [0x3a4a78, 0x14121a]; B.sunDir = [0.3, 0.75, -0.4]; B.sunI = 1.25; B.ambI = 1.05; }
   else { B.sky = 0xf0b878; B.fog = 0xe8c8a0; B.sunColor = 0xffd8a8; B.amb = [0xf0d0b0, 0x6a5a4a]; B.sunDir = [-0.7, 0.35, 0.3]; B.sunI = 2.2; B.ambI = 1.1; }   // dawn
   return B;
 }
@@ -485,6 +486,7 @@ function stadium() {
   B.prop('lamp', 6, 30, {}).prop('lamp', 84, 30, {}).prop('lamp', 6, 44, {}).prop('lamp', 84, 44, {}).prop('tv', 45, 60, {});
   B.sky = 0x241a3a; B.fog = 0x3a2a4a; B.sunColor = 0xffc890; B.amb = [0x8a70b0, 0x302030]; B.sunDir = [-0.5, 0.45, 0.4]; B.sunI = 1.8; B.ambI = 1.0;   // dusk
   B.photo = 'sunset'; B.photoTint = [0.95, 0.8, 1.0];   // the real sky over it (sky_<name>_*.jpg)
+  B.litWindows = 0.2;   // a few windows glow at sunset
   return B;
 }
 
@@ -521,6 +523,7 @@ function wienerHouse() {
   B.prop('tv', 24, 13, {}).prop('lamp', 34, 20, {}).prop('tree', 36, 6, {}).prop('tree', 3, 34, {}).prop('barrel', 18, 6, {});
   B.sky = 0x1c1626; B.fog = 0x2a2030; B.sunColor = 0xffb070; B.amb = [0xffb878, 0x3a2418]; B.sunDir = [0.5, 0.5, 0.3]; B.sunI = 1.2; B.ambI = 1.15; B.fogNear = 20; B.fogFar = 90;
   B.photo = 'night'; B.photoTint = [0.55, 0.62, 0.95];   // the real sky over it (sky_<name>_*.jpg)
+  B.litWindows = 0.55;   // most windows glow at night
   return B;
 }
 
@@ -574,6 +577,7 @@ function club() {
   for (let z = 10; z <= 18; z += 2) B.prop('stool', 44.6, z + 0.5);
   B.sky = 0x140a1e; B.fog = 0x2a1434; B.sunColor = 0xffc8f0; B.amb = [0xf4c0f4, 0x7a4a80]; B.sunDir = [0.3, 0.8, 0.2]; B.sunI = 1.7; B.ambI = 2.1; B.fogNear = 18; B.fogFar = 80;
   B.photo = 'night'; B.photoTint = [0.55, 0.62, 0.95];   // the real sky over it (sky_<name>_*.jpg)
+  B.litWindows = 0.55;   // most windows glow at night
   B.wet = 3.4;   // screen-space reflections: a polished dance floor
   return B;
 }
@@ -610,6 +614,7 @@ function mansion() {
   B.prop('lamp', 30, 46, {}).prop('lamp', 40, 46, {}).prop('lamp', 10, 50, {}).prop('lamp', 60, 50, {}).prop('tree', 6, 36, {}).prop('tree', 66, 38, {}).prop('palm', 26, 34, {}).prop('palm', 44, 34, {}).prop('tv', 36, 28, {});
   B.sky = 0x0a0e1e; B.fog = 0x10142a; B.sunColor = 0x9aaeff; B.amb = [0x46507a, 0x16121a]; B.sunDir = [0.4, 0.7, 0.3]; B.sunI = 1.1; B.ambI = 1.0; B.fogNear = 30; B.fogFar = 150;
   B.photo = 'night'; B.photoTint = [0.55, 0.62, 0.95];   // the real sky over it (sky_<name>_*.jpg)
+  B.litWindows = 0.55;   // most windows glow at night
   B.wet = 3.0;   // screen-space reflections: marble and lacquered wood
   return B;
 }
