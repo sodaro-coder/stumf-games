@@ -52,6 +52,12 @@ const P = {
     const e = Math.min(v, 1 - v) * 2, k = 0.55 + 0.45 * Math.pow(Math.min(1, e * 1.6), 0.6), f = fbm(u, v, 30, 2, 51) * 0.08;
     o[0] = 255 * k; o[1] = (70 + 120 * k * k) * k + f * 40; o[2] = 200 * k; o[3] = 0.5;
   },
+  glasslit(u, v, o) {   // a lit window at night: warm amber glass, cross mullion, curtains/blinds variation
+    const mull = (Math.abs(u - 0.5) < 0.035 || Math.abs(v - 0.5) < 0.04) ? 0.45 : 1;
+    const shade = 0.8 + fbm(u, v, 3, 2, 71) * 0.35, edge = 1 - 0.3 * Math.max(Math.abs(u - 0.5), Math.abs(v - 0.5)) * 2;
+    const k = edge * mull * shade;
+    o[0] = 255 * k; o[1] = 182 * k; o[2] = 104 * k; o[3] = 0.5;
+  },
   velvet(u, v, o) {   // crushed velvet: a deep pile with a sheen that shifts in patches
     const n = fbm(u, v, 5, 4, 61), f = fbm(u, v, 80, 2, 62), k = 0.7 + n * 0.45 + (f - 0.5) * 0.15;
     o[0] = 78 * k; o[1] = 22 * k; o[2] = 66 * k; o[3] = 0.4 + f * 0.3;
