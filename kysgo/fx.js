@@ -54,15 +54,52 @@ export class Particles {
 }
 
 // ---- floating comic text ("BANG!", "PEW") ----
-export function textPop(scene, x, y, z, text, color = '#ffd23a') {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 96; const g = c.getContext('2d');
-  g.font = '900 64px Impact, "Arial Black", system-ui'; g.textAlign = 'center'; g.lineWidth = 10; g.strokeStyle = '#000'; g.strokeText(text, 128, 72); g.fillStyle = color; g.fillText(text, 128, 72);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
-  s.position.set(x, y, z); s.scale.set(1.6, 0.6, 1); s.renderOrder = 9; scene.add(s);
-  const t0 = performance.now();
-  const step = () => { const k = (performance.now() - t0) / 900; if (k >= 1) { scene.remove(s); s.material.map.dispose(); s.material.dispose(); return; } s.position.y = y + k * 0.8; s.material.opacity = 1 - k * k; s.scale.set(1.6 + k * 0.6, 0.6 + k * 0.22, 1); requestAnimationFrame(step); };
-  requestAnimationFrame(step);
+// Pooled: pre-renders common kill texts once, reuses sprites. Falls back to
+// one-off canvas for unseen text (then caches it). No per-pop rAF loops:
+// active pops are ticked from a single list.
+const _textPool = { sprites: [], texCache: new Map(), active: [] };
+function _textTex(text, color) {
+  const key = text + '|' + color;
+  let t = _textPool.texCache.get(key);
+  if (!t) {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 96; const g = c.getContext('2d');
+    g.font = '900 64px Impact, "Arial Black", system-ui'; g.textAlign = 'center'; g.lineWidth = 10; g.strokeStyle = '#000'; g.strokeText(text, 128, 72); g.fillStyle = color; g.fillText(text, 128, 72);
+    t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    _textPool.texCache.set(key, t);
+  }
+  return t;
 }
+export function textPop(scene, x, y, z, text, color = '#ffd23a') {
+  let s = _textPool.sprites.pop();
+  if (!s) {
+    s = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
+    s.renderOrder = 9;
+  }
+  s.material.map = _textTex(text, color);
+  s.material.opacity = 1; s.material.needsUpdate = true;
+  s.position.set(x, y, z); s.scale.set(1.6, 0.6, 1); s.visible = true;
+  scene.add(s);
+  _textPool.active.push({ s, scene, y, t: 0 });
+}
+export function textPopTick(dt) {
+  const a = _textPool.active;
+  for (let i = a.length - 1; i >= 0; i--) {
+    const q = a[i]; q.t += dt;
+    const k = q.t / 0.9;
+    if (k >= 1) {
+      q.scene.remove(q.s); q.s.visible = false;
+      _textPool.sprites.push(q.s);
+      a.splice(i, 1);
+      continue;
+    }
+    q.s.position.y = q.y + k * 0.8;
+    q.s.material.opacity = 1 - k * k;
+    q.s.scale.set(1.6 + k * 0.6, 0.6 + k * 0.22, 1);
+  }
+}
+
+// Expose the pooled ticker for perf_patch.js (plain script, no module import).
+try { if (typeof window !== 'undefined') window.__textPopTick = textPopTick; } catch (e) { /* no window */ }
 
 // ---- sky: an inside-out sphere (horizon haze to deep blue, a warm glow around the sun) with the cloud layer painted
 // on in the same pass (no full-screen transparent layer: that alone halved the frame rate on weak machines), and the sun.
@@ -72,6 +109,13 @@ let cloudT = null;
 // its sun sits where the map's sun is; the painted gradient shows until it has loaded (and stays without it)
 const skyTexCache = new Map();
 export function skyTexture(name, size = 2048) {
+  // Perf: on low tiers, halve the sky photo resolution (it's a distant backdrop).
+  try {
+    var t = null;
+    if (typeof window !== 'undefined' && window.__cs && window.__cs.gfx) t = window.__cs.gfx.tier;
+    else if (typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(window.navigator ? window.navigator.userAgent : '')) t = 'low';
+    if (t === 'potato' || t === 'low') size = Math.min(size, 1024);
+  } catch (e) { /* ignore */ }
   const key = name + size;
   if (!skyTexCache.has(key)) skyTexCache.set(key, new Promise((res) => new THREE.TextureLoader().load(`sky_${name}_${size}.jpg`, (t) => {
     t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; res(t);
