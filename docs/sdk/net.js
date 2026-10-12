@@ -35,6 +35,7 @@ export function session(gameId, { code, host = false, name = 'Player', strategy 
   let hostId = host ? selfId : null;
   const s = {
     code, id: selfId, get isHost() { return hostId === selfId; }, get hostId() { return hostId; },
+    get room() { return room; },   // raw p2p room (addTrack/removeTrack/onPeerTrack) for voice chat
     peers: () => Object.keys(room.getPeers()),
     names,
     on(type, fn) { handlers.set(type, fn); return s; },
