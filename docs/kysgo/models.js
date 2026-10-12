@@ -414,12 +414,13 @@ export function skinTexture(item, info) {
   if (skinTexCache.has(k)) return skinTexCache.get(k);
   let t = null;
   if (item && info && info.paint) {
-    const sc = HQ ? 8 : 4, big = document.createElement('canvas'); big.width = 64 * sc; big.height = 32 * sc;   // painted at full resolution: crisp edges, fine scratches
+    const sc = HQ ? 12 : 4, big = document.createElement('canvas'); big.width = 64 * sc; big.height = 32 * sc;   // painted at full resolution: crisp edges, fine scratches
     paintSkin(big, info.paint, item.seed, item.float, sc);
     const g = big.getContext('2d'), im = g.getImageData(0, 0, big.width, big.height);   // a fine grain on top so the paint reads as a coating
     let s = (item.seed | 0) * 7919 + 1; for (let i = 0; i < im.data.length; i += 4) { s = (s * 1103515245 + 12345) & 0x7fffffff; const n = ((s >> 16) & 15) - 7; im.data[i] += n; im.data[i + 1] += n; im.data[i + 2] += n; }
     g.putImageData(im, 0, 0);
-    t = new THREE.CanvasTexture(big); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    t = new THREE.CanvasTexture(big); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+    t.userData.skinFloat = item.float || 0; t.userData.skinFinish = info.paint.t || '';
     if (info.paint.glow) t.userData.glow = glowMask(info.paint);
   }
   skinTexCache.set(k, t);
@@ -452,11 +453,16 @@ export function animateGlow(t, dt) {   // call once a frame
   }
 }
 const paintMats = new Map();
+// per-finish PBR: anodized fades read metallic and glossy, sprayed camos read matte, damascus reads like real
+// patterned steel. [metalness, roughness] per paint type.
+const FINISH_PBR = { fade: [0.6, 0.28], wave: [0.55, 0.3], galaxy: [0.5, 0.32], damascus: [0.9, 0.26], marble: [0.7, 0.3], camo: [0.05, 0.78], smear: [0.08, 0.72], clouds: [0.08, 0.75], tiger: [0.15, 0.6], stripes: [0.2, 0.55], solid: [0.25, 0.5], checker: [0.2, 0.55], dots: [0.15, 0.6], hex: [0.35, 0.45], circuit: [0.3, 0.45], geo: [0.3, 0.45], scales: [0.4, 0.4], web: [0.25, 0.5], flames: [0.35, 0.4], text: [0.1, 0.7], hotdogs: [0.05, 0.8], poops: [0.05, 0.8] };
 const paintMat = (tex) => {
   if (paintMats.has(tex)) return paintMats.get(tex);
-  const m = HQ ? new THREE.MeshStandardMaterial({ map: tex, metalness: tex.userData.glow ? 0.5 : 0.3, roughness: tex.userData.glow ? 0.25 : 0.42, envMapIntensity: 1.1 }) : new THREE.MeshMatcapMaterial({ map: tex, matcap: matcapTex('gloss') });   // skins on Low: the finish under baked studio light
-  if (HQ && !tex.userData.glow) gunSurface(m, 'gpaint', { wear: 0.85, albedo: 0.6 });   // skins are paint: it chips at the edges
-  if (tex.userData.glow) glowify(m, tex.userData.glow, 1);
+  const fl = tex.userData.skinFloat || 0, fm = FINISH_PBR[tex.userData.skinFinish] || [0.3, 0.42], glow = !!tex.userData.glow;
+  const m = HQ ? new THREE.MeshPhysicalMaterial({ map: tex, metalness: glow ? 0.5 : fm[0], roughness: glow ? 0.25 : fm[1], envMapIntensity: 1.1, clearcoat: glow ? 0.3 : 0.55, clearcoatRoughness: 0.22 + fl * 0.55 })   // skins under glossy clearcoat, dulled by wear
+    : new THREE.MeshMatcapMaterial({ map: tex, matcap: matcapTex('gloss') });   // skins on Low: the finish under baked studio light
+  if (HQ && !glow) gunSurface(m, 'gpaint', { wear: 0.1 + fl * 0.9, albedo: 0.6, wearColor: '#c8ccd2' });   // edge wear follows the float: factory-new barely chips, battle-scarred strips to metal
+  if (glow) glowify(m, tex.userData.glow, 1);
   paintMats.set(tex, m); return m;
 };
 
