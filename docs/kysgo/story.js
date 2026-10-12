@@ -25,9 +25,9 @@ export const CHARACTERS = {
     ability: { id: 'cancer_nade', unlock: { mission: 'o1', obj: 3 }, name: 'Cancer Nade', desc: 'One per mission: a canister of hospital-grade nasty. A lingering poison cloud that hurts and slows anyone standing in it.', perLevel: 1, dps: 9, radius: 4.5, dur: 9, slow: 0.6 },
   },
   ricky: {
-    name: 'Recruit Ricky', short: 'Ricky', role: 'Rifleman',
-    look: { body: '#7a3cc8', legs: '#1a1a1a', head: '#5a3a26', hat: 'cap', hatColor: '#e8c020', chains: true },   // skinny, middle-aged; loud rapper fit and jewellery
-    bio: 'Skinny, middle-aged, dressed like he is about to drop a mixtape: purple fit, gold chains, cap sideways. Confident about everything, right about nothing. Wiener and Cancer correct him constantly.',
+    name: 'Ricky The Rapper', short: 'Ricky', role: 'Rifleman · mixtape legend',
+    look: { body: '#7a3cc8', legs: '#1a1a1a', head: '#5a3a26', hat: 'dreads', hatColor: '#17100c', chains: true, grill: true },   // skinny; long dreads, purple fit, gold chains, gold grill
+    bio: 'Skinny, long dreads, purple fit, gold chains, gold grill. Calls himself Ricky The Rapper; the mixtape is always "about to drop." Confident about everything, right about nothing. Wiener and Cancer correct him constantly.',
     guns: { cats: ['rifle'], ids: [], noZoom: true },   // assault rifles; his sidearm is fixed (below)
     sidearm: { id: 'glock', name: 'Glock-18C "Switch"', auto: true, laser: true, mag: 50, note: 'Full-auto switch, laser, drum mag. His only secondary, always.' },
     ability: null,
@@ -148,7 +148,7 @@ export const CHAPTERS = [
       objectives: [
         { kind: 'explore', hint: 'Find your squad', points: [
           { zone: 'Bunks', label: 'Wiener', say: [['wiener', 'Thirty-nine. Forty. Forty-one.'], ['wiener', 'Don\'t ask what the number is for. Nobody asks. That\'s the rule.'], ['wiener', 'Sergeant Wiener. Yes, the costume is regulation. No, you may not touch the bun.'], ['wiener', 'One more rule. Wieners protect their own. You\'re all Wieners now. Don\'t make it weird.']] },
-          { zone: 'Mess Hall', label: 'Ricky', say: [['ricky', 'Yo! You the new ones too? Recruit Ricky. Can I get an expresso around here?'], ['cancer', 'Espresso. There is no X. There has never been an X.'], ['ricky', 'You sure? Because I been saying it with the X for thirty-four years and nobody complained.'], ['cancer', 'I\'m complaining. I\'m complaining right now.'], ['ricky', 'Eight months clean and THIS is how I get treated.']] },
+          { zone: 'Mess Hall', label: 'Ricky', say: [['ricky', 'Yo! You the new ones too? Ricky The Rapper. Can I get an expresso around here?'], ['cancer', 'Espresso. There is no X. There has never been an X.'], ['ricky', 'You sure? Because I been saying it with the X for thirty-four years and nobody complained. That\'s gonna be the hook on my next track.'], ['cancer', 'I\'m complaining. I\'m complaining right now.'], ['ricky', 'Eight months clean and THIS is how I get treated. Mixtape dropping soon, by the way.']] },
           { zone: 'Infirmary', label: 'Cancer', say: [['cancer', 'Captain Cancer. Yes, that\'s the callsign. Yes, I have it. Stage four, before you ask.'], ['ricky', 'Man, naming yourself after it is like getting your ex\'s name tattooed.'], ['cancer', 'It\'s more like a name tag, kid. Saves everybody the awkward question.'], ['cancer', 'Upside: I\'m the bravest man on this base. I\'ve got nothing to lose.']] },
           { zone: 'Watchtower', label: 'Igor', say: [['igor', 'Igor. Sniper. In my village, we train with one bullet. If you miss, you are the target.'], ['igor', 'I still carry the bullet. I do not fire it. Is for something important.'], ['ricky', 'What village?'], ['igor', '...one that had very long winters.']] },
         ] },
@@ -347,7 +347,7 @@ export const CHAPTERS = [
     { id: 'm15', name: 'Hot Tub Time Bomb', tier: 4, intro: 'There is a bomb in the hot tub. Igor volunteers.',
       objectives: [
         { kind: 'defuse', puzzle: 'wires', hint: 'Defuse the bomb in the hot tub', say: [['igor', 'In my country, water is always this temperature. But frozen.']] },
-        { kind: 'clear', zone: 'deck', count: 20, hint: 'Clear the party deck',
+        { kind: 'clear', zone: 'Stern', count: 20, hint: 'Clear the party deck',
           scene: [['wiener', 'Where\'s Cancer?'], ['igor', 'Lower deck. On a phone. Whispering.'], ['wiener', 'Who carries a phone on a covert op?'], ['ricky', 'Leave him alone, man. Maybe it\'s a doctor.'], ['wiener', 'At midnight? On Ballin\'s yacht?']] },
       ],
       cut: { in: [['command', 'Bomb in the hot tub, team! Classic Ballin\'.']],
