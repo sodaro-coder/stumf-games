@@ -15,6 +15,7 @@ import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf,
 import { Bots, botNames } from './bots.js';
 import { StoryMatch } from './story_sim.js';
 import { storyClient } from './story_client.js';
+import { startAimTrainer } from './aim_trainer.js';
 import { makeMusic } from './music.js';
 import { MISSIONS, CHAPTERS, CHARACTERS, SQUAD, BOSS, STORY_LOOKS } from './story.js';
 // the boss in a match: a giant in a basketball jersey and a gold cap
@@ -25,6 +26,8 @@ import { releaseThumbs } from './thumbs.js';
 import { line, sfxFor, hasLine } from './voices.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { initGore, bloodHit, goreKill } from './gore.js';
+import { Voice } from './voice.js';
+import { playerToken, saveRejoin, clearRejoin, sweepSlots, sanitizeToken, SLOT_TTL } from './reconnect.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
 import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear } from './chars.js';
@@ -47,7 +50,7 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, dmgNums: 1, colorblind: 'none', killcam: 1, gore: 1 };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, dmgNums: 1, colorblind: 'none', killcam: 1, gore: 1, voiceChat: 0, vcHear: 'friends' };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // ---- rebindable keybinds (action -> list of e.code / mouse codes). S.keys overrides; legacy S.crouchKey migrates in.
@@ -58,7 +61,7 @@ const DEF_KEYS = {
   prone: ['KeyZ'], burst: ['KeyX'], buy: ['KeyB'], chat: ['KeyY'], teamchat: ['KeyU'],
   emote: ['KeyT'], leanL: ['KeyQ'], leanR: ['KeyE'],
   slot1: ['Digit1'], slot2: ['Digit2'], slot3: ['Digit3'], slot4: ['Digit4'], slot5: ['Digit5'],
-  score: ['Tab'], altfire: ['M2'],
+  score: ['Tab'], altfire: ['M2'], ptt: ['KeyV'],
 };
 const KEY_LABELS = {
   forward: 'Move forward', back: 'Move back', left: 'Strafe left', right: 'Strafe right',
@@ -68,9 +71,9 @@ const KEY_LABELS = {
   leanL: 'Lean left', leanR: 'Lean right',
   slot1: 'Weapon slot 1', slot2: 'Weapon slot 2', slot3: 'Weapon slot 3', slot4: 'Weapon slot 4', slot5: 'Weapon slot 5',
   buy: 'Buy menu', chat: 'Chat', teamchat: 'Team chat', emote: 'Emote wheel',
-  score: 'Scoreboard', altfire: 'Alt fire / ADS',
+  score: 'Scoreboard', altfire: 'Alt fire / ADS', ptt: 'Push to talk (voice chat)',
 };
-const KEY_GROUPS = [['Movement', ['forward', 'back', 'left', 'right', 'jump', 'crouch', 'sprint']], ['Combat', ['reload', 'use', 'inspect', 'drop', 'prone', 'burst', 'leanL', 'leanR', 'altfire']], ['Weapons', ['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'buy']], ['Comms', ['chat', 'teamchat', 'emote', 'score']]];
+const KEY_GROUPS = [['Movement', ['forward', 'back', 'left', 'right', 'jump', 'crouch', 'sprint']], ['Combat', ['reload', 'use', 'inspect', 'drop', 'prone', 'burst', 'leanL', 'leanR', 'altfire']], ['Weapons', ['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'buy']], ['Comms', ['chat', 'teamchat', 'emote', 'score', 'ptt']]];
 const RESERVED_KEYS = ['Escape'];   // menu key, never rebindable
 const keyName = (c) => ({ Space: 'Space', Tab: 'Tab', ShiftLeft: 'Shift', ShiftRight: 'Shift', ControlLeft: 'Ctrl', ControlRight: 'Ctrl', AltLeft: 'Alt', AltRight: 'Alt', M0: 'Mouse 1', M1: 'Mouse 2 (wheel)', M2: 'Mouse 3', WheelUp: 'Wheel up', WheelDown: 'Wheel down', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' }[c] || (c.startsWith('Key') ? c.slice(3) : c.startsWith('Digit') ? c.slice(5) : c));
 const resolveKeys = () => {
@@ -339,7 +342,7 @@ export default function start({ cfg, E, N, smoke }) {
     g.fillStyle = window.__CB__ ? __CB__.site() : '#ff6a4a'; g.font = 'bold 13px system-ui'; for (const [n, r] of Object.entries(B.sites)) g.fillText(n, ox + (r[0] + r[2]) / 2 * s - 4, oz + (r[1] + r[3]) / 2 * s + 4);
   };
   let menu = null;
-  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); refreshKeys(); if (window.__CB__) __CB__.set(s.colorblind || 'none'); }, keybinds: () => keybindAPI({ get: () => S, save: (s) => { S = s; saveSet(s); }, toast }), announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
+  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, aim: (acfg) => { menu.hide(); startAimTrainer({ onExit: (tab) => { showMenu(); if (tab === 'aim' && menu) { menu.tab = 'aim'; menu.render(); } }, toast, profile, initial: acfg }); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); refreshKeys(); if (window.__CB__) __CB__.set(s.colorblind || 'none'); }, keybinds: () => keybindAPI({ get: () => S, save: (s) => { S = s; saveSet(s); }, toast }), voiceSet: (on) => Voice.setWanted(on, true), voiceTest: (el) => Voice.micTest(el), voiceHear: (m) => Voice.setHearMode(m), announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
   if (smoke) { let m = 'dust'; try { const q = new URLSearchParams(location.search).get('map'); if (MAPS[q]) m = q; } catch (e) { /* no page */ } runMatch({ mode: '5v5', map: m, bot: 'normal', host: true, solo: true, smoke: true }); }
   else showMenu();
 
@@ -353,6 +356,17 @@ export default function start({ cfg, E, N, smoke }) {
       myId = session.id;
       history.replaceState(null, '', '#' + session.code);
       if (isHost && opt.pub) { lobby = N.lobbyBrowser(cfg.id, () => {}); lobby.announce({ code: session.code, name: (opt.ranked ? 'RANKED · ' : '') + myName + "'s lobby", players: 1, max: MODES[opt.mode].size * 2, mode: opt.mode, map: opt.map, ranked: !!opt.ranked }); }
+    }
+    // voice chat rides the same WebRTC peer connections as the data channel
+    if (session) {
+      Voice.attach(session, {
+        toast,
+        vol: S.vol,
+        pttLabel: keyName((KB.ptt || ['KeyV'])[0]),
+        getFriends: () => (profile.signedIn ? profile.friends().catch(() => []) : Promise.resolve([])),
+      });
+      Voice.setHearMode(S.vcHear || 'friends');
+      if (S.voiceChat) Voice.setWanted(true, false);   // mic requested on first PTT press (needs a gesture)
     }
     const loadout = { T: profile.loadoutFor('T'), CT: profile.loadoutFor('CT') };
     const myAtt = (wid) => ((loadout[me.team] || {}).att || {})[wid] || null;
@@ -369,7 +383,7 @@ export default function start({ cfg, E, N, smoke }) {
     const rhK = () => (touchPlayer || (typeof pad !== 'undefined' && pad.active) || (S.recoilHelp && profile.admin) ? 0.4 : 1);
     const story = opt.story || null;   // co-op story mission: { mission, diff, host: character }
     if (story) { opt.mode = 'story'; opt.map = (MISSIONS[story.mission] || MISSIONS[0]).map; }
-    const hello = { char: story ? story.host : (() => { try { return localStorage.getItem('cs:story:char') || undefined; } catch (e) { return undefined; } })(), name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
+    const hello = { char: story ? story.host : (() => { try { return localStorage.getItem('cs:story:char') || undefined; } catch (e) { return undefined; } })(), name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife }, rtok: playerToken() };
 
     // ---- renderer & scene ----
     // graphics: one GraphicsSettingsManager decides every switch (graphics.js). A fixed tier, or Auto (setting 0): start
@@ -535,6 +549,9 @@ export default function start({ cfg, E, N, smoke }) {
     };
     const fpsM = S.fps ? E.fpsMeter() : () => {};
     const hud = new Hud(S);
+    // voice chat: speaking indicators on the HUD, kept in sync with voice state
+    const refreshVoiceHud = () => { try { hud.voiceHUD(Voice.speakers(), Voice.isTalking(), myName); } catch (e) { /* hud gone */ } };
+    Voice.onChange(refreshVoiceHud); Voice.setVol(S.vol);
 
     let culler = null, lobbyPanel = null, sunLight = null, sky = null, parts = null, sunDir = [0.6, 0.7, 0.4];
     let W = null, mode = opt.mode, mapId = opt.map, botLevel = opt.bot || 'normal', match = null, bots = null, ended = false, started = false;
@@ -658,7 +675,7 @@ export default function start({ cfg, E, N, smoke }) {
     let loadMenu = null;
     function openLoadout() {
       if (loadMenu) return; SC.hub(null);
-      loadMenu = new Menu(cfg, profile, { play: () => {}, lobbies: () => ({ close() {}, announce() {}, update() {} }), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (v) => { S = v; saveSet(v); refreshKeys(); }, keybinds: () => keybindAPI({ get: () => S, save: (v) => { S = v; saveSet(v); }, toast }), announce: () => {},
+      loadMenu = new Menu(cfg, profile, { play: () => {}, lobbies: () => ({ close() {}, announce() {}, update() {} }), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (v) => { S = v; saveSet(v); refreshKeys(); }, keybinds: () => keybindAPI({ get: () => S, save: (v) => { S = v; saveSet(v); }, toast }), voiceSet: (on) => Voice.setWanted(on, true), voiceTest: (el) => Voice.micTest(el), voiceHear: (m) => Voice.setHearMode(m), announce: () => {},
         back: () => { loadMenu.hide(); loadMenu = null; const info = hostInfo(); if (isHost) camp.info.set(myId, info); else toHost('loadout', { loadout: info.loadout, agent: info.agent, knife: info.knife }); if (camp.phase === 'hub') renderHub({ phase: 'hub', chapter: camp.hubChapter, party: [...camp.party.values()] }); } });
       loadMenu.tab = 'inv'; loadMenu.show();
     }
@@ -952,6 +969,8 @@ export default function start({ cfg, E, N, smoke }) {
 
     // ---- networking ----
     const send = (t, d, to) => { if (session) session.send(t, d, to); };
+    // reconnect: disconnected real players keep their slot for SLOT_TTL (rtok -> { p, until, campInfo, party })
+    const rejoinSlots = new Map();
     const toHost = (t, d) => { if (isHost) hostRecv(t, d, myId); else if (session) session.toHost(t, d); };
     // host: messages from peers
     function hostRecv(t, d, peer) {
@@ -961,6 +980,29 @@ export default function start({ cfg, E, N, smoke }) {
         if (p) return;
         const info = d && typeof d === 'object' ? d : {};
         const clean = { char: SQUAD.includes(info.char) ? info.char : undefined, name: String(info.name || 'Player').slice(0, 20), loadout: sanitizeLoadout(info.loadout), agent: sanitizeAgent(info.agent), knife: sanitizeKnife(info.knife) };
+        const rtok = sanitizeToken(info.rtok);
+        sweepSlots(rejoinSlots);
+        if (match.over) { send('toast', 'That match has ended', peer); return; }  // too late: host is on the end screen
+        // ---- reconnect: this browser was in the match recently; restore their slot instead of a fresh join ----
+        const slot = rtok && rejoinSlots.get(rtok);
+        if (slot && slot.until > Date.now() && !match.over) {
+          rejoinSlots.delete(rtok);
+          const rp = slot.p;
+          rp.id = peer; rp.rtok = rtok; rp.disconnected = false;
+          rp.name = clean.name; rp.loadout = clean.loadout; rp.agent = clean.agent; rp.knife = clean.knife;  // fresh loadout, kept team/KDA/money
+          match.players.set(peer, rp);
+          if (slot.campInfo) camp.info.set(peer, slot.campInfo);
+          if (slot.party) camp.party.set(peer, { ...slot.party, id: peer });
+          match.broadcastRoster();
+          send('lobby', { mode, map: mapId, bot: botLevel, started, ranked }, peer);
+          match.sendInv(rp);
+          if (mode === 'story') { if (started) campWelcome(peer); }
+          else if (match.phase === 'warmup' || match.phase === 'freeze') match.spawn(rp);  // mid-round: they wait for next round, like a normal late join
+          else { rp.alive = false; }  // stale alive flag from before the disconnect: they're dead until next round
+          send('toast', 'Welcome back — your slot was kept', peer);
+          if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
+          return;
+        }
         if (ranked && !started) { const n = MODES[mode].size, onT = [...match.players.values()].filter((q) => !q.bot && q.team === 'T').length; clean.team = onT < n ? 'T' : 'CT'; }
         if (started && mode !== 'story') {  // replace a bot on the team that needs a human most
           const humans = (tm) => [...match.players.values()].filter((q) => q.team === tm && !q.bot).length;
@@ -969,7 +1011,8 @@ export default function start({ cfg, E, N, smoke }) {
           if (bot) { match.remove(bot.id); clean.team = bot.team; }
         }
         if (mode === 'story') { camp.info.set(peer, clean); const hp = camp.party.get(peer); if (hp) clean.char = hp.char; }
-        match.add(peer, clean);
+        const np = match.add(peer, clean);
+        if (rtok) np.rtok = rtok;  // so a later disconnect reserves this player's slot
         send('lobby', { mode, map: mapId, bot: botLevel, started, ranked }, peer);
         if (mode === 'story' && started) campWelcome(peer);
         if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
@@ -1280,7 +1323,19 @@ export default function start({ cfg, E, N, smoke }) {
       if (session) {
         session.on('_join', () => {});
         for (const t of ['hello', 'pose', 'shot', 'buy', 'nade', 'pickup', 'drop', 'dropc4', 'ammo', 'chat', 'emote', 'ability', 'skipVote', 'campReady', 'campHub', 'loadout']) session.on(t, (d, peer) => hostRecv(t, d, peer));
-        session.on('_leave', (_, peer) => { if (camp.party.delete(peer) && camp.phase === 'hub') broadcastHub(); camp.ready.delete(peer); if (match) { match.remove(peer); const r = rigs.get(peer); if (r) { scene.remove(r.g); if (r.blob) scene.remove(r.blob); rigs.delete(peer); } if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length }); } });
+        session.on('_leave', (_, peer) => {
+          // reserve a disconnected real player's slot so they can rejoin (3 min); stash their state first
+          const dp = match && match.players.get(peer);
+          const partyEntry = camp.party.get(peer), campInfo = camp.info.get(peer);
+          if (camp.party.delete(peer) && camp.phase === 'hub') broadcastHub(); camp.ready.delete(peer);
+          if (campInfo) camp.info.delete(peer);
+          if (match) {
+            if (dp && !dp.bot && dp.rtok && !match.over) { sweepSlots(rejoinSlots); rejoinSlots.set(dp.rtok, { p: dp, until: Date.now() + SLOT_TTL, campInfo, party: partyEntry }); }
+            match.remove(peer);
+            const r = rigs.get(peer); if (r) { scene.remove(r.g); if (r.blob) scene.remove(r.blob); rigs.delete(peer); }
+            if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
+          }
+        });
       }
       if (solo) startMatch(); else showLobbyPanel();
     } else {
@@ -1288,6 +1343,7 @@ export default function start({ cfg, E, N, smoke }) {
       session.on('lobby', (d, peer) => {
         if (peer !== session.hostId || !d || !MODES[d.mode] || !MAPS[d.map]) return;
         mode = d.mode; botLevel = d.bot; ranked = !!d.ranked; if (!W || mapId !== d.map) buildMap(d.map);
+        saveRejoin({ code: session.code, name: myName, rtok: playerToken(), mode, map: mapId });  // so a reload/crash can rejoin this match
         started = !!d.started; hud.banner(started ? '' : 'Waiting for the host to start', `${MODES[mode].name} · ${MAPS[mapId].name}`, started ? 1 : 0);
       });
       const msgTypes = { inv: onInv, spawn: onSpawn, tp: onTp, hurt: onHurt, hitconfirm: onHitConfirm, ev: onEvent, fire: onFire, bomb: onBomb, drops: onDrops, fx: onFx, nade: onNade, chat: onChat, toast: (t) => toast(String(t).slice(0, 80)), camp: onCamp };
@@ -1589,6 +1645,8 @@ export default function start({ cfg, E, N, smoke }) {
         if (!canBuy()) closeBuy();
       }
       showSb = kdA('score') || E.input.touch.buttons.has('score');
+      // voice chat push-to-talk (mic live only while held)
+      Voice.setTalking(!typing && !uiOpen && (kdA('ptt') || E.input.touch.buttons.has('ptt')));
       if (mob) { const sh = !uiOpen && !ended; if (sh !== mobShown) { mobShown = sh; mob.show(sh); } mob.setAiming(me.ads > 0.5); }
       // movement (frozen in freeze time)
       { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || me.adsToggle); if (!wantAds && !mouseBtn[2] && (me.reload > 0 || !adsOptic || !me.alive)) me.adsToggle = false; me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0;
@@ -1873,7 +1931,8 @@ export default function start({ cfg, E, N, smoke }) {
       if (showSb && sbT > 0.25) {
         sbT = 0;
         const rows = match ? match.scoreboard() : [...st.roster.values()].map((r) => { const p = st.players.get(r.id) || {}; return { id: r.id, name: r.name, team: r.team, bot: r.bot, k: r.k || 0, a: 0, d: 0, mvp: 0, score: 0, money: p.money || 0, alive: r.id === myId ? me.alive : p.alive }; });
-        hud.scoreboard(true, { players: rows, me: myId, myTeam: me.team, score: st.score, round: st.round, history: st.history, title: `${MODES[mode].name} · ${MAPS[mapId].name}` });
+        hud.scoreboard(true, { players: rows, me: myId, myTeam: me.team, score: st.score, round: st.round, history: st.history, title: `${MODES[mode].name} · ${MAPS[mapId].name}`,
+          vc: session ? { muted: Voice.mutedMap(), speaking: Voice.speakingMap(), onMute: (id) => Voice.toggleMute(id) } : null });
       } else if (!showSb) hud.scoreboard(false);
     });
 
@@ -1901,13 +1960,13 @@ export default function start({ cfg, E, N, smoke }) {
       set(`+${res.coins} coins · +${res.xp} XP${res.coins === 0 && profile.signedIn ? ' (daily coin limit reached)' : ''}${lv.length ? ' · ' + lv.join(' · ') : ''}${rk}`);
     }
     function quit(next) {
-      ended = true; saveGunXp(); endKillcam(); kcHist.clear();
+      ended = true; saveGunXp(); endKillcam(); kcHist.clear(); clearRejoin();  // leaving for good: nothing to rejoin
       try { loopH.stop(); } catch (e) { /* already stopped */ }
       if (hiddenTick) hiddenTick.terminate();
       try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* not locked */ }
       if (mob) mob.destroy(); removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp); removeEventListener('mousemove', onMove); removeEventListener('mouseup', onUp); removeEventListener('resize', resize);
       document.removeEventListener('pointerlockchange', onLock);
-      if (session) session.leave(); if (lobby) lobby.close();
+      if (session) session.leave(); if (lobby) lobby.close(); Voice.detach();
       if (lobbyPanel) { clearInterval(lobbyPanel.iv); lobbyPanel.remove(); }
       if (SC) { SC.dispose(); SC = null; }
       hud.destroy(); renderer.dispose(); renderer.domElement.remove();
