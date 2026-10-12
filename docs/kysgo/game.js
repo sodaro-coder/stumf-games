@@ -1292,12 +1292,12 @@ export default function start({ cfg, E, N, smoke }) {
     function startReload() {
       const it = me.inv[me.cur], w = curWeapon(); if (!it || !w || w.cat === 'knife' || w.cat === 'zeus' || me.reload > 0 || it.ammo >= w.mag || it.reserve <= 0) return;
       me.reload = w.reload; me.scoped = 0; me.reloadEmpty = it.ammo === 0;   // a tactical reload (rounds left) skips the rack
+      window.__RELOAD_EMPTY__ = me.reloadEmpty;   // the reload choreography module keys its beats off this
       if (w.shellReload) audio.play('shell', 0.6);
       else {
-        const it0 = it, st = reloadStyle(w.id), at = (f, n, v = 0.6) => setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play(n, v); }, w.reload * f * 1000);
-        if (st.cover) { at(0.08, 'bolt', 0.4); at(0.22, 'magout'); at(0.55, 'magin'); at(0.72, 'bolt', 0.5); }   // belt-fed: cover up, box off, box on, belt, cover shut
-        else if (st.cyl) { at(0.1, 'bolt', 0.35); at(0.3, 'shell', 0.5); at(0.6, 'magin', 0.5); at(0.8, 'bolt', 0.4); }   // a revolver: swing out, punch the empties, speed-loader, snap it shut
-        else { audio.play('magout', 0.6); at(0.6, 'magin'); if (me.reloadEmpty && st.charge !== 'none') at(st.charge === 'bolt' ? 0.8 : 0.85, 'bolt'); }
+        const it0 = it, at = (f, n, v = 0.6) => setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play(n, v); }, w.reload * f * 1000);
+        const cues = (window.__RELOAD_CUES__ || (() => []))(w.id, me.reloadEmpty);   // foley timed to the new per-family choreography
+        for (const c of cues) at(c.f, c.n, c.v);
       }
     }
     function switchTo(slot) {
@@ -1623,7 +1623,7 @@ export default function start({ cfg, E, N, smoke }) {
           parts.emit(cam.position.x - sy * f + cy * sx, cam.position.y - 0.18 + Math.random() * 0.1, cam.position.z - cy * f - sy * sx, { n: 3, colors: [me.inspectGlow, '#ffffff'], speed: 0.6, up: 0.5, size: 0.012, life: 0.5 });
         }
         const ud = vm.userData;
-        if (animReload) reloadPose(vm, w, me.reload > 0 && w ? 1 - me.reload / w.reload : -1);
+        if (animReload) (window.__RELOAD_POSE__ || reloadPose)(vm, w, me.reload > 0 && w ? 1 - me.reload / w.reload : -1);
         if (ud.flop) {   // floppy: each joint is a damped spring kicked by turning, walking, swinging and stroking
           const F = ud.flopS || (ud.flopS = { x: 0, y: 0, vx: 0, vy: 0 }), stroking = me.inspect > 0 && me.inspectStyle === 'stroke';
           const kick = { x: -lookDY * 0.9 + Math.cos(bob * 2) * 0.6 * Math.min(1, sp / 4) + (me.knifeSwing > 0 ? 9 : 0) + (stroking ? Math.sin(me.inspect * 22) * 7 : 0), y: lookDX * 0.9 };
@@ -1700,6 +1700,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (st.phase === 'freeze' && mode !== 'story') hint = `Buy time · ${Math.ceil(st.timer)}s · ${mob ? 'tap BUY' : 'press B'}`;
         else if (me.alive && me.inv[5] && W.siteAt(me.x, me.z) && (!MODES[mode].bombSite || MODES[mode].bombSite === W.siteAt(me.x, me.z))) hint = me.cur === 5 ? 'Hold fire or E to plant' : 'Press 5 to take out the bomb';
         else if (me.alive && me.team === 'CT' && st.bomb && st.bomb.s === 'planted' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 1.8) hint = `Hold E to defuse${me.defuser ? ' (kit: 5s)' : ' (10s)'}`;
+        else if (mode === 'story' && me.alive) { const SS = window.__storyState; if (SS && SS.markers) { const nm = SS.markers.find((m) => !m.done && ['terminal', 'bomb', 'revive'].includes(m.kind) && Math.hypot(m.x - me.x, m.z - me.z) < 2.2); if (nm) hint = `Hold ${mob ? 'USE' : 'E'} to use${nm.label && nm.label !== 'USE' ? ' ' + nm.label : ''}`; } if (!hint) { const d = me.alive && nearestDrop(); if (d) hint = `E: pick up ${itemName(d.wid)}`; } }
         else { const d = me.alive && nearestDrop(); if (d) hint = `E: pick up ${itemName(d.wid)}`; }
         if (match && !started && session) hint = 'Lobby: start the match from the panel';
         hud.hint(hint);
