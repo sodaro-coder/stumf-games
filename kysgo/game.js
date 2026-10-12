@@ -46,9 +46,57 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1 };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, dmgNums: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
+// ---- rebindable keybinds (action -> list of e.code / mouse codes). S.keys overrides; legacy S.crouchKey migrates in.
+const DEF_KEYS = {
+  forward: ['KeyW'], back: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
+  jump: ['Space'], crouch: ['ControlLeft', 'ControlRight'], sprint: ['ShiftLeft', 'ShiftRight'],
+  reload: ['KeyR'], use: ['KeyE'], inspect: ['KeyF'], drop: ['KeyG'],
+  prone: ['KeyZ'], burst: ['KeyX'], buy: ['KeyB'], chat: ['KeyY'], teamchat: ['KeyU'],
+  emote: ['KeyT'], leanL: ['KeyQ'], leanR: ['KeyE'],
+  slot1: ['Digit1'], slot2: ['Digit2'], slot3: ['Digit3'], slot4: ['Digit4'], slot5: ['Digit5'],
+  score: ['Tab'], altfire: ['M2'],
+};
+const KEY_LABELS = {
+  forward: 'Move forward', back: 'Move back', left: 'Strafe left', right: 'Strafe right',
+  jump: 'Jump', crouch: 'Crouch', sprint: 'Sprint',
+  reload: 'Reload', use: 'Use / plant / defuse', inspect: 'Inspect weapon',
+  drop: 'Drop weapon / ability', prone: 'Prone', burst: 'Toggle burst fire',
+  leanL: 'Lean left', leanR: 'Lean right',
+  slot1: 'Weapon slot 1', slot2: 'Weapon slot 2', slot3: 'Weapon slot 3', slot4: 'Weapon slot 4', slot5: 'Weapon slot 5',
+  buy: 'Buy menu', chat: 'Chat', teamchat: 'Team chat', emote: 'Emote wheel',
+  score: 'Scoreboard', altfire: 'Alt fire / ADS',
+};
+const KEY_GROUPS = [['Movement', ['forward', 'back', 'left', 'right', 'jump', 'crouch', 'sprint']], ['Combat', ['reload', 'use', 'inspect', 'drop', 'prone', 'burst', 'leanL', 'leanR', 'altfire']], ['Weapons', ['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'buy']], ['Comms', ['chat', 'teamchat', 'emote', 'score']]];
+const RESERVED_KEYS = ['Escape'];   // menu key, never rebindable
+const keyName = (c) => ({ Space: 'Space', Tab: 'Tab', ShiftLeft: 'Shift', ShiftRight: 'Shift', ControlLeft: 'Ctrl', ControlRight: 'Ctrl', AltLeft: 'Alt', AltRight: 'Alt', M0: 'Mouse 1', M1: 'Mouse 2 (wheel)', M2: 'Mouse 3', WheelUp: 'Wheel up', WheelDown: 'Wheel down', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' }[c] || (c.startsWith('Key') ? c.slice(3) : c.startsWith('Digit') ? c.slice(5) : c));
+const resolveKeys = () => {
+  const out = {};
+  for (const k in DEF_KEYS) out[k] = [...DEF_KEYS[k]];
+  if (typeof S !== 'undefined' && S.crouchKey === 'c') out.crouch = ['KeyC'];   // legacy setting migration
+  const u = (typeof S !== 'undefined' && S.keys) || {};
+  for (const k in u) if (DEF_KEYS[k] && Array.isArray(u[k]) && u[k].length) out[k] = [...u[k]];
+  return out;
+};
+let KB = null;
+const refreshKeys = () => { KB = resolveKeys(); };
+// API handed to the Menu for the settings keybind UI. ctx: { get: () => S, save: (s) => void, toast: (t) => void }
+const keybindAPI = (ctx) => ({
+  defs: DEF_KEYS, labels: KEY_LABELS, groups: KEY_GROUPS, name: keyName,
+  cur: () => KB,
+  set(action, code) {
+    if (!DEF_KEYS[action]) return { ok: false, err: 'unknown action' };
+    if (RESERVED_KEYS.includes(code)) return { ok: false, err: 'Escape is reserved for the menu' };
+    const dup = Object.keys(KB).find((a) => a !== action && (KB[a] || []).includes(code));
+    if (dup) return { ok: false, err: 'duplicate', other: KEY_LABELS[dup] || dup };
+    const S = ctx.get(); S.keys = S.keys || {}; S.keys[action] = [code];
+    ctx.save(S); refreshKeys();
+    return { ok: true };
+  },
+  reset() { const S = ctx.get(); delete S.keys; delete S.crouchKey; ctx.save(S); refreshKeys(); },
+});
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
 const shotSound = (wid, skin, hit) => {
   if (wid === 'knife') return skinSound(skin, hit ? 'hit' : 'miss') || (hit ? 'stab' : 'knife');
@@ -251,6 +299,7 @@ export default function start({ cfg, E, N, smoke }) {
     addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__installPrompt = e; });
   }
   let S = loadSet();
+  refreshKeys();
   const profile = new Profile(cfg);
   if (profile.signedIn) profile.sync();
   const audio = makeAudio(() => S.vol);
@@ -288,7 +337,7 @@ export default function start({ cfg, E, N, smoke }) {
     g.fillStyle = '#ff6a4a'; g.font = 'bold 13px system-ui'; for (const [n, r] of Object.entries(B.sites)) g.fillText(n, ox + (r[0] + r[2]) / 2 * s - 4, oz + (r[1] + r[3]) / 2 * s + 4);
   };
   let menu = null;
-  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
+  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); refreshKeys(); }, keybinds: () => keybindAPI({ get: () => S, save: (s) => { S = s; saveSet(s); }, toast }), announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
   if (smoke) { let m = 'dust'; try { const q = new URLSearchParams(location.search).get('map'); if (MAPS[q]) m = q; } catch (e) { /* no page */ } runMatch({ mode: '5v5', map: m, bot: 'normal', host: true, solo: true, smoke: true }); }
   else showMenu();
 
@@ -607,7 +656,7 @@ export default function start({ cfg, E, N, smoke }) {
     let loadMenu = null;
     function openLoadout() {
       if (loadMenu) return; SC.hub(null);
-      loadMenu = new Menu(cfg, profile, { play: () => {}, lobbies: () => ({ close() {}, announce() {}, update() {} }), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (v) => { S = v; saveSet(v); }, announce: () => {},
+      loadMenu = new Menu(cfg, profile, { play: () => {}, lobbies: () => ({ close() {}, announce() {}, update() {} }), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (v) => { S = v; saveSet(v); refreshKeys(); }, keybinds: () => keybindAPI({ get: () => S, save: (v) => { S = v; saveSet(v); }, toast }), announce: () => {},
         back: () => { loadMenu.hide(); loadMenu = null; const info = hostInfo(); if (isHost) camp.info.set(myId, info); else toHost('loadout', { loadout: info.loadout, agent: info.agent, knife: info.knife }); if (camp.phase === 'hub') renderHub({ phase: 'hub', chapter: camp.hubChapter, party: [...camp.party.values()] }); } });
       loadMenu.tab = 'inv'; loadMenu.show();
     }
@@ -872,7 +921,7 @@ export default function start({ cfg, E, N, smoke }) {
     let mouseBtn = [false, false, false], mdx = 0, mdy = 0, locked = false, uiOpen = null, showSb = false;
     const onKey = (e) => {
       if (e.target && e.target.tagName === 'INPUT') return;
-      if (e.code === 'Tab' || e.code === 'Space' || (e.ctrlKey && /Key[WSDAEQRTFGB]/.test(e.code))) e.preventDefault();
+      if (e.code === 'Tab' || e.code === 'Space' || (KB.jump || []).includes(e.code) || (KB.score || []).includes(e.code) || (e.ctrlKey && /Key[WSDAEQRTFGB]/.test(e.code))) e.preventDefault();
       if (e.repeat) return; keys.add(e.code); pressed.add(e.code);
     };
     const onKeyUp = (e) => keys.delete(e.code);
@@ -887,7 +936,7 @@ export default function start({ cfg, E, N, smoke }) {
     const onLock = () => { locked = document.pointerLockElement === renderer.domElement; if (!locked && !uiOpen && !ended && !smoke && !campHold && !loadMenu) openPause(); };   // the story hub / cards free the mouse on purpose
     document.addEventListener('pointerlockchange', onLock);
     // raw mouse where the browser supports it (no OS acceleration, lower latency), else the plain lock
-    const lock = () => { try { let r = null; try { r = renderer.domElement.requestPointerLock({ unadjustedMovement: true }); } catch (e1) { r = null; } if (r && r.catch) r = r.catch(() => renderer.domElement.requestPointerLock()); else if (!r && !document.pointerLockElement) r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock(['ControlLeft', 'KeyW', 'Tab']).catch(() => {}); };
+    const lock = () => { try { let r = null; try { r = renderer.domElement.requestPointerLock({ unadjustedMovement: true }); } catch (e1) { r = null; } if (r && r.catch) r = r.catch(() => renderer.domElement.requestPointerLock()); else if (!r && !document.pointerLockElement) r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock([...new Set([...(KB.forward || []), ...(KB.crouch || []), ...(KB.score || [])])]).catch(() => {}); };
     let mob = null; try { if (matchMedia('(pointer: coarse)').matches) mob = mobileControls(E.input); } catch (e) { /* no touch */ }
     if (mob && story) document.querySelectorAll('.kc-t b').forEach((b) => { if (b.textContent === 'BUY') b.textContent = 'SKILL'; });   // nothing to buy in a mission: that button is the ability
     // controllers (consoles, TVs, PCs with a pad): drive the match while playing, the menus otherwise
@@ -895,6 +944,8 @@ export default function start({ cfg, E, N, smoke }) {
     if (mob) { hud.el.classList.add('touch'); mob.setSens(S.touchSens || 1); }
     let mobShown = true;
     const kd = (c) => keys.has(c), kp = (c) => pressed.has(c);
+    const kdA = (a) => { const l = KB[a]; return !!l && l.some((c) => keys.has(c)); };   // held: any bound code for action a
+    const kpA = (a) => { const l = KB[a]; return !!l && l.some((c) => pressed.has(c)); }; // pressed this frame: any bound code
 
     // ---- networking ----
     const send = (t, d, to) => { if (session) session.send(t, d, to); };
@@ -999,7 +1050,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (m.hp <= 0) me.alive = false;
     }
     const dmgFrom = new Map(), dmgTo = new Map();
-    function onHitConfirm(m) { { const r = rigs.get(m.id); if (r && r.soldier) soldierEvent(r, 'hit'); } if (me.lastGun && performance.now() - (me.lastShotAt || 0) < 600) addXp(me.lastGun, (m.dmg | 0) * XP_RULES.dmg); audio.play(m.group === 'head' ? 'head' : 'hit', 1.25); if (hud.hitmark) hud.hitmark(m.group === 'head' ? 'head' : ''); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); }
+    function onHitConfirm(m) { const r = rigs.get(m.id); if (r && r.soldier) soldierEvent(r, 'hit'); if (me.lastGun && performance.now() - (me.lastShotAt || 0) < 600) addXp(me.lastGun, (m.dmg | 0) * XP_RULES.dmg); audio.play(m.group === 'head' ? 'head' : 'hit', 1.25); if (hud.hitmark) hud.hitmark(m.group === 'head' ? 'head' : ''); stats.dmg += m.dmg | 0; dmgTo.set(m.id, (dmgTo.get(m.id) || 0) + (m.dmg | 0)); if (S.dmgNums && r && r.g) { const head = m.group === 'head', armored = !head && (m.armor | 0) > 0; const col = head ? '#ff4b4b' : armored ? '#5ec8ff' : '#ffffff'; const sc = 1 + Math.min(0.45, (m.dmg | 0) / 220); textPop(scene, r.g.position.x + (Math.random() - 0.5) * 0.7, r.g.position.y + (head ? 1.75 : 1.25), r.g.position.z + (Math.random() - 0.5) * 0.7, String(m.dmg | 0), col, sc); } }
     function onFire(m) {
       if (m.id === myId) return;
       const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
@@ -1317,7 +1368,7 @@ export default function start({ cfg, E, N, smoke }) {
         lastSim = performance.now();
         const mp = match.players.get(myId);
         if (mp) { mp.x = me.x; mp.y = me.y; mp.z = me.z; mp.yaw = me.yaw; mp.pitch = me.pitch; mp.crouch = me.crouch; mp.lean = me.lean; mp.prone = me.prone || 0; mp.reloading = me.reload > 0; mp.onGround = me.onGround; mp.vx = me.vx; mp.vz = me.vz;
-          mp.cur = me.cur === 4 ? 4 : me.cur; mp.plant = me.cur === 5 && me.alive && (mouseBtn[0] || kd('KeyE') || E.input.touch.buttons.has('use')); mp.defusing = me.alive && ((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && ((st.bomb && st.bomb.s === 'planted') || mode === 'story') && me.team === 'CT';
+          mp.cur = me.cur === 4 ? 4 : me.cur; mp.plant = me.cur === 5 && me.alive && (mouseBtn[0] || kdA('use') || E.input.touch.buttons.has('use')); mp.defusing = me.alive && ((kdA('use') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && ((st.bomb && st.bomb.s === 'planted') || mode === 'story') && me.team === 'CT';
           for (const s of [1, 2]) if (mp.inv[s] && me.inv[s] && mp.inv[s].wid === me.inv[s].wid) { mp.inv[s].ammo = me.inv[s].ammo; mp.inv[s].reserve = me.inv[s].reserve; } }
         if (bots) bots.tick(dt);
         match.tick(dt);
@@ -1364,7 +1415,7 @@ export default function start({ cfg, E, N, smoke }) {
           if (p.tyaw != null) { let dy = p.tyaw - p.yaw; dy -= Math.round(dy / (Math.PI * 2)) * Math.PI * 2; const ka = Math.min(1, dt * 18); p.yaw += dy * ka; p.pitch += (p.tpitch - p.pitch) * ka; p.crouch += (p.tcrouch - p.crouch) * Math.min(1, dt * 12); }
         }
         netT += dt; ammoT += dt;
-        if (session && netT >= 1 / 30) { netT = 0; const fl = (me.cur === 5 && (mouseBtn[0] || kd('KeyE')) ? 1 : 0) | (((kd('KeyE') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && me.team === 'CT' ? 2 : 0) | (me.onGround ? 4 : 0) | (me.reload > 0 ? 8 : 0);
+        if (session && netT >= 1 / 30) { netT = 0; const fl = (me.cur === 5 && (mouseBtn[0] || kdA('use')) ? 1 : 0) | (((kdA('use') && me.ads < 0.5) || E.input.touch.buttons.has('use')) && me.team === 'CT' ? 2 : 0) | (me.onGround ? 4 : 0) | (me.reload > 0 ? 8 : 0);
           session.toHost('pose', [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(3), +me.pitch.toFixed(3), +me.crouch.toFixed(2), fl, me.cur, +me.lean.toFixed(2), +(me.prone || 0).toFixed(2)]); }
         if (ammoT > 1) { ammoT = 0; sendAmmo(); }
       }
@@ -1397,14 +1448,14 @@ export default function start({ cfg, E, N, smoke }) {
       if (radioOpen) { for (let k = 1; k <= 6; k++) if (kp('Digit' + k)) { hud.radioPick(k - 1); radioOpen = null; } if (kp('Digit0') || kp('Escape')) { hud.radio(null); hud.emoteWheel(null); radioOpen = null; } }
       if (!typing && !uiOpen && !radioOpen && !storyHold()) {
         if (me.alive) {
-          for (let k = 1; k <= 5; k++) if (kp('Digit' + k)) switchTo(k);
-          const leaning = me.ads > 0.5;   // aimed in with an optic (never snipers): Q / E lean left / right, toggled like R6
-          if (leaning && kp('KeyQ')) me.leanWant = me.leanWant === -1 ? 0 : -1;
-          else if (leaning && kp('KeyE')) me.leanWant = me.leanWant === 1 ? 0 : 1;
-          else if (kp('KeyQ')) switchTo(me.last || 1);
+          for (let k = 1; k <= 5; k++) if (kpA('slot' + k)) switchTo(k);
+          const leaning = me.ads > 0.5;   // aimed in with an optic (never snipers): lean keys lean left / right, toggled like R6
+          if (leaning && kpA('leanL')) me.leanWant = me.leanWant === -1 ? 0 : -1;
+          else if (leaning && kpA('leanR')) me.leanWant = me.leanWant === 1 ? 0 : 1;
+          else if (kpA('leanL')) switchTo(me.last || 1);
           if (kp('WheelDown') || kp('WheelUp')) { const order = [1, 2, 3, 4, 5].filter((s) => s === 4 ? me.nades.length : me.inv[s]); const i = order.indexOf(me.cur); switchTo(order[(i + (kp('WheelDown') ? 1 : order.length - 1)) % order.length]); }
-          if (kp('KeyR') || E.input.touch.tapped.has('reload')) startReload();
-          if (kp('KeyZ') || E.input.touch.tapped.has('prone')) me.proneWant = !me.proneWant;   // Z: go prone / get up
+          if (kpA('reload') || E.input.touch.tapped.has('reload')) startReload();
+          if (kpA('prone') || E.input.touch.tapped.has('prone')) me.proneWant = !me.proneWant;   // go prone / get up
           const tt = E.input.touch.tapped;
           if (tt.has('swap')) { const order = [1, 2, 3].filter((k) => me.inv[k]); const i = order.indexOf(me.cur); switchTo(order[(i + 1) % order.length]); }
           if (tt.has('nade')) switchTo(4);
@@ -1412,18 +1463,18 @@ export default function start({ cfg, E, N, smoke }) {
           if (leaning && tt.has('leanL')) me.leanWant = me.leanWant === -1 ? 0 : -1;
           if (leaning && tt.has('leanR')) me.leanWant = me.leanWant === 1 ? 0 : 1;
           if (tt.has('alt') && adsOptic) me.adsToggle = !me.adsToggle;
-          if (kp('KeyF') || E.input.touch.tapped.has('inspect')) { me.inspect = 2.2; const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)) || (isMythic(held) ? 'mythic' : null); if (me.inspectStyle === 'mythic') { flareGlow(1); me.inspectGlow = ((itemInfo(held) || {}).paint || {}).glow || '#ff2e4c'; } if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
-          if (mode === 'story' && (kp('KeyG') || E.input.touch.tapped.has('ability') || E.input.touch.tapped.has('buy'))) toHost('ability', 1);
-          else if (kp('KeyG')) { if (me.cur === 5 && me.inv[5]) { toHost('dropc4', 1); } else if (me.cur === 1 || me.cur === 2) { sendAmmo(); toHost('drop', me.cur); } }
-          if (!leaning && (kp('KeyE') || E.input.touch.tapped.has('use'))) { const d = nearestDrop(); if (d && !(st.bomb && st.bomb.s === 'planted' && me.team === 'CT' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2)) { sendAmmo(); toHost('pickup', d.id); } }
+          if (kpA('inspect') || E.input.touch.tapped.has('inspect')) { me.inspect = 2.2; const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)) || (isMythic(held) ? 'mythic' : null); if (me.inspectStyle === 'mythic') { flareGlow(1); me.inspectGlow = ((itemInfo(held) || {}).paint || {}).glow || '#ff2e4c'; } if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
+          if (mode === 'story' && (kpA('drop') || E.input.touch.tapped.has('ability') || E.input.touch.tapped.has('buy'))) toHost('ability', 1);
+          else if (kpA('drop')) { if (me.cur === 5 && me.inv[5]) { toHost('dropc4', 1); } else if (me.cur === 1 || me.cur === 2) { sendAmmo(); toHost('drop', me.cur); } }
+          if (!leaning && (kpA('use') || E.input.touch.tapped.has('use'))) { const d = nearestDrop(); if (d && !(st.bomb && st.bomb.s === 'planted' && me.team === 'CT' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2)) { sendAmmo(); toHost('pickup', d.id); } }
           const w = curWeapon();
-          if (kp('M2') || E.input.touch.tapped.has('alt')) {
+          if (kpA('altfire') || E.input.touch.tapped.has('alt')) {
             if (w && w.zoom) { me.scoped = (me.scoped + 1) % (w.zoom.length + 1); audio.play('tick'); }
             else if (w && w.cat === 'knife') fire(true);
             else if (me.cur === 4) fire(true);
             else if (w && w.burst && !adsOptic) { me.burst = !me.burst; toast(me.burst ? 'Burst fire' : 'Automatic / semi'); }
           }
-          if (kp('KeyX') && w && w.burst) { me.burst = !me.burst; toast(me.burst ? 'Burst fire' : 'Automatic / semi'); }
+          if (kpA('burst') && w && w.burst) { me.burst = !me.burst; toast(me.burst ? 'Burst fire' : 'Automatic / semi'); }
           const firing = mouseBtn[0] || E.input.touch.buttons.has('fire');
           if (firing && !frozen) {
             if (me.cur === 4) { if (kp('M0') || E.input.touch.tapped.has('fire')) fire(false); }
@@ -1431,16 +1482,16 @@ export default function start({ cfg, E, N, smoke }) {
           }
           if (me.burstLeft > 0 && me.cd <= 0) { me.burstLeft--; fire(false); }
         }
-        if (mode !== 'story' && (kp('KeyB') || E.input.touch.tapped.has('buy'))) openBuy();
-        if (kp('KeyY')) hud.chatInput(false, (t) => toHost('chat', { text: t, team: false }));
-        if (kp('KeyU')) hud.chatInput(true, (t) => toHost('chat', { text: t, team: true }));
-        if (kp('KeyT') && me.alive) { radioOpen = 'emote'; hud.emoteWheel(profile.wheel().map((id) => EMOTE_BY_ID[id]).filter(Boolean), (e) => toHost('emote', e.id)); }
-        for (const k of S.crouchKey === 'c' ? ['v', 'x'] : ['v', 'x', 'c']) if (kp('Key' + k.toUpperCase()) && !kd('ControlLeft')) { radioOpen = k; hud.radio(k, me.team, (t) => toHost('chat', { text: '📻 ' + t, team: true })); }
+        if (mode !== 'story' && (kpA('buy') || E.input.touch.tapped.has('buy'))) openBuy();
+        if (kpA('chat')) hud.chatInput(false, (t) => toHost('chat', { text: t, team: false }));
+        if (kpA('teamchat')) hud.chatInput(true, (t) => toHost('chat', { text: t, team: true }));
+        if (kpA('emote') && me.alive) { radioOpen = 'emote'; hud.emoteWheel(profile.wheel().map((id) => EMOTE_BY_ID[id]).filter(Boolean), (e) => toHost('emote', e.id)); }
+        { const ckL = ((KB.crouch[0] || 'ControlLeft').replace(/^Key/, '')).toLowerCase(); for (const k of ['v', 'x', 'c'].filter((l) => l !== ckL)) if (kp('Key' + k.toUpperCase()) && !kdA('crouch')) { radioOpen = k; hud.radio(k, me.team, (t) => toHost('chat', { text: '📻 ' + t, team: true })); } }
       } else if (uiOpen === 'buy') {
-        if (kp('KeyB') || kp('Escape')) closeBuy();
+        if (kpA('buy') || kp('Escape')) closeBuy();
         if (!canBuy()) closeBuy();
       }
-      showSb = kd('Tab') || E.input.touch.buttons.has('score');
+      showSb = kdA('score') || E.input.touch.buttons.has('score');
       if (mob) { const sh = !uiOpen && !ended; if (sh !== mobShown) { mobShown = sh; mob.show(sh); } mob.setAiming(me.ads > 0.5); }
       // movement (frozen in freeze time)
       { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || me.adsToggle); if (!wantAds && !mouseBtn[2] && (me.reload > 0 || !adsOptic || !me.alive)) me.adsToggle = false; me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0;
@@ -1450,10 +1501,10 @@ export default function start({ cfg, E, N, smoke }) {
         if (want && W) { const sgn = Math.sign(want), o = { x: me.x, y: me.y + eyeHeight(me), z: me.z }, dr = { x: Math.cos(me.yaw) * sgn, y: 0, z: -Math.sin(me.yaw) * sgn }, hit = W.ray(o, dr, LEAN + 0.2, 0); if (hit) want = sgn * Math.max(0, Math.min(1, (hit.t - 0.2) / LEAN)); }
         me.lean += (want - me.lean) * Math.min(1, dt * 9); if (Math.abs(me.lean) < 0.002) me.lean = 0; }
       const w0 = curWeapon(), wspeed = (w0 ? (me.scoped && w0.scopedSpeed ? w0.scopedSpeed : w0.speed) : 245) * U * (1 - 0.2 * me.ads) * (mineStory().speed || 1);
-      const mv = typing || uiOpen === 'pause' ? { x: 0, y: 0 } : (() => { let x = (kd('KeyD') ? 1 : 0) - (kd('KeyA') ? 1 : 0), y = (kd('KeyW') ? 1 : 0) - (kd('KeyS') ? 1 : 0); if (E.input.touch.active && (E.input.touch.move.x || E.input.touch.move.y)) { x = E.input.touch.move.x; y = E.input.touch.move.y; } return { x, y }; })();
-      if (me.emote) { me.emote.t += dt; if (me.emote.t > me.emote.dur || !me.alive || mv.x || mv.y || mouseBtn[0] || kd('Space')) me.emote = null; }
+      const mv = typing || uiOpen === 'pause' ? { x: 0, y: 0 } : (() => { let x = (kdA('right') ? 1 : 0) - (kdA('left') ? 1 : 0), y = (kdA('forward') ? 1 : 0) - (kdA('back') ? 1 : 0); if (E.input.touch.active && (E.input.touch.move.x || E.input.touch.move.y)) { x = E.input.touch.move.x; y = E.input.touch.move.y; } return { x, y }; })();
+      if (me.emote) { me.emote.t += dt; if (me.emote.t > me.emote.dur || !me.alive || mv.x || mv.y || mouseBtn[0] || kdA('jump')) me.emote = null; }
       if (me.alive) {
-        const inp = { f: frozen ? 0 : mv.y, s: frozen ? 0 : mv.x, jump: !frozen && !typing && (kd('Space') || E.input.touch.buttons.has('jump')), crouch: !typing && !me.proneWant && (S.crouchKey === 'c' ? kd('KeyC') : (kd('ControlLeft') || kd('ControlRight'))) || E.input.touch.buttons.has('crouch'), prone: !!me.proneWant, sprint: !typing && (kd('ShiftLeft') || kd('ShiftRight') || E.input.touch.buttons.has('sprint')) && me.ads < 0.3 };
+        const inp = { f: frozen ? 0 : mv.y, s: frozen ? 0 : mv.x, jump: !frozen && !typing && (kdA('jump') || E.input.touch.buttons.has('jump')), crouch: (!typing && !me.proneWant && kdA('crouch')) || E.input.touch.buttons.has('crouch'), prone: !!me.proneWant, sprint: !typing && (kdA('sprint') || E.input.touch.buttons.has('sprint')) && me.ads < 0.3 };
         if (inp.jump && me.proneWant) { me.proneWant = false; inp.jump = false; }   // jump gets you up
         if (me.walkTo) { const dx = me.walkTo[0] - me.x, dz = me.walkTo[1] - me.z; if (Math.hypot(dx, dz) < 0.4 || !(SC && SC.cutscene)) me.walkTo = null; else { me.yaw = Math.atan2(-dx, -dz); inp.f = 1; inp.s = 0; inp.walk = true; } }   // a scene walking you somewhere
         const wasG = me.onGround;
