@@ -102,14 +102,16 @@ const CSS = `
 .cs-xh{position:absolute;left:50%;top:50%;width:0;height:0}.cs-hm{position:fixed;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:31;opacity:0}.cs-hm i{position:absolute;width:11px;height:2px;background:#fff;box-shadow:0 0 2px #000;left:-5.5px;top:-1px}.cs-hm i:nth-child(1){transform:rotate(45deg) translateX(-12px)}.cs-hm i:nth-child(2){transform:rotate(135deg) translateX(-12px)}.cs-hm i:nth-child(3){transform:rotate(225deg) translateX(-12px)}.cs-hm i:nth-child(4){transform:rotate(315deg) translateX(-12px)}.cs-hm.head i{background:#ffd54a}.cs-hm.kill i{background:#ff3b3b;width:14px}.cs-hm.on{animation:csHm .26s ease-out}@keyframes csHm{0%{opacity:1;transform:scale(1.35)}35%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.9)}}.cs-xh i{position:absolute;background:var(--xc,#5f5);box-shadow:0 0 0 1px rgba(0,0,0,var(--xo,.6))}
 .cs-scope{position:fixed;inset:0;z-index:19;pointer-events:none;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 34vh,#000 34.2vh)}
 .cs-scope.ret:before,.cs-scope.ret:after{display:none}
-.cs-ads{position:fixed;inset:0;z-index:18;pointer-events:none;display:none}
-.cs-ads .dot{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#ff2a2a;box-shadow:0 0 6px 2px rgba(255,40,40,.7)}
-.cs-ads .holo{position:absolute;left:50%;top:50%;width:10vh;height:10vh;transform:translate(-50%,-50%);filter:drop-shadow(0 0 3px rgba(255,50,50,.8))}
+.cs-ads{position:fixed;inset:0;z-index:18;pointer-events:none;display:none;--ret-gain:1}
+.cs-ads .dot{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:radial-gradient(circle,#fff8f0 0%,#ff5040 35%,#ff2010 70%);box-shadow:0 0 2px 1px rgba(255,240,220,calc(.9*var(--ret-gain))),0 0 8px 3px rgba(255,45,35,calc(.75*var(--ret-gain))),0 0 20px 8px rgba(255,30,20,calc(.3*var(--ret-gain)))}
+.cs-ads .holo{position:absolute;left:50%;top:50%;width:11vh;height:11vh;transform:translate(-50%,-50%);filter:drop-shadow(0 0 1px rgba(255,90,70,calc(.95*var(--ret-gain)))) drop-shadow(0 0 4px rgba(255,45,35,calc(.7*var(--ret-gain)))) drop-shadow(0 0 12px rgba(255,30,20,calc(.35*var(--ret-gain))))}
 .cs-ads.reddot{background:radial-gradient(circle at 50% 50%,rgba(120,180,255,.04) 0,rgba(120,180,255,.06) 24vh,rgba(10,12,14,.85) 25.5vh,rgba(22,24,28,.97) 30vh,rgba(10,12,14,.9) 33vh,transparent 36vh)}
-.cs-ads.reddot::after{content:'';position:absolute;left:50%;top:50%;width:52vh;height:52vh;transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 6vh rgba(0,0,0,.45)}
-.cs-ads.holo::before{content:'';position:absolute;left:50%;top:48%;width:64vh;height:42vh;transform:translate(-50%,-50%);border:4.5vh solid rgba(20,22,26,.96);border-radius:2.5vh;box-shadow:0 0 0 1px rgba(255,255,255,.08),inset 0 0 5vh rgba(80,140,255,.12)}
+.cs-ads.reddot::after{content:'';position:absolute;left:50%;top:50%;width:52vh;height:52vh;transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 6vh rgba(0,0,0,.45),inset 0 0 1px rgba(140,180,220,.25)}
+.cs-ads.holo::before{content:'';position:absolute;left:50%;top:48%;width:68vh;height:46vh;transform:translate(-50%,-50%);border-radius:3vh;background:linear-gradient(180deg,#2b2d34 0%,#1b1c21 12%,#141518 100%);box-shadow:0 0 0 1px rgba(0,0,0,.92),inset 0 2px 3px rgba(255,255,255,.14),inset 0 -4px 8px rgba(0,0,0,.65),0 4px 24px rgba(0,0,0,.5)}
+.cs-ads.holo::after{content:'';position:absolute;left:50%;top:48%;width:54vh;height:32vh;transform:translate(-50%,-50%);border-radius:1.6vh;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.10) 46%,rgba(255,255,255,.03) 51%,transparent 56%),radial-gradient(ellipse at 50% 38%,rgba(130,190,210,.12) 0%,rgba(90,150,170,.06) 55%,transparent 100%),linear-gradient(180deg,rgba(45,75,95,.14) 0%,rgba(25,45,60,.09) 100%);box-shadow:inset 0 0 0 1px rgba(0,0,0,.75),inset 0 0 4vh rgba(0,0,0,.4),inset 0 1px 2px rgba(160,210,235,.18)}
 .cs-ads.acog{background:radial-gradient(circle at 50% 50%,transparent 0,transparent 31vh,rgba(0,0,0,.55) 33vh,rgba(0,0,0,.94) 35vh)}
-.cs-ads .chev{position:absolute;left:50%;top:50%;width:34vh;height:34vh;transform:translate(-50%,-50%)}
+.cs-ads.acog::after{content:'';position:absolute;left:50%;top:50%;width:62vh;height:62vh;transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 8vh rgba(0,0,0,.5)}
+.cs-ads .chev{position:absolute;left:50%;top:50%;width:34vh;height:34vh;transform:translate(-50%,-50%);filter:drop-shadow(0 0 2px rgba(255,60,40,calc(.9*var(--ret-gain)))) drop-shadow(0 0 8px rgba(255,40,30,calc(.4*var(--ret-gain))))}
 .cs-scope:before,.cs-scope:after{content:"";position:absolute;background:#000}.cs-scope:before{left:0;right:0;top:50%;height:1px}.cs-scope:after{top:0;bottom:0;left:50%;width:1px}
 .cs-flash{position:fixed;inset:0;z-index:25;background:#fff;pointer-events:none;opacity:0}
 .cs-hurt{position:fixed;inset:0;z-index:18;pointer-events:none;background:radial-gradient(transparent 55%,rgba(200,0,0,.55));opacity:0;transition:opacity .25s}
@@ -583,17 +585,17 @@ const svg = (k) => `<svg viewBox="0 0 24 24"><path d="${ICON[k]}"/></svg>`;
 // sniper scope reticles (drawn over the scope view) and the aim-down-sights optics' reticles
 const RS = (inner) => `<svg viewBox="-100 -100 200 200" style="position:absolute;left:50%;top:50%;width:68vh;height:68vh;transform:translate(-50%,-50%)">${inner}</svg>`;
 const RETICLES = {
-  duplex: RS('<path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="3"/><path d="M-22 0H22M0 -22V22" stroke="#000" stroke-width="0.8"/>'),
-  mildot: RS('<path d="M-100 0H100M0 -100V100" stroke="#000" stroke-width="0.8"/>' + [-60, -45, -30, -15, 15, 30, 45, 60].map((k) => `<circle cx="${k}" cy="0" r="1.8"/><circle cx="0" cy="${k}" r="1.8"/>`).join('')),
-  dotret: RS('<path d="M-100 0H-30M30 0H100M0 -100V-30M0 30V100" stroke="#000" stroke-width="2"/><circle r="2.4" fill="#ff2a2a"/>'),
-  circle: RS('<circle r="22" fill="none" stroke="#000" stroke-width="1.2"/><path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="1"/><circle r="1" />'),
-  chevret: RS('<path d="M-9 9L0 0L9 9" fill="none" stroke="#ff3a2a" stroke-width="1.6"/><path d="M0 14V100M-100 0H-40M40 0H100" stroke="#000" stroke-width="1.2"/>'),
-  hotdog: RS('<ellipse rx="16" ry="5" fill="#d8a050"/><ellipse rx="18" ry="3" fill="#b8402a"/><path d="M-14 -1Q-10 -4 -6 -1T2 -1T10 -1" stroke="#f2d33c" fill="none" stroke-width="1.2"/><path d="M-100 0H-24M24 0H100M0 -100V-12M0 12V100" stroke="#000" stroke-width="1"/>'),
+  duplex: RS('<path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="4.5" opacity="0.35"/><path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#0a0a0a" stroke-width="3"/><path d="M-22 0H22M0 -22V22" stroke="#000" stroke-width="1.6" opacity="0.35"/><path d="M-22 0H22M0 -22V22" stroke="#0a0a0a" stroke-width="0.8"/>'),
+  mildot: RS('<path d="M-100 0H100M0 -100V100" stroke="#000" stroke-width="1.8" opacity="0.35"/><path d="M-100 0H100M0 -100V100" stroke="#0a0a0a" stroke-width="0.8"/>' + [-60, -45, -30, -15, 15, 30, 45, 60].map((k) => `<circle cx="${k}" cy="0" r="2.6" fill="#000" opacity="0.35"/><circle cx="${k}" cy="0" r="1.8"/><circle cx="0" cy="${k}" r="2.6" fill="#000" opacity="0.35"/><circle cx="0" cy="${k}" r="1.8"/>`).join('')),
+  dotret: RS('<path d="M-100 0H-30M30 0H100M0 -100V-30M0 30V100" stroke="#000" stroke-width="3" opacity="0.35"/><path d="M-100 0H-30M30 0H100M0 -100V-30M0 30V100" stroke="#0a0a0a" stroke-width="2"/><circle r="3.4" fill="#ff2a1a" opacity="0.5"/><circle r="2.4" fill="#ff2a1a"/><circle r="1" fill="#ffe0cc"/>'),
+  circle: RS('<circle r="23.5" fill="none" stroke="#000" stroke-width="2.4" opacity="0.35"/><circle r="22" fill="none" stroke="#0a0a0a" stroke-width="1.2"/><path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="2" opacity="0.35"/><path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#0a0a0a" stroke-width="1"/><circle r="1.8" fill="#000" opacity="0.4"/><circle r="1" />'),
+  chevret: RS('<path d="M-9 9L0 0L9 9" fill="none" stroke="#ff3a22" stroke-width="2.6" opacity="0.45"/><path d="M-9 9L0 0L9 9" fill="none" stroke="#ff3a22" stroke-width="1.6"/><circle r="0.8" fill="#ffe0cc"/><path d="M0 14V100M-100 0H-40M40 0H100" stroke="#000" stroke-width="2.2" opacity="0.35"/><path d="M0 14V100M-100 0H-40M40 0H100" stroke="#0a0a0a" stroke-width="1.2"/>'),
+  hotdog: RS('<ellipse rx="16" ry="5" fill="#d8a050"/><ellipse rx="18" ry="3" fill="#b8402a"/><path d="M-14 -1Q-10 -4 -6 -1T2 -1T10 -1" stroke="#f2d33c" fill="none" stroke-width="1.2"/><path d="M-100 0H-24M24 0H100M0 -100V-12M0 12V100" stroke="#000" stroke-width="2" opacity="0.35"/><path d="M-100 0H-24M24 0H100M0 -100V-12M0 12V100" stroke="#0a0a0a" stroke-width="1"/>'),
 };
 const ADS_RET = {
   reddot: '<div class="dot"></div>',
-  holo: '<svg viewBox="-20 -20 40 40" class="holo"><circle r="13" fill="none" stroke="#ff3030" stroke-width="1.3"/><circle r="1.6" fill="#ff3030"/><path d="M0 -13V-9M0 13V9M-13 0H-9M13 0H9" stroke="#ff3030" stroke-width="1.3"/></svg>',
-  acog: '<svg viewBox="-20 -20 40 40" class="chev"><path d="M-3.5 3L0 -0.5L3.5 3" fill="none" stroke="#ff3a2a" stroke-width="1"/><path d="M0 3.5V14M-12 0H-6M6 0H12" stroke="#111" stroke-width="0.6"/></svg>',
+  holo: '<svg viewBox="-20 -20 40 40" class="holo"><g fill="none" stroke="#ff2e1e"><circle r="13" stroke-width="1.2" opacity="0.95"/><path d="M0 -13V-9.5M0 13V9.5M-13 0H-9.5M13 0H9.5" stroke-width="1.2"/></g><circle r="1.7" fill="#ff2e1e"/><circle r="0.7" fill="#ffe8d8"/></svg>',
+  acog: '<svg viewBox="-20 -20 40 40" class="chev"><path d="M-4 3.5L0 -1L4 3.5" fill="none" stroke="#ff3a22" stroke-width="1.1"/><circle r="0.55" fill="#ffe0cc"/><path d="M0 4V15M-13 0H-7M7 0H13" stroke="#151515" stroke-width="0.7"/></svg>',
 };
 // a case drawn from its pull set's colours (a box with a stripe and the case's name)
 function drawCase(c, crate) {
@@ -799,7 +801,9 @@ export class Menu {
         ${P.signedIn ? (it.listed ? '<button class="cs-btn alt sm" data-unlist>Remove listing</button>' : '<input type="number" min="1" id="lp" placeholder="price" style="width:100px"><button class="cs-btn alt sm" data-list>List on market</button>') : ''}</div></div>`;
     document.body.appendChild(m);
     const v = viewer($('canvas', m), it); if (!v) drawItem($('canvas', m), it);
-    const close = () => { if (v) v.stop(); m.remove(); };
+    const close = () => { try { if (v) v.stop(); } catch (e) {} m.remove(); document.removeEventListener('keydown', escClose); };
+    const escClose = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', escClose);
     // 3D model or collector's card
     m.querySelectorAll('[data-vw]').forEach((b) => (b.onclick = () => {
       const card = b.dataset.vw === 'card';
@@ -835,7 +839,9 @@ export class Menu {
     document.body.appendChild(m);
     const lo = P.loadoutFor('T'), perf = AGENT_BY_ID[lo.agent] || AGENT_BY_ID.a_t_default;   // performed by your own outfit
     const v = viewer($('canvas', m), it, { performer: { look: perf.look, team: perf.team } }); if (!v) drawItem($('canvas', m), it);
-    const rm0 = m.remove.bind(m); m.remove = () => { if (v) v.stop(); rm0(); };
+    const rm0 = m.remove.bind(m); m.remove = () => { try { if (v) v.stop(); } catch (e) {} rm0(); document.removeEventListener('keydown', escClose2); };
+    const escClose2 = (e) => { if (e.key === 'Escape') m.remove(); };
+    document.addEventListener('keydown', escClose2);
     $('[data-x]', m).onclick = () => m.remove(); m.onclick = (e) => { if (e.target === m) m.remove(); };
     m.querySelectorAll('[data-slot]').forEach((b) => (b.onclick = () => { P.setWheel(+b.dataset.slot, info.weapon); this.h.toast('On your emote wheel'); m.remove(); }));
     $('[data-sell]', m).onclick = async () => { if (!confirm('Sell ' + info.finish + '?')) return; try { await P.sell(it.uid); } catch (e) { this.h.toast(e.message); } m.remove(); this.render(); };
@@ -1233,6 +1239,13 @@ export class Hud {
   setAds(kind) {
     if (this.adsKind === kind) return; this.adsKind = kind;
     this.ads.style.display = kind ? 'block' : 'none'; this.ads.innerHTML = kind ? (ADS_RET[kind] || '') : ''; this.ads.className = 'cs-ads ' + (kind || '');
+  }
+  // reticle brightness follows the environment (brighter in daylight): 0.7 dim .. 1.4 bright
+  setReticleGain(g) {
+    const v = Math.max(0.5, Math.min(1.6, g || 1));
+    if (this.retGain === v) return; this.retGain = v;
+    this.ads.style.setProperty('--ret-gain', v.toFixed(2));
+  }
   }
   feed(e, mineId) {
     const box = this.q('.feed'), row = document.createElement('div'); row.className = 'kf' + (e.kid === mineId || e.vid === mineId ? ' mine' : '');
