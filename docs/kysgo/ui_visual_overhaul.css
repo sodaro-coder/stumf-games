@@ -1,8 +1,6 @@
-/* TEST: bright red background - remove after confirming */
-.cs.cs-menu{ background:#ff0000 !important; }
 
 /* ---------- Version badge: proves the overhaul is live ---------- */
-/*DISABLED*/ .cs.cs-menu .cs-brand::after{
+.cs.cs-menu .cs-brand::after{
   content:" v2.1";
   font-size:10px; color:#f2a33a; font-weight:700;
   margin-left:6px; vertical-align:super;
