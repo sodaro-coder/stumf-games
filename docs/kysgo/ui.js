@@ -11,7 +11,9 @@ import { cardInto, cardImage, gradeBadge } from './cards.js';
 import * as WAL from './wallet.js';
 import { VOICE_PACKS } from './voices.js';
 import { ATTACH, slotsFor, optionsFor, gunLevel, xpForLevel, GUN_MAX } from './guns.js';
+import { AIM_DRAINS, AIM_SIZES, AIM_SPEEDS, AIM_PACES, AIM_DURS, aimWeapons, defaultAimCfg, getAimPB, aimPBKey } from './aim_trainer.js';
 import { topUp as sdkTopUp } from '../sdk/topup.js';
+import { loadRejoin, clearRejoin } from './reconnect.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -579,7 +581,7 @@ const ICON = {  // nav icons (simple inline SVG paths)
   story: 'M3 5c3-1 6-1 8 1v14c-2-2-5-2-8-1zM21 5c-3-1-6-1-8 1v14c2-2 5-2 8-1z',
   guns: 'M11 2h2v4h-2zM11 18h2v4h-2zM2 11h4v2H2zM18 11h4v2h-4zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z',
   home: 'M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z', play: 'M7 4l13 8-13 8z', pass: 'M5 3h14v18l-7-4-7 4z', inv: 'M4 7h16v13H4zM8 7V4h8v3', crates: 'M3 8l9-5 9 5v8l-9 5-9-5zM12 13v8M3 8l9 5 9-5',
-  market: 'M4 9l2-5h12l2 5zM5 9h14v11H5zM9 14h6', quests: 'M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z', friends: 'M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1 21c0-4 3-7 7-7s7 3 7 7zM17 11a3 3 0 1 0 0-6M16 14c4 0 7 3 7 7h-6', admin: 'M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6z', profile: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22c1-5 5-8 9-8s8 3 9 8z', settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 2h4l1 3 3 1 3-1 2 3-2 3 1 2-1 2 2 3-2 3-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-3 2-3-1-2 1-2-2-3 2-3 3 1 3-1z',
+  market: 'M4 9l2-5h12l2 5zM5 9h14v11H5zM9 14h6', aim: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm0 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4z', quests: 'M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z', friends: 'M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1 21c0-4 3-7 7-7s7 3 7 7zM17 11a3 3 0 1 0 0-6M16 14c4 0 7 3 7 7h-6', admin: 'M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6z', profile: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22c1-5 5-8 9-8s8 3 9 8z', settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 2h4l1 3 3 1 3-1 2 3-2 3 1 2-1 2 2 3-2 3-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-3 2-3-1-2 1-2-2-3 2-3 3 1 3-1z',
 };
 const svg = (k) => `<svg viewBox="0 0 24 24"><path d="${ICON[k]}"/></svg>`;
 // sniper scope reticles (drawn over the scope view) and the aim-down-sights optics' reticles
@@ -623,7 +625,7 @@ export class Menu {
     this.root = document.createElement('div'); this.root.className = 'cs cs-menu';
     const title = esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`);
     this.root.innerHTML = `<canvas class="cs-stage"></canvas><div class="cs-vig"></div>
-      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${(this.h.back ? [['inv', 'Inventory'], ['guns', 'Gunsmith'], ['settings', 'Settings']] : [['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])])
+      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${(this.h.back ? [['inv', 'Inventory'], ['guns', 'Gunsmith'], ['settings', 'Settings']] : [['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['aim', 'Aim Trainer'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])])
         .map(([k, n]) => `<button data-tab="${k}">${svg(k)}<span>${n}</span></button>`).join('')}</nav>
         <div class="cs-acct"><button class="cs-coinbox" id="mTop" style="cursor:pointer;color:#7ed957">＋ TOP UP</button><span class="cs-coinbox" id="mCoins"></span><div class="cs-rank"><b id="mLvlN">1</b><div><div style="font:700 11px system-ui;color:#c8d0da" id="mName"></div><div class="xp"><i id="mXp"></i></div></div></div>
         ${this.h.back ? '<button class="cs-btn" id="mBack" style="margin-right:8px">◀ BACK TO PARTY</button>' : ''}<button class="cs-ibtn" id="mFull" title="Fullscreen (also makes Ctrl-crouch safe)">⛶</button></div></div>
@@ -719,7 +721,8 @@ export class Menu {
               <div class="cs-small cs-mut">${rk.n < PLACEMENTS ? `Placement matches: ${rk.n}/${PLACEMENTS} (double rating swings)` : `${rk.rr} RR${nx ? ` · ${nx.rr - rk.rr} to ${esc(nx.name)}` : ' · top rank'}`} · ${rk.w} wins</div>
               <div class="cs-small cs-mut" style="margin-top:6px">Ranked rules: bots only on Normal or Hard, and one team must be all real players before it starts. Wins vs bot opponents count half. First time you reach a rank: 300 coins × its tier.${this.P.cloud && !this.P.signedIn ? ' <b>Sign in to save your rank.</b>' : ''}</div></div></div>`; })() : ''}
           <div style="margin-top:22px"><button class="cs-go" id="pGo">GO</button></div></div>
-        <div><div class="cs-panel2"><h3>Join a friend</h3><div class="bd"><div class="cs-row"><input id="pCode" maxlength="5" placeholder="INVITE CODE" style="flex:1;text-transform:uppercase"><button class="cs-btn" id="pJoin">Join</button></div></div></div>
+        <div>${(() => { const rj = loadRejoin(); if (!rj) return ''; const ago = Math.max(0, Math.round((Date.now() - (rj.t || Date.now())) / 60000)); const mm = (typeof MODES[rj.mode] !== 'undefined' && MODES[rj.mode].name) || '', mp = (MAPS[rj.map] || {}).name || ''; return `<div class="cs-panel2" style="border-color:#7cf29c"><h3>🔄 Rejoin match</h3><div class="bd"><div class="cs-row"><div style="flex:1;min-width:0"><b style="color:#7cf29c">${esc(rj.code)}</b> <span class="cs-mut cs-small">${esc(mm)}${mp ? ' · ' + esc(mp) : ''} · ${ago < 1 ? 'just now' : ago + ' min ago'}</span></div><button class="cs-btn" id="pRejoin">Rejoin</button><button class="cs-btn alt sm" id="pRejoinX" title="dismiss">✕</button></div><div class="cs-mut cs-small" style="margin-top:6px">Your slot is kept for a few minutes after a disconnect.</div></div></div>`; })()}
+          <div class="cs-panel2"><h3>Join a friend</h3><div class="bd"><div class="cs-row"><input id="pCode" maxlength="5" placeholder="INVITE CODE" style="flex:1;text-transform:uppercase"><button class="cs-btn" id="pJoin">Join</button></div></div></div>
           <div class="cs-panel2"><h3>Open lobbies</h3><div class="bd" id="pList"><span class="cs-mut cs-small">Looking for lobbies…</span></div></div></div></div>`;
     B.querySelectorAll('[data-mode]').forEach((e) => (e.onclick = () => { s.mode = e.dataset.mode; this.render(); }));
     B.querySelectorAll('[data-map]').forEach((e) => (e.onclick = () => { s.map = e.dataset.map; this.render(); }));
@@ -730,6 +733,8 @@ export class Menu {
       this.h.play({ mode: s.mode, map: s.map, bot: s.bot, host: true, solo: s.host === 'bots', pub: s.host === 'pub' || rkd, ranked: rkd }); };
     const code = $('#pCode', B); const hash = location.hash.slice(1).toUpperCase(); if (/^[A-Z0-9]{5}$/.test(hash)) code.value = hash;
     $('#pJoin', B).onclick = () => { const c = code.value.trim().toUpperCase(); if (c.length === 5) this.h.play({ code: c, host: false }); };
+    const pr = $('#pRejoin', B); if (pr) pr.onclick = () => { const rj = loadRejoin(); if (rj) this.h.play({ code: rj.code, host: false, rejoin: true }); };
+    const px = $('#pRejoinX', B); if (px) px.onclick = () => { clearRejoin(); this.render(); };
     if (!this.lb) this.lb = this.h.lobbies((list) => { this.lobbies = list; const el = $('#pList', this.root); if (!el) return;
       el.innerHTML = list.length ? '' : '<span class="cs-mut cs-small">No open lobbies right now: host one!</span>';
       for (const l of list) { const r = document.createElement('div'); r.className = 'cs-row'; r.style.marginBottom = '8px'; r.innerHTML = '<div style="flex:1;min-width:0"><b class="n" style="display:block;font-size:13px"></b><span class="cs-mut cs-small m"></span></div><button class="cs-btn sm">Join</button>';
@@ -765,6 +770,52 @@ export class Menu {
     B.querySelectorAll('[data-sh]').forEach((e) => (e.onclick = () => { s.host = e.dataset.sh; this.render(); }));
     $('#sGo', B).onclick = () => this.h.play({ story: { mission: s.mission, diff: s.diff, host: s.char }, bot: STORY_DIFF[s.diff].bot, host: true, solo: s.host === 'solo', pub: false });
     const cont = $('#sCont', B); if (cont) cont.onclick = () => this.h.play({ story: { mission: saved.mission, obj: saved.obj | 0, diff: saved.diff || 'normal', host: saved.char || s.char, runId: saved.runId }, bot: (STORY_DIFF[saved.diff] || STORY_DIFF.normal).bot, host: true, solo: s.host === 'solo', pub: false });
+  }
+  // ---- AIM TRAINER: drill setup ----
+  tab_aim(B) {
+    const c = this.aimCfg || (this.aimCfg = defaultAimCfg());
+    const pb = getAimPB();
+    const pbFor = (drill) => { const k = aimPBKey(drill, c.weapon, c.size), p = pb[k]; return p ? `${p.score.toLocaleString()} pts · ${p.acc}%` : 'no runs yet'; };
+    const seg = (opts, cur, fn) => `<div class="cs-seg">${opts.map(([k, n]) => `<button data-v="${k}" class="${cur === k || cur === +k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+    const guns = aimWeapons(), cats = ['pistol', 'smg', 'rifle', 'sniper', 'heavy'];
+    const catName = { pistol: 'Pistols', smg: 'SMGs', rifle: 'Rifles', sniper: 'Snipers', heavy: 'Heavy' };
+    B.innerHTML = `<div class="cs-sec">Aim Trainer · practice range</div>
+      <div class="cs-small cs-mut" style="margin:-6px 0 14px">Pick a drill, pick a gun, run it. Scores and personal bests are saved on this device.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:18px">
+        ${Object.entries(AIM_DRAINS).map(([k, d]) => `<div class="cs-panel2" data-drill="${k}" style="cursor:pointer;${c.drill === k ? 'border-color:#f2a33a' : ''}"><h3>${d.icon} ${d.name}</h3>
+          <div class="bd cs-small"><div class="cs-mut" style="margin-bottom:8px">${d.desc}</div><div>🏆 <b>${pbFor(k)}</b></div></div></div>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px" class="cs-aimsetup">
+        <div>
+          <div class="cs-sec">Weapon</div>
+          <select id="aWep" style="width:100%;max-width:340px;padding:10px;border-radius:8px;background:#151b24;color:#e8ecf0;border:1px solid #2c3442;font-size:15px">
+            ${cats.map((cat) => `<optgroup label="${catName[cat]}">${guns.filter((g) => g.cat === cat).map((g) => `<option value="${g.id}" ${c.weapon === g.id ? 'selected' : ''}>${g.name}</option>`).join('')}</optgroup>`).join('')}
+          </select>
+          <div class="cs-small cs-mut" style="margin-top:6px">Uses your equipped skin when you own one. Infinite reserve ammo, R to reload.</div>
+          <div class="cs-sec" style="margin-top:14px">Target size</div><div id="aSize">${seg(Object.entries(AIM_SIZES).map(([k, s]) => [k, s.name]), c.size)}</div>
+          ${c.drill === 'tracking' ? `<div class="cs-sec" style="margin-top:14px">Target speed</div><div id="aSpeed">${seg(Object.entries(AIM_SPEEDS).map(([k, s]) => [k, s.name]), c.speed)}</div>` : ''}
+          ${c.drill === 'flick' ? `<div class="cs-sec" style="margin-top:14px">Pace</div><div id="aPace">${seg(Object.entries(AIM_PACES).map(([k, s]) => [k, `${s.name} · ${s.max} tgt/${s.life}s`]), c.pace)}</div>` : ''}
+          <div class="cs-sec" style="margin-top:14px">Duration</div><div id="aDur">${seg(AIM_DURS.map((d) => [d, d + 's']), c.dur)}</div>
+          <div class="cs-sec" style="margin-top:14px">Sensitivity <span class="cs-mut" id="aSensV">${(+c.sens).toFixed(2)}×</span></div>
+          <input id="aSens" type="range" min="0.3" max="2.5" step="0.05" value="${c.sens}" style="width:100%;max-width:340px">
+          <div style="margin-top:20px"><button class="cs-go" id="aGo" style="max-width:340px">▶ START DRILL</button></div>
+        </div>
+        <div><div class="cs-panel2"><h3>Personal bests</h3><div class="bd cs-small">
+          ${Object.entries(pb).length ? Object.entries(pb).sort((a, b) => b[1].score - a[1].score).slice(0, 8).map(([k, p]) => { const [dr, wid, sz] = k.split('|'); return `<div class="cs-row" style="margin-bottom:6px"><span>${(AIM_DRAINS[dr] || {}).icon || ''} ${(AIM_DRAINS[dr] || {}).name || dr} · ${((guns.find((g) => g.id === wid) || {}).name || wid)} · ${sz}</span><span style="flex:1"></span><b style="color:#ffd24a">${p.score.toLocaleString()}</b></div>`; }).join('') : '<span class="cs-mut">No runs yet. Set one.</span>'}
+        </div></div>
+        <div class="cs-panel2" style="margin-top:10px"><h3>How scoring works</h3><div class="bd cs-small cs-mut">
+          🎯 Precision: 100 pts per target + speed bonus for clearing all 24.<br>🛰️ Tracking: damage dealt + 200 per target destroyed.<br>⚡ Flick: 100 per hit + speed bonus, −50 per expired target.
+        </div></div></div>
+      </div>`;
+    B.querySelectorAll('[data-drill]').forEach((e) => (e.onclick = () => { c.drill = e.dataset.drill; this.h.sound('tick'); this.render(); }));
+    const bindSeg = (id, fn) => { const el = $(id, B); if (el) el.querySelectorAll('[data-v]').forEach((b) => (b.onclick = () => { fn(b.dataset.v); this.render(); })); };
+    bindSeg('#aSize', (v) => (c.size = v));
+    bindSeg('#aSpeed', (v) => (c.speed = v));
+    bindSeg('#aPace', (v) => (c.pace = v));
+    bindSeg('#aDur', (v) => (c.dur = +v));
+    $('#aWep', B).onchange = (e) => { c.weapon = e.target.value; this.render(); };
+    const sens = $('#aSens', B); sens.oninput = () => { c.sens = +sens.value; $('#aSensV', B).textContent = (+c.sens).toFixed(2) + '×'; };
+    $('#aGo', B).onclick = () => { this.h.sound('tick'); this.h.aim({ ...c }); };
   }
   // ---- INVENTORY ----
   tab_inv(B) {
@@ -1199,7 +1250,7 @@ export class Hud {
     this.el = document.createElement('div'); this.el.className = 'cs cs-hud';
     this.el.innerHTML = `<div class="tl"><canvas class="radar" width="190" height="190"></canvas><div class="loc"></div><div class="money"></div><div class="buyic"></div></div>
       <div class="top"><div class="team" id="hT"></div><div class="scoreb" id="hsT" style="color:var(--tt)">0</div><div class="timer" id="hTime">0:00</div><div class="scoreb" id="hsCT" style="color:var(--ct)">0</div><div class="team" id="hCT"></div></div>
-      <div class="feed"></div><div class="center"></div><div class="prog" style="display:none"><span></span><div class="cs-bar"><i></i></div></div><div class="hint" style="display:none"></div>
+      <div class="feed"></div><div class="vtalk"></div><div class="center"></div><div class="prog" style="display:none"><span></span><div class="cs-bar"><i></i></div></div><div class="hint" style="display:none"></div>
       <div class="chat"></div><div class="spec" style="display:none"></div><div class="dmgdir"></div>
       <div class="bl"><div class="stat" id="hHp"><span class="ic">✚</span><span>100</span></div><div class="stat" id="hAr"><span class="ic">⛨</span><span>0</span></div></div>
       <div class="br"><div class="slots"></div><div class="ammo"></div></div><div class="cs-xh"></div>`;
@@ -1263,6 +1314,14 @@ export class Hud {
   hint(t) { const h = this.q('.hint'); h.style.display = t ? '' : 'none'; if (t) h.textContent = t; }
   spec(t) { const h = this.q('.spec'); h.style.display = t ? '' : 'none'; if (t) h.textContent = t; }
   chat(name, team, text, teamOnly) { const box = this.q('.chat'), d = document.createElement('div'); const n = document.createElement('b'); n.textContent = (teamOnly ? '(Team) ' : '') + name + ': '; n.style.color = team === 'CT' ? 'var(--ct)' : 'var(--tt)'; d.appendChild(n); d.appendChild(document.createTextNode(text)); box.appendChild(d); while (box.children.length > 6) box.firstChild.remove(); setTimeout(() => d.remove(), 9000); }
+  // voice chat: who's talking right now (HUD portraits strip)
+  voiceHUD(speakers, meTalking, meName) {
+    const box = this.q('.vtalk'); if (!box) return;
+    const html = (meTalking ? `<div class="vt me"><i>🎤</i><b>${esc(meName || 'You')}</b></div>` : '') +
+      (speakers || []).map((s) => `<div class="vt${s.muted ? ' dim' : ''}"><i>${s.muted ? '🔇' : '🔊'}</i><b>${esc(s.name)}</b></div>`).join('');
+    if (this.last.vt === html) return; this.last.vt = html;
+    box.innerHTML = html; box.style.display = html ? '' : 'none';
+  }
   hurt(angle) { this.hurtEl.style.opacity = 1; setTimeout(() => (this.hurtEl.style.opacity = 0), 200); if (angle != null) { const d = this.q('.dmgdir'); d.style.transform = `rotate(${angle}rad)`; d.style.opacity = 1; clearTimeout(this.dt); this.dt = setTimeout(() => (d.style.opacity = 0), 700); } }
   flashAmt(a) { this.flash.style.opacity = Math.max(0, Math.min(1, a)); }
   // ---- radar ----
