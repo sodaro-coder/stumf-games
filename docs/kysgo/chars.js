@@ -81,8 +81,9 @@ export function costumeOf(L) {
   const cs = {
     head: c(L.head, '#c89a74'), torso: c(L.body), arms: c(L.arms || L.body), hips: c(L.speedo || L.bikini || L.hips || L.legs), legs: c(L.legs),
     skin: skin ? 1 : 0, speedo: L.speedo || L.bikini ? 1 : 0, bikini: L.bikini ? 1 : 0, stripes: L.stripes ? 1 : 0, mustard: L.mustard ? 1 : 0, bands: L.hat === 'cone' ? 1 : 0, belly: L.belly ? 1 : 0,
+    gown: L.gown ? 1 : 0,
   };
-  cs.key = [L.head, L.body, L.legs, L.speedo, L.stripes, L.mustard, L.hat, L.belly, L.bikini].join(',');
+  cs.key = [L.head, L.body, L.legs, L.speedo, L.stripes, L.mustard, L.hat, L.belly, L.bikini, L.gown].join(',');
   return cs;
 }
 function dye(m, cs) {
@@ -91,7 +92,7 @@ function dye(m, cs) {
   m.onBeforeCompile = (sh, r) => {
     prev(sh, r);
     Object.assign(sh.uniforms, { cHead: { value: cs.head }, cTorso: { value: cs.torso }, cArms: { value: cs.arms }, cHips: { value: cs.hips }, cLegs: { value: cs.legs },
-      cFlags: { value: new THREE.Vector4(cs.skin, cs.stripes, cs.mustard, cs.bands) }, cFlags2: { value: new THREE.Vector4(cs.speedo, cs.belly, cs.bikini || 0, 0) } });
+      cFlags: { value: new THREE.Vector4(cs.skin, cs.stripes, cs.mustard, cs.bands) }, cFlags2: { value: new THREE.Vector4(cs.speedo, cs.belly, cs.bikini || 0, cs.gown || 0) } });
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;\nuniform vec3 cHead; uniform vec3 cTorso; uniform vec3 cArms; uniform vec3 cHips; uniform vec3 cLegs; uniform vec4 cFlags; uniform vec4 cFlags2;')
       .replace('#include <map_fragment>', `#include <map_fragment>
@@ -105,14 +106,29 @@ function dye(m, cs) {
 		else if (z < 106.0) { c = cHips; if (cFlags2.x > 0.5) skinR = 0.0; }
 		if (cFlags.y > 0.5 && z > 96.0 && z < 152.0 && ax < 20.0 && fract(z / 11.0) < 0.5) c = vec3(0.05);   // mime stripes
 		if (cFlags.w > 0.5 && ((z > 112.0 && z < 120.0) || (z > 128.0 && z < 136.0))) c = vec3(0.92, 0.94, 0.9);   // reflective cone bands
+		if (cFlags2.w > 0.5 && z < 152.0) {   // hospital gown: pale blue with a faint diamond print, open at the back
+			vec2 gp = vec2((vRest.x + vRest.y * 0.5) / 7.0, z / 7.0);
+			float dia = abs(fract(gp.x + gp.y) - 0.5) + abs(fract(gp.x - gp.y) - 0.5);
+			vec3 gownC = vec3(0.75, 0.85, 0.92);
+			if (dia < 0.08) gownC = vec3(0.55, 0.7, 0.85);   // the print
+			if (vRest.y < -8.0 && z > 96.0 && z < 150.0) gownC *= 0.85;   // the open back shows a shadowed gap
+			c = gownC; skinR = 0.0;
+		}
 		if (cFlags.z > 0.5 && vRest.y > 4.0 && z > 92.0 && z < 150.0 && abs(vRest.x - sin(z * 0.55) * 7.0) < 2.2) c = vec3(0.95, 0.72, 0.05);   // mustard
 		if (cFlags2.z > 0.5 && z > 124.0 && z < 135.0 && ax < 17.0) { c = cHips; skinR = 0.0; }   // a bikini top
 		c = max(c, vec3(0.05));   // near-black outfits still show their folds and plates
 		// plates take the colour with the photo's light and scratches; the undersuit a darker, matte cut of it
 		float detail = plate > 0.5 ? clamp(lum / 0.36, 0.35, 1.35) : clamp(0.55 + lum * 9.0, 0.5, 1.2);
 		vec3 dyed = c * mix(0.42 * detail, detail, plate);
-		vec3 bare = c * mix(0.88, 1.06, smoothstep(0.0, 0.4, lum));   // skin: the armour detail smoothed away
-		diffuseColor.rgb = mix(dyed, bare, skinR);
+		// skin: pores, a faint warm translucency in the hollows (cheap SSS), fabric weave on cloth
+		float pore = fract(sin(dot(floor(vRest.xy * 14.0) + floor(vRest.zz * 14.0), vec2(12.9898, 78.233))) * 43758.5453);
+		float weave = fract(sin(dot(floor(vRest.xy * 9.0), vec2(39.346, 11.135))) * 24634.6345);
+		vec3 bare = c * mix(0.88, 1.06, smoothstep(0.0, 0.4, lum));
+		bare *= 0.96 + pore * 0.07;   // skin pores
+		float hollow = smoothstep(0.45, 0.1, lum);   // shadowed skin reads warmer: light scattering through
+		bare = mix(bare, bare * vec3(1.06, 0.94, 0.9) + vec3(0.03, 0.008, 0.004), hollow * 0.55);
+		vec3 cloth = dyed * (0.94 + weave * 0.1);   // woven fabric micro-texture
+		diffuseColor.rgb = mix(mix(dyed, cloth, (1.0 - plate) * 0.7), bare, skinR);
 	}`);
   };
   const k0 = m.customProgramCacheKey;
@@ -309,6 +325,17 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
   r.mixer.update(dt);
   r.g.updateMatrixWorld(true);
   const B = r.bones;
+  if (!r.dead && !emote && r.base === 'idle') {   // breathing: chest rises, shoulders roll, weight shifts
+    const br = r.t * 1.7, inhale = (Math.sin(br) + 1) / 2;
+    _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // character's right
+    if (B.Spine2) turnWorld(B.Spine2, _v, -0.018 - inhale * 0.014);   // chest lifts on inhale
+    if (B.Spine1) turnWorld(B.Spine1, _v, -0.008 - inhale * 0.008);
+    if (B.Head) turnWorld(B.Head, _v, 0.006 + inhale * 0.006);   // chin lifts slightly
+    const sway = Math.sin(r.t * 0.45) * 0.012;   // slow weight shift
+    _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
+    if (B.Hips) turnWorld(B.Hips, _fw, sway);
+    if (B.Spine) turnWorld(B.Spine, _fw, -sway * 0.6);   // counter-sway keeps the head level
+  }
   if (!r.dead) {
     // aim: bend the spine and head with the pitch; procedural emotes on top of the idle pose
     _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // the character's right
@@ -407,6 +434,9 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       } else if (r.reloadT > 0 && B.Hips) {   // reload: the left hand drops to the mag pouch and brings a fresh one up
         const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(_t6).addScaledVector(rt, -0.18).add(_t4.set(0, 0.05, 0));
         ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, _t5.copy(lh).lerp(pouch, out), _t1.copy(B.LeftArm.getWorldPosition(_t1)).add(_t4.set(0, -0.6, 0)));
+        // tilt the whole gun inward so the mag well faces the incoming hand (like a real reload)
+        tg.rotateOnAxis(_t6.set(0, 0, 1).applyQuaternion(tg.getWorldQuaternion(_q2.identity())), out * 0.5);
+        tg.rotateOnAxis(_t6.set(1, 0, 0).applyQuaternion(tg.getWorldQuaternion(_q2.identity())), out * 0.2);
       }
     } else {   // knife, grenade, bomb: carried in the right hand as animated
       hand.getWorldPosition(_v); r.g.worldToLocal(_v);
@@ -515,7 +545,14 @@ function hat(head, L) {
     geo.setAttribute('color', new THREE.BufferAttribute(arr, 3)); parts.push(geo.index ? geo.toNonIndexed() : geo);
   };
   switch (L.hat) {
-    case 'bun': add(new THREE.CapsuleGeometry(0.075, 0.24, 3, 8), c, -0.14, 0.14, 0, 0, 0, 0.1, 1, 1, 0.8); add(new THREE.CapsuleGeometry(0.075, 0.24, 3, 8), c, 0.14, 0.14, 0, 0, 0, -0.1, 1, 1, 0.8); break;
+    case 'bun': {
+      add(new THREE.CapsuleGeometry(0.075, 0.24, 3, 8), c, -0.14, 0.14, 0, 0, 0, 0.1, 1, 1, 0.8); add(new THREE.CapsuleGeometry(0.075, 0.24, 3, 8), c, 0.14, 0.14, 0, 0, 0, -0.1, 1, 1, 0.8);
+      for (let k = 0; k < 14; k++) {   // sesame seeds scattered on the bun
+        const sx = (k % 2 ? -0.14 : 0.14) + ((k * 53) % 11 - 5) / 100, sy = 0.2 + ((k * 29) % 7) / 100, sz = ((k * 71) % 9 - 4) / 100;
+        add(new THREE.SphereGeometry(0.012, 6, 4), '#f4e0b0', sx, sy, sz, 0, 0, 0, 1, 0.7, 1.4);
+      }
+      break;
+    }
     case 'swirl': for (let k = 0; k < 3; k++) add(new THREE.TorusGeometry(0.11 - k * 0.028, 0.048 - k * 0.009, 6, 14), c, 0, 0.3 + k * 0.07, 0, Math.PI / 2); add(new THREE.ConeGeometry(0.035, 0.09, 8), c, 0.01, 0.52, 0); break;
     case 'curlers': for (let k = 0; k < 5; k++) add(new THREE.CylinderGeometry(0.026, 0.026, 0.1, 8), c, -0.09 + k * 0.045, 0.3, 0.01 - (k % 2) * 0.04, Math.PI / 2); break;
     case 'beak': add(new THREE.ConeGeometry(0.045, 0.16, 8), c, 0, 0.13, -0.17, -Math.PI / 2); break;
@@ -532,11 +569,51 @@ function hat(head, L) {
     case 'helmet': if (L.plain && !L.human) break; add(new THREE.SphereGeometry(0.155, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.17, 0.01, 0, 0, 0, 1.06, 0.92, 1.12); add(new THREE.CylinderGeometry(0.165, 0.17, 0.03, 16), c, 0, 0.17, 0.01, 0, 0, 0, 1, 1, 1.08);
       if (L.visor) add(new THREE.BoxGeometry(0.23, 0.07, 0.025), '#0e1014', 0, 0.13, -0.16, 0.12); break;
     case 'cap': add(new THREE.SphereGeometry(0.135, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.45), c, 0, 0.22, 0); add(new THREE.CylinderGeometry(0.1, 0.1, 0.014, 14), c, 0, 0.26, -0.11, 0, 0, 0, 1.05, 1, 1.1); break;
-    case 'dreads': add(new THREE.SphereGeometry(0.135, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.17, 0.01); for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2, dx = Math.cos(a), dz = Math.sin(a); add(new THREE.CylinderGeometry(0.024, 0.019, 0.34, 8), '#17100c', dx * 0.105, 0.02, dz * 0.105 + 0.01, dz * 0.22, 0, -dx * 0.22); } break;   // dreadlocks hanging around the head
-    case 'ushanka': add(new THREE.SphereGeometry(0.145, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, 0.18, 0.01); add(new THREE.BoxGeometry(0.09, 0.14, 0.02), c, -0.12, 0.08, 0, 0, 0, 0.15); add(new THREE.BoxGeometry(0.09, 0.14, 0.02), c, 0.12, 0.08, 0, 0, 0, -0.15); add(new THREE.CylinderGeometry(0.028, 0.028, 0.012, 12), '#c22', 0, 0.24, -0.135, Math.PI / 2.3); break;   // Russian fur hat with ear flaps + red star
+    case 'dreads': {
+      add(new THREE.SphereGeometry(0.135, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.17, 0.01);
+      const dc = ['#17100c', '#1d130d', '#120d09', '#1a110b'];   // subtle color variation between locks
+      for (let k = 0; k < 18; k++) {   // fuller head of locs: varied lengths, natural outward fall, some over shoulders
+        const a = k / 18 * Math.PI * 2 + (k % 3) * 0.12, dx = Math.cos(a), dz = Math.sin(a);
+        const len = 0.3 + ((k * 37) % 10) / 10 * 0.22, front = dz < -0.3;   // longer in back, some drape forward
+        const y0 = front ? -0.02 : 0.03;
+        add(new THREE.CylinderGeometry(0.026, 0.02, len, 7), dc[k % 4], dx * 0.108, y0 - len / 2 + 0.12, dz * 0.108 + 0.01, dz * 0.24, 0, -dx * 0.24);
+        add(new THREE.SphereGeometry(0.024, 7, 5), dc[(k + 1) % 4], dx * (0.108 + 0.24 * len * 0.5 * -dx * 0.1), y0 - len + 0.12, dz * 0.108 + 0.01 + 0.24 * len * 0.5 * dz * 0.1);   // rounded tips
+      }
+      break;
+    }
+    case 'ushanka': {
+      add(new THREE.SphereGeometry(0.145, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, 0.18, 0.01);
+      add(new THREE.BoxGeometry(0.09, 0.14, 0.02), c, -0.12, 0.08, 0, 0, 0, 0.15); add(new THREE.BoxGeometry(0.09, 0.14, 0.02), c, 0.12, 0.08, 0, 0, 0, -0.15);
+      for (let k = 0; k < 10; k++) {   // fur tufts around the rim
+        const a = k / 10 * Math.PI * 2;
+        add(new THREE.ConeGeometry(0.018, 0.05, 5), c, Math.cos(a) * 0.145, 0.1, Math.sin(a) * 0.145 + 0.01, Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
+      }
+      add(new THREE.CylinderGeometry(0.03, 0.03, 0.014, 5), '#c02020', 0, 0.245, -0.138, Math.PI / 2.25);   // red star (pentagon)
+      add(new THREE.CylinderGeometry(0.012, 0.012, 0.016, 10), '#e8b820', 0, 0.245, -0.14, Math.PI / 2.25);   // gold center
+      break;
+    }
     default: break;
   }
   if (L.eyes) for (const sd of [-1, 1]) { add(new THREE.SphereGeometry(0.04, 10, 7), '#ffffff', sd * 0.05, 0.15, -0.13); add(new THREE.SphereGeometry(0.019, 8, 5), '#111111', sd * 0.05, 0.15, -0.168); }
+  if (L.grill) {   // gold grill: a curved row of gold teeth over the smile
+    for (let k = 0; k < 8; k++) {
+      const a = (k - 3.5) / 3.5 * 0.5, gx = Math.sin(a) * 0.055, gz = -Math.cos(a) * 0.055 - 0.1;
+      add(new THREE.BoxGeometry(0.016, 0.02, 0.012), k % 2 ? '#e8c020' : '#f4d040', gx, 0.055, gz, 0, a, 0);
+    }
+    add(new THREE.BoxGeometry(0.12, 0.008, 0.02), '#c8a010', 0, 0.068, -0.145);   // the gold bar they sit on
+  }
+  if (L.chains) {   // two gold chains: a choker and a longer one with a pendant
+    for (let k = 0; k < 14; k++) {   // choker: tight ring of links at the throat
+      const a = k / 14 * Math.PI * 2;
+      add(new THREE.TorusGeometry(0.016, 0.006, 5, 8), '#e8c020', Math.cos(a) * 0.075, -0.045, Math.sin(a) * 0.075 - 0.01, 0, a, 0.4);
+    }
+    for (let k = 0; k < 10; k++) {   // long chain: draped catenary with bigger links
+      const t = k / 9, cx = (t - 0.5) * 0.16, cy = -0.06 - Math.sin(t * Math.PI) * 0.1;
+      add(new THREE.TorusGeometry(0.02, 0.007, 5, 8), '#f4d040', cx, cy, -0.055 - Math.sin(t * Math.PI) * 0.02, 0.3, t * 1.2, 0);
+    }
+    add(new THREE.CylinderGeometry(0.028, 0.028, 0.008, 6), '#e8c020', 0, -0.175, -0.075, Math.PI / 2.2);   // pendant: gold medallion
+    add(new THREE.TorusGeometry(0.014, 0.004, 5, 12), '#f4d040', 0, -0.175, -0.082, 0, 0, 0);   // its ring
+  }
   if (!parts.length) return;
   let n = 0; for (const p of parts) n += p.attributes.position.count;
   const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
