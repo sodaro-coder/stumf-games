@@ -24,6 +24,7 @@ import { Menu, Hud, injectCss, esc, weaponIcon } from './ui.js';
 import { releaseThumbs } from './thumbs.js';
 import { line, sfxFor, hasLine } from './voices.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
+import { initGore, bloodHit, goreKill } from './gore.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
 import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear } from './chars.js';
@@ -46,7 +47,7 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, dmgNums: 1, colorblind: 'none', killcam: 1 };
+const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, dmgNums: 1, colorblind: 'none', killcam: 1, gore: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // ---- rebindable keybinds (action -> list of e.code / mouse codes). S.keys overrides; legacy S.crouchKey migrates in.
@@ -729,6 +730,7 @@ export default function start({ cfg, E, N, smoke }) {
       }
       W.spinners = []; for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); if (m.userData.spin) W.spinners.push(m.userData.spin); }
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
+      try { initGore(parts); } catch (e) { /* gore is cosmetic */ }
       hud.radarBase(W);
       if (SC) SC.setWorld(W);
     }
@@ -1202,6 +1204,17 @@ export default function start({ cfg, E, N, smoke }) {
         const r = rigs.get(data.vid); if (r) { r.dieT = 0.001; const kp2 = data.kid === myId ? me : st.players.get(data.kid), vp = st.players.get(data.vid); if (kp2 && vp) { const dx = vp.x - kp2.x, dz = vp.z - kp2.z, L = Math.hypot(dx, dz) || 1; r.fall = { x: dx / L, z: dz / L, side: Math.random() < 0.5 ? -1 : 1 }; } }
         const fxd = data.fx && KILL_FX[data.fx], vp2 = data.vid === myId ? me : st.players.get(data.vid);
         if (fxd && vp2) { if (parts) parts.emit(vp2.x, vp2.y + 1.2, vp2.z, { n: fxd.n, colors: fxd.colors, speed: fxd.speed, up: 1, size: 0.06, life: 1.4, g: fxd.g ?? 1 }); if (fxd.text) textPop(scene, vp2.x, vp2.y + 2.2, vp2.z, fxd.text, fxd.textColor); audio.at(fxd.sound, vp2.x, vp2.y, vp2.z, cam, 40); }
+        // gore: directional kill burst, headshot pop, dismemberment gibs, ground decal
+        if (S.gore && parts && vp2) {
+          try {
+            const wcat = (W_BY_ID[data.weapon] || {}).cat || null;
+            const kp = data.kid === myId ? me : st.players.get(data.kid);
+            let gdx = 0, gdz = 1;
+            if (kp && vp2) { const L = Math.hypot(vp2.x - kp.x, vp2.z - kp.z) || 1; gdx = (vp2.x - kp.x) / L; gdz = (vp2.z - kp.z) / L; }
+            else if (r && r.fall) { gdx = r.fall.x; gdz = r.fall.z; }
+            goreKill(parts, vp2.x, vp2.y + 1.2, vp2.z, { x: gdx, y: 0.25, z: gdz }, wcat, !!data.head, vp2.team);
+          } catch (e) { /* gore is cosmetic */ }
+        }
       }
       if (type === 'planted') { hud.banner('The bomb has been planted', `Site ${data.site}`, 3000); audio.play('planted'); announce('planted'); if (data.by === myName) stats.plant++; }
       if (type === 'glitter' && parts) { for (let k = 0; k < 3; k++) parts.emit(data.x, data.y, data.z, { n: 40, colors: ['#ff4ad2', '#ffd23a', '#5af0ff', '#ffffff', '#b040ff'], speed: 4.5, up: 2.5, size: 0.05, life: 1.6 }); audio.at('doing', data.x, data.y, data.z, cam, 30); }   // a vest goes off: confetti
@@ -1377,7 +1390,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (!end && tr.end) end = { x: tr.end.x, y: tr.end.y, z: tr.end.z };
         for (const h of tr.hits) { const p = st.players.get(h.id); if (p) puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); }
         if (tr.wallHits[0]) { decal(tr.wallHits[0], d); const hp = tr.wallHits[0], mn = W.matName(hp.m), e = impactFx(mn); if (parts) { parts.emit(hp.x - d.x * 0.05, hp.y - d.y * 0.05, hp.z - d.z * 0.05, e); if (e !== IMPACT.metal) parts.smoke(hp.x - d.x * 0.1, hp.y - d.y * 0.1, hp.z - d.z * 0.1, { n: 2, color: e.colors[0], size: e === IMPACT.sand ? 0.22 : 0.14, life: 1.1, rise: 0.15, alpha: 0.55 }); } if (e === IMPACT.metal && Math.random() < 0.35) audio.at('ricochet', hp.x, hp.y, hp.z, cam, 30); }
-        for (const h of tr.hits) { const p = st.players.get(h.id); if (p && parts) parts.emit(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, { n: 6, colors: ['#8a0a0a', '#c01a1a'], speed: 1.5, up: 0.4, size: 0.04, life: 0.5 }); }
+        if (S.gore) for (const h of tr.hits) { const p = st.players.get(h.id); if (p && parts) bloodHit(parts, p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, { x: d.x, y: d.y, z: d.z }); }
       }
       { // the crosshair follows recoil, always: each shot climbs your actual view along the gun's pattern (pull down to
         // control it). Hip fire kicks a little harder than aimed in.
@@ -1694,7 +1707,7 @@ export default function start({ cfg, E, N, smoke }) {
       const selfRig = me.emote || (cine && !povShot) || rigs.has(myId) ? rigFor(myId) : null;
       if (selfRig) {
         selfRig.g.visible = (!!me.emote || (!!cine && !povShot)) && me.alive; if (selfRig.blob) selfRig.blob.visible = selfRig.g.visible;
-        if (cine && !povShot && !me.emote && me.alive) { selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw; setTpGun(selfRig, (curWeapon() || {}).id || 'knife', null); if (selfRig.soldier) setGear(selfRig, me.armor || 0, me.helmet); if (selfRig.soldier) poseSoldier(selfRig, { dt, vx: 0, vz: 0, vy: 0, yaw: me.yaw, crouch: 0, pitch: 0, rest: 1 }); else posePlayer(selfRig, { speed: 0, t: selfRig.t, crouch: 0, pitch: 0 }); }
+        if (cine && !povShot && !me.emote && me.alive) { selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw; setTpGun(selfRig, (curWeapon() || {}).id || 'knife', null); if (selfRig.soldier) setGear(selfRig, me.armor || 0, me.helmet); if (selfRig.soldier) poseSoldier(selfRig, { dt, vx: 0, vz: 0, vy: 0, yaw: me.yaw, crouch: 0, pitch: 0, rest: 1, ads: me.ads || 0 }); else posePlayer(selfRig, { speed: 0, t: selfRig.t, crouch: 0, pitch: 0 }); }
         if (me.emote) {
           selfRig.t += dt; selfRig.g.position.set(me.x, me.y, me.z); selfRig.g.rotation.y = me.yaw;
           if (selfRig.soldier) setGear(selfRig, me.armor || 0, me.helmet); if (selfRig.soldier) poseSoldier(selfRig, { dt, yaw: me.yaw, emote: me.emote }); else posePlayer(selfRig, { t: selfRig.t, emote: me.emote });
