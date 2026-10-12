@@ -500,16 +500,149 @@ const plate = (G, u0, u1, v0, v1, w2, mat = 'metal', lift = 0.0008) => { for (co
 // per-weapon recipes. Parts go into material buckets: body (takes the skin), metal, dark, wood, ...
 const RECIPE = {};
 const R = (ids, fn) => { for (const id of ids.split(' ')) RECIPE[id] = fn; };
+// ---- extreme geometric detail: real fasteners, curved triggers, deep bores ----
+// Screw head with drive recess. Returns array of geometries (caller pushes to buckets).
+// u along gun, v up, x across. drive: 'slot', 'phillips', 'torx', 'hex'.
+function screwGeo(u, v, x, r, drive) {
+  r = r || 0.0035; drive = drive || 'slot';
+  const out = [];
+  const head = CYL(r * 0.82, r, r * 0.55, HQ ? 16 : 10);
+  head.rotateZ(Math.PI / 2); head.translate(x, v, -u);
+  out.push(head);
+  const dw = r * 0.18, dl = r * 1.35, dd = r * 0.5;
+  const mkSlot = function(w2, l2) {
+    const g = BOX(dd, w2, l2);
+    g.translate(x + r * 0.28, v, -u);
+    return g;
+  };
+  if (drive === 'phillips' || drive === 'torx') {
+    out.push(mkSlot(dw, dl)); out.push(mkSlot(dl, dw));
+    if (drive === 'torx') {
+      const g = CYL(r * 0.28, r * 0.28, dd * 1.1, 6);
+      g.rotateZ(Math.PI / 2); g.translate(x + r * 0.28, v, -u);
+      out.push(g);
+    }
+  } else if (drive === 'hex') {
+    const g = CYL(r * 0.45, r * 0.45, dd * 1.1, 6);
+    g.rotateZ(Math.PI / 2); g.translate(x + r * 0.28, v, -u);
+    out.push(g);
+  } else {
+    out.push(mkSlot(dw, dl));
+  }
+  return out;
+}
+// Helper: add screws to buckets. list items: [u, v, x, r, drive, bucket]
+function addScrews(G, list) {
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    const geos = screwGeo(s[0], s[1], s[2], s[3], s[4]);
+    const bucket = s[5] || 'dark';
+    G('metal', geos[0]);
+    for (let j = 1; j < geos.length; j++) G(bucket, geos[j]);
+  }
+}
+// Hex bolt with washer face
+function hexBoltGeo(u, v, x, r) {
+  r = r || 0.005;
+  const out = [];
+  const washer = CYL(r * 1.15, r * 1.15, r * 0.25, HQ ? 18 : 12);
+  washer.rotateZ(Math.PI / 2); washer.translate(x, v, -u);
+  out.push(washer);
+  const head = CYL(r, r, r * 0.8, 6);
+  head.rotateZ(Math.PI / 2); head.translate(x + r * 0.5, v, -u);
+  out.push(head);
+  return out;
+}
+function addHexBolts(G, mat, list) {
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    const geos = hexBoltGeo(s[0], s[1], s[2], s[3]);
+    for (let j = 0; j < geos.length; j++) G(mat, geos[j]);
+  }
+}
+// Curved trigger: extruded crescent profile, thin at pivot, wider shoe at bottom.
+// u is pivot position along gun, topV is top of trigger, len hangs down, w is thickness.
+function triggerGeo(u, topV, len, w) {
+  len = len || 0.032; w = w || 0.007;
+  const v0 = topV, v1 = topV - len;
+  const pts = [
+    [u - 0.004, v0], [u + 0.004, v0],
+    ['q', u + 0.006, v0 - len * 0.4, u + 0.002, v1 + 0.004],
+    ['q', u + 0.004, v1, u - 0.002, v1],
+    ['q', u - 0.006, v1 + 0.002, u - 0.007, v0 - len * 0.45],
+    ['q', u - 0.007, v0 - len * 0.15, u - 0.004, v0]
+  ];
+  return ext(pts, w, 0.0012);
+}
+// Trigger with serrated shoe: thin grooves on the front face
+function triggerSerrGeo(u, topV, len, w) {
+  len = len || 0.032; w = w || 0.007;
+  const out = [triggerGeo(u, topV, len, w)];
+  for (let k = 0; k < 4; k++) {
+    const v = topV - len + 0.004 + k * 0.004;
+    out.push(blk(u - 0.0035, u + 0.0035, v, v + 0.0012, w + 0.001));
+  }
+  return out;
+}
+// Deep muzzle bore: stepped crown rings, dark recessed bore, rifling grooves.
+// bEnd is muzzle face position, bv is bore height, br is barrel radius.
+function boreGeo(bEnd, bv, br) {
+  const out = [];
+  const boreR = br * 0.55;
+  out.push(tube(br + 0.0012, bEnd - 0.008, bEnd - 0.002, bv, 0, HQ ? 18 : 12));
+  out.push(tube(br * 0.78, bEnd - 0.004, bEnd - 0.0005, bv, 0, HQ ? 18 : 12));
+  out.push(tube(boreR, bEnd - 0.009, bEnd - 0.0012, bv, 0, HQ ? 16 : 10));
+  if (HQ) {
+    for (let k = 0; k < 6; k++) {
+      const a = k * Math.PI / 3 + 0.35;
+      const g = blk(bEnd - 0.0085, bEnd - 0.002, -0.0008, 0.0008, 0.0016);
+      g.translate(0, 0, 0);
+      const m1 = new THREE.Matrix4().makeTranslation(0, bv, 0);
+      const m2 = new THREE.Matrix4().makeRotationZ(a);
+      const m3 = new THREE.Matrix4().makeTranslation(0, boreR * 0.82, 0);
+      m1.multiply(m2).multiply(m3);
+      g.applyMatrix4(m1);
+      out.push(g);
+    }
+  }
+  return out;
+}
+// Add bore to buckets: [dark, metal, dark, ...rifling]
+function addBore(G, bEnd, bv, br) {
+  const geos = boreGeo(bEnd, bv, br);
+  G('dark', geos[0]);
+  G('metal', geos[1]);
+  G('dark', geos[2]);
+  for (let i = 3; i < geos.length; i++) G('dark', geos[i]);
+}
+// Charging handle with latch paddles
+function chargingHandleGeo(u, v, w) {
+  const out = [];
+  out.push(blk(u - 0.02, u + 0.02, v - 0.004, v + 0.004, w));
+  out.push(blk(u - 0.028, u - 0.02, v - 0.006, v + 0.006, w * 0.7));
+  out.push(blk(u + 0.02, u + 0.028, v - 0.006, v + 0.006, w * 0.7));
+  return out;
+}
+// Ejection port with visible bolt inside
+function ejectionPortGeo(u0, u1, v0, v1, w) {
+  const out = [];
+  out.push(blk(u0, u1, v0, v1, w + 0.004));
+  out.push(blk(u0 + 0.008, u1 - 0.008, v0 + 0.004, v1 - 0.004, w + 0.002));
+  return out;
+}
 function rifle(G, o) {
   const [r0, r1, rb, rt] = o.recv, w = o.w || 0.05, F = 'f~' + (o.furn || 'dark'), B = 'body';   // f~: furniture (stock, grip, handguard): a skin covers it too
   // receiver (dust cover rounded on the AK family, flat-top rail on the western rifles)
   if (o.top === 'ak') G(B, ext([[r0, rb], [r1, rb], [r1, rt - 0.012], ['q', (r0 + r1) / 2, rt + 0.01, r0, rt - 0.004]], w));
   else G(B, ext([[r0, rb], [r1, rb], [r1, rt - 0.01], [r1 - 0.015, rt], [r0 + 0.01, rt], [r0, rt - 0.012]], w));
-  G('dark', blk(r1 - 0.13, r1 - 0.05, rt - 0.036, rt - 0.014, w + 0.004));   // ejection port
-  G('metal', blk(r1 - 0.045, r1 - 0.025, rt - 0.03, rt - 0.016, w + 0.03, w / 2 + 0.012));   // charging handle
+  { const ep = ejectionPortGeo(r1 - 0.13, r1 - 0.05, rt - 0.036, rt - 0.014, w); G('dark', ep[0]); G('metal', ep[1]); }
+  { const ch = chargingHandleGeo(r1 - 0.035, rt - 0.023, w + 0.03); for (let ci = 0; ci < ch.length; ci++) G('metal', ch[ci]); }
   // grip + trigger guard + trigger
   G(o.gripMat ? 'f~' + o.gripMat : F, soft([[-0.04, rb + 0.004], [0.018, rb + 0.004], [-0.004, rb - 0.115], [-0.056, rb - 0.12], ['q', -0.064, rb - 0.06, -0.04, rb + 0.004]], w * 0.82, 0.32));
-  G('metal', guard(0.012, 0.09, rb - 0.048, rb + 0.002)); G('metal', blk(0.04, 0.048, rb - 0.03, rb, 0.006));
+  G('metal', guard(0.012, 0.09, rb - 0.048, rb + 0.002));
+  { const tg = triggerSerrGeo(0.044, rb, 0.03, 0.006); G('metal', tg[0]); for (let ti = 1; ti < tg.length; ti++) G('dark', tg[ti]); }
+  // receiver screws: steel heads with slot drives on both flats
+  addScrews(G, [[r0 + 0.02, (rb + rt) / 2, w / 2 + 0.001, 0.0035, 'slot'], [r0 + 0.02, (rb + rt) / 2, -w / 2 - 0.001, 0.0035, 'slot'], [r1 - 0.02, (rb + rt) / 2, w / 2 + 0.001, 0.0035, 'slot'], [r1 - 0.02, (rb + rt) / 2, -w / 2 - 0.001, 0.0035, 'slot']]);
   // magazine
   const m0 = o.mag0 ?? 0.11;
   if (o.mag === 'curve') G('mag|' + (o.magMat || 'metal'), soft([[m0, rb + 0.005], [m0 + 0.075, rb + 0.005], ['q', m0 + 0.09, rb - 0.12, m0 + 0.15, rb - 0.205], [m0 + 0.085, rb - 0.235], ['q', m0 + 0.025, rb - 0.13, m0, rb + 0.005]], w * 0.72, 0.18));
@@ -541,6 +674,7 @@ function rifle(G, o) {
   // barrel, front sight, muzzle
   const bv = o.bv ?? (hv + 0.006), bEnd = h1 + (o.blen || 0.12);
   G('metal', tube(o.br || 0.0105, h1 - 0.02, bEnd, bv));
+  if (!o.muzzle && !(G.att && G.att.muzzle && G.att.muzzle !== 'standard')) addBore(G, bEnd, bv, o.br || 0.0105);
   if (o.fsight !== false && o.top === 'ak') {   // AK front sight: a block on the barrel, a post between two protective ears
     G('metal', blk(h1 + 0.03, h1 + 0.06, bv - 0.014, bv + 0.016, 0.024)); G('metal', blk(h1 + 0.038, h1 + 0.052, bv + 0.016, bv + 0.05, 0.004));
     for (const x of [-0.011, 0.011]) G('metal', ext([[h1 + 0.034, bv + 0.012], [h1 + 0.056, bv + 0.012], [h1 + 0.052, bv + 0.055], [h1 + 0.04, bv + 0.055]], 0.004, 0).translate(x, 0, 0));
@@ -742,7 +876,10 @@ function pistol(G, o) {
   G('body', ext([[s0, sb], [s1, sb], [s1, st - 0.006], [s1 - 0.008, st], [s0 + 0.006, st], [s0, st - 0.01]], w));
   for (let k = 0; k < 5; k++) G('dark', blk(s0 + 0.012 + k * 0.009, s0 + 0.016 + k * 0.009, sb + 0.008, st - 0.008, w + 0.002));   // serrations
   G(F, ext([[s0 + 0.01, sb + 0.002], [s1 - 0.01, sb + 0.002], [s1 - 0.012, sb - 0.016], [s0 + 0.08, sb - 0.018], [s0 + 0.05, sb - 0.11], [s0 - 0.005, sb - 0.112], ['q', -0.008 + s0, sb - 0.05, s0 + 0.012, sb - 0.012]], w * 0.95));
-  G('metal', guard(s0 + 0.045, s0 + 0.095, sb - 0.05, sb - 0.012, 0.01)); G('metal', blk(s0 + 0.064, s0 + 0.07, sb - 0.04, sb - 0.016, 0.005));
+  G('metal', guard(s0 + 0.045, s0 + 0.095, sb - 0.05, sb - 0.012, 0.01));
+  { const tg = triggerSerrGeo(s0 + 0.067, sb - 0.016, 0.024, 0.005); G('metal', tg[0]); for (let ti = 1; ti < tg.length; ti++) G('dark', tg[ti]); }
+  // grip screws with slot drives
+  addScrews(G, [[s0 + 0.02, sb - 0.06, w * 0.95 / 2 + 0.001, 0.003, 'slot'], [s0 + 0.02, sb - 0.06, -w * 0.95 / 2 - 0.001, 0.003, 'slot']]);
   G('metal', tube(0.0075, s1 - 0.01, s1 + (o.bl || 0.006), st / 2 - 0.002));
   G('dark', blk(s1 - 0.012, s1 - 0.004, st, st + 0.008, 0.006)); G('dark', blk(s0 + 0.004, s0 + 0.014, st, st + 0.008, 0.016));
   if (o.sil) G('dark', tube(0.017, s1 + 0.005, s1 + 0.16, st / 2 - 0.002, 0, 12));
