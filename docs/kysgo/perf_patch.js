@@ -67,7 +67,8 @@
   // ---- 1. Particle scaling -------------------------------------------------
   // The particle pool is fixed at 220; on low tiers we emit fewer particles
   // per effect so the pool doesn't saturate and the GPU does less work.
-  var PARTICLE_SCALE = { potato: 0.3, low: 0.5, medium: 0.8, high: 1.0, ultra: 1.0 };
+  // Ultra gets 1.5x emission for maximum density; high stays 1.0 (~67% of ultra).
+  var PARTICLE_SCALE = { potato: 0.3, low: 0.5, medium: 0.8, high: 1.0, ultra: 1.5 };
   function patchParticles() {
     var parts = null;
     try { parts = window.__cs.parts; } catch (e) { return; }
@@ -76,7 +77,7 @@
     parts.emit = function (x, y, z, o) {
       o = o || {};
       var scale = PARTICLE_SCALE[tier()] || 1;
-      if (scale < 1 && o.n) {
+      if (scale !== 1 && o.n) {
         o = Object.assign({}, o, { n: Math.max(1, Math.round(o.n * scale)) });
       }
       return origEmit(x, y, z, o);
@@ -87,7 +88,7 @@
       parts.smoke = function (x, y, z, o) {
         o = o || {};
         var scale = PARTICLE_SCALE[tier()] || 1;
-        if (scale < 1 && o.n) {
+        if (scale !== 1 && o.n) {
           o = Object.assign({}, o, { n: Math.max(1, Math.round(o.n * scale)) });
         }
         return origSmoke(x, y, z, o);
@@ -118,8 +119,16 @@
   // ---- 3. Character LOD ----------------------------------------------------
   // Characters beyond LOD_DISTANCE get simplified: hide small attachments
   // (chains, grill details, etc.) to reduce draw calls and vertex load.
-  var LOD_DISTANCE = 25; // metres
+  // Ultra never culls (max fidelity); high keeps details out to 30m.
+  var LOD_DISTANCE = 25; // metres (medium default)
   var LOD_DISTANCE_LOW = 18; // closer cutoff on low tiers
+  var LOD_DISTANCE_HIGH = 30; // high tier: details visible further
+  function lodDistanceFor(t) {
+    if (t === 'ultra') return Infinity; // no LOD culling on ultra
+    if (t === 'high') return LOD_DISTANCE_HIGH;
+    if (t === 'potato' || t === 'low') return LOD_DISTANCE_LOW;
+    return LOD_DISTANCE;
+  }
   function installCharacterLOD() {
     var scene, cam;
     try { scene = window.__cs.scene; cam = window.__cs.cam; } catch (e) { return; }
@@ -172,7 +181,7 @@
         var c = window.__cs.cam;
         var t = 'medium';
         try { t = window.__cs.gfx.tier || 'medium'; } catch (e) { /* default */ }
-        var dist = (t === 'potato' || t === 'low') ? LOD_DISTANCE_LOW : LOD_DISTANCE;
+        var dist = lodDistanceFor(t);
         var wp = new THREE.Vector3();
         for (var i = 0; i < lodObjects.length; i++) {
           var e2 = lodObjects[i];
