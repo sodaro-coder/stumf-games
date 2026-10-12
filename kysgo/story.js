@@ -143,7 +143,7 @@ export const SPEAKERS = { command: 'Colonel Brisket (Command)', tape: 'Dale (on 
 
 export const CHAPTERS = [
   { id: 'c1', map: 'range', name: 'Wieners Protect Their Own', tease: 'Boot camp, a live-fire exercise, and the worst day of Sergeant Wiener\'s life. Twice.', hub: 'Frank Wiener got back up. He has never once told anyone what it cost him to stand.', missions: [
-    { id: 'm1', name: 'Reveille', map: 'barracks', featured: 'wiener', tier: 0, intro: 'Fort Brisket. 0500. Somebody is already doing push-ups.',
+    { id: 'm1', name: 'Reveille', map: 'barracks', tier: 0, intro: 'Fort Brisket. 0500. Somebody is already doing push-ups.',
       objectives: [
         { kind: 'explore', hint: 'Find your squad', points: [
           { zone: 'Bunks', label: 'Wiener', say: [['wiener', 'Thirty-nine. Forty. Forty-one.'], ['wiener', 'Don\'t ask what the number is for. Nobody asks. That\'s the rule.'], ['wiener', 'Sergeant Wiener. Yes, the costume is regulation. No, you may not touch the bun.'], ['wiener', 'One more rule. Wieners protect their own. You\'re all Wieners now. That\'s not a joke. That\'s the whole job.']] },
@@ -157,7 +157,7 @@ export const CHAPTERS = [
       ],
       cut: { in: [['command', 'Morning, Sergeant! Colonel Brisket, your new handler. You\'ll hear me in your ear, never see my face. Like a conscience, but useful.', { cam: 'wide' }], ['wiener', 'Copy, Command. What\'s that squeaking behind you?'], ['command', 'New office floors. Very shiny. Get your people up, Sergeant.']],
         out: [['command', 'Somebody\'s been leaving live rounds on the range. Go take a look. Probably nothing!'], ['wiener', 'Probably nothing. Squad, full kit.'], ['cancer', '(quietly, to Ricky) He says "probably nothing" the way other people say "I love you."']] } },
-    { id: 'm2', name: 'Orientation', featured: 'wiener', tier: 0, intro: 'The range. Somebody has been leaving live rounds in the training dummies.',
+    { id: 'm2', name: 'Orientation', tier: 0, intro: 'The range. Somebody has been leaving live rounds in the training dummies.',
       objectives: [
         { kind: 'reach', zone: 'Firing Line', hint: 'Get to the firing line', say: [['ricky', 'I\'m ready. I trained. I watched like four movies.'], ['cancer', '...which four?'], ['ricky', 'Just four. Old ones. Dog Cop Three, Grandpa\'s Big Fish— don\'t worry about it.'], ['cancer', 'I wasn\'t worried. I\'m never worried.'], ['ricky', 'You should worry a little. It\'s healthy.']] },
         { kind: 'clear', zone: 'Lanes', count: 12, hint: 'Shoot the targets (they shoot back)', say: [['igor', 'Targets have rifles. Is new. I like it.'], ['wiener', 'Ricky! Stop firing from the hip like a music video!'], ['ricky', 'It\'s WORKING though!'], ['wiener', 'That\'s the problem!']] },
@@ -165,7 +165,7 @@ export const CHAPTERS = [
       ],
       cut: { in: [['wiener', 'Intel says the Ballin\' Brotherhood is building something big. Something that smells.', { cam: 'wide' }], ['igor', 'In my village, we train with one bullet. Today I bring many. Is special occasion.']],
         out: [['wiener', 'Osama bin Ballin. In MY range.'], ['command', 'Nothing but net, team! Take a breather. Range is clear now.'], ['cancer', 'He says that a lot. "Nothing but net."'], ['wiener', 'Command\'s a basketball fan. Lot of people are.'], ['igor', '(quietly) ...Lot of people are.']] } },
-    { id: 'w3', name: 'Ambush', featured: 'wiener', tier: 1, intro: 'Range is clear now, Command said.',
+    { id: 'w3', name: 'Ambush', tier: 1, intro: 'Range is clear now, Command said.',
       objectives: [
         { kind: 'reach', zone: 'Firing Line', hint: 'Walk the range with your squad', say: [['ricky', 'Sarge, real talk. What do you do for fun?'], ['wiener', 'Push-ups.'], ['ricky', 'For FUN.'], ['wiener', 'Angry push-ups.'], ['cancer', 'He has one hobby. It\'s called yelling.'], ['igor', 'In my village, fun was illegal. We had it anyway. Quietly.'], ['ricky', '...I like you guys.']] },
         { kind: 'collect', item: 'live round', count: 3, hint: 'Pick up the live rounds on the range', say: [['cancer', 'Live rounds on a training range. Again.'], ['ricky', 'Maybe the range is haunted.'], ['cancer', 'Maybe you are.'], ['ricky', 'Maybe we\'re all haunted. Ever think of that?']] },
@@ -384,7 +384,7 @@ export const CHAPTERS = [
         ['doctor', 'Mr. Mercer?', { place: ['cancer', 'Oncology'], cam: 'wide' }], ['doctor', 'It\'s spread to the liver and the lungs, Dale. I\'m so sorry.', { cam: 'close' }], ['doctor', 'We\'re looking at about a week.', { hold: 2.5 }], ['cancer', '(He doesn\'t say anything for a long time.)', { hold: 2 }],
         ['cancer', 'A week. Like... seven days.'], ['cancer', 'I\'ve got a thing next month. His birthday. Can I get a month? I\'ll take a month.'], ['doctor', 'I\'m so sorry.'], ['cancer', '(The doctor leaves. The machine beeps. The clock ticks. Out in the hall somebody laughs.)', { hold: 2.5 }], ['cancer', '(He looks at the door.)', { hold: 1.5 }], ['cancer', 'No. Not in here.'], ['cancer', '(He picks up the pen. He starts the seventh card.)', { hold: 1 }]],
         out: [['cancer', '(Outside. Morning. A bus goes by. A pigeon is fighting a sandwich.)', { cam: 'wide', music: 'tender' }], ['cancer', '(Sun on a brick wall. Wind. Somebody\'s radio across the street.)', { hold: 2 }], ['cancer', 'Huh.'], ['cancer', 'Still scared. Still sick. Still got a week.'], ['cancer', 'Right now, though?', { hold: 1 }], ['cancer', 'Right now\'s actually pretty good.', { hold: 1 }], ['cancer', '(He taps his chest twice.) Still ticking.', { hold: 1.5 }], ['cancer', '(He takes out his phone. He looks at Ricky\'s number. He does not call.)', { hold: 1.5 }]] } },
-    { id: 'm18', name: 'Code Blue', featured: 'cancer', tier: 5, intro: 'The squad finds him in the ambulance bay. So does the Brotherhood.',
+    { id: 'm18', name: 'Code Blue', tier: 5, intro: 'The squad finds him in the ambulance bay. So does the Brotherhood.',
       objectives: [
         { kind: 'defend', zone: 'Ward', time: 90, hint: 'Hold the ward: patients can\'t run', say: [['ricky', 'Nobody touches these people. NOBODY.'], ['igor', 'Ricky is angry. I like angry Ricky.'], ['ricky', '(fierce) ...They\'re just lying there. They can\'t run. Somebody has to stand here.']] },
         { kind: 'revive', who: 'cancer', hint: 'Cancer is down: hold USE on him',
@@ -393,7 +393,7 @@ export const CHAPTERS = [
       ],
       cut: { in: [['ricky', '(A truck screeches into the ambulance bay.) CANCER! Yo! There he is!', { cam: 'wide' }], ['wiener', 'You walked out of confinement, Dale.'], ['cancer', 'I walked out of a hospital, Frank. Confinement was the warm-up.'], ['igor', 'You look terrible. More than usual.'], ['cancer', 'A week. That\'s what they gave me. One week.'], ['ricky', '...a week?', { hold: 1.2 }], ['command', 'Team! Brotherhood units inbound on St. Mercy. Leave Mercer. He\'s compromised.'], ['wiener', 'Command, you\'re breaking up.'], ['command', 'I\'m not breaking up.'], ['wiener', '*click*'], ['wiener', '(to the squad) ...Nobody gets left. That\'s the rule.']],
         out: [['nurse', 'He\'s lost a lot of blood. He needs a transfusion. O negative, and we\'re out.'], ['ricky', '(already rolling up his sleeve) ...I\'m O negative.'], ['cancer', '(weakly) ...Kid, no.'], ['ricky', '...It\'s just blood, man.']] } },
-    { id: 'm19', name: 'O Negative', featured: 'cancer', tier: 5, intro: 'O negative. The blood bank is on the other side of the Brotherhood.',
+    { id: 'm19', name: 'O Negative', tier: 5, intro: 'O negative. The blood bank is on the other side of the Brotherhood.',
       objectives: [
         { kind: 'collect', item: 'blood bag', count: 3, hint: 'Get to the blood bank (three bags)',
           scene: [['ricky', 'Don\'t bother with the bank. Take mine. O negative.'], ['nurse', 'Are you sure?'], ['ricky', 'O negative. Same as—'], ['ricky', '...same as a lot of people. Just take it.'], ['cancer', '(eyes half open, staring at Ricky)'], ['cancer', '(very quietly) ...D.'], ['wiener', 'Get the bags anyway. Ricky\'s only got the one body.']] },
@@ -424,7 +424,7 @@ export const CHAPTERS = [
         out: [['igor', '(Treeline. He looks back once.)', { cam: 'wide', music: '' }], ['radio', '(radio) ...this is not an exercise... repeat, this is not...'], ['radio', '(radio, the other side) ...we have launches... we have launches...', { hold: 1 }], ['igor', '(The horizon goes white. Then it goes white again, somewhere else.)', { vision: 'nuke', hold: 3 }],
           ['radio', '(radio, a woman, civilian band) Mama? Mama, the lights went out, are you— can you hear—', { hold: 1.5 }], ['radio', '(radio) ...emergency broadcast... seek shelter... seek...', { hold: 1.5 }], ['igor', '(Static. On every channel. Everywhere.)', { hold: 3 }],
           ['igor', '(He looks at the bullet in his hand. The one he never fires.)', { cam: 'close', hold: 3 }], ['igor', 'It was only paper.', { hold: 3 }], ['igor', '(He puts the bullet back in his pocket. He will carry it for twelve years.)', { hold: 2 }]] } },
-    { id: 'm20', name: 'Clock In', featured: 'igor', tier: 5, intro: 'Brisket thinks you don\'t know. Let him keep thinking it.',
+    { id: 'm20', name: 'Clock In', tier: 5, intro: 'Brisket thinks you don\'t know. Let him keep thinking it.',
       objectives: [
         { kind: 'reach', zone: 'lobby', hint: 'Get inside the plant', say: [['command', 'Team! Great news, the pot\'s at the gas plant. Light resistance!'], ['wiener', 'Copy, Command. Light resistance. Sounds great.'], ['igor', '(whispering) He is very bad liar. We are very good liars now.'], ['wiener', '(quietly, to Igor) ...You ever get tired of carrying it?'], ['igor', '(a long pause) ...Every day, Wiener.']] },
         { kind: 'collect', item: 'badge', count: 3, hint: 'Find three employee badges' },
@@ -432,7 +432,7 @@ export const CHAPTERS = [
       ],
       cut: { in: [['wiener', 'He\'s using the reactor to heat the chili. Weapons-grade. We act normal. Ricky, act normal.'], ['ricky', 'I\'m always normal.'], ['cancer', 'Expresso normal.'], ['ricky', 'See, now YOU said it with the X.'], ['cancer', 'I was testing you.'], ['cancer', '(smiling, but his eyes are tired) ...You passed.']],
         out: [['igor', '(Igor stares into the reactor glow for too long.)', { cam: 'close' }], ['ricky', 'Igor? You good?'], ['igor', 'Reminds me of home.'], ['ricky', '...where IS home, man?'], ['igor', 'Nowhere, now.'], ['wiener', '(putting a hand on Igor\'s shoulder) ...You got somewhere now.'], ['igor', '(looking at him) ...Yes. I am starting to believe this.']] } },
-    { id: 'm21', name: 'Meltdown Manager', featured: 'igor', tier: 5, intro: 'Five control rods, one control room, and a conversation Wiener has been putting off.',
+    { id: 'm21', name: 'Meltdown Manager', tier: 5, intro: 'Five control rods, one control room, and a conversation Wiener has been putting off.',
       objectives: [
         { kind: 'interact', targets: 5, puzzle: 'rods', hint: 'Lower the control rods in order' },
         { kind: 'defend', zone: 'control', time: 130, hint: 'Hold the control room',
@@ -440,7 +440,7 @@ export const CHAPTERS = [
       ],
       cut: { in: [['cancer', 'Radiation\'s already doing my job for me. Let\'s go.'], ['wiener', '(checking his gear) ...You know, my old man worked at a plant. Different kind. He came home smelling like chemicals and anger.'], ['cancer', '...Frank?'], ['wiener', '...Let\'s go.']],
         out: [['wiener', 'Pot\'s gone. Loaded on a truck, heading for the vents.'], ['cancer', '(quietly) ...Frank. Thank you. For saying that.'], ['wiener', '...Don\'t mention it. Ever.']] } },
-    { id: 'm22', name: 'Exhaust Vent', featured: 'igor', tier: 6, intro: 'Through the vents to the loading dock. Brisket is about to stop pretending.',
+    { id: 'm22', name: 'Exhaust Vent', tier: 6, intro: 'Through the vents to the loading dock. Brisket is about to stop pretending.',
       objectives: [
         { kind: 'clear', zone: 'vents', count: 20, hint: 'Clear the vent shafts' },
         { kind: 'survive', time: 110, hint: 'Hold the loading dock', say: [['command', '...you know, don\'t you, Sergeant.'], ['wiener', 'Nothing but net, Colonel.'], ['command', '(sneakers squeaking) Smart squad. Shame. Ballin\'s got a stadium full of people tomorrow night and a pot that\'ll cover all of them.'], ['wiener', '(cold) ...We\'ll be there.']] },
@@ -450,7 +450,7 @@ export const CHAPTERS = [
         out: [['command', 'Ballin\' Arena, tomorrow night. Sold out. See you there, team. I\'ll be courtside.'], ['wiener', 'The desert depot first. Then the arena.'], ['igor', 'Tomorrow, we end this. Tonight, we drink. Only water. I am joking. Not water.'], ['wiener', '(looking at his squad) ...Tonight, we\'re together. That\'s enough.']] } },
   ] },
   { id: 'c9', map: 'dust', name: 'Dust To Dust', tease: 'The last stop. Bring everything. Leave nothing unsaid.', hub: 'Espresso. There is no X. There has never been an X. And that is love.', missions: [
-    { id: 'm23', name: 'Long A', featured: 'wiener', tier: 6, intro: 'The Brotherhood\'s desert depot. The last thing between the squad and the arena.',
+    { id: 'm23', name: 'Long A', tier: 6, intro: 'The Brotherhood\'s desert depot. The last thing between the squad and the arena.',
       objectives: [
         { kind: 'reach', zone: 'Long Doors', hint: 'Push Long A' },
         { kind: 'clear', zone: 'Long A', count: 22, hint: 'Clear Long', say: [['wiener', 'Everything hurts and I love it.'], ['cancer', 'Everything hurts and I\'m used to it.'], ['ricky', 'Nothing hurts and I\'m scared.'], ['igor', 'I feel nothing. Is good.'], ['wiener', '(quieter) ...Stay close tonight. All of you.']] },
@@ -458,7 +458,7 @@ export const CHAPTERS = [
       ],
       cut: { in: [['wiener', 'Depot first. They\'ve got the stadium blueprints and the arming codes.'], ['cancer', '(coughing, hiding it) ...Let\'s make this quick, Frank.']],
         out: [['cancer', 'The pot\'s got a dead-man trigger. Let go of it and it vents. It has to be carried into the arena\'s blast tank.'], ['igor', 'Through the gas?'], ['cancer', 'Through the gas.'], ['wiener', 'We camp here tonight. Arena at dusk.'], ['wiener', '(looking at the sunset) ...One more night.']] } },
-    { id: 'm24', name: 'The Last Night', map: 'barracks_night', featured: 'wiener', tier: 6, intro: 'One night. A fire. Nobody says what they are all thinking.',
+    { id: 'm24', name: 'The Last Night', map: 'barracks_night', tier: 6, intro: 'One night. A fire. Nobody says what they are all thinking.',
       objectives: [
         { kind: 'explore', hint: 'Spend the night with your squad', points: [
           { zone: 'Watchtower', label: 'Igor', say: [['igor', 'The winters I talk about. There was only one.'], ['igor', 'I made it. Twelve years ago. With three pieces of paper.'], ['igor', 'My grandmother lived in a city with a very good bakery. I tell her stories so she is still somewhere.'], ['ricky', '...Igor.'], ['igor', 'You asked once what the bullet is for. It is for the day I am allowed to stop carrying it.'], ['ricky', 'Who decides that?'], ['igor', 'I thought God. Now I think maybe a friend.'], ['ricky', '(quietly) ...You can stop, man. Whenever you want.']] },
@@ -479,7 +479,7 @@ export const CHAPTERS = [
       ],
       cut: { in: [['wiener', 'Squad. Proud of you. Whatever happens in there.'], ['igor', 'Is like wedding speech. I hate it. Keep going.'], ['wiener', '(looking at each of them) ...You\'re not my squad. You\'re my family. There. I said it.']],
         out: [['cancer', 'I\'ll take it.'], ['wiener', 'Dale—'], ['cancer', 'I\'m the only one here who\'s already dying. I\'ve got nothing to lose.'], ['ricky', 'You had me.'], ['cancer', '...what?'], ['ricky', 'You had ME. You always had me. Dad.'], ['cancer', '...how long?'], ['ricky', 'Since the first expresso.'], ['cancer', '(laughing and crying) You little— you knew. The whole time, you knew.'], ['ricky', 'It was the only way you\'d talk to me.'], ['ricky', '(crying) ...I waited thirty-four years for you to say it.'], ['cancer', '(holding him) ...I know. I\'m sorry. I\'m so sorry.'], ['wiener', 'Dale. Ten minutes in that gas. That\'s all you\'d have.'], ['cancer', 'Then cover me for ten minutes, Frank. That\'s the plan. The plan always hurts.'], ['wiener', '(voice breaking) ...Wieners protect their own.'], ['cancer', '(smiling through tears) ...I know. Let me protect mine.']] } },
-    { id: 'm26', name: 'The Walk', map: 'stadium', featured: 'wiener', tier: 6, intro: 'Ten minutes. That\'s all he asked for.',
+    { id: 'm26', name: 'The Walk', map: 'stadium', tier: 6, intro: 'Ten minutes. That\'s all he asked for.',
       objectives: [
         { kind: 'carry', who: 'cancer', zone: 'Blast Tank', hint: 'Get Cancer and the pot to the blast tank',
           say: [['cancer', 'Talk to me, kid. Keep me company.'], ['ricky', 'Remember Dog Cop Three? "A cop is just a dog with a badge, and a dog is just a cop with—"'], ['cancer', '"—better manners." You used to say it with a mouthful of cereal.'], ['ricky', 'You remember that?'], ['cancer', 'I remember all of it. I just wasn\'t there for any of it.'], ['ricky', '(crying) ...You\'re here now.'], ['cancer', '...Yeah. I\'m here now.']] },
@@ -488,7 +488,7 @@ export const CHAPTERS = [
       ],
       cut: { in: [['wiener', 'Wieners protect their own.', { cam: 'close' }], ['cancer', 'I know, Frank. Let me protect mine.', { hold: 1 }], ['wiener', '(He can\'t heal this. He knows it. Everybody knows it.)', { hold: 1.5 }], ['wiener', 'Wiener to squad: nobody gets within ten metres of him. Nobody.'], ['wiener', '(quietly, to himself) ...Not again. Please, not again.'], ['igor', 'Cancer. Comrade. It is honour.'], ['cancer', '(radio, weak) ...The honour is mine, Igor.']],
         out: [['cancer', '(radio) Tank\'s armed. Pot\'s contained. Arena\'s safe.'], ['cancer', 'Frank. Tell Frank... I owe him an expresso.'], ['ricky', '(crying) Espresso, Dad.'], ['cancer', '...somebody write that down.'], ['cancer', '(two taps on the mic)'], ['ricky', '(two taps on his chest, sobbing) Still ticking.'], ['cancer', '(very faint) ...Still... ticking...'], ['squad', '(static)'], ['ricky', '(screaming) DAD!'], ['wiener', '(holding Ricky back, crying himself) ...He\'s gone, kid. He\'s gone.'], ['ricky', '(collapsing) ...He just got here. He JUST got here.'], ['wiener', '(holding him tighter) ...I know. I know. I\'ve got you. I\'ve got you.']] } },
-    { id: 'm27', name: 'Tape Four', map: 'barracks_night', featured: 'wiener', tier: 6, absent: ['cancer'], intro: 'Fort Brisket, renamed. A week later. It still doesn\'t feel real.',
+    { id: 'm27', name: 'Tape Four', map: 'barracks_night', tier: 6, absent: ['cancer'], intro: 'Fort Brisket, renamed. A week later. It still doesn\'t feel real.',
       objectives: [
         { kind: 'explore', hint: 'Walk the barracks', points: [
           { zone: 'Infirmary', label: 'His bunk', say: [['wiener', 'Gown\'s still on the hook. Nobody\'s moving it. That\'s an order.'], ['ricky', '(quietly) ...He hated that gown.'], ['wiener', '(gently) ...I know, kid.']] },
