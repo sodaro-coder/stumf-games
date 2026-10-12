@@ -699,18 +699,41 @@ function muzzle(G, kind, bEnd, bv) {
 function optic(G, kind, mount) {
   const [u, v] = mount;
   G('dark', blk(u - 0.035, u + 0.035, v, v + 0.012, 0.032));
-  if (kind === 'reddot') { G('reticle', new THREE.CircleGeometry(0.0013, 18).translate(0, v + 0.036, -(u + 0.0165))); G('optic', CYL(0.019, 0.019, 0.044, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.036, -u)); G('dark', blk(u - 0.02, u + 0.02, v + 0.012, v + 0.02, 0.026)); G('glass', CYL(0.017, 0.017, 0.002, 14).rotateX(-Math.PI / 2).translate(0, v + 0.036, -(u + 0.018))); return [u, v + 0.036]; }
+  if (kind === 'reddot') {
+    G('reticle', new THREE.CircleGeometry(0.0013, 18).translate(0, v + 0.036, -(u + 0.0165)));
+    G('optic', CYL(0.019, 0.019, 0.044, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.036, -u));
+    G('dark', blk(u - 0.02, u + 0.02, v + 0.012, v + 0.02, 0.026));
+    G('glass', CYL(0.017, 0.017, 0.002, 14).rotateX(-Math.PI / 2).translate(0, v + 0.036, -(u + 0.018)));
+    G('dark', place(CYL(0.0075, 0.0075, 0.009, 12), [0, v + 0.036 + 0.0235, -u]));   // elevation turret cap
+    G('dark', place(CYL(0.0075, 0.0075, 0.009, 12), [0.0235, v + 0.036, -u], [0, 0, Math.PI / 2]));   // windage turret cap
+    G('metal', place(BOX(0.004, 0.008, 0.028), [0.018, v + 0.006, -(u - 0.008)], [0.5, 0, 0]));   // QD throw lever
+    return [u, v + 0.036];
+  }
   if (kind === 'holo') {
-    G('optic', blk(u - 0.035, u + 0.035, v + 0.012, v + 0.062, 0.006, 0.026)); G('optic', blk(u - 0.035, u + 0.035, v + 0.012, v + 0.062, 0.006, -0.026));
-    G('optic', blk(u - 0.035, u + 0.035, v + 0.056, v + 0.064, 0.058)); G('glass', blk(u + 0.02, u + 0.022, v + 0.014, v + 0.056, 0.046));
-    const z = -(u + 0.0195), y = v + 0.036;   // the holographic reticle: a 65 MOA ring, a 1 MOA dot and four ticks
+    // EOTech EXPS-style: armored hood with stepped walls, sloped front, side controls, QD mount
+    const y0 = v + 0.012, y1 = v + 0.066;
+    for (const s of [-1, 1]) {
+      G('optic', blk(u - 0.040, u + 0.040, y0, y1, 0.007, s * 0.0295));            // hood side walls
+      G('optic', blk(u - 0.040, u + 0.040, y0, y0 + 0.016, 0.010, s * 0.028));      // stepped armor base (wider)
+      G('optic', blk(u - 0.040, u + 0.040, y1 - 0.010, y1, 0.009, s * 0.0285));     // top rail of the hood
+    }
+    G('optic', place(BOX(0.066, 0.058, 0.008), [0, (y0 + y1) / 2 - 0.003, -(u + 0.038)], [0.30, 0, 0]));   // sloped front face (leans back ~17 deg)
+    G('optic', blk(u - 0.040, u + 0.044, y1 - 0.009, y1, 0.066));                  // top hood, slight forward overhang
+    G('glass', blk(u + 0.026, u + 0.028, y0 + 0.005, y1 - 0.012, 0.050));          // large recessed window
+    for (const dy of [0.020, 0.032]) G('dark', place(CYL(0.0042, 0.0042, 0.0035, 10), [-0.0345, y0 + dy, -(u - 0.006)], [0, 0, Math.PI / 2]));   // brightness +/- buttons (left side)
+    G('dark', place(CYL(0.0085, 0.0085, 0.007, 12), [0.0345, y0 + 0.026, -(u - 0.006)], [0, 0, Math.PI / 2]));   // battery cap (right side)
+    G('metal', place(BOX(0.004, 0.009, 0.032), [0.020, v + 0.006, -(u - 0.010)], [0.5, 0, 0]));   // QD throw lever
+    const z = -(u + 0.0255), y = v + 0.038;   // the holographic reticle: a 65 MOA ring, a 1 MOA dot and four ticks
     G('reticle', new THREE.RingGeometry(0.0076, 0.0084, 40).translate(0, y, z)); G('reticle', new THREE.CircleGeometry(0.0006, 12).translate(0, y, z));
     for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) G('reticle', new THREE.PlaneGeometry(dx ? 0.0022 : 0.0007, dy ? 0.0022 : 0.0007).translate(dx * 0.0069, y + dy * 0.0069, z));
     return [u, y];
   }
   if (kind === 'acog') {
     G('optic', CYL(0.021, 0.021, 0.09, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.042, -u)); G('optic', CYL(0.026, 0.021, 0.03, 14, true).rotateX(-Math.PI / 2).translate(0, v + 0.042, -(u + 0.06)));
-    G('dark', blk(u - 0.015, u + 0.015, v + 0.012, v + 0.03, 0.03)); G('dark', blk(u - 0.01, u + 0.02, v + 0.06, v + 0.072, 0.012)); G('glass', CYL(0.024, 0.024, 0.002, 14).rotateX(-Math.PI / 2).translate(0, v + 0.042, -(u + 0.074))); return [u, v + 0.042];
+    G('dark', blk(u - 0.015, u + 0.015, v + 0.012, v + 0.03, 0.03)); G('dark', blk(u - 0.01, u + 0.02, v + 0.06, v + 0.072, 0.012)); G('glass', CYL(0.024, 0.024, 0.002, 14).rotateX(-Math.PI / 2).translate(0, v + 0.042, -(u + 0.074)));
+    G('dark', blk(u - 0.045, u + 0.025, v + 0.062, v + 0.070, 0.016));   // fiber-optic housing on top
+    G('reticle', place(BOX(0.007, 0.0035, 0.058), [0, v + 0.0715, -(u - 0.010)]));   // glowing fiber-optic light pipe (ACOG's signature)
+    return [u, v + 0.042];
   }
   return null;
 }
@@ -879,6 +902,13 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
         parts.push([blk(ur - 0.012, ur + 0.012, base - 0.002, base + 0.004, 0.02), null]);                                             // clamped to the gun
       }
       geos.ironpost = merge(parts); hold.iron = [hold.iron[0], line];
+      // tritium night sights: glowing dots on the front post and both sides of the rear aperture
+      const trit = [new THREE.SphereGeometry(0.0016, 8, 6).translate(0, line - 0.0035, -(hold.iron[0]) + 0.0028)];
+      if (long) {
+        trit.push(new THREE.SphereGeometry(0.0016, 8, 6).translate(-0.0118, line - 0.001, -ur));
+        trit.push(new THREE.SphereGeometry(0.0016, 8, 6).translate(0.0118, line - 0.001, -ur));
+      }
+      geos.irontrit = merge(trit.map((g) => [g, null]));
     }
     cg = { geos, hold, len };
     geoCache.set(ckey, cg);
@@ -887,7 +917,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
   for (const [k, geo] of Object.entries(cg.geos)) {
     if (k.startsWith('mag|')) { magGroup.add(new THREE.Mesh(geo, gm(k.slice(4)))); continue; }
     const furn = k.startsWith('f~');
-    g.add(new THREE.Mesh(geo, k === 'body' || (furn && tex) ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(furn ? k.slice(2) : k === 'ironpost' ? 'dark' : k)));
+    g.add(new THREE.Mesh(geo, k === 'body' || (furn && tex) ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(furn ? k.slice(2) : k === 'ironpost' ? 'dark' : k === 'irontrit' ? 'dot' : k)));
   }
   const magBox = new THREE.Box3().setFromObject(magGroup), magPos = magGroup.children.length ? magBox.getCenter(new THREE.Vector3()) : null;
   const grip = new THREE.Vector3(0, cg.hold.grip[1], -cg.hold.grip[0]), fore = cg.hold.fore ? new THREE.Vector3(0, cg.hold.fore[1], -cg.hold.fore[0]) : null;
