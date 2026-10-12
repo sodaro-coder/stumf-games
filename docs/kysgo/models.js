@@ -1128,7 +1128,15 @@ export function makeBomb(sleeve = '#3c4e66', glove = '#2a2a2a', hands = false) {
 }
 
 // ---- map props (one merged mesh each, lit by the baked sun) ---------------------------------------------------------
-let propMatC = null, leafMatC = null;
+let propMatC = null, leafMatC = null, lampGlowMatC = null;
+const lampGlowMat = () => {   // soft halo so street lamps read as real light sources (one shared texture)
+  if (lampGlowMatC) return lampGlowMatC;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,230,175,0.9)'); gr.addColorStop(0.32, 'rgba(255,214,150,0.32)'); gr.addColorStop(1, 'rgba(255,200,130,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+  return (lampGlowMatC = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+};
 const propMat = () => propMatC || (propMatC = litPatch(new THREE.MeshLambertMaterial({ vertexColors: true }), 'dyn'));
 const leafMat = () => leafMatC || (leafMatC = litPatch(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), 'dyn'));
 function frond(len, a, tilt) {   // a palm frond: a bent, tapering leaf strip
@@ -1169,7 +1177,10 @@ export function makeProp(p) {
     const col = new Float32Array(ball.geometry.attributes.position.count * 3); for (let i = 0; i < col.length; i += 9) { const k = 0.55 + ((i * 2654435761) % 97) / 97 * 0.45; col.fill(k, i, i + 9); }
     ball.geometry.setAttribute('color', new THREE.BufferAttribute(col, 3)); ball.material.vertexColors = true; ball.position.set(0, 3.3, 0); g.add(ball); g.userData.spin = ball;
   }
-  if (p.type === 'lamp') { const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), basic('#ffe9a8')); bulb.position.set(0.55, 3.8, 0); g.add(bulb); }
+  if (p.type === 'lamp') {
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), basic('#ffe9a8')); bulb.position.set(0.55, 3.8, 0); g.add(bulb);
+    if (typeof document !== 'undefined') { const halo = new THREE.Sprite(lampGlowMat()); halo.position.set(0.55, 3.8, 0); halo.scale.setScalar(1.6); g.add(halo); }
+  }
   g.position.set(p.x, p.y || 0, p.z); g.rotation.y = p.rot || 0;
   return g;
 }
