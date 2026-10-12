@@ -558,7 +558,7 @@ export default function start({ cfg, E, N, smoke }) {
         try { if (mapId !== m.map) buildMap(m.map); } catch (e) { toast('Could not build ' + m.name + ': ' + (e.message || e)); }
         resetLevel();
         const old = match, mine = people.find((p) => p.id === myId) || {};
-        match = new StoryMatch({ W, mode, mapId, botLevel, send: (t, d, to) => { if (session) session.send(t, d, to); }, onLocal: local }, { mission: mi, diff: camp.diff, host: mine.char || myChar(), runId: camp.runId, obj: camp.resumeObj || 0 });
+        match = new StoryMatch({ W, mode, mapId, botLevel, send: (t, d, to) => { if (session) session.send(t, d, to); }, onLocal: local }, { mission: mi, diff: camp.diff, host: mine.char || myChar(), runId: camp.runId, obj: camp.resumeObj || 0, solo });
         camp.resumeObj = 0; match.hostId = myId; match.killFx = old.killFx; bots = new Bots(match);
         const mp = match.add(myId, hostInfo()); mp.local = true; me.team = mp.team;
         for (const p of people) if (p.id !== myId) match.add(p.id, { ...(camp.info.get(p.id) || { name: 'Player' }), char: p.char || undefined });
@@ -1124,7 +1124,7 @@ export default function start({ cfg, E, N, smoke }) {
     if (isHost) {
       buildMap(mapId);
       const margs = { W, mode, mapId, botLevel, send: (t, d, to) => { if (session) session.send(t, d, to); }, onLocal: local };
-      match = story ? new StoryMatch(margs, { ...story, runId: camp.runId }) : new Match(margs); match.hostId = myId;
+      match = story ? new StoryMatch(margs, { ...story, runId: camp.runId, solo }) : new Match(margs); match.hostId = myId;
       bots = new Bots(match);
       match.killFx = (by, weapon) => funnyKey(weapon === 'knife' ? (by.knife || {})[by.team] : (Object.values(by.inv).find((i) => i && i.wid === weapon) || {}).skin);
       const mp = match.add(myId, { ...hello, ...(ranked ? { team: 'T' } : {}), loadout: sanitizeLoadout(loadout), agent: sanitizeAgent(hello.agent), knife: sanitizeKnife(hello.knife) });
