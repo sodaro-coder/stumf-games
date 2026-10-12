@@ -8,7 +8,7 @@ import * as THREE from '../sdk/three.module.min.js';
 import { CHARACTERS, MISSIONS, CHAPTERS, SQUAD } from './story.js';
 
 const COLORS = { headliner: '#d070ff', radio: '#a8b4bc', dad: '#c8a050', danny: '#f2b080', doctor: '#cfe0ea', nurse: '#cfe0ea', enemy: '#c8c8c8', wiener: '#e8613a', cancer: '#9ad0ff', ricky: '#c07aff', igor: '#8fd06a', recruit: '#d8d8a0', boss: '#ff3b3b', command: '#ffb04a', tape: '#9ad0ff', squad: '#ffffff' };
-const VOICE = { headliner: [1.35, 0.9], radio: [0.85, 1.25], dad: [0.55, 0.92], danny: [1.7, 1.1], doctor: [0.95, 0.95], nurse: [1.15, 1.0], bouncer: [0.6, 1.0], boss: [0.6, 1.0], ricky: [1.2, 1.05], igor: [0.75, 0.95], cancer: [0.9, 0.95], tape: [0.88, 0.92], wiener: [0.8, 1.05], command: [1.0, 1.15], recruit: [1.25, 1.1] };
+const VOICE = { headliner: [1.35, 0.9], radio: [0.85, 1.25], dad: [0.55, 0.92], danny: [1.7, 1.1], doctor: [0.95, 0.95], nurse: [1.15, 1.0], bouncer: [0.6, 1.0], boss: [0.6, 1.0], ricky: [0.65, 0.88], igor: [0.75, 0.95], cancer: [0.9, 0.95], tape: [0.88, 0.92], wiener: [0.8, 1.05], command: [1.0, 1.15], recruit: [1.25, 1.1] };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const lineTime = (l) => 1.6 + String(l.text).length * 0.045 + ((l.o && l.o.hold) || 0);   // the same pace the host uses (story_sim.js scene())
 const stage = (t) => /^\(.*\)$|^\*.*\*$/.test(String(t).trim());   // "(laughing)", "*coughs*": a stage direction, not spoken
