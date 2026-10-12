@@ -120,14 +120,41 @@ function dye(m, cs) {
 		// plates take the colour with the photo's light and scratches; the undersuit a darker, matte cut of it
 		float detail = plate > 0.5 ? clamp(lum / 0.36, 0.35, 1.35) : clamp(0.55 + lum * 9.0, 0.5, 1.2);
 		vec3 dyed = c * mix(0.42 * detail, detail, plate);
-		// skin: pores, a faint warm translucency in the hollows (cheap SSS), fabric weave on cloth
-		float pore = fract(sin(dot(floor(vRest.xy * 14.0) + floor(vRest.zz * 14.0), vec2(12.9898, 78.233))) * 43758.5453);
+		// ---- hyper-real skin & cloth: two-scale pores, mottling, blemishes, veins, red-shifted SSS,
+		// joint wrinkles, ground dirt, edge wear (all inline: no function defs allowed in this block)
+		float pore1 = fract(sin(dot(floor(vRest.xy * 22.0) + floor(vRest.zz * 22.0), vec2(12.9898, 78.233))) * 43758.5453);
+		float pore2 = fract(sin(dot(floor(vRest.xy * 47.0) + floor(vRest.zz * 47.0), vec2(39.346, 11.135))) * 24634.6345);
+		float pore = pore1 * 0.65 + pore2 * 0.35;
 		float weave = fract(sin(dot(floor(vRest.xy * 9.0), vec2(39.346, 11.135))) * 24634.6345);
+		float weave2 = fract(sin(dot(floor(vRest.xy * 23.0) + floor(vRest.yy * 23.0), vec2(74.231, 13.571))) * 9358.1234);
+		float mottle = sin(vRest.x * 0.35 + sin(vRest.z * 0.31) * 2.0) * sin(vRest.y * 0.33 + sin(vRest.x * 0.27) * 2.0);   // large soft blotches
+		float freckH = fract(sin(dot(floor(vRest.xy * 6.0) + floor(vRest.zz * 6.0), vec2(12.9898, 78.233))) * 43758.5453);
+		float blemish = step(0.986, freckH);   // sparse moles / freckles
+		float veinPat = abs(sin(vRest.x * 1.1 + sin(vRest.z * 0.9) * 3.0) * sin(vRest.y * 0.8 + vRest.z * 0.5));
+		float vein = smoothstep(0.93, 1.0, veinPat);   // thin branching lines
 		vec3 bare = c * mix(0.88, 1.06, smoothstep(0.0, 0.4, lum));
-		bare *= 0.96 + pore * 0.07;   // skin pores
-		float hollow = smoothstep(0.45, 0.1, lum);   // shadowed skin reads warmer: light scattering through
-		bare = mix(bare, bare * vec3(1.06, 0.94, 0.9) + vec3(0.03, 0.008, 0.004), hollow * 0.55);
-		vec3 cloth = dyed * (0.94 + weave * 0.1);   // woven fabric micro-texture
+		bare *= 0.94 + pore * 0.1;   // pores, two scales
+		bare *= 1.0 + mottle * 0.04;   // skin is never one flat tone
+		bare = mix(bare, bare * vec3(0.68, 0.48, 0.4), blemish * 0.6);   // blemishes read darker/redder
+		bare = mix(bare, vec3(0.36, 0.46, 0.62), vein * 0.13 * skinR);   // veins show blue-green through skin
+		float hollow = smoothstep(0.5, 0.08, lum);
+		vec3 sss = bare * vec3(1.1, 0.8, 0.7) + vec3(0.04, 0.009, 0.004);   // scattered light is red-shifted, like flesh
+		bare = mix(bare, sss, hollow * 0.68);   // deeper, warmer SSS in the hollows
+		float neckBand = smoothstep(138.0, 143.0, z) * (1.0 - smoothstep(150.0, 152.0, z)) * step(3.0, vRest.y);
+		float tendon = smoothstep(3.0, 0.8, abs(abs(vRest.x) - 4.5)) * neckBand;   // sternocleidomastoid: the neck's cords
+		bare *= 1.0 - tendon * 0.09 * skinR;
+		vec3 cloth = dyed * (0.93 + weave * 0.08 + weave2 * 0.05);   // woven fabric, two thread scales
+		float elbowW = smoothstep(4.0, 0.5, abs(z - 120.0)) * step(20.0, ax) * step(96.0, z);   // wrinkles gather at joints
+		float kneeW = smoothstep(5.0, 0.5, abs(z - 54.0)) * (1.0 - smoothstep(8.0, 16.0, ax)) * step(z, 90.0);
+		float wristW = smoothstep(3.0, 0.5, abs(z - 98.0)) * step(20.0, ax) * step(90.0, z) * step(z, 104.0);
+		float wrLine = sin(z * 6.0 + sin(vRest.x * 2.0) * 2.0) * 0.5 + 0.5;
+		cloth *= 1.0 - (elbowW + kneeW * 0.8 + wristW * 0.5) * (0.05 + wrLine * 0.07) * (1.0 - skinR);
+		float dirt = smoothstep(26.0, 3.0, z) * (1.0 - skinR);   // ground grime on boots and cuffs
+		vec3 dirtC = dyed * vec3(0.8, 0.72, 0.6);
+		dyed = mix(dyed, dirtC, dirt * 0.45);
+		cloth = mix(cloth, dirtC * 0.9, dirt * 0.4);
+		float wear = smoothstep(0.72, 0.95, lum) * plate;   // worn edges catch the light
+		dyed = mix(dyed, dyed * 1.1 + vec3(0.025, 0.022, 0.018), wear * 0.55);
 		diffuseColor.rgb = mix(mix(dyed, cloth, (1.0 - plate) * 0.7), bare, skinR);
 	}`);
   };
@@ -158,13 +185,123 @@ function humanColors(L, team) {
     human_helmet: L.hat === 'helmet' ? (L.hatColor || '#2a3646') : (ct ? '#2a3646' : '#5e5944'), human_shemagh: L.hatColor || '#d8c6a0', human_visor: '#0c0e12',
   };
 }
+// ---- procedural detail textures: iris, sclera, skin (canvas-baked, no downloads) ----
+let irisTex = null, scleraTex = null, skinDetTex = null;
+function irisTexture() {
+  if (irisTex) return irisTex;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  const cx = 128, cy = 128;
+  let g = x.createRadialGradient(cx, cy, 20, cx, cy, 128);   // iris: dark limbal ring -> warm brown -> deep collarette
+  g.addColorStop(0, '#2a1a0e'); g.addColorStop(0.28, '#5a3a1c'); g.addColorStop(0.62, '#7a5228');
+  g.addColorStop(0.88, '#3a2410'); g.addColorStop(0.97, '#14100a'); g.addColorStop(1, '#0a0806');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 220; k++) {   // radial fibers: the crypts and furrows of a real iris
+    const a = (k / 220) * Math.PI * 2 + Math.random() * 0.05, r0 = 34 + Math.random() * 8, r1 = 104 + Math.random() * 14;
+    x.strokeStyle = Math.random() < 0.5 ? `rgba(20,12,6,${0.15 + Math.random() * 0.25})` : `rgba(190,140,80,${0.1 + Math.random() * 0.2})`;
+    x.lineWidth = 1 + Math.random() * 1.6; x.beginPath();
+    x.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+    x.lineTo(cx + Math.cos(a + (Math.random() - 0.5) * 0.1) * r1, cy + Math.sin(a + (Math.random() - 0.5) * 0.1) * r1); x.stroke();
+  }
+  x.strokeStyle = 'rgba(10,6,4,0.85)'; x.lineWidth = 10;   // limbal ring: the dark border of the iris
+  x.beginPath(); x.arc(cx, cy, 121, 0, 7); x.stroke();
+  x.fillStyle = '#050403'; x.beginPath(); x.arc(cx, cy, 33, 0, 7); x.fill();   // pupil
+  x.strokeStyle = 'rgba(120,80,40,0.5)'; x.lineWidth = 3;   // collarette around the pupil
+  x.beginPath(); x.arc(cx, cy, 38, 0, 7); x.stroke();
+  const cg = x.createRadialGradient(88, 78, 2, 88, 78, 26);   // catchlight: the wet glint
+  cg.addColorStop(0, 'rgba(255,255,255,0.95)'); cg.addColorStop(0.4, 'rgba(255,255,255,0.45)'); cg.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = cg; x.beginPath(); x.ellipse(88, 78, 26, 18, -0.5, 0, 7); x.fill();
+  irisTex = new THREE.CanvasTexture(c); irisTex.colorSpace = THREE.SRGBColorSpace; return irisTex;
+}
+function scleraTexture() {
+  if (scleraTex) return scleraTex;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  x.fillStyle = '#e9e4d8'; x.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 16; k++) {   // faint blood vessels
+    x.strokeStyle = `rgba(170,80,70,${0.12 + Math.random() * 0.15})`; x.lineWidth = 1 + Math.random();
+    const y0 = Math.random() * 256; x.beginPath(); x.moveTo(-10, y0);
+    x.bezierCurveTo(70, y0 + (Math.random() - 0.5) * 60, 180, y0 + (Math.random() - 0.5) * 60, 266, y0 + (Math.random() - 0.5) * 40); x.stroke();
+  }
+  const g = x.createRadialGradient(128, 128, 90, 128, 128, 180);   // gentle edge darkening
+  g.addColorStop(0, 'rgba(120,110,100,0)'); g.addColorStop(1, 'rgba(120,110,100,0.25)');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  scleraTex = new THREE.CanvasTexture(c); scleraTex.colorSpace = THREE.SRGBColorSpace; return scleraTex;
+}
+function skinDetailTexture() {
+  if (skinDetTex) return skinDetTex;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  x.fillStyle = '#f4f4f4'; x.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 6; k++) {   // large soft blotches: skin is never one flat tone
+    const gx = Math.random() * 256, gy = Math.random() * 256, gr = 40 + Math.random() * 60;
+    const g = x.createRadialGradient(gx, gy, 4, gx, gy, gr);
+    const warm = Math.random() < 0.6;
+    g.addColorStop(0, warm ? 'rgba(210,170,150,0.10)' : 'rgba(170,180,190,0.08)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(gx, gy, gr, 0, 7); x.fill();
+  }
+  for (let k = 0; k < 2600; k++) {   // pores: fine speckle
+    x.fillStyle = `rgba(60,40,30,${0.03 + Math.random() * 0.05})`;
+    x.fillRect(Math.random() * 256, Math.random() * 256, 1.2, 1.2);
+  }
+  for (let k = 0; k < 14; k++) {   // sparse blemishes
+    const bx = Math.random() * 256, by = Math.random() * 256, br = 1.5 + Math.random() * 3;
+    const g = x.createRadialGradient(bx, by, 0.5, bx, by, br);
+    g.addColorStop(0, 'rgba(120,70,55,0.35)'); g.addColorStop(1, 'rgba(120,70,55,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(bx, by, br, 0, 7); x.fill();
+  }
+  skinDetTex = new THREE.CanvasTexture(c); skinDetTex.colorSpace = THREE.NoColorSpace;
+  skinDetTex.wrapS = skinDetTex.wrapT = THREE.RepeatWrapping; skinDetTex.repeat.set(3, 3); return skinDetTex;
+}
+let gownTex = null;
+function gownTexture() {   // hospital gown: pale blue with a faint diamond print
+  if (gownTex) return gownTex;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  x.fillStyle = '#bfd4e6'; x.fillRect(0, 0, 256, 256);
+  x.strokeStyle = 'rgba(90,120,160,0.4)'; x.lineWidth = 1.5;
+  for (let i = -8; i < 16; i++) {
+    x.beginPath(); x.moveTo(i * 32, 0); x.lineTo(i * 32 + 128, 128); x.lineTo(i * 32, 256); x.stroke();
+    x.beginPath(); x.moveTo(i * 32 + 128, 0); x.lineTo(i * 32, 128); x.lineTo(i * 32 + 128, 256); x.stroke();
+  }
+  for (let k = 0; k < 900; k++) {   // thin hospital cotton, slightly uneven
+    x.fillStyle = `rgba(255,255,255,${Math.random() * 0.07})`;
+    x.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
+  }
+  gownTex = new THREE.CanvasTexture(c); gownTex.colorSpace = THREE.SRGBColorSpace;
+  gownTex.wrapS = gownTex.wrapT = THREE.RepeatWrapping; return gownTex;
+}
 function humanMat(part, L, team, hq) {
   const col = humanColors(L, team)[part] || '#888', cloth = CLOTH[part], plaid = (part === 'human_shirt' && team !== 'CT') || part === 'human_shemagh' ? 1 : 0;
-  const key = `h|${part}|${col}|${hq}|${plaid}`;
+  const key = `h|${part}|${col}|${hq}|${plaid}|${L.gown ? 'gown' : ''}`;
   if (D.mats.has(key)) return D.mats.get(key);
+  if (L.gown && part === 'human_shirt') {   // hospital gown instead of a shirt (Cancer): pale blue diamond print
+    const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, metalness: 0, map: gownTexture() });
+    litPatch(m, 'dyn');
+    const lit0 = m.onBeforeCompile;   // baked-AO hook, own cache key (own map)
+    m.onBeforeCompile = (sh, r) => {
+      lit0(sh, r);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;')
+        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;');
+    };
+    m.customProgramCacheKey = () => 'human-gown';
+    D.mats.set(key, m); return m;
+  }
+  if (part === 'human_eye' || part === 'human_iris') {   // wet, glossy eyes: clearcoat cornea over a detailed iris
+    const m = new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.08, metalness: 0, clearcoat: 1.0, clearcoatRoughness: 0.06,
+      map: part === 'human_iris' ? irisTexture() : scleraTexture(), emissive: '#000000' });
+    litPatch(m, 'dyn');
+    const lit0 = m.onBeforeCompile;   // same baked-AO hook as the other human materials, own cache key (physical shader)
+    m.onBeforeCompile = (sh, r) => {
+      lit0(sh, r);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;')
+        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;');
+    };
+    m.customProgramCacheKey = () => 'human-eye';
+    D.mats.set(key, m); return m;
+  }
   const rough = part === 'human_eye' || part === 'human_iris' || part === 'human_visor' ? 0.15 : part === 'human_skin' ? 0.55 : part === 'human_boot' ? 0.6 : part === 'human_helmet' ? 0.6 : 0.95;
   const m = new THREE.MeshStandardMaterial({ color: col, roughness: rough, metalness: part === 'human_visor' ? 0.4 : 0 });
   if (part === 'human_boot') m.side = THREE.DoubleSide;   // the lofted boot's end caps
+  if (part === 'human_skin') { m.map = skinDetailTexture(); m.roughness = 0.5; }   // pores, blotches, blemishes baked in
   litPatch(m, 'dyn');
   { // baked ambient occlusion: creases, collars, under the plate carrier
     const lit0 = m.onBeforeCompile;
@@ -198,7 +335,15 @@ vec4 tri3(sampler2D t, vec3 p, vec3 w) { return texture2D(t, p.yz * tileK) * w.x
 		float thin = smoothstep(0.03, 0.0, abs(g.x - 0.3)) + smoothstep(0.03, 0.0, abs(g.y - 0.3));
 		diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55, clamp(band, 0.0, 1.0) * 0.8) + vec3(0.06, 0.05, 0.035) * thin;
 	}
-	if (soleOn > 0.5 && vRestP.z < 2.8) diffuseColor.rgb *= 0.3;   // rubber sole`)
+	if (soleOn > 0.5 && vRestP.z < 2.8) diffuseColor.rgb *= 0.3;   // rubber sole
+	float dirtM = smoothstep(30.0, 4.0, vRestP.z) * dirtOn;   // ground grime creeps up boots and cuffs
+	diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.58), dirtM * 0.55);
+	float elbowW = smoothstep(5.0, 1.0, abs(vRestP.z - 118.0)) * jointOn;   // fabric bunches at elbows and knees
+	float kneeW = smoothstep(6.0, 1.0, abs(vRestP.z - 52.0)) * jointOn;
+	float wrL = sin(vRestP.z * 5.0 + sin(vRestP.x * 1.7) * 2.5) * 0.5 + 0.5;
+	diffuseColor.rgb *= 1.0 - (elbowW + kneeW) * (0.04 + wrL * 0.06);
+	float edgeW = smoothstep(0.75, 1.0, hDet);   // raised weave threads catch the light: worn highs
+	diffuseColor.rgb += vec3(0.03, 0.028, 0.024) * edgeW;`)
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = clamp(roughnessFactor * mix(0.75, 1.15, tN.b), 0.05, 1.0);');
     };
     m.customProgramCacheKey = () => 'human-cloth';
@@ -223,6 +368,7 @@ export function makeSoldier(look, team, hq = true) {
   let humanHelm = null;
   if (L.model !== 'log') for (const m of D.meshes) {
     if (m.name.startsWith('human_') !== human) continue;
+    if (L.gown && m.name === 'human_vest') continue;   // no plate carrier over a hospital gown
     const wear = HEADGEAR[m.name] ? HEADGEAR[m.name](L) : true;
     if (!wear && m.name !== 'human_helmet') continue;   // the helmet is kept (hidden) so a bought one can show
     const sm = new THREE.SkinnedMesh(m.g, human ? humanMat(m.name, L, team, hq) : mat); sm.frustumCulled = false; root.add(sm);
@@ -298,14 +444,18 @@ function curlHand(r, side, amt) {
   for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b) turnWorld(b, axis, amt * (side === 'Left' ? 1 : -1) * (k === 1 ? 0.9 : 1.1)); }
 }
 // per frame: pick the base animation from how the player moves, then aim, gun and props
-export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
+export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0, ads = 0 }) {
   r.t += dt;
   if (dead) {
-    if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; if (!d) return; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
+    if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; if (!d) return; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; r.dieT2 = 0; }
+    else r.dieT2 = (r.dieT2 || 0) + dt;
   } else {
     if (r.dead) { r.dead = false; r.act.die.stop(); r.base = ''; base(r, 'idle'); }
     const sp = Math.hypot(vx, vz), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const f = -(vx * sy) - vz * cy, side = vx * cy - vz * sy;   // speed along where they face, and to their right
+    let dyaw = yaw - (r.prevYaw ?? yaw); dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));   // wrapped turn rate
+    const yawVel = dt > 0 ? dyaw / dt : 0; r.prevYaw = yaw;
+    const wasFalling = (r.prevVy ?? 0) < -4.5; r.prevVy = vy;   // for the landing dip below
     if (r.rootS) r.root.scale.copy(r.rootS); else r.rootS = r.root.scale.clone();   // emotes may squash the whole body: reset first
     if (emote) {
       const a = emote.anim, BASE = { dance: 'dance', floss: 'dance', chicken: 'dance', griddy: 'run', twerk: 'crouch', sit: 'crouch', zombie: 'walk', tbag: Math.floor(r.t * 5) % 2 ? 'crouch' : 'idle', lmao: 'crouch' };
@@ -314,12 +464,17 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     }
     else if (Math.abs(vy) > 2.2) base(r, 'jump');
     else if (crouch > 0.5) { if (sp > 0.3) base(r, 'crouchWalk', Math.min(1.6, sp / SPEED.crouchWalk)); else base(r, 'crouch'); }
-    else if (sp < 0.35) base(r, 'idle');
+    else if (sp < 0.35) {
+      // standing turn: the upper body leads with a real pivot step instead of sliding round
+      if (!rest && Math.abs(yawVel) > 1.5 && r.act.turnLeft) base(r, yawVel > 0 ? 'turnLeft' : 'turnRight', Math.min(1.6, Math.abs(yawVel) / 2.2));
+      else base(r, 'idle');
+    }
     else {
       const run = sp > 3.4, ax = Math.abs(f) >= Math.abs(side) * 0.8;
       const name = ax ? (f >= 0 ? (run ? 'run' : 'walk') : (run ? 'runBack' : 'walkBack')) : (side > 0 ? (run ? 'runRight' : 'walkRight') : (run ? 'runLeft' : 'walkLeft'));
       base(r, name, Math.max(0.6, Math.min(1.7, sp / SPEED[name])));
     }
+    if (wasFalling && Math.abs(vy) < 2.2 && !emote) r.landT = 0.3;   // touchdown: absorb it below
   }
   r.mixer.update(dt);
   r.g.updateMatrixWorld(true);
@@ -334,6 +489,46 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
     if (B.Hips) turnWorld(B.Hips, _fw, sway);
     if (B.Spine) turnWorld(B.Spine, _fw, -sway * 0.6);   // counter-sway keeps the head level
+    if (!rest) {   // alive micro-behaviour: every few seconds the head drifts to a glance and back
+      r.lookT = (r.lookT ?? 2.5) - dt;
+      if (r.lookT <= 0) { r.lookT = 3 + Math.random() * 5; r.lookYawT = (Math.random() - 0.5) * 0.7; r.lookPitT = (Math.random() - 0.5) * 0.2; }
+      r.lookYaw = (r.lookYaw || 0) + ((r.lookYawT || 0) - (r.lookYaw || 0)) * Math.min(1, dt * 2.5);
+      r.lookPit = (r.lookPit || 0) + ((r.lookPitT || 0) - (r.lookPit || 0)) * Math.min(1, dt * 2.5);
+      _t1.set(0, 1, 0);   // world up: a glance, not an aim change
+      if (B.Neck) turnWorld(B.Neck, _t1, r.lookYaw * 0.55);
+      if (B.Head) { turnWorld(B.Head, _t1, r.lookYaw * 0.45); turnWorld(B.Head, _v, r.lookPit * 0.5); }
+    }
+  }
+  // ---- locomotion realism: weight shift, head bob, strafe lean, landing dip, death settle ----
+  if (r.rootY === undefined) r.rootY = r.root.position.y;
+  let rootDy = 0;
+  if (!r.dead && !emote && /^(walk|run|crouchWalk)/.test(r.base)) {
+    const sp2 = Math.hypot(vx, vz), cy2 = Math.cos(yaw), sy2 = Math.sin(yaw), side2 = vx * cy2 - vz * sy2;
+    r.stride = (r.stride || 0) + dt * Math.max(0.5, sp2) * 5.2;   // stride phase from ground speed
+    const s1 = Math.sin(r.stride), s2 = Math.sin(r.stride * 2);
+    _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // facing
+    if (B.Hips) turnWorld(B.Hips, _fw, s1 * 0.04);                  // weight shifts side to side each step
+    if (B.Spine) turnWorld(B.Spine, _fw, -s1 * 0.022);              // torso counter-rotates, head stays level
+    _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
+    if (B.Head) turnWorld(B.Head, _v, s2 * 0.012);                  // tiny head bob, twice per stride
+    rootDy -= Math.abs(s2) * 0.018;                                 // vertical bob, lowest mid-stride
+    if (Math.abs(side2) > 0.6 && B.Spine1) turnWorld(B.Spine1, _fw, -side2 * 0.028);   // lean into strafes
+  }
+  if ((r.landT || 0) > 0 && !r.dead && !emote) {   // touchdown: knees give, body absorbs it
+    r.landT -= dt; const k = Math.max(0, r.landT / 0.3), dip = Math.sin(k * Math.PI);
+    rootDy -= dip * 0.07;
+    _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // character's right
+    for (const s of ['Left', 'Right']) {
+      if (B[s + 'UpLeg']) turnWorld(B[s + 'UpLeg'], _v, dip * 0.22);
+      if (B[s + 'Leg']) turnWorld(B[s + 'Leg'], _v, -dip * 0.34);
+    }
+  }
+  r.root.position.y += (r.rootY + rootDy - r.root.position.y) * Math.min(1, dt * 18);   // eased, never snaps
+  if (r.dead && (r.dieT2 || 0) > 1.5) {   // the mocap fall is done: settle — chest sinks, head lolls
+    const k = Math.min(1, (r.dieT2 - 1.5) / 1.4);
+    _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
+    if (B.Spine2) turnWorld(B.Spine2, _v, 0.06 * k);
+    if (B.Head) turnWorld(B.Head, _v, 0.14 * k);
   }
   if (!r.dead) {
     // aim: bend the spine and head with the pitch; procedural emotes on top of the idle pose
@@ -442,10 +637,26 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
         tg.rotateOnAxis(_t6.set(0, 0, 1).applyQuaternion(tg.getWorldQuaternion(_q2.identity())), out * 0.5);
         tg.rotateOnAxis(_t6.set(1, 0, 0).applyQuaternion(tg.getWorldQuaternion(_q2.identity())), out * 0.2);
       }
+      // trigger finger: the right index stays straighter on the trigger while the rest of the hand grips
+      const ri1 = B.RightHandIndex1, rp1 = B.RightHandPinky1;
+      if (ri1 && rp1) {
+        ri1.getWorldPosition(_t1); rp1.getWorldPosition(_t2); _t3.copy(_t1).sub(_t2).normalize();   // the knuckle line
+        for (let k = 1; k <= 3; k++) { const fb = B['RightHandIndex' + k]; if (fb) turnWorld(fb, _t3, 0.28); }   // + = uncurl for the right hand
+      }
+      if (ads > 0.5 && !pistol) {   // aimed in: cheek drops to the stock, head rolls onto it, elbows tuck
+        _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // right
+        _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())); // forward
+        if (B.Head) { turnWorld(B.Head, _v, 0.07 * ads); turnWorld(B.Head, _fw, 0.05 * ads); }   // cheek weld
+        if (B.RightArm) turnWorld(B.RightArm, _fw, -0.06 * ads);   // firing elbow tucks down-in
+      }
     } else {   // knife, grenade, bomb: carried in the right hand as animated
       hand.getWorldPosition(_v); r.g.worldToLocal(_v);
       tg.position.copy(_v); tg.rotation.set(ap, 0, 0, 'YXZ');
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
+      if (cat === 'knife' && B.RightForeArm && !r.dead && !emote) {   // knife guard: forearm rises, blade up-forward
+        _t1.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
+        turnWorld(B.RightForeArm, _t1, 0.18);
+      }
     }
   }
   if (r.human && !r.dead && !emote && (tg.userData || {}).cat !== 'knife') curlHand(r, 'Left', 0.55);   // the support hand closes round the handguard
