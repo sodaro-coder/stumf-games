@@ -1603,16 +1603,19 @@ export default function start({ cfg, E, N, smoke }) {
         }
         me.sprintK = (me.sprintK || 0) + ((me.sprinting ? 1 : 0) - (me.sprintK || 0)) * Math.min(1, dt * 10);
         { // the feel of holding a real gun: it lags behind your aim, breathes, tilts as you strafe, dips when you land,
-          // and each shot kicks it back and up with a little roll before it settles
+          // and each shot kicks it back and up with a little roll before it settles.
+          // inertia is per-weapon: pistols snap back instantly, snipers drag like they have real mass (CS2/R6-style)
           const F = me.vmF || (me.vmF = { x: 0, y: 0, vx: 0, vy: 0, t: 0 }), aim = 1 - 0.75 * me.ads;
-          for (const [a, k] of [['x', -lookDX], ['y', lookDY]]) { F['v' + a] += (k * 0.6 - 90 * F[a] - 14 * F['v' + a]) * dt; F[a] += F['v' + a] * dt; F[a] = Math.max(-1.2, Math.min(1.2, F[a])); }
+          const wcat = (w && w.cat) || 'knife';
+          const IN = wcat === 'sniper' ? [0.85, 48, 9, 1.35] : wcat === 'heavy' ? [0.72, 65, 11, 1.2] : wcat === 'rifle' ? [0.6, 90, 14, 1] : wcat === 'smg' ? [0.55, 115, 16, 0.9] : [0.42, 150, 20, 0.75];   // [drive, stiffness, damping, heft]: heavy guns lag further behind the camera and displace more when they do
+          for (const [a, k] of [['x', -lookDX], ['y', lookDY]]) { F['v' + a] += (k * IN[0] - IN[1] * F[a] - IN[2] * F['v' + a]) * dt; F[a] += F['v' + a] * dt; F[a] = Math.max(-1.2, Math.min(1.2, F[a])); }
           F.t += dt; const br = Math.sin(F.t * 1.7), still = 1 - Math.min(1, sp / 2);
           const side = (me.vx * Math.cos(me.yaw) - me.vz * Math.sin(me.yaw)) / 6;
           me.landK = Math.max(0, (me.landK || 0) - dt * 3); me.shotK = Math.max(0, (me.shotK || 0) - dt * 14);
-          vm.position.x += F.x * 0.012 * aim; vm.position.y += (F.y * 0.01 + br * 0.0016 * still) * aim - me.landK * 0.035 * Math.sin(Math.min(1, me.landK) * Math.PI);
+          vm.position.x += F.x * 0.012 * IN[3] * aim; vm.position.y += (F.y * 0.01 * IN[3] + br * 0.0016 * still) * aim - me.landK * 0.035 * Math.sin(Math.min(1, me.landK) * Math.PI);
           vm.position.z += me.shotK * 0.022;
-          vm.rotation.y += F.x * 0.05 * aim; vm.rotation.x += (F.y * 0.035 + br * 0.004 * still) * aim + me.shotK * 0.05;
-          vm.rotation.z += (F.x * 0.06 - Math.max(-1, Math.min(1, side)) * 0.07) * aim + me.shotK * (me.shotRoll || 0) * 0.05;
+          vm.rotation.y += F.x * 0.05 * IN[3] * aim; vm.rotation.x += (F.y * 0.035 * IN[3] + br * 0.004 * still) * aim + me.shotK * 0.05;
+          vm.rotation.z += (F.x * 0.06 * IN[3] - Math.max(-1, Math.min(1, side)) * 0.07) * aim + me.shotK * (me.shotRoll || 0) * 0.05;
         }
         if (me.sprintK > 0.01) { vm.rotation.x -= 0.32 * me.sprintK; vm.rotation.y += 0.45 * me.sprintK * S.hand; vm.position.y -= 0.035 * me.sprintK; vm.position.x -= 0.03 * me.sprintK * S.hand; }   // gun lowered while sprinting
         if (vm.userData.sc == null) vm.userData.sc = vm.scale.x;
