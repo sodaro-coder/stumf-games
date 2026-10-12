@@ -132,7 +132,8 @@ function nuke() {
   B.block(26, 24, 27, 27, 0.9, 'concrete'); B.block(45, 24, 46, 27, 0.9, 'concrete');  // planters
   B.zone('Green Backyard', 0, 0, 12, 52).zone('Yellow Backyard', 60, 0, 72, 52).zone('Green House', 12, 12, 26, 38).zone('Yellow House', 46, 14, 60, 40)
     .zone('Bus', 30, 16, 41, 34).zone('Truck', 26, 2, 34, 14).zone('North Street', 26, 2, 46, 16).zone('South Street', 26, 34, 46, 50)
-    .zone('Green Garage Side', 12, 2, 26, 12).zone('Green Pool Side', 12, 38, 26, 50).zone('Yellow Garage Side', 46, 2, 60, 14).zone('Yellow Pool Side', 46, 40, 60, 50);
+    .zone('Green Garage Side', 12, 2, 26, 12).zone('Green Pool Side', 12, 38, 26, 50).zone('Yellow Garage Side', 46, 2, 60, 14).zone('Yellow Pool Side', 46, 40, 60, 50)
+    .zone('lobby', 14, 32, 20, 37).zone('control', 47, 16, 52, 28).zone('vents', 19, 13, 25, 37);
   B.zone('Green Upstairs', 19, 13, 25, 37).zone('Yellow Upstairs', 47, 15, 53, 39);   // later zones win
   B.site('A', 26, 2, 46, 14).site('B', 26, 36, 46, 50);
   B.buyzone('T', 2, 2, 12, 50).buyzone('CT', 60, 2, 70, 50);
@@ -160,7 +161,8 @@ function ship() {
   for (const [x, z] of [[13, 14], [25, 24], [12, 25], [27, 14], [15, 33], [26, 5], [3, 16], [36, 24], [19, 24]]) B.block(x, z, x + 1, z + 1, 1.0, 'crate');
   B.block(14, 14, 15, 15, 2.0, 'crate');
   B.block(2, 2, 4, 4, 2.4, 'potty'); B.block(36, 36, 38, 38, 2.4, 'potty');
-  B.zone('North', 2, 2, 38, 7).zone('South', 2, 33, 38, 38).zone('West Lane', 2, 7, 6, 33).zone('East Lane', 34, 7, 38, 33).zone('Center', 12, 12, 28, 28);
+  B.zone('North', 2, 2, 38, 7).zone('South', 2, 33, 38, 38).zone('West Lane', 2, 7, 6, 33).zone('East Lane', 34, 7, 38, 33).zone('Center', 12, 12, 28, 28)
+    .zone('deck', 10, 10, 30, 30).zone('bridge', 22, 2, 30, 6).zone('lifeboat', 8, 35, 15, 37);
   B.site('A', 3, 12, 15, 18).site('B', 25, 22, 37, 28);
   B.buyzone('T', 2, 33, 38, 38).buyzone('CT', 2, 2, 38, 7);
   for (let k = 0; k < 5; k++) { B.spawn('T', 8 + k * 6, 36, 0); B.spawn('CT', 8 + k * 6, 4, Math.PI); }
@@ -217,7 +219,8 @@ function town() {
   B.block(25, 40, 27, 41, 1.2, 'rock'); B.block(37, 23, 39, 24, 1.2, 'rock');
   B.block(25, 12, 26, 14, 1.0, 'crate'); B.block(38, 46, 39, 48, 1.0, 'crate'); B.block(30, 40, 32, 41, 1.0, 'crate'); B.block(31, 22, 33, 23, 1.0, 'crate');
   B.zone('Bank', 4, 4, 22, 22).zone('Vault', 7, 7, 13, 11).zone('Saloon', 42, 4, 60, 22).zone('Diner', 4, 42, 22, 60).zone('Fire Station', 42, 42, 60, 60)
-    .zone('Crater', 27, 27, 37, 37).zone('North Road', 24, 2, 40, 27).zone('South Road', 24, 37, 40, 62).zone('West Road', 2, 24, 27, 40).zone('East Road', 37, 24, 62, 40);
+    .zone('Crater', 27, 27, 37, 37).zone('North Road', 24, 2, 40, 27).zone('South Road', 24, 37, 40, 62).zone('West Road', 2, 24, 27, 40).zone('East Road', 37, 24, 62, 40)
+    .zone('stand', 8, 28, 14, 34).zone('square', 24, 24, 40, 40).zone('van', 26, 52, 32, 58).zone('bridge', 26, 30, 28, 34);
   B.zone('Bank Upstairs', 5, 16, 21, 21).zone('Saloon Upstairs', 43, 16, 59, 21).zone('Balcony', 44, 21, 58, 25);
   B.site('A', 5, 5, 21, 16).site('B', 43, 5, 59, 16);
   B.buyzone('T', 24, 52, 40, 59).buyzone('CT', 24, 5, 40, 12);
@@ -261,7 +264,8 @@ function crust() {
   B.ramp(36, 38, 42, 41, 0, 1.0, 'x', 'sand'); B.open(42, 38, 45, 41, 1.0, 'sand');
   B.block(6, 6, 8, 8, 1.1, 'crate').block(40, 6, 44, 8, 2.6, 'cred').block(32, 14, 34, 16, 1.1, 'crate').block(12, 34, 14, 36, 1.1, 'crate');
   B.zone('West Yard', 2, 2, 14, 46).zone('East Yard', 34, 2, 46, 46).zone('Pipes', 2, 28, 14, 40).zone('Shack', 18, 3, 30, 11).zone('Containers', 16, 36, 32, 46)
-    .zone('Under the Tower', 14, 18, 34, 30).zone('Tower', 19, 19, 29, 29).zone("Crow's Nest", 23, 20, 27, 23);
+    .zone('Under the Tower', 14, 18, 34, 30).zone('Tower', 19, 19, 29, 29).zone("Crow's Nest", 23, 20, 27, 23)
+    .zone('kitchen', 19, 4, 23, 8).zone('dining', 25, 4, 29, 10).zone('oven', 19, 4, 29, 10).zone('roof', 21, 21, 27, 27);
   B.site('A', 19, 4, 29, 10).site('B', 16, 36, 32, 45);
   B.buyzone('T', 2, 14, 9, 34).buyzone('CT', 39, 14, 46, 34);
   for (let k = 0; k < 5; k++) { B.spawn('T', 5, 16 + k * 4, -Math.PI / 2); B.spawn('CT', 43, 16 + k * 4, Math.PI / 2); }
@@ -303,7 +307,8 @@ function yacht() {
   B.block(62, 13, 66, 17, 2.8, 'tile').block(63, 14, 65, 16, 2.6, 'cblue');
   B.block(58, 9, 60, 11, 3.0, 'crate').block(68, 18, 70, 20, 3.0, 'crate').block(58, 19, 60, 21, 3.0, 'crate');
   B.zone('Stern', 6, 7, 24, 23).zone('Pool', 10, 12, 18, 18).zone('Port Side', 24, 7, 58, 10).zone('Starboard Side', 24, 20, 58, 23)
-    .zone('Deckhouse', 26, 10, 46, 20).zone('Bridge', 47, 10, 57, 21).zone('Bow', 58, 7, 72, 23).zone('Hot Tub', 61, 12, 67, 18).zone('Bow Tip', 72, 10, 78, 20);
+    .zone('Deckhouse', 26, 10, 46, 20).zone('Bridge', 47, 10, 57, 21).zone('Bow', 58, 7, 72, 23).zone('Hot Tub', 61, 12, 67, 18).zone('Bow Tip', 72, 10, 78, 20)
+    .zone('jetski', 6, 10, 10, 20);
   B.site('A', 27, 11, 45, 19).site('B', 58, 8, 71, 22);
   B.buyzone('T', 6, 8, 16, 22).buyzone('CT', 70, 10, 78, 20);
   for (let k = 0; k < 5; k++) { B.spawn('T', 9, 10 + k * 2.5, -Math.PI / 2); B.spawn('CT', 73.5, 11 + k * 2, Math.PI / 2); }
