@@ -118,6 +118,15 @@ const CSS = `
 .cs-flash{position:fixed;inset:0;z-index:25;background:#fff;pointer-events:none;opacity:0}
 .cs-hurt{position:fixed;inset:0;z-index:18;pointer-events:none;background:radial-gradient(transparent 55%,rgba(200,0,0,.55));opacity:0;transition:opacity .25s}
 .cs-panel{position:fixed;z-index:120;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px;pointer-events:auto;max-width:96vw;max-height:92vh;overflow:auto}
+.cs-hud .vtalk{position:absolute;left:14px;bottom:110px;display:flex;flex-direction:column;gap:5px;pointer-events:none}
+.cs-hud .vt{display:flex;align-items:center;gap:7px;background:rgba(8,12,18,.82);border:1px solid #2f7cf6;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;animation:vtPulse 1.1s ease-in-out infinite}
+.cs-hud .vt.me{border-color:#7ed957}
+.cs-hud .vt.dim{opacity:.55;border-color:#5a6472}
+@keyframes vtPulse{0%,100%{opacity:1}50%{opacity:.55}}
+.cs-sb tr.speaking td:first-child{box-shadow:inset 3px 0 0 #7ed957}
+.cs-sb .vmut{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:14px;padding:2px 7px;line-height:1.2}
+.cs-sb .vmut:hover{border-color:#2f7cf6}
+.cs-sb .vmut.off{opacity:.5}
 .cs-buy{width:min(900px,96vw)}.cs-buy .cats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
 .cs-buy .cat h4{margin:0 0 6px;font-size:12px;letter-spacing:.1em;color:var(--mut);text-transform:uppercase}
 .cs-buy .it{display:flex;justify-content:space-between;gap:6px;width:100%;text-align:left;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:12px}
@@ -1195,6 +1204,10 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
         <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · same as phones)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
+      <div class="cs-h">Voice chat</div><div class="cs-grid">
+        <label class="cs-card"><div class="cs-small cs-mut">Voice chat (P2P · no server)</div><select data-k="voiceChat"><option value="1">On</option><option value="0">Off</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Hear voice from</div><select data-k="vcHear"><option value="all">Everyone</option><option value="friends">Friends only (strangers muted)</option><option value="none">Nobody</option></select></label>
+        <div class="cs-card"><div class="cs-small cs-mut">Push to talk: <b>Keybinds → Comms</b> below</div><div class="cs-small" style="margin:6px 0">Hold the key in a match to talk. Strangers are muted by default.</div><button class="cs-btn alt sm" id="vMicTest">Test microphone</button><div id="vMicOut" style="margin-top:6px"></div></div></div>
       <div class="cs-h">Accessibility</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Colorblind mode</div><select data-k="colorblind"><option value="none">Off</option><option value="deuteranopia">Deuteranopia (red-green · most common)</option><option value="protanopia">Protanopia (red-blind)</option><option value="tritanopia">Tritanopia (blue-yellow · rare)</option></select><div class="cs-small cs-mut" style="margin-top:8px">CT / T / alert preview</div><div id="cbPrev" style="display:flex;gap:6px;margin-top:4px"></div></label></div>
       <div class="cs-h">Keybinds <span style="flex:1"></span><button class="cs-btn alt sm" id="kbReset">Reset defaults</button></div>
       <div class="cs-small cs-mut" style="margin-bottom:8px">Click a key, then press the new key (or a mouse button). Esc cancels.</div>
@@ -1202,7 +1215,11 @@ export class Menu {
     const renderCbPrev = () => { const el = $('#cbPrev', B); if (!el || !window.__CB__) return; const p = __CB__.swatch(S.colorblind || 'none'); el.innerHTML = [p.ct, p.t, p.bombPlanted, p.hmHead].map((c) => `<span title="${c}" style="width:26px;height:18px;border-radius:4px;background:${c};border:1px solid #000"></span>`).join(''); };
     if (window.__CB__) __CB__.set(S.colorblind || 'none');
     renderCbPrev();
-    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'voicePack' || k === 'colorblind' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); if (k === 'colorblind' && window.__CB__) { __CB__.set(e.value); renderCbPrev(); } drawXh($('#xPrev', B), S, 0); }; });
+    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'voicePack' || k === 'colorblind' || k === 'vcHear' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); if (k === 'colorblind' && window.__CB__) { __CB__.set(e.value); renderCbPrev(); } if (k === 'vcHear' && this.h.voiceHear) this.h.voiceHear(e.value); drawXh($('#xPrev', B), S, 0); }; });
+    const vcSel = B.querySelector('[data-k="voiceChat"]');
+    if (vcSel) vcSel.addEventListener('change', () => { if (this.h.voiceSet) this.h.voiceSet(vcSel.value === '1'); });
+    const micT = $('#vMicTest', B);
+    if (micT) micT.onclick = (e) => { e.preventDefault(); if (this.h.voiceTest) this.h.voiceTest($('#vMicOut', B)); };
     drawXh($('#xPrev', B), S, 0);
     $('#vTry', B).onclick = (e) => { e.preventDefault(); this.h.announce('planted'); };
     this.keybindUI(B);
@@ -1366,11 +1383,16 @@ export class Hud {
   scoreboard(show, d) {
     if (!show) { if (this.panel && this.panel.dataset.k === 'sb') { this.panel.remove(); this.panel = null; } return; }
     if (!this.panel || this.panel.dataset.k !== 'sb') { if (this.panel) this.panel.remove(); this.panel = document.createElement('div'); this.panel.className = 'cs cs-panel cs-sb'; this.panel.dataset.k = 'sb'; document.body.appendChild(this.panel); }
-    const rows = (team) => d.players.filter((p) => p.team === team).sort((a, b) => b.score - a.score).map((p) => `<tr class="${team} ${p.alive ? '' : 'dead'} ${p.id === d.me ? 'me' : ''}"><td>${p.bot ? '🤖 ' : ''}${esc(p.name)}</td><td>${d.myTeam === team ? '$' + p.money : ''}</td><td>${p.k}</td><td>${p.a}</td><td>${p.d}</td><td>${p.mvp ? '★' + p.mvp : ''}</td><td>${p.score}</td><td>${p.bot ? 'BOT' : (p.ping | 0)}</td></tr>`).join('');
+    const vc = d.vc || null;   // voice chat: {muted, speaking, onMute}
+    const rows = (team) => d.players.filter((p) => p.team === team).sort((a, b) => b.score - a.score).map((p) => {
+      const sp = vc && vc.speaking[p.id], mu = vc && vc.muted[p.id], canMute = vc && !p.bot && p.id !== d.me;
+      return `<tr class="${team} ${p.alive ? '' : 'dead'} ${p.id === d.me ? 'me' : ''}${sp ? ' speaking' : ''}"><td>${p.bot ? '🤖 ' : ''}${esc(p.name)}${sp ? ' 🔊' : ''}</td><td>${d.myTeam === team ? '$' + p.money : ''}</td><td>${p.k}</td><td>${p.a}</td><td>${p.d}</td><td>${p.mvp ? '★' + p.mvp : ''}</td><td>${p.score}</td><td>${p.bot ? 'BOT' : (p.ping | 0)}</td>${vc ? `<td>${canMute ? `<button class="vmut${mu ? ' off' : ''}" data-mute="${esc(p.id)}" title="${mu ? 'Unmute their voice' : 'Mute their voice'}">${mu ? '🔇' : '🔊'}</button>` : ''}</td>` : ''}</tr>`;
+    }).join('');
     const hist = (d.history || []).map((h) => `<i style="background:${h.w === 'T' ? 'var(--tt)' : h.w === 'CT' ? 'var(--ct)' : '#555'}" title="${esc(h.r)}">${h.r === 'bomb' ? '💥' : h.r === 'defuse' ? '✂' : h.r === 'time' ? '⏱' : ''}</i>`).join('');
-    this.panel.innerHTML = `<div class="cs-row"><b>${esc(d.title)}</b><span style="flex:1"></span><span>Round ${d.round}</span></div><div class="hist">${hist}</div>
-      <table><tr class="cs-mut"><th>Counter-Terrorists · ${d.score.CT}</th><th>Money</th><th>K</th><th>A</th><th>D</th><th>MVP</th><th>Score</th><th>Ping</th></tr>${rows('CT')}
-      <tr class="cs-mut"><th>Terrorists · ${d.score.T}</th><th></th><th></th><th></th><th></th><th></th><th></th><th></th></tr>${rows('T')}</table>`;
+    this.panel.innerHTML = `<div class="cs-row"><b>${esc(d.title)}</b><span style="flex:1"></span><span>Round ${d.round}</span></div><div class="hist">${hist}</div>${vc ? '<div class="cs-small cs-mut" style="margin:4px 0">🎤 Voice: strangers muted by default — click 🔊 to mute / unmute</div>' : ''}
+      <table><tr class="cs-mut"><th>Counter-Terrorists · ${d.score.CT}</th><th>Money</th><th>K</th><th>A</th><th>D</th><th>MVP</th><th>Score</th><th>Ping</th>${vc ? '<th title="Voice chat">🎤</th>' : ''}</tr>${rows('CT')}
+      <tr class="cs-mut"><th>Terrorists · ${d.score.T}</th><th></th><th></th><th></th><th></th><th></th><th></th><th></th>${vc ? '<th></th>' : ''}</tr>${rows('T')}</table>`;
+    if (vc && vc.onMute) this.panel.querySelectorAll('[data-mute]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); vc.onMute(b.dataset.mute); }; });
   }
   radio(open, team, onPick) {
     if (this.radioEl) { this.radioEl.remove(); this.radioEl = null; }
