@@ -484,6 +484,13 @@ const blk = (u0, u1, v0, v1, w, x = 0) => {
 const guard = (u0, u1, v0, v1, w = 0.012) => ext([[u0, v1], [u1, v1], [u1, v0 + 0.012], ['q', u1, v0, u1 - 0.015, v0], [u0 + 0.01, v0], [u0, v0 + 0.012]], w, 0.002, [[[u0 + 0.008, v1 - 0.001], [u1 - 0.008, v1 - 0.001], [u1 - 0.008, v0 + 0.008], [u0 + 0.008, v0 + 0.008]]]);
 
 const xpin = (u, v, len, r = 0.0032) => place(CYL(r, r, len, 8), [0, v, -u], [0, 0, Math.PI / 2]);   // a pin/rivet/button across the gun
+// panel gaps: thin dark recesses where two parts meet, so the gun reads as assembled from separate pieces at
+// different depths instead of one continuous blob. seamH runs along the gun (u), seamV across it (v).
+const seamH = (G, u0, u1, v, w2, lift = 0.0004) => { for (const s of [-1, 1]) G('dark', blk(u0, u1, v - 0.0009, v + 0.0009, 0.0012, s * (w2 / 2 + lift))); };
+const seamV = (G, u, v0, v1, w2, lift = 0.0004) => { for (const s of [-1, 1]) G('dark', blk(u - 0.0009, u + 0.0009, v0, v1, 0.0012, s * (w2 / 2 + lift))); };
+// a stepped plate: a thin overlay standing proud of the surface, a real change in depth level (forged side plates,
+// upper/lower receiver steps, barrel bands)
+const plate = (G, u0, u1, v0, v1, w2, mat = 'metal', lift = 0.0008) => { for (const s of [-1, 1]) G(mat, blk(u0, u1, v0, v1, 0.0014, s * (w2 / 2 + lift))); };
 // per-weapon recipes. Parts go into material buckets: body (takes the skin), metal, dark, wood, ...
 const RECIPE = {};
 const R = (ids, fn) => { for (const id of ids.split(' ')) RECIPE[id] = fn; };
@@ -579,6 +586,8 @@ function rifle(G, o) {
   if (o.top === 'ak') {
     G('metal', ext([[r1 - 0.17, rt - 0.031], [r1 - 0.03, rt - 0.025], [r1 - 0.025, rt - 0.017], [r1 - 0.17, rt - 0.023]], 0.003, 0).translate(w / 2 + 0.0025, 0, 0));   // selector lever
     G('metal', blk(r1 - 0.17, r1 - 0.15, rt - 0.034, rt - 0.024, 0.006, w / 2 + 0.003));
+    G('steel', place(CYL(0.0012, 0.0012, 0.001, 6), [w / 2 + 0.0016, rt - 0.026, -(r1 - 0.055)], [0, 0, Math.PI / 2]));   // selector position dots
+    G('steel', place(CYL(0.0012, 0.0012, 0.001, 6), [w / 2 + 0.0016, rt - 0.026, -(r1 - 0.145)], [0, 0, Math.PI / 2]));
     if (o.rear !== false) { G('metal', blk(r1 + 0.002, r1 + 0.05, rt - 0.012, rt + 0.012, w * 0.62)); G('dark', ext([[r1 + 0.008, rt + 0.012], [r1 + 0.06, rt + 0.016], [r1 + 0.06, rt + 0.02], [r1 + 0.008, rt + 0.018]], w * 0.5, 0)); for (let k = 0; k < 4; k++) G('dark', blk(r1 + 0.014 + k * 0.01, r1 + 0.017 + k * 0.01, rt + 0.016, rt + 0.02, w * 0.52)); }   // rear sight block + leaf with range graduations
     for (const u of [r0 + 0.05, r0 + 0.09, r1 - 0.06]) G('metal', xpin(u, rt - 0.02, w + 0.003, 0.0026));   // rivets
     for (let k = 0; k < 6; k++) G(B, blk(r0 + 0.03 + k * 0.022, r0 + 0.036 + k * 0.022, rt - 0.004, rt + 0.0035, w * 0.7));   // dust cover ribs
@@ -599,6 +608,8 @@ function rifle(G, o) {
     G('dark', ext([[r0 + 0.004, rt + 0.004], [r0 + 0.03, rt + 0.004], [r0 + 0.03, rt + 0.012], [r0 - 0.012, rt + 0.012], [r0 - 0.012, rt + 0.006]], 0.024, 0.0015));   // charging handle
     G('metal', place(CYL(0.006, 0.006, 0.006, 12), [-(w / 2 + 0.003), rb - 0.004, -(r0 + 0.045)], [0, 0, Math.PI / 2]));   // safety selector hub
     G('metal', ext([[r0 + 0.035, rb - 0.003], [r0 + 0.06, rb - 0.0], [r0 + 0.06, rb - 0.008], [r0 + 0.035, rb - 0.006]], 0.003, 0).translate(-(w / 2 + 0.006), 0, 0));   // and its lever
+    G('steel', place(CYL(0.0012, 0.0012, 0.001, 6), [-(w / 2 + 0.0016), rb + 0.005, -(r0 + 0.028)], [0, 0, Math.PI / 2]));   // selector position dots
+    G('steel', place(CYL(0.0012, 0.0012, 0.001, 6), [-(w / 2 + 0.0016), rb + 0.005, -(r0 + 0.062)], [0, 0, Math.PI / 2]));
     G('dark', blk(m0 + 0.078, m0 + 0.094, rb - 0.006, rb + 0.012, 0.004, -w / 2 - 0.0025));    // bolt catch
     G('metal', place(new THREE.TorusGeometry(0.006, 0.002, 6, 12), [0, rb - 0.012, -(r0 - 0.055)], [0, Math.PI / 2, 0]));   // QD sling socket
   } else {
@@ -638,6 +649,24 @@ function rifle(G, o) {
   }
   if (o.stock === 'ak') G('metal', ext([[r0 - 0.3, rb - 0.08], [r0 - 0.312, rb - 0.08], [r0 - 0.316, rt - 0.03], [r0 - 0.305, rt - 0.03]], w * 0.92, 0.0015));   // steel buttplate
   if (o.stock && o.stock !== 'none' && o.stock !== 'fold') G('metal', place(new THREE.TorusGeometry(0.009, 0.0022, 6, 12), [0, rb - 0.03, -(r0 - 0.1)], [0, Math.PI / 2, 0]));   // sling swivel
+  // ---- panel gaps & stepped levels: receiver, handguard, grip, stock and mag well read as separate parts ----
+  seamH(G, r0 + 0.006, r1 - 0.006, rb + 0.009, w);                       // upper/lower receiver split line
+  seamV(G, r0 + 0.004, rb, rt - 0.004, w);                               // receiver <-> stock joint
+  seamV(G, r1 - 0.004, rb, rt - 0.004, w);                               // receiver <-> handguard joint
+  if (o.top === 'ak') seamH(G, r0 + 0.008, r1 - 0.008, rt - 0.011, w);   // dust cover lower edge
+  else if (!o.rail) seamH(G, r0 + 0.008, r1 - 0.008, rt - 0.002, w);     // top edge split (no rail covering it)
+  plate(G, r0 + 0.025, r1 - 0.06, rb + 0.014, rt - 0.01, w);              // stepped receiver side plate
+  const _hw = w * 1.1;
+  if (o.hgType && o.hgType !== 'none') {                                  // handguard panel separation, both sides
+    seamH(G, h0 + 0.01, h1 - 0.01, hv + 0.02, _hw); seamH(G, h0 + 0.01, h1 - 0.01, hv - 0.02, _hw);
+    seamV(G, h0 + 0.006, rb, rt - 0.006, _hw); seamV(G, h1 - 0.006, rb, rt - 0.006, _hw);
+  }
+  const _gw = w * 0.82;                                                   // pistol-grip panel outline
+  seamH(G, -0.062, 0.02, rb + 0.002, _gw); seamV(G, -0.058, rb - 0.108, rb + 0.002, _gw); seamV(G, 0.014, rb - 0.05, rb + 0.002, _gw);
+  seamH(G, m0 - 0.006, m0 + 0.1, rb + 0.004, w);                          // magazine well seam
+  { const _br = o.br || 0.0105; G('dark', tube(_br + 0.0012, h1 - 0.004, h1 + 0.004, bv, 0, 10)); }   // barrel step ring at the handguard end
+  if (o.rail) for (const _u of [r0 + 0.05, r1 - 0.05]) G('metal', place(CYL(0.003, 0.003, 0.0025, 8), [0, rt + 0.0115, -_u]));   // rail screws
+  if (!o.muzzle || o.muzzle === 'none') { const _br = o.br || 0.0105; G('dark', tube(_br + 0.0008, bEnd - 0.007, bEnd - 0.001, bv, 0, 12)); G('steel', tube(_br * 0.45, bEnd - 0.006, bEnd - 0.002, bv, 0, 10)); }   // crowned muzzle: dark crown ring, bright bore
   return { iron: o.fsight !== false && !o.scope ? [h1 + 0.045, bv + 0.05] : null, grip: [-0.03, rb - 0.055], fore: [(h0 + h1) / 2 - 0.02, rb - 0.006], mount, charge: [r1 - 0.035, rt - 0.023, w / 2 + 0.02] };
 }
 // muzzle devices (looks only; the suppressor only makes the gun quieter)
@@ -711,6 +740,21 @@ function pistol(G, o) {
   G('dark', blk(s0 + 0.066, s0 + 0.068, sb - 0.036, sb - 0.02, 0.002));   // trigger safety blade
   G(F, ext([[s0 - 0.002, sb - 0.012], [s0 - 0.016, sb - 0.008], [s0 - 0.014, sb - 0.016], [s0 + 0.004, sb - 0.026]], w * 0.9, 0.002));   // beavertail
   if (o.mag) G('mag|dark', ext([[s0 + 0.075, sb - 0.016], [s0 + 0.095, sb - 0.016], [s0 + 0.105, sb - (o.mag + 0.02)], [s0 + 0.08, sb - (o.mag + 0.02)]], w * 0.8));
+  // ---- panel gaps & stepped levels: slide, frame, grip and mag read as separate parts ----
+  for (const s of [-1, 1]) {
+    G('dark', blk(s0 + 0.008, s1 - 0.008, sb - 0.0004, sb + 0.0016, 0.0012, s * (w / 2 + 0.0004)));       // slide/frame seam
+    G('dark', blk(s0 + 0.014, s0 + 0.05, sb - 0.024, sb - 0.022, 0.0012, s * (w * 0.95 / 2 + 0.0004)));   // grip panel top edge
+    G('dark', blk(s0 + 0.006, s0 + 0.008, sb - 0.1, sb - 0.024, 0.0012, s * (w * 0.95 / 2 + 0.0004)));    // grip panel back edge
+    G('dark', blk(s0 + 0.042, s0 + 0.044, sb - 0.1, sb - 0.024, 0.0012, s * (w * 0.95 / 2 + 0.0004)));    // grip panel front edge
+    G('dark', blk(s0 + 0.006, s0 + 0.048, sb - 0.102, sb - 0.1, 0.0012, s * (w * 0.7 / 2 + 0.0004)));     // magazine base seam
+    G('dark', blk(s0 + 0.043, s0 + 0.047, sb - 0.05, sb - 0.014, 0.0012, 0.0064 * s));                    // trigger guard rear joint
+    G('dark', blk(s0 + 0.093, s0 + 0.097, sb - 0.05, sb - 0.014, 0.0012, 0.0064 * s));                    // trigger guard front joint
+  }
+  if (!o.topRib) G('dark', blk(s0 + 0.025, s1 - 0.025, st + 0.0002, st + 0.0014, 0.009));   // slide top anti-glare channel
+  for (let k = 0; k < 5; k++) G('dark', blk(s0 + 0.074, s0 + 0.082, sb - 0.032 - k * 0.012, sb - 0.030 - k * 0.012, w * 0.9));   // front-strap checkering
+  G('metal', blk(s1 - 0.072, s1 - 0.038, st - 0.002, st + 0.0008, 0.013));   // barrel hood visible in the ejection port
+  if (o.noHammer) for (const s of [-1, 1]) G('dark', blk(s0 - 0.007, s0 - 0.003, st - 0.014, st - 0.002, 0.0012, s * (w * 0.72 / 2 + 0.0004)));   // striker cover-plate seam
+  { const _bl = o.bl || 0.006; G('dark', tube(0.0083, s1 + _bl - 0.006, s1 + _bl - 0.001, st / 2 - 0.002, 0, 10)); G('steel', tube(0.0035, s1 + _bl - 0.005, s1 + _bl - 0.002, st / 2 - 0.002, 0, 8)); }   // muzzle crown + bore
   return { iron: [s1 - 0.008, st + 0.008], grip: [s0 + 0.03, sb - 0.06], fore: null, mount: [s0 + 0.045, st], charge: [s0 + 0.02, st, 0] };
 }
 R('ak47', (G) => rifle(G, { recv: [-0.12, 0.25, -0.03, 0.03], w: 0.05, top: 'ak', furn: 'wood', hgType: 'ak', hg: [0.25, 0.43], blen: 0.17, muzzle: 'ak', mag: 'curve', stock: 'ak', gripMat: 'wood' }));
