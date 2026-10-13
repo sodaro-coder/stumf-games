@@ -286,6 +286,40 @@ function curlHand(r, side, amt) {
   for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b && b.userData.q0) { b.quaternion.copy(b.userData.q0); b.updateMatrixWorld(true); } }
   for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b) turnWorld(b, axis, amt * (side === 'Left' ? -1 : 1) * (k === 1 ? 0.9 : 1.1)); }
 }
+// wrap a hand round a cylinder (a pistol grip, a handguard): A = { p: a point on its axis, d: the axis direction, rad }.
+// Each finger joint bends only the way a finger bends (towards the palm, up to ~95 degrees), picked so the next joint
+// sits on the surface; the thumb closes round the other side. Gives a real fist round the part, whatever its size.
+const _wa = new THREE.Vector3(), _wb = new THREE.Vector3(), _wc = new THREE.Vector3();
+function axisDist(p, A) { _wa.copy(p).sub(A.p); return _wa.addScaledVector(A.d, -_wa.dot(A.d)).length(); }
+function wrapHand(r, side, A) {
+  const B = r.bones, hand = B[side + 'Hand'], m1 = B[side + 'HandMiddle1'], i1 = B[side + 'HandIndex1'], p1 = B[side + 'HandPinky1'];
+  if (!hand || !m1 || !i1 || !p1) return;
+  for (const fn of ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b && b.userData.q0) b.quaternion.copy(b.userData.q0); }
+  hand.updateMatrixWorld(true);
+  const h = hand.getWorldPosition(new THREE.Vector3()), f = m1.getWorldPosition(new THREE.Vector3()).sub(h).normalize();
+  const across = i1.getWorldPosition(new THREE.Vector3()).sub(p1.getWorldPosition(new THREE.Vector3()));
+  const n = new THREE.Vector3().crossVectors(f, across).normalize().multiplyScalar(PALM[side]), kax = new THREE.Vector3().crossVectors(n, f).normalize();
+  const R = A.rad + 0.009;   // finger thickness
+  for (const fn of ['Index', 'Middle', 'Ring', 'Pinky', 'Thumb']) {
+    const bs = [1, 2, 3].map((k) => B[side + 'Hand' + fn + k]).filter(Boolean); if (bs.length < 2) continue;
+    for (let i = 0; i < bs.length; i++) {
+      const b = bs[i], after = () => i + 1 < bs.length ? bs[i + 1].getWorldPosition(_wb) : bs[i].getWorldPosition(_wb).addScaledVector(_wc.copy(_wb).sub(bs[i - 1].getWorldPosition(_wc)), 0.8);
+      let ax;
+      if (fn === 'Thumb') {   // the thumb turns towards the axis, round the near side
+        const j = b.getWorldPosition(new THREE.Vector3()), seg = after().clone().sub(j), to = A.p.clone().addScaledVector(A.d, j.clone().sub(A.p).dot(A.d)).sub(j);
+        ax = new THREE.Vector3().crossVectors(seg, to); if (ax.lengthSq() < 1e-10) continue; ax.normalize();
+      } else {
+        ax = kax.clone(); const q = b.quaternion.clone(), a0 = after().clone(); turnWorld(b, ax, 0.3); const moved = after().clone().sub(a0).dot(n); b.quaternion.copy(q); b.updateMatrixWorld(true);
+        if (moved < 0) ax.negate();   // flexing moves the finger towards the palm side
+      }
+      const q0 = b.quaternion.clone(), cost = (ang) => { b.quaternion.copy(q0); turnWorld(b, ax, ang); const d = axisDist(after(), A); return Math.abs(d - R) + (d < R ? (R - d) * 4 : 0) + ang * 0.004; };
+      let best = 0, bc = Infinity;
+      for (let ang = -0.1; ang <= 1.65; ang += 0.175) { const c = cost(ang); if (c < bc) { bc = c; best = ang; } }
+      for (let ang = best - 0.12; ang <= best + 0.12; ang += 0.04) { const c = cost(ang); if (c < bc) { bc = c; best = ang; } }
+      b.quaternion.copy(q0); turnWorld(b, ax, Math.max(-0.1, Math.min(fn === 'Thumb' ? 1.2 : 1.65, best)));
+    }
+  }
+}
 // turn a hand so its fingers (wrist to middle knuckle) run along fWant and its palm faces nWant
 const PALM = { Left: 1, Right: -1 };   // index-to-pinky crossed with the fingers points out of the palm on the right, the back on the left
 function orientHand(r, side, fWant, nWant) {
@@ -401,6 +435,11 @@ function legs(r, rt, rest, crouched, moving) {
     const pole = hp.clone().lerp(l.tgt, 0.5).addScaledVector(fw, 0.6).addScaledVector(rt, l.sx * 0.12);   // knee forward, a little out over the little toe
     ik2(l.hp, l.kn, l.ft, l.tgt, pole);
     l.ft.parent.getWorldQuaternion(_q).invert(); l.ft.quaternion.copy(_q.multiply(l.q)); l.ft.updateMatrixWorld(true);   // the foot keeps its angle to the ground
+    const toeB = B[k + 'ToeBase'];
+    if (toeB && !still) {   // the clips also turn the trailing foot round (toes pointing back): same heel-to-toe pitch, toes forward
+      const a = l.ft.getWorldPosition(new THREE.Vector3()), d = toeB.getWorldPosition(new THREE.Vector3()).sub(a), back = d.dot(fw);
+      if (back < 0) { const want = d.clone().addScaledVector(fw, -2 * back); rotateWorld(l.ft, d.normalize(), want.normalize()); }
+    }
     if (still) {   // toes ahead (turned out a touch), heel-to-toe level as the clip had it
       const toe = B[k + 'ToeBase'];
       if (toe) { const a = l.ft.getWorldPosition(new THREE.Vector3()), d = toe.getWorldPosition(new THREE.Vector3()).sub(a), h = Math.hypot(d.x, d.z);
@@ -490,9 +529,11 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
       const X = xA.clone(), Y = yA.clone();
-      reachPalm(r, 'Right', grip.clone().addScaledVector(X, 0.03).addScaledVector(Y, -0.012), dir.clone().addScaledVector(Y, -0.45), X.clone().negate(),
+      r.wrapR = { p: grip.clone(), d: Y.clone().multiplyScalar(-0.988).addScaledVector(dir, -0.156).normalize(), rad: 0.022 };   // the pistol grip: down and raked back
+      reachPalm(r, 'Right', grip.clone().addScaledVector(X, 0.03).addScaledVector(Y, -0.012), dir.clone().addScaledVector(Y, 0.16).addScaledVector(X, -0.25), X.clone().negate(),
         B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.6).addScaledVector(rt, 0.4).addScaledVector(fw, -0.3));   // elbow down and back by the ribs (kept out of them)
       const fore = (gm.userData.fore ? gm.localToWorld(gm.userData.fore.clone()) : grip.clone().addScaledVector(dir, 0.3)).addScaledVector(Y, -0.035).addScaledVector(X, -0.01);   // palm against the underside of the handguard
+      r.wrapL = { p: fore.clone().addScaledVector(Y, 0.053), d: dir.clone(), rad: 0.024 };   // the handguard, palm under it
       reachPalm(r, 'Left', fore, X.clone().addScaledVector(dir, 0.35).addScaledVector(Y, 0.2), Y,
         B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, -0.35).addScaledVector(fw, -0.05));   // elbow down at the side, bent ~90 degrees
       r.restGrip = true;
@@ -516,7 +557,8 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
       const shR = B.RightArm.getWorldPosition(new THREE.Vector3()), shL = B.LeftArm.getWorldPosition(new THREE.Vector3());
-      reachPalm(r, 'Right', grip.clone().addScaledVector(xA, 0.03).addScaledVector(yA, -0.012), dir.clone().addScaledVector(yA, -0.45), xA.clone().negate(),
+      r.wrapR = { p: grip.clone(), d: yA.clone().multiplyScalar(-0.988).addScaledVector(dir, -0.156).normalize(), rad: pistol ? 0.019 : 0.022 };
+      reachPalm(r, 'Right', grip.clone().addScaledVector(xA, 0.03).addScaledVector(yA, -0.012), dir.clone().addScaledVector(yA, 0.16).addScaledVector(xA, -0.25), xA.clone().negate(),
         shR.clone().addScaledVector(up, -0.5).addScaledVector(xA, 0.6).addScaledVector(dir, -0.1));   // elbow out and down
       r.restGrip = true;
       let fore = gm.userData.fore ? gm.localToWorld(gm.userData.fore.clone()) : grip.clone().addScaledVector(dir, 0.3);
@@ -530,6 +572,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
         const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(new THREE.Vector3()).addScaledVector(rt, -0.18).addScaledVector(up, 0.05);
         fore.lerp(pouch, out);
       }
+      r.wrapL = pistol ? { p: grip.clone(), d: r.wrapR.d.clone(), rad: 0.042 } : r.reloadT > 0 ? null : { p: fore.clone().addScaledVector(yA, 0.058), d: dir.clone(), rad: 0.024 };   // pistol: round the firing hand
       reachPalm(r, 'Left', fore, pistol ? dir.clone().addScaledVector(yA, -0.3) : xA.clone().addScaledVector(dir, 0.35).addScaledVector(yA, 0.2), pistol ? xA.clone() : yA.clone(),
         shL.clone().addScaledVector(up, -0.7).addScaledVector(xA, -0.25).addScaledVector(dir, 0.15));   // elbow down under the gun
     } else {   // knife, grenade, bomb: carried in the right hand as animated
@@ -538,9 +581,11 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
     }
   }
-  if (r.human && !r.dead && !emote && (tg.userData || {}).cat !== 'knife') curlHand(r, 'Left', rest ? 0.85 : 0.55);   // the support hand closes round the handguard
-  if (r.human && r.restGrip && !r.dead && !emote) curlHand(r, 'Right', 0.95);   // and the firing hand round the grip
-  r.restGrip = false;
+  if (r.human && !r.dead && !emote) {   // the hands close round what they hold, like a person's grip
+    if (r.restGrip && r.wrapL) wrapHand(r, 'Left', r.wrapL); else if ((tg.userData || {}).cat !== 'knife') curlHand(r, 'Left', 0.55);
+    if (r.restGrip && r.wrapR) wrapHand(r, 'Right', r.wrapR); else if (r.restGrip) curlHand(r, 'Right', 0.95);
+  }
+  r.restGrip = false; r.wrapL = r.wrapR = null;
   if (r.reloadT > 0) r.reloadT -= dt;
   if (!r.dead && !emote && B.Head) {   // last word on the head: level, following the aim (the gun passes above move the spine)
     const rtv = _t5.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), fwv = _t6.set(0, 1, 0).cross(rtv).normalize();

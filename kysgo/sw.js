@@ -2,7 +2,7 @@
 // settings are fetched fresh when online (updates arrive right away); images and models show from the cache first and
 // are refreshed in the background, so new textures arrive by the next start.
 // Anything on another server (accounts, multiplayer relays) is never touched.
-const CACHE = 'kysgo-v2';
+const CACHE = 'kysgo-v3';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
@@ -15,7 +15,7 @@ self.addEventListener('fetch', (e) => {
       const hit = await c.match(e.request);
       if (hit) { e.waitUntil(fetch(e.request).then((r) => { if (r.ok) return c.put(e.request, r); }).catch(() => {})); return hit; }
     }
-    try { const r = await fetch(e.request); if (r.ok) c.put(e.request, r.clone()); return r; }
+    try { const r = await fetch(e.request, { cache: 'no-cache' }); if (r.ok) c.put(e.request, r.clone()); return r; }   // always checked with the server, so a new build shows on the next load
     catch (err) { const hit = await c.match(e.request); if (hit) return hit; throw err; }
   })());
 });
