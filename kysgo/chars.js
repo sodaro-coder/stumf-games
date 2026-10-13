@@ -156,9 +156,11 @@ function humanMat(part, L, team, hq) {
       lit0(sh, r);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;')
-        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;');
+        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;' + (part === 'human_skin'
+          // skin: light scattered under it. Shadowed sides keep a warm red, edges facing away (ears, nose, fingers against the light) glow a little
+          ? '\n\t{ float rim = 1.0 - max(dot(normal, normalize(vViewPosition)), 0.0); reflectedLight.indirectDiffuse *= vec3(1.1, 0.96, 0.93); reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.85, 0.22, 0.12) * 0.22 * rim * rim * vAO; }' : ''));
     };
-    m.customProgramCacheKey = () => 'human-ao';
+    m.customProgramCacheKey = () => part === 'human_skin' ? 'human-ao-skin' : 'human-ao';
   }
   if (cloth && hq) {
     const lit = m.onBeforeCompile, det = clothTex(cloth), nrm = clothTex(cloth + 'n');   // (lighting + AO already patched in)
@@ -200,7 +202,7 @@ export function makeSoldier(look, team, hq = true) {
   const g = new THREE.Group(), holder = new THREE.Group(); holder.rotation.y = 0; g.add(holder);   // the converted rig already faces -z, like the game's players (measured: the support hand is in front at -z)
   const c = D.c, root = new THREE.Group();
   root.position.fromArray(c.root.t); root.quaternion.fromArray(c.root.q); root.scale.fromArray(c.root.s); holder.add(root);
-  const bones = c.bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); o.quaternion.fromArray(b.q); o.scale.fromArray(b.s); return o; });
+  const bones = c.bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); o.quaternion.fromArray(b.q); o.scale.fromArray(b.s); o.userData.q0 = o.quaternion.clone(); return o; });
   c.bones.forEach((b, i) => { if (b.p >= 0) bones[b.p].add(bones[i]); else root.add(bones[i]); });
   const human = isHuman(L) && D.meshes.some((m) => m.name.startsWith('human_'));
   const mat = human ? null : material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null, costumeOf(L));
@@ -280,6 +282,7 @@ function curlHand(r, side, amt) {
   hand.getWorldPosition(_cA); mid.getWorldPosition(_cB); const f = _cB.sub(_cA).normalize();       // along the fingers
   idx.getWorldPosition(_cC); pin.getWorldPosition(_cN); const across = _cC.sub(_cN).normalize();     // index to pinky
   const axis = _cN.crossVectors(f, across).cross(f).normalize().cross(f).normalize();               // across the knuckles, square to the fingers
+  for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b && b.userData.q0) { b.quaternion.copy(b.userData.q0); b.updateMatrixWorld(true); } }
   for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b) turnWorld(b, axis, amt * (side === 'Left' ? -1 : 1) * (k === 1 ? 0.9 : 1.1)); }
 }
 // turn a hand so its fingers (wrist to middle knuckle) run along fWant and its palm faces nWant
@@ -340,6 +343,10 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     if (rest && !emote) { if (B.Spine2) turnWorld(B.Spine2, _v, 0.03); if (B.Head) turnWorld(B.Head, _v, 0.03); }   // at rest: stand tall, chin up
     if (r.human && B.Head) turnWorld(B.Head, _v, -0.16);   // the human's head sits higher on the neck than the soldier's: level its gaze
     if (rest && !emote) {   // at rest: stand up straight (the clip leans into its aim) and look ahead, not down the rifle line
+      if (B.Hips && B.RightArm && B.LeftArm) {   // the rifle clip stands bladed (right shoulder back): square the body to the front first
+        const want = _t5.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), sh = B.RightArm.getWorldPosition(_t1).sub(B.LeftArm.getWorldPosition(_t2)); sh.y = 0;
+        if (sh.lengthSq() > 1e-4) { sh.normalize(); const ang = Math.atan2(sh.x * want.z - sh.z * want.x, sh.x * want.x + sh.z * want.z); turnWorld(B.Hips, _t3.set(0, 1, 0), -ang); }
+      }
       for (const [n, k] of [['Spine', 0.5], ['Spine1', 0.6], ['Spine2', 0.7], ['Neck', 0.7], ['Head', 0.85]]) {
         const b = B[n]; if (!b) continue;
         const d = _t1.set(0, 1, 0).applyQuaternion(b.getWorldQuaternion(_q2)).normalize();
@@ -364,6 +371,11 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], _fw, lean * 0.2);
       if (B.Head) turnWorld(B.Head, _fw, -lean * 0.12);
     }
+    if (r.flinch && r.flinch.t > 0 && !emote) {   // shot: the upper body jerks away from the hit, then recovers
+      const f = r.flinch, k = Math.sin(Math.min(1, f.t / 0.22) * Math.PI) * 0.3 * (f.k || 1), ax = _t4.set(f.z, 0, -f.x).normalize();
+      if (B.Spine1) turnWorld(B.Spine1, ax, k * 0.5); if (B.Spine2) turnWorld(B.Spine2, ax, k * 0.6); if (B.Head) turnWorld(B.Head, ax, k * 0.4 * (f.k || 1));
+      f.t -= dt;
+    }
     if (emote) emotePose(r, emote, _v);
   }
   // the gun: shouldered for rifles, held out in both hands for pistols, pointing where the player aims. The animation
@@ -384,7 +396,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       // bent and tucked down by the sides.
       const q = r.g.getWorldQuaternion(_q2.identity()), rt = _t5.set(1, 0, 0).applyQuaternion(q).clone(), fw = _fw.set(0, 0, -1).applyQuaternion(q).clone(), up = new THREE.Vector3(0, 1, 0);
       const hips = B.Hips.getWorldPosition(new THREE.Vector3());
-      const grip = hips.clone().addScaledVector(rt, 0.12).addScaledVector(fw, 0.2).addScaledVector(up, 0.0);
+      const grip = hips.clone().addScaledVector(rt, 0.2).addScaledVector(fw, 0.27).addScaledVector(up, 0.06);   // out at the hip and forward: the arm hangs outside the ribs and vest, elbow bent
       const dir = new THREE.Vector3().addScaledVector(rt, -0.84).addScaledVector(fw, 0.42).addScaledVector(up, -0.3).normalize();
       // the rifle is placed first, then each palm is closed onto it: right palm round the pistol grip (fingers forward
       // under the trigger guard, palm against the grip's right side), left palm up under the handguard, fingers over the far side
@@ -396,10 +408,10 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       tg.updateMatrixWorld(true);
       const X = xA.clone(), Y = yA.clone();
       reachPalm(r, 'Right', grip.clone().addScaledVector(X, 0.03).addScaledVector(Y, -0.035), dir.clone().addScaledVector(Y, -0.45), X.clone().negate(),
-        B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, 0.3).addScaledVector(fw, -0.45));
+        B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.45).addScaledVector(rt, 0.75).addScaledVector(fw, -0.15));   // elbow out to the side, not into the ribs
       const fore = grip.clone().addScaledVector(dir, 0.34).addScaledVector(Y, -0.055).addScaledVector(X, -0.01);
       reachPalm(r, 'Left', fore, X.clone().addScaledVector(dir, 0.35).addScaledVector(Y, 0.2), Y,
-        B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, -0.35).addScaledVector(fw, -0.3));
+        B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.6).addScaledVector(rt, -0.6).addScaledVector(fw, 0.05));
       r.restGrip = true;
     } else if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
       // The clips are a rifle set: the hands already hold an (invisible) rifle in a natural, motion-captured pose. So the

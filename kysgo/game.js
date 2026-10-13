@@ -23,6 +23,7 @@ import { Profile } from './backend.js';
 import { Menu, Hud, injectCss, esc, weaponIcon } from './ui.js';
 import { releaseThumbs } from './thumbs.js';
 import { line, sfxFor, hasLine } from './voices.js';
+import { createCombatFx } from './fx2.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
@@ -406,9 +407,9 @@ export default function start({ cfg, E, N, smoke }) {
         void main() {
           vec4 g = texture2D(vmTex, vUv);
           if (ads > 0.01) {   // aimed in: the gun body goes soft (depth of field) around a sharp sight picture, like R6
-            float r = ads * smoothstep(0.05, 0.28, length((vUv - 0.5) * vec2(res.x / res.y, 1.0)));
+            float r = ads * 0.55 * smoothstep(0.14, 0.42, length((vUv - 0.5) * vec2(res.x / res.y, 1.0)));
             if (r > 0.01) { vec4 b = vec4(0.0); float j = fract(sin(dot(vUv * res, vec2(39.3468, 11.135))) * 43758.5453) * 6.2832;
-              for (int k = 0; k < 12; k++) { float a = float(k) * 0.5236 + j; b += texture2D(vmTex, vUv + vec2(cos(a), sin(a)) / res * (1.5 + r * (2.0 + float(k) * 0.9))); } g = mix(g, b / 12.0, min(1.0, r * 1.6)); }
+              for (int k = 0; k < 12; k++) { float a = float(k) * 0.5236 + j; b += texture2D(vmTex, vUv + vec2(cos(a), sin(a)) / res * (1.0 + r * (1.4 + float(k) * 0.5))); } g = mix(g, b / 12.0, min(1.0, r * 1.2)); }
           }
           vec4 w4 = texture2D(tex, vUv); vec3 wc = w4.rgb;
           if (cine > 0.01) {   // cutscenes: a shallow depth of field on whoever is talking, and a touch of lens fringing at the edges
@@ -505,7 +506,7 @@ export default function start({ cfg, E, N, smoke }) {
     const fpsM = S.fps ? E.fpsMeter() : () => {};
     const hud = new Hud(S);
 
-    let culler = null, lobbyPanel = null, sunLight = null, sky = null, parts = null, sunDir = [0.6, 0.7, 0.4];
+    let culler = null, lobbyPanel = null, sunLight = null, sky = null, parts = null, cfx = null, sunDir = [0.6, 0.7, 0.4];
     let W = null, mode = opt.mode, mapId = opt.map, botLevel = opt.bot || 'normal', match = null, bots = null, ended = false, started = false;
     // ranked: bots only on Normal or Hard, real players fill one team first, and that team must be all real to start
     let ranked = !!opt.ranked; if (ranked && !RANKED_BOTS.includes(botLevel)) botLevel = 'hard';
@@ -563,7 +564,7 @@ export default function start({ cfg, E, N, smoke }) {
     function resetLevel() {   // the last level's leftovers: other players' bodies, smoke, drops, decals, grenades in the air
       for (const [id, r] of rigs) { if (id === myId) continue; scene.remove(r.g); if (r.blob) scene.remove(r.blob); rigs.delete(id); }
       st.players.clear(); st.bomb = null; onFx([]); onDrops([]);
-      for (const d of decals) fx.remove(d); decals.length = 0;
+      for (const d of decals) fx.remove(d); decals.length = 0; if (cfx) cfx.clear();
       for (const [id, f] of flying) { fx.remove(f.m); flying.delete(id); }
       if (SC) SC.reset();
     }
@@ -699,6 +700,7 @@ export default function start({ cfg, E, N, smoke }) {
       }
       W.spinners = []; for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); if (m.userData.spin) W.spinners.push(m.userData.spin); }
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
+      if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier) }); else cfx.setWorld(W);   // holes, blood, sparks, smoke that fills rooms, fire, ripples
       hud.radarBase(W);
       if (SC) SC.setWorld(W);
     }
@@ -761,7 +763,7 @@ export default function start({ cfg, E, N, smoke }) {
     // ---- reload animations: tilt the gun, drop the mag, bring a fresh one up, seat it, rack it -----------------------
     const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     const _rv = new THREE.Vector3(), _rv2 = new THREE.Vector3();
-    const EYE_RELIEF = { reddot: 0.15, holo: 0.16, acog: 0.12, iron: 0.34 };   // how far the sight sits in front of your eye when aimed in (metres)
+    const EYE_RELIEF = { reddot: 0.17, holo: 0.18, acog: 0.13, iron: 0.4 };   // how far the sight sits in front of your eye when aimed in (metres)
     // every gun reloads its own way: how far it tilts, where the old mag goes, and how (and whether) it is charged.
     // charge: 'pull' (AR charging handle), 'side' (AK bolt on the right), 'slap' (the HK slap), 'bolt' (bolt-action),
     // 'slide' (pistol slide release), 'none'. Rounds left in the gun (a tactical reload) means no charge at all.
@@ -860,7 +862,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (!m.parent) fx.add(m); decals.push(m);
     };
     const puffMat = new THREE.MeshBasicMaterial({ color: 0xaa1111, transparent: true, opacity: 0.9 }); const puffGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18), puffs = [];
-    const puff = (x, y, z, col) => { const m = new THREE.Mesh(puffGeo, col ? basic(col) : puffMat); m.position.set(x, y, z); fx.add(m); puffs.push({ m, t: 0.25 }); };
+    const puff = (x, y, z, col) => { if (parts) parts.smoke(x, y, z, { color: col || '#6a0606', size: col ? 0.3 : 0.18, grow: 2.2, life: col ? 0.9 : 0.5, rise: col ? 0.4 : 0.05, drift: 0.1, alpha: col ? 0.7 : 0.55 }); };
     const smokeTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 4, 32, 32, 32); gr.addColorStop(0, 'rgba(210,210,210,1)'); gr.addColorStop(0.6, 'rgba(190,190,190,.85)'); gr.addColorStop(1, 'rgba(180,180,180,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
     const fireTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 40, 2, 32, 40, 30); gr.addColorStop(0, 'rgba(255,240,140,1)'); gr.addColorStop(0.5, 'rgba(255,120,20,.8)'); gr.addColorStop(1, 'rgba(200,40,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
     const effectObjs = new Map();
@@ -869,13 +871,14 @@ export default function start({ cfg, E, N, smoke }) {
       for (const e of st.effects) {
         const k = `${e.type}:${e.x.toFixed(1)}:${e.z.toFixed(1)}`; keep.add(k);
         if (effectObjs.has(k)) continue;
+        if (cfx && (e.type === 'smoke' || e.type === 'fire')) { cfx[e.type].add(k, e.x, e.y, e.z, e.r); effectObjs.set(k, { cfx: e.type }); continue; }   // smoke fills the room, fire runs over the ground
         const g = new THREE.Group();
         if (e.type === 'smoke') { const mat = new THREE.SpriteMaterial({ map: smokeTex, color: 0xc8c8c8, depthWrite: false }); for (let i = 0; i < 14; i++) { const s = new THREE.Sprite(mat); const a = i * 2.4, r = (i % 4) / 4 * e.r * 0.75; s.position.set(Math.cos(a) * r, 0.9 + (i % 3) * 0.9, Math.sin(a) * r); s.scale.setScalar(e.r * 1.25); g.add(s); } }
         if (e.type === 'poison') { const mat = new THREE.SpriteMaterial({ map: smokeTex, color: e.hurtsSquad ? 0x9a8a3a : 0x6aff5a, transparent: true, opacity: 0.55, depthWrite: false }); for (let i = 0; i < 10; i++) { const s = new THREE.Sprite(mat); const a = i * 2.4, r = (i % 4) / 4 * e.r * 0.8; s.position.set(Math.cos(a) * r, 0.5 + (i % 3) * 0.6, Math.sin(a) * r); s.scale.setScalar(e.r * 0.9); g.add(s); } }
         if (e.type === 'fire') { const mat = new THREE.SpriteMaterial({ map: fireTex, depthWrite: false, blending: THREE.AdditiveBlending }); for (let i = 0; i < 9; i++) { const s = new THREE.Sprite(mat); const a = i * 2.1, r = (i % 3) / 3 * e.r; s.position.set(Math.cos(a) * r, 0.4, Math.sin(a) * r); s.scale.setScalar(1.1); g.add(s); } }
         g.position.set(e.x, e.y, e.z); fx.add(g); effectObjs.set(k, g);
       }
-      for (const [k, g] of effectObjs) if (!keep.has(k)) { fx.remove(g); effectObjs.delete(k); }
+      for (const [k, g] of effectObjs) if (!keep.has(k)) { if (g.cfx) { if (cfx) cfx[g.cfx].remove(k); } else fx.remove(g); effectObjs.delete(k); }
     }
     const flying = new Map();  // grenades in flight (visual)
     const dropObjs = new Map();
@@ -885,6 +888,13 @@ export default function start({ cfg, E, N, smoke }) {
       for (const [k, m] of dropObjs) if (!keep.has(k)) { fx.remove(m); dropObjs.delete(k); }
     }
     const bombObj = makeBomb(); bombObj.visible = false; scene.add(bombObj);
+    {   // the C4's screen shows the real countdown, green digits on a dark LCD
+      const c = document.createElement('canvas'); c.width = 128; c.height = 44; const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.068, 0.022), new THREE.MeshBasicMaterial({ map: tex })); m.rotation.x = -Math.PI / 2; m.position.set(0, 0.0892, -0.025); bombObj.add(m);
+      bombObj.userData.lcd = { c, tex, last: '' };
+    }
+    const bombLcd = (t) => { const L = bombObj.userData.lcd, txt = t == null ? '--:--' : `00:${String(Math.max(0, Math.ceil(t))).padStart(2, '0')}`; if (!L || txt === L.last) return; L.last = txt;
+      const g = L.c.getContext('2d'); g.fillStyle = '#0d1a10'; g.fillRect(0, 0, 128, 44); g.fillStyle = '#7dff8a'; g.shadowColor = '#7dff8a'; g.shadowBlur = 6; g.font = 'bold 34px monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, 64, 24); L.tex.needsUpdate = true; };
     let bombBeep = 0;
 
     // ---- inputs ----
@@ -1024,6 +1034,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (m.id === myId) return;
       const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
       audio.at(snd, m.o[0], m.o[1], m.o[2], cam, w.silenced || m.sup ? 25 : w.cat === 'knife' ? 12 : 110);
+      if (cfx && w.cat !== 'knife' && w.cat !== 'zeus') { const L = m.e ? Math.hypot(m.e[0] - m.o[0], m.e[1] - m.o[1], m.e[2] - m.o[2]) || 1 : 1, dx = m.e ? (m.e[0] - m.o[0]) / L : 0, dz = m.e ? (m.e[2] - m.o[2]) / L : 0; cfx.muzzle(m.o[0] + dx * 0.8, m.o[1] - 0.1, m.o[2] + dz * 0.8, w.silenced || m.sup ? 0.25 : 0.8); if (m.e) cfx.tracer({ x: m.o[0], y: m.o[1], z: m.o[2] }, { x: m.e[0], y: m.e[1], z: m.e[2] }); }
       if (m.e && w.cat !== 'knife') { tracer(m.o, m.e); if (parts) parts.emit(m.e[0], m.e[1], m.e[2], { n: 3, colors: ['#8a8070', '#ffd27a'], speed: 1.2, up: 0.5, size: 0.03, life: 0.35 }); }
       if (m.id === specId && W_BY_ID[m.wid] && W_BY_ID[m.wid].cat !== 'knife') { specKick = Math.min(specKick + (W_BY_ID[m.wid].kick || 0.02) * 0.9, 0.09); specFlashT = 0.045; }
       const r = rigs.get(m.id); if (r) { r.flashT = 0.05; if (r.soldier && W_BY_ID[m.wid] && W_BY_ID[m.wid].cat !== 'knife') soldierEvent(r, 'fire'); }
@@ -1070,6 +1081,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (type === 'banner') hud.banner(data.text, data.sub || '', 3000);
       if (type === 'kill') {
         hud.feed(data, myId);
+        if (cfx && data.weapon !== 'bomb') { const v = data.vid === myId ? me : st.players.get(data.vid); if (v) setTimeout(() => cfx && cfx.pool(v.x, v.y, v.z), 700); }
         if (data.kid === myId && data.vteam !== me.team) {
           const now = performance.now(); mkN = now - mkT < 4500 && mkR === st.round ? mkN + 1 : 1; mkT = now; mkR = st.round;
           const w2 = W_BY_ID[data.weapon] || {}, foes = [...st.players.values()].filter((q) => q.team && q.team !== me.team).length;
@@ -1096,7 +1108,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (type === 'nadefx') {
         const f = flying.get([...flying.keys()].find((k) => flying.get(k).n.owner === data.owner && flying.get(k).n.type === data.type)); if (f) { fx.remove(f.m); flying.delete(f.n.id); }
         audio.at(data.type === 'he' ? 'he' : data.type === 'flash' ? 'flash' : data.type === 'smoke' ? 'smoke' : data.type === 'decoy' ? 'bounce' : 'fire', data.x, data.y, data.z, cam, 120);
-        if (data.type === 'he') { puff(data.x, data.y + 0.3, data.z, '#ffaa33'); camShake = Math.max(camShake, 0.5); }
+        if (data.type === 'he') { puff(data.x, data.y + 0.3, data.z, '#ffaa33'); if (cfx) cfx.he(data.x, data.y, data.z); camShake = Math.max(camShake, 0.5); }
         if (data.type === 'flash') flashBy(data);
       }
       if (type === 'emote' && data && EMOTE_BY_ID[data.e]) {
@@ -1260,8 +1272,12 @@ export default function start({ cfg, E, N, smoke }) {
         const tr = traceShot(W, players, myId, eye, d, w);   // pooled result: keep copies of what outlives this pellet
         for (const h of tr.hits) hits.push({ id: h.id, group: h.group, dist: h.dist, pen: h.pen });
         if (!end && tr.end) end = { x: tr.end.x, y: tr.end.y, z: tr.end.z };
-        for (const h of tr.hits) { const p = st.players.get(h.id); if (p) puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); }
-        if (tr.wallHits[0]) { decal(tr.wallHits[0], d); const hp = tr.wallHits[0], mn = W.matName(hp.m), e = impactFx(mn); if (parts) { parts.emit(hp.x - d.x * 0.05, hp.y - d.y * 0.05, hp.z - d.z * 0.05, e); if (e !== IMPACT.metal) parts.smoke(hp.x - d.x * 0.1, hp.y - d.y * 0.1, hp.z - d.z * 0.1, { n: 2, color: e.colors[0], size: e === IMPACT.sand ? 0.22 : 0.14, life: 1.1, rise: 0.15, alpha: 0.55 }); } if (e === IMPACT.metal && Math.random() < 0.35) audio.at('ricochet', hp.x, hp.y, hp.z, cam, 30); }
+        for (const h of tr.hits) { const p = st.players.get(h.id); if (p) { if (cfx) cfx.blood(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, d, h.group === 'head'); else puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); const rg = rigs.get(h.id); if (rg) rg.flinch = { x: d.x, z: d.z, t: 0.22, k: h.group === 'head' ? 1.3 : 1 }; } }
+        if (cfx && tr.wallHits.length > 1) for (let wi = 0; wi < tr.wallHits.length - 1; wi++) {   // wallbang: the exit hole on the far side, debris blown out of it
+          const wh = tr.wallHits[wi], o2 = { x: wh.x - d.x * 0.02, y: wh.y - d.y * 0.02, z: wh.z - d.z * 0.02 }, th = W.thickness(o2, d, 0, 1.2);
+          if (th < 1.2) { const ex = { x: wh.x + d.x * th, y: wh.y + d.y * th, z: wh.z + d.z * th, side: true }; cfx.impact(ex, { x: -d.x, y: -d.y, z: -d.z }, W.matName(wh.m)); if (parts) parts.emit(ex.x + d.x * 0.05, ex.y, ex.z + d.z * 0.05, { ...impactFx(W.matName(wh.m)), n: 7, dir: d, spread: 0.4 }); }
+        }
+        if (tr.wallHits[0]) { if (cfx) cfx.impact(tr.wallHits[0], d, W.matName(tr.wallHits[0].m)); else decal(tr.wallHits[0], d); const hp = tr.wallHits[0], mn = W.matName(hp.m), e = impactFx(mn); if (parts) { parts.emit(hp.x - d.x * 0.05, hp.y - d.y * 0.05, hp.z - d.z * 0.05, e); if (e !== IMPACT.metal) parts.smoke(hp.x - d.x * 0.1, hp.y - d.y * 0.1, hp.z - d.z * 0.1, { n: 2, color: e.colors[0], size: e === IMPACT.sand ? 0.22 : 0.14, life: 1.1, rise: 0.15, alpha: 0.55 }); } if (e === IMPACT.metal && Math.random() < 0.35) audio.at('ricochet', hp.x, hp.y, hp.z, cam, 30); }
         for (const h of tr.hits) { const p = st.players.get(h.id); if (p && parts) parts.emit(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, { n: 6, colors: ['#8a0a0a', '#c01a1a'], speed: 1.5, up: 0.4, size: 0.04, life: 0.5 }); }
       }
       { // the crosshair follows recoil, always: each shot climbs your actual view along the gun's pattern (pull down to
@@ -1274,6 +1290,8 @@ export default function start({ cfg, E, N, smoke }) {
       if (w.cat === 'zeus') { const zr = w.range || 4.5; for (let i = hits.length - 1; i >= 0; i--) if (hits[i].dist > zr) hits.splice(i, 1); }
       toHost('shot', { w: w.id, h: hits.map((h) => ({ id: h.id, group: h.group, pen: +h.pen.toFixed(2) })), o: [eye.x, eye.y, eye.z], e: end ? [end.x, end.y, end.z] : null, sup: sup ? 1 : 0 });
       if (end && w.cat !== 'zeus') tracer([eye.x + Math.cos(me.yaw) * 0.15 * S.hand, eye.y - 0.1, eye.z - Math.sin(me.yaw) * 0.15 * S.hand], [end.x, end.y, end.z]);
+      if (cfx && w.cat !== 'zeus') { const fx3 = -Math.sin(me.yaw), fz3 = -Math.cos(me.yaw); cfx.muzzle(eye.x + fx3 * 0.7, eye.y - 0.1, eye.z + fz3 * 0.7, sup ? 0.25 : 1); if (end) cfx.tracer(eye, end);
+        if (me.spray >= 4 && !sup) { const sx = eye.x + fx3 * 0.6 + Math.cos(me.yaw) * 0.12 * S.hand, sy = eye.y - 0.1, sz = eye.z + fz3 * 0.6 - Math.sin(me.yaw) * 0.12 * S.hand; setTimeout(() => cfx && cfx.barrelSmoke(sx, sy, sz), 160); } }
       audio.play(sup ? supSound(w) : shotSound(w.id, it.skin, false), sup ? 0.45 : 0.8);
       if (parts && w.cat !== 'zeus') { const rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw), fx2 = -Math.sin(me.yaw), fz2 = -Math.cos(me.yaw); parts.emit(eye.x + rx * 0.18 * S.hand + fx2 * 0.35, eye.y - 0.12, eye.z + rz * 0.18 * S.hand + fz2 * 0.35, { n: 1, colors: [w.pellets > 1 ? '#c8321e' : '#d4a640'], speed: 2.2, up: 0.9, size: w.cat === 'sniper' ? 0.05 : 0.035, life: 1.2, dir: { x: rx * S.hand, y: 0.3, z: rz * S.hand } }); }
       if (vm && vm.userData.flash) { vm.userData.flash.visible = true; vm.userData.flash.rotation.z = Math.random() * 6.3; vm.userData.flash.scale.setScalar(0.8 + Math.random() * 0.5); flashT = 0.04; }
@@ -1289,7 +1307,7 @@ export default function start({ cfg, E, N, smoke }) {
       for (const a of fan) {
         const yw = me.yaw + a * (heavy ? 1 : me.knifeDir), d = { x: -Math.sin(yw) * Math.cos(me.pitch), y: Math.sin(me.pitch), z: -Math.cos(yw) * Math.cos(me.pitch) };
         const tr = traceShot(W, shotTargets(), myId, eye, d, W_BY_ID.knife, reach), t = tr.hits[0];
-        if (t) { const p = st.players.get(t.id), dd = p ? Math.hypot(p.x - me.x, p.z - me.z) + Math.abs(a) : 9; if (dd < hd) { hd = dd; h = t; } } else if (tr.wallHits.length) wallAny = true;
+        if (t) { const p = st.players.get(t.id), dd = p ? Math.hypot(p.x - me.x, p.z - me.z) + Math.abs(a) : 9; if (dd < hd) { hd = dd; h = t; } } else if (tr.wallHits.length) { if (!wallAny && cfx) cfx.gouge(tr.wallHits[0], d, heavy ? 0 : me.knifeDir); wallAny = true; }
       }
       if (h) { const p = st.players.get(h.id); if (p) { puff(p.x, p.y + 1.2, p.z); if (parts) parts.emit(p.x, p.y + 1.2, p.z, { n: 10, colors: ['#8a0d0d', '#5a0505'], speed: 2.2, up: 0.8, size: 0.035, life: 0.5 }); } }
       const wall = !h && wallAny;
@@ -1311,7 +1329,8 @@ export default function start({ cfg, E, N, smoke }) {
     }
     function startReload() {
       const it = me.inv[me.cur], w = curWeapon(); if (!it || !w || w.cat === 'knife' || w.cat === 'zeus' || me.reload > 0 || it.ammo >= w.mag || it.reserve <= 0) return;
-      me.reload = w.reload; me.scoped = 0; me.reloadEmpty = it.ammo === 0;   // a tactical reload (rounds left) skips the rack
+      me.reload = w.reload; me.scoped = 0; me.reloadEmpty = it.ammo === 0;
+      if (cfx && !w.shellReload && w.cat !== 'knife') setTimeout(() => cfx && me.alive && cfx.dropMag(me.x - Math.sin(me.yaw) * 0.25, me.y + eyeHeight(me) - 0.55, me.z - Math.cos(me.yaw) * 0.25, me.yaw), 280);   // a tactical reload (rounds left) skips the rack
       if (w.shellReload) audio.play('shell', 0.6);
       else {
         const it0 = it, st = reloadStyle(w.id), at = (f, n, v = 0.6) => setTimeout(() => { if (me.inv[me.cur] === it0 && me.reload > 0) audio.play(n, v); }, w.reload * f * 1000);
@@ -1556,7 +1575,7 @@ export default function start({ cfg, E, N, smoke }) {
         r.t += dt;
         if (p.alive && sp > 3.6 && !(spectating && p.id === spectating.id)) { r.stepT = (r.stepT || 0) - dt * sp / 3.3; if (r.stepT <= 0) { r.stepT = 1; audio.at('step', p.x, p.y, p.z, cam, 28, W.matName(W.mat[W.idx(Math.floor(p.x), Math.floor(p.z))])); } }
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
-        if (r.soldier && p.rl && !r.wasRl) soldierEvent(r, 'reload'); r.wasRl = !!p.rl;
+        if (r.soldier && p.rl && !r.wasRl) { soldierEvent(r, 'reload'); if (cfx) setTimeout(() => cfx && cfx.dropMag(p.x, p.y + 1.0, p.z, p.yaw || 0), 300); } r.wasRl = !!p.rl;
         if (r.soldier) setGear(r, p.armor || 0, p.helmet);
         if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0, prone: p.prone || 0 });
         else posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
@@ -1602,7 +1621,7 @@ export default function start({ cfg, E, N, smoke }) {
       }
       // bomb
       const b = st.bomb; bombObj.visible = !!b && (b.s === 'planted' || b.s === 'dropped');
-      if (bombObj.visible) { bombObj.position.set(b.x, b.y + 0.02, b.z); bombObj.userData.led.visible = b.s !== 'planted' || (now * (1 + (40 - (b.t || 40)) / 8)) % 1 < 0.5; }
+      if (bombObj.visible) { bombLcd(b.s === 'planted' ? b.t : null); bombObj.position.set(b.x, b.y + 0.02, b.z); bombObj.userData.led.visible = b.s !== 'planted' || (now * (1 + (40 - (b.t || 40)) / 8)) % 1 < 0.5; }
       // ---- view model ----
       if (vm) {
         vm.visible = me.alive && !(me.scoped && w && w.zoom) && !spectating && !me.emote && !cine && !(me.ads > 0.9 && ['acog', 'reddot', 'holo'].includes(vm.userData.optic));   // aimed through an optic: you look through the glass, not at the gun
@@ -1610,7 +1629,8 @@ export default function start({ cfg, E, N, smoke }) {
         const animReload = !!(vm.userData.leftArm && (vm.userData.magGroup || (w && w.shellReload)));
         const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
         vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4);
-        vm.rotation.set(rel * 2 + camKick * 2, (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
+        const breath = Math.sin(now * 1.7) * 0.0018 * (1 - 0.7 * me.ads) * (me.crouch > 0.5 ? 0.6 : 1); vm.position.y += breath; vm.position.x += Math.sin(now * 0.85) * 0.0012 * (1 - 0.7 * me.ads);   // breathing: the gun rises and settles
+        vm.rotation.set(breath * 3 + rel * 2 + camKick * 2, (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
         if (me.throwK > 0) {   // a throw: wind up, then release; the grenade leaves the hand at the snap
           const tk = 1 - me.throwK / 0.42, wind = Math.sin(Math.min(1, tk / 0.35) * Math.PI / 2) * (1 - sm(0.35, 0.55, tk)), go = sm(0.35, 0.6, tk) * (1 - sm(0.75, 1, tk));
           const S = me.throwStyle;
@@ -1661,15 +1681,16 @@ export default function start({ cfg, E, N, smoke }) {
         }
         if (me.ads > 0.001 && (vm.userData.sight || vm.userData.iron)) {   // aim down sights: bring the sight line onto the view line
           const sc = vm.userData.sc, sg = vm.userData.sight || vm.userData.iron, k = me.ads, pistolV = (W_BY_ID[(curWeapon() || {}).id] || {}).cat === 'pistol';
-          const relief = vm.userData.optic ? (EYE_RELIEF[vm.userData.optic] || 0.2) : pistolV ? 0.42 : EYE_RELIEF.iron;
-          vm.position.lerp(new THREE.Vector3(-sg.x * sc, -sg.y * sc, -relief - sg.z * sc + camKick * 0.6), k);
+          const relief = vm.userData.optic ? (EYE_RELIEF[vm.userData.optic] || 0.2) : pistolV ? 0.5 : EYE_RELIEF.iron;
+          const drop = pistolV ? 0.055 : 0.004;   // the eye sits a hair above the sight line, so the hands and receiver stay under it
+          vm.position.lerp(new THREE.Vector3(-sg.x * sc, -sg.y * sc - drop, -relief - sg.z * sc + camKick * 0.6), k);
           vm.rotation.set(vm.rotation.x * (1 - k) + camKick * 0.8 * k, vm.rotation.y * (1 - k), vm.rotation.z * (1 - k));
           const arc = Math.sin(k * Math.PI);   // R6-style: the gun rolls in and dips slightly on its way up to the eye, then settles dead level
           vm.rotation.z += arc * 0.16 * S.hand; vm.position.y -= arc * 0.014; vm.position.x += arc * 0.01 * S.hand;
         }
       }
       if (parts) parts.tick(dt);
-      stepCasings(dt);
+      stepCasings(dt); if (cfx) { cfx.tick(dt); if (me.alive) cfx.wade(me.x, me.y, me.z, speedOf(me)); }
       if (W) {   // first-person arms catch the sun only when you stand in it (from the same baked shadows as the map)
         const sv = W.sunAt(cam.position.x, cam.position.y - 0.25, cam.position.z); vmSunK += (sv - vmSunK) * Math.min(1, dt * 8);
         W.probeAt(cam.position.x, cam.position.z, vmProbe); vmProbeK += ((vmProbe[0] + vmProbe[1] + vmProbe[2]) / 3 - vmProbeK) * Math.min(1, dt * 6);   // the light probes: arms darken deep indoors
@@ -1782,6 +1803,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

@@ -681,7 +681,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
     let prev = idx(Math.floor(p[0]), Math.floor(p[1]));
     for (let k = 1; k <= n; k++) {
       const x = p[0] + (q[0] - p[0]) * k / n, z = p[1] + (q[1] - p[1]) * k / n;
-      for (const [ox, oz] of [[0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]]) { const j = idx(Math.floor(x + ox), Math.floor(z + oz)); if (j < 0 || !walk[j] || Math.abs(h[j] - h[prev]) > PHYS.step + 0.02 || flag[j] === 3) return false; }
+      for (const [ox, oz] of [[0.43, 0.43], [-0.43, 0.43], [0.43, -0.43], [-0.43, -0.43]]) { const j = idx(Math.floor(x + ox), Math.floor(z + oz)); if (j < 0 || !walk[j] || Math.abs(h[j] - h[prev]) > PHYS.step + 0.02 || flag[j] === 3) return false; }
       prev = idx(Math.floor(x), Math.floor(z));
     }
     return true;

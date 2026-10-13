@@ -456,6 +456,23 @@ const MENU_CSS = `
  .cs-nav button{padding-left:14px;padding-right:14px}
 }
 
+/* PC top bar: every tab always fits the window (no sideways scrolling). Tabs share the width and shrink together;
+   icons drop first, then labels (each tab keeps its icon and a tooltip), then the account box tightens. */
+@media (min-width:761px){
+ .cs-topnav{display:flex;align-items:stretch;overflow:hidden}
+ .cs-topnav .cs-brand{flex:0 0 auto}
+ .cs-topnav .cs-nav{flex:1 1 auto;min-width:0;display:flex;overflow:hidden!important}
+ .cs-topnav .cs-nav button{flex:1 1 auto;min-width:0;justify-content:center;padding:0 clamp(3px,.5vw,14px)!important;font-size:clamp(9.5px,.66vw,13px)!important;letter-spacing:clamp(.02em,.06vw,.1em)!important;gap:clamp(3px,.3vw,8px)!important;white-space:nowrap;overflow:hidden}
+ .cs-topnav .cs-nav button span{overflow:hidden;text-overflow:ellipsis}
+ .cs-topnav .cs-acct{flex:0 0 auto;min-width:0}
+}
+@media (min-width:761px) and (max-width:2300px){.cs-topnav .cs-nav button svg{display:none}}
+@media (min-width:761px) and (max-width:1180px){
+ .cs-topnav .cs-nav button svg{display:block;width:17px;height:17px}
+ .cs-topnav .cs-nav button span{display:none}
+ .cs-topnav #mTop .tl{display:none}
+ .cs-topnav .cs-rank{display:none}
+}
 `;
 export function injectCss() { if (document.getElementById('cs-css')) return; const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS + MENU_CSS; document.head.appendChild(s); }
 
@@ -593,8 +610,8 @@ export class Menu {
     const title = esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`);
     this.root.innerHTML = `<canvas class="cs-stage"></canvas><div class="cs-vig"></div>
       <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${(this.h.back ? [['inv', 'Inventory'], ['guns', 'Gunsmith'], ['settings', 'Settings']] : [['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])])
-        .map(([k, n]) => `<button data-tab="${k}">${svg(k)}<span>${n}</span></button>`).join('')}</nav>
-        <div class="cs-acct"><button class="cs-coinbox" id="mTop" style="cursor:pointer;color:#7ed957">＋ TOP UP</button><span class="cs-coinbox" id="mCoins"></span><div class="cs-rank"><b id="mLvlN">1</b><div><div style="font:700 11px system-ui;color:#c8d0da" id="mName"></div><div class="xp"><i id="mXp"></i></div></div></div>
+        .map(([k, n]) => `<button data-tab="${k}" title="${n}">${svg(k)}<span>${n}</span></button>`).join('')}</nav>
+        <div class="cs-acct"><button class="cs-coinbox" id="mTop" style="cursor:pointer;color:#7ed957">＋<span class="tl"> TOP UP</span></button><span class="cs-coinbox" id="mCoins"></span><div class="cs-rank"><b id="mLvlN">1</b><div><div style="font:700 11px system-ui;color:#c8d0da" id="mName"></div><div class="xp"><i id="mXp"></i></div></div></div>
         ${this.h.back ? '<button class="cs-btn" id="mBack" style="margin-right:8px">◀ BACK TO PARTY</button>' : ''}<button class="cs-ibtn" id="mFull" title="Fullscreen (also makes Ctrl-crouch safe)">⛶</button></div></div>
       <div class="cs-page" id="mBody"></div>`;
     document.body.appendChild(this.root);

@@ -351,7 +351,7 @@ export function stage(canvas, look) {
     if (now - last < 33) return; const dt = (now - last) / 1000; last = now; t += dt;   // 30 fps is plenty here
     const w = Math.max(1, canvas.clientWidth), h = Math.max(1, canvas.clientHeight); if (w > 1 && h > 1 && (canvas.width !== w || canvas.height !== h)) { r3.setSize(w, h, false); cam3.aspect = w / h; cam3.updateProjectionMatrix(); bgDirty = 8; }
     // the rifle idle stands bladed to the side: the rig is turned back so the agent faces the camera
-    if (rig && rig.soldier) { rig.g.rotation.y = Math.PI + 0.85 + Math.sin(t * 0.25) * 0.05; poseSoldier(rig, { dt, yaw: rig.g.rotation.y, rest: 1 }); }
+    if (rig && rig.soldier) { rig.g.rotation.y = Math.PI + 0.38 + Math.sin(t * 0.25) * 0.04; poseSoldier(rig, { dt, yaw: rig.g.rotation.y, rest: 1 }); }
     else if (rig) { posePlayer(rig, { t, pitch: Math.sin(t * 0.7) * 0.05 }); rig.torso.position.y += Math.sin(t * 1.6) * 0.008; rig.g.rotation.y = 0.5 + Math.sin(t * 0.25) * 0.12; }
     cam3.position.set(0.05, 1.3, 3.4); cam3.lookAt(0.05, 1.12, 0);   // knees up, a touch below eye level
     animateGlow(t, dt); render(now);

@@ -78,7 +78,7 @@ export function traceShot(W, players, shooterId, o, d, w, range = 8192 * U, out 
       n--; continue;   // look for a second body along the same stretch (doesn't use up a wall pass; max 2 hits)
     }
     if (!wall) { const e = res._end; e.x = o.x + d.x * range; e.y = o.y + d.y * range; e.z = o.z + d.z * range; e.m = 0; res.end = e; break; }
-    const pt = res._wallPool[res.wallHits.length]; pt.x = o.x + d.x * wall.t; pt.y = o.y + d.y * wall.t; pt.z = o.z + d.z * wall.t; pt.m = wall.m;
+    const pt = res._wallPool[res.wallHits.length]; pt.x = o.x + d.x * wall.t; pt.y = o.y + d.y * wall.t; pt.z = o.z + d.z * wall.t; pt.m = wall.m; pt.side = wall.side !== false;
     res.wallHits.push(pt); res.end = pt;
     const th = W.thickness(o, d, wall.t), cost = th * W.density(wall.m), cap = (w.pen || 1) * 0.55;
     if (!isFinite(th) || cost >= cap) break;

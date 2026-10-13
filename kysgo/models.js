@@ -314,6 +314,9 @@ float gW; vec3 gTri; vec4 gNs;`);
   float gpatch = texture2D(gC, vOP.zy * 1.3 + vOP.xy * 0.7).r;   // wear comes in patches (where hands and holsters rub), not as an outline
   gW = gWear * smoothstep(80.0, 320.0, gcurv) * smoothstep(0.5, 0.56, gpatch) * smoothstep(0.42, 0.6, gcol + (gNs.b - 0.5) * 0.5);
   diffuseColor.rgb = mix(diffuseColor.rgb, gWearC, gW);`);
+    // brushed metal: the finish is drawn in long streaks along the barrel, so a highlight smears into a line instead of a dot
+    f = f.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+  if (metalnessFactor > 0.45) { float bl = texture2D(gC, vec2(vOP.y * 61.0 + vOP.x * 37.0, vOP.z * 0.6)).r; roughnessFactor = clamp(roughnessFactor * (0.72 + bl * 0.62), 0.04, 1.0); }`);
     f = f.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
   roughnessFactor = clamp(roughnessFactor + (gNs.b - 0.5) * gRk * 2.0, 0.04, 1.0); roughnessFactor = mix(roughnessFactor, 0.3, gW);
   {   // micro-scratches: hairline marks in a few directions, polished brighter and smoother than the finish around them,

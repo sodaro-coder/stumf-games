@@ -3,7 +3,7 @@
 // by the mission's objectives. Everything is host-authoritative like a normal match, so co-op uses the same netcode:
 // the host broadcasts the story state (objective, markers, timers, boss) as an event and clients draw it.
 import { Match, moveStep } from './sim.js';
-import { W_BY_ID, MODES } from './data.js';
+import { W_BY_ID, MODES, PHYS } from './data.js';
 import { CHARACTERS, SQUAD, STORY_DIFF, ARSENAL, MISSIONS, BOSS, BOSSES, BARKS, SPEAKERS } from './story.js';
 
 const ENEMY_GUNS = [['glock', 'mac10'], ['mac10', 'galil'], ['galil', 'ak47', 'mp9'], ['ak47', 'galil', 'p90'], ['ak47', 'm4a4', 'p90'], ['ak47', 'm4a4', 'ssg08'], ['ak47', 'awp', 'm4a1s']];
@@ -185,14 +185,46 @@ export class StoryMatch extends Match {
   zonePt(name, salt = 0) {
     const zs = this.W.B.zones.length ? this.W.B.zones : [['all', 2, 2, this.W.w - 2, this.W.d - 2]];
     const key = name + '|' + salt;
-    if (!this.zoneCache.has(key)) { const z = zs.find((q) => q[0].toLowerCase() === String(name).toLowerCase()) || zs[hash(String(name)) % zs.length]; this.zoneCache.set(key, this.W.randomIn([z[1], z[2], z[3], z[4]], () => ((hash(key + this.zoneCache.size) % 1000) / 1000))); }
+    if (!this.zoneCache.has(key)) { const z = zs.find((q) => q[0].toLowerCase() === String(name).toLowerCase()) || zs[hash(String(name)) % zs.length]; this.zoneCache.set(key, this.reach(this.W.randomIn([z[1], z[2], z[3], z[4]], () => ((hash(key + this.zoneCache.size) % 1000) / 1000)))); }
     return this.zoneCache.get(key);
+  }
+  // every objective point is somewhere a player can WALK to from the squad's spawn: the floor reachable from there is
+  // flooded once (open cells, steps no higher than a stair), and a point off it (inside a crate, on a roof, in a sealed
+  // room) moves to the nearest reachable cell
+  reachMap() {
+    if (this._reach) return this._reach;
+    const W = this.W, w = W.w, d = W.d, R = new Uint8Array(w * d), q = [], step = PHYS.step + 0.02;   // the same rule as the bots' paths
+    const seeds = [...(W.B.spawns.CT || []), ...(W.B.spawns.T || [])];
+    for (const s of seeds.slice(0, 2)) { const i = W.idx(Math.floor(s[0]), Math.floor(s[1])); if (i >= 0 && !R[i]) { R[i] = 1; q.push(i); } }
+    while (q.length) {
+      const c = q.pop(), cx = c % w, cz = (c / w) | 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = W.idx(cx + dx, cz + dz); if (n >= 0 && !R[n] && W.flag[n] === 2 && Math.abs(W.h[n] - W.h[c]) <= step) { R[n] = 1; q.push(n); } }
+    }
+    return (this._reach = R);
+  }
+  reach(pt) {
+    const W = this.W, R = this.reachMap(), w = W.w, cx = Math.floor(pt[0]), cz = Math.floor(pt[1]), i0 = W.idx(cx, cz);
+    const open = (i) => { if (!R[i]) return false; const x = i % w, z = (i / w) | 0; let k = 0; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = W.idx(x + dx, z + dz); if (n >= 0 && R[n]) k++; } return k >= 3; };   // not squeezed against a wall
+    if (i0 >= 0 && open(i0)) {   // against a wall: the middle of the cell, so a player can stand on it
+      let all = true; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = W.idx(cx + dx, cz + dz); if (n < 0 || !R[n]) all = false; }
+      return all ? pt : [cx + 0.5, cz + 0.5];
+    }
+    for (let r = 1; r <= 40; r++) {
+      let best = null, bd = 1e9;
+      for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const i = W.idx(cx + dx, cz + dz); if (i < 0 || !open(i)) continue;
+        const dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = [cx + dx + 0.5, cz + dz + 0.5]; }
+      }
+      if (best) return best;
+    }
+    return pt;
   }
   farFrom(pt, minD = 18) {   // an enemy spawn point out of the squad's sight, preferring the T side
     const cands = [...this.W.B.spawns.T, ...this.W.B.zones.map((z) => [(z[1] + z[3]) / 2, (z[2] + z[4]) / 2])];
     const squad = [...this.players.values()].filter((p) => p.squad && p.alive);
     for (let k = 0; k < 12; k++) {
-      const c = cands[Math.floor(this.rng() * cands.length)], q = this.W.randomIn([c[0] - 3, c[1] - 3, c[0] + 3, c[1] + 3]);
+      const c = cands[Math.floor(this.rng() * cands.length)], q = this.reach(this.W.randomIn([c[0] - 3, c[1] - 3, c[0] + 3, c[1] + 3]));
       if (squad.every((s) => Math.hypot(s.x - q[0], s.z - q[1]) > minD) && squad.every((s) => !this.W.los({ x: s.x, y: s.y + 1.6, z: s.z }, { x: q[0], y: this.W.groundAt(q[0], q[1], 10) + 1.4, z: q[1] }))) return q;
     }
     const c = this.W.B.spawns.T[0]; return [c[0], c[1]];
@@ -214,7 +246,7 @@ export class StoryMatch extends Match {
     p.guard = opts.guard || null; this.enemies.add(id);
     return p;
   }
-  wave(n, at) { const k = Math.max(1, Math.round(n * this.diff.enemyCount)); for (let i = 0; i < k; i++) { const pt = at || this.farFrom(null); this.enemy(this.W.randomIn([pt[0] - 2.5, pt[1] - 2.5, pt[0] + 2.5, pt[1] + 2.5])); } }
+  wave(n, at) { const k = Math.max(1, Math.round(n * this.diff.enemyCount)); for (let i = 0; i < k; i++) { const pt = at || this.farFrom(null); this.enemy(this.reach(this.W.randomIn([pt[0] - 2.5, pt[1] - 2.5, pt[0] + 2.5, pt[1] + 2.5]))); } }
   // bots: enemies with a guard post hold it until they spot someone; squad AI stays with the humans or the NPC goal
   botGoal(p) {
     if (p === this.npc) { const lead = this.nearestHuman(p); return lead ? [lead.x, lead.z] : null; }
@@ -249,7 +281,7 @@ export class StoryMatch extends Match {
       case 'reach': { const pt = this.zonePt(place, i); this.markers.push({ id: 'goal', x: pt[0], z: pt[1], kind: 'goal', label: o.hint }); break; }
       case 'clear': {
         const pt = this.zonePt(place, i), n = Math.round((o.count || 10) * this.diff.enemyCount);
-        for (let k = 0; k < n; k++) { let q = null; for (let j = 0; j < 8 && (!q || this.humans().some((h) => Math.hypot(h.x - q[0], h.z - q[1]) < 10)); j++) q = this.W.randomIn([pt[0] - 9, pt[1] - 9, pt[0] + 9, pt[1] + 9]); this.enemy(q, { guard: q }); }
+        for (let k = 0; k < n; k++) { let q = null; for (let j = 0; j < 8 && (!q || this.humans().some((h) => Math.hypot(h.x - q[0], h.z - q[1]) < 10)); j++) q = this.reach(this.W.randomIn([pt[0] - 9, pt[1] - 9, pt[0] + 9, pt[1] + 9])); this.enemy(q, { guard: q }); }
         st.need = n; st.ids = new Set([...this.enemies].slice(-n)); this.markers.push({ id: 'area', x: pt[0], z: pt[1], kind: 'area', label: 'Clear' });
         break;
       }
@@ -260,7 +292,7 @@ export class StoryMatch extends Match {
       }
       case 'collect': {
         st.need = o.count || 3;
-        for (let k = 0; k < st.need; k++) { const z = this.W.B.zones[(hash(o.item + k + this.mi) % Math.max(1, this.W.B.zones.length))]; const q = z ? this.W.randomIn([z[1], z[2], z[3], z[4]]) : this.zonePt(o.item, k); this.markers.push({ id: 'c' + k, x: q[0], z: q[1], kind: 'item', label: o.item }); }
+        for (let k = 0; k < st.need; k++) { const z = this.W.B.zones[(hash(o.item + k + this.mi) % Math.max(1, this.W.B.zones.length))]; const q = z ? this.reach(this.W.randomIn([z[1], z[2], z[3], z[4]])) : this.zonePt(o.item, k); this.markers.push({ id: 'c' + k, x: q[0], z: q[1], kind: 'item', label: o.item }); }
         this.wave(3); break;
       }
       case 'interact': {
@@ -281,14 +313,14 @@ export class StoryMatch extends Match {
       case 'rescue': {   // a captured squadmate: get to them and hold USE; they're back in the fight (a real player gets control back)
         const q = this.zonePt(o.zone || 'cell' + i, i); st.pt = q; st.need = 2.2; st.who = o.who; st.limit = o.time || 0;
         this.markers.push({ id: 'cell', x: q[0], z: q[1], kind: 'revive', label: (CHARACTERS[o.who] || {}).short || 'Rescue', prog: 0 });
-        const n = Math.round((o.guards || 4) * this.diff.enemyCount); for (let k = 0; k < n; k++) { let g = null; for (let j = 0; j < 8 && (!g || this.humans().some((h) => Math.hypot(h.x - g[0], h.z - g[1]) < 9)); j++) g = this.W.randomIn([q[0] - 8, q[1] - 8, q[0] + 8, q[1] + 8]); this.enemy(g, { guard: g, look: this.mission.enemyLook }); }
+        const n = Math.round((o.guards || 4) * this.diff.enemyCount); for (let k = 0; k < n; k++) { let g = null; for (let j = 0; j < 8 && (!g || this.humans().some((h) => Math.hypot(h.x - g[0], h.z - g[1]) < 9)); j++) g = this.reach(this.W.randomIn([q[0] - 8, q[1] - 8, q[0] + 8, q[1] + 8])); this.enemy(g, { guard: g, look: this.mission.enemyLook }); }
         break;
       }
       case 'intel': {   // Igor's swap: several files at one desk, one is the right one to replace (the clue says which)
         const q = this.zonePt(o.zone, i); st.pt = q; st.answer = o.answer; st.need = 1;
-        (o.options || []).forEach((lab, k) => this.markers.push({ id: 'i' + k, x: q[0] + (k - (o.options.length - 1) / 2) * 1.6, z: q[1], kind: 'terminal', label: lab, opt: lab, prog: 0 }));
+        (o.options || []).forEach((lab, k) => { const p2 = this.reach([q[0] + (k - (o.options.length - 1) / 2) * 1.6, q[1]]); this.markers.push({ id: 'i' + k, x: p2[0], z: p2[1], kind: 'terminal', label: lab, opt: lab, prog: 0 }); });
         const n = o.guards | 0, H = this.humans();
-        for (let k = 0; k < n; k++) { let g = null; for (let j = 0; j < 10 && (!g || H.some((h) => Math.hypot(h.x - g[0], h.z - g[1]) < 12)); j++) g = this.W.randomIn([q[0] - 12, q[1] - 12, q[0] + 12, q[1] + 12]); const e = this.enemy(g, { guard: g, look: o.look || this.mission.enemyLook }); e.passive = true; e.yaw = this.rng() * 6.28; st.guards = (st.guards || []).concat(e.id); }
+        for (let k = 0; k < n; k++) { let g = null; for (let j = 0; j < 10 && (!g || H.some((h) => Math.hypot(h.x - g[0], h.z - g[1]) < 12)); j++) g = this.reach(this.W.randomIn([q[0] - 12, q[1] - 12, q[0] + 12, q[1] + 12])); const e = this.enemy(g, { guard: g, look: o.look || this.mission.enemyLook }); e.passive = true; e.yaw = this.rng() * 6.28; st.guards = (st.guards || []).concat(e.id); }
         st.spotted = false; st.lookT = 0; st.sight = o.sight || this.mission.sight || 16; break;
       }
       case 'ability': {   // the tutorial: use it for real, on people who need it
@@ -304,7 +336,7 @@ export class StoryMatch extends Match {
         const pt = this.zonePt(place, i); st.pt = pt; this.markers.push({ id: 'goal', x: pt[0], z: pt[1], kind: 'goal', label: 'Get here unseen' });
         const n = Math.round((o.guards || 5) * this.diff.enemyCount), H = this.humans();
         for (let k = 0; k < n; k++) {
-          let q = null; for (let j = 0; j < 10 && (!q || H.some((h) => Math.hypot(h.x - q[0], h.z - q[1]) < 14)); j++) q = this.W.randomIn([pt[0] - 14, pt[1] - 14, pt[0] + 14, pt[1] + 14]);
+          let q = null; for (let j = 0; j < 10 && (!q || H.some((h) => Math.hypot(h.x - q[0], h.z - q[1]) < 14)); j++) q = this.reach(this.W.randomIn([pt[0] - 14, pt[1] - 14, pt[0] + 14, pt[1] + 14]));
           const e = this.enemy(q, { guard: q }); e.passive = true; e.yaw = this.rng() * Math.PI * 2; st.guards = (st.guards || []).concat(e.id);
         }
         st.spotted = false; st.lookT = 0; break;
