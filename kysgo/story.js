@@ -98,7 +98,7 @@ export const BOSSES = {
   father: { name: 'Dad', look: 'father', scale: 1.3, hp: 820, vulnMul: 2.4, armorMul: 0.4, swing: 24, charge: 32, bottle: 14,
     miss: ['Hold STILL, you little—', 'Get over here!', 'Don\'t you run from me!'], wall: ['*groans*', 'Damn it—', '...where\'d you go?'],
     phaseLines: [null, ['boss', 'You think you\'re a MAN now? Huh?'], ['boss', 'Your mother would be ashamed of you. ASHAMED.']],
-    after: [['danny', '(The room is very quiet.)', { cam: 'wide', music: '' }], ['danny', 'Frankie...?', { cam: 'close' }], ['danny', 'Why did you do that?'], ['wiener', '(He looks at his little brother for a long time.)', { cam: 'close', hold: 1.6 }], ['wiener', 'Wiener\'s protect their own.', { cam: 'close', hold: 2.5 }]] },
+    after: [['danny', '(The room is very quiet.)', { cam: 'wide', music: '' }], ['danny', 'Frankie...?', { cam: 'close' }], ['danny', 'Why did you do that?'], ['wiener', '(He looks at his little brother for a long time.)', { cam: 'close', hold: 1.6 }], ['wiener', 'Wieners protect their own.', { cam: 'close', hold: 2.5 }]] },
   reaper: { name: 'The Reaper', look: 'reaper', scale: 1.45, hp: 1500, vulnMul: 1.0, armorMul: 0.08, reapFrac: 0.42, grasp: 26,
     phaseLines: [[['cancer', 'Okay. Okay. Every swing, it opens up. Hit it THEN.']], [['cancer', '(The lights die. It is not where it was a second ago.)'], ['cancer', 'Stop trying to see it coming, Dale. Just move.']], null],
     fall: [['cancer', '(The scythe catches him. He goes down.)', { cam: 'close', down: 'cancer', music: '', vision: 'dread_last' }], ['cancer', '(It stands over him. Patient. It has all the time in the world.)', { cam: 'boss', hold: 1.6 }], ['cancer', '(His chest rises. Falls. Rises.)', { cam: 'close', hold: 1.2 }], ['cancer', '...huh.'], ['cancer', 'Still here.', { hold: 0.8 }], ['cancer', '(He taps his chest twice.) Still ticking.', { fullhp: true, music: 'defiant', hold: 1 }]],
@@ -148,15 +148,16 @@ export const CHAPTERS = [
       objectives: [
         { kind: 'explore', hint: 'Find your squad', points: [
           { zone: 'Bunks', label: 'Wiener', say: [['wiener', 'Thirty-nine. Forty. Forty-one.'], ['wiener', 'Don\'t ask what the number is for. Nobody asks. That\'s the rule.'], ['wiener', 'Sergeant Wiener. Yes, the costume is regulation. No, you may not touch the bun.'], ['wiener', 'One more rule. Wieners protect their own. You\'re all Wieners now. Don\'t make it weird.']] },
-          { zone: 'Mess Hall', label: 'Ricky', say: [['ricky', 'Yo! You the new ones too? Recruit Ricky. Can I get an expresso around here?'], ['cancer', 'Espresso. There is no X. There has never been an X.'], ['ricky', 'You sure? Because I been saying it with the X for thirty-four years and nobody complained.'], ['cancer', 'I\'m complaining. I\'m complaining right now.'], ['ricky', 'Eight months clean and THIS is how I get treated.']] },
-          { zone: 'Infirmary', label: 'Cancer', say: [['cancer', 'Captain Cancer. Yes, that\'s the callsign. Yes, I have it. Stage four, before you ask.'], ['ricky', 'Man, naming yourself after it is like getting your ex\'s name tattooed.'], ['cancer', 'It\'s more like a name tag, kid. Saves everybody the awkward question.'], ['cancer', 'Upside: I\'m the bravest man on this base. I\'ve got nothing to lose.']] },
+          { zone: 'Mess Hall', label: 'Ricky', say: [['ricky', 'Yo. Y\'all the new meat too? Recruit Ricky. Where a man get an expresso around here?'], ['cancer', 'Espresso. There is no X. There has never been an X.'], ['ricky', 'You sure? Because I been saying it with the X for thirty-four years and nobody complained.'], ['cancer', 'I\'m complaining. I\'m complaining right now.'], ['ricky', 'Eight months sober and I gotta get bullied by a hospital gown.']] },
+          { zone: 'Infirmary', label: 'Cancer', say: [['cancer', 'Captain Cancer. Yes, that\'s the callsign. Yes, I have it. Stage four, before you ask.'], ['ricky', 'Naming yourself after it is wild, man. That\'s like getting your ex tatted on your neck.'], ['cancer', 'It\'s more like a name tag, kid. Saves everybody the awkward question.'], ['cancer', 'Upside? Nothing on this base scares me. I\'ve got nothing to lose.']] },
           { zone: 'Watchtower', label: 'Igor', say: [['igor', 'Igor. Sniper. In my village, we train with one bullet. If you miss, you are the target.'], ['igor', 'I still carry the bullet. I do not fire it. Is for something important.'], ['ricky', 'What village?'], ['igor', '...one that had very long winters.']] },
         ] },
-        { kind: 'interact', targets: 1, zone: 'Armory', hint: 'Draw your weapons from the armory', say: [['ricky', 'Do they got a Glock with the switch on it? I\'m asking for a friend. The friend is me.'], ['wiener', 'You get one Glock, Recruit. One. I\'ve read your file.']] },
+        { kind: 'interact', targets: 1, zone: 'Armory', hint: 'Draw your weapons from the armory', say: [['ricky', 'They got Glocks with the switch? Asking for a friend. I\'m the friend.'], ['wiener', 'You get one Glock, Recruit. One. I\'ve read your file.']] },
         { kind: 'reach', zone: 'Parade Ground', hint: 'Fall in on the parade ground',
           scene: [['wiener', 'Listen up. You are the worst squad this base has ever assembled, and I picked every one of you personally.', { cam: 'wide' }], ['wiener', 'That\'s not a compliment. That\'s a confession.'], ['wiener', 'Recruit. You sure you want this? Last chance to walk away.'], ['ricky', 'Been waiting thirty-four years for this, Sarge. I ain\'t walking.'], ['cancer', 'Thirty-four years. You mean your whole life.'], ['ricky', '...yeah. Something like that.']] },
       ],
-      cut: { in: [['command', 'Morning, Sergeant! Colonel Brisket, your new handler. You\'ll hear me in your ear, never see my face. Like a conscience, but useful.', { cam: 'wide' }], ['wiener', 'Copy, Command. What\'s that squeaking behind you?'], ['command', 'New office floors. Very shiny. Get your people up, Sergeant.']],
+      cut: { in: [['cancer', '(Ballin\' Arena. Twenty thousand screaming fans. Green gas rolling across the court.)', { cam: 'wide', music: 'dread', slowmo: [0.45, 3.5] }], ['cancer', '(A bald man in a hospital gown walks straight into it. He is carrying a pot. He is smiling.)', { hold: 1.4 }], ['ricky', 'CANCER! GET BACK HERE!', { hold: 0.6 }], ['wiener', '(Six weeks earlier.)', { music: '', hold: 1.4 }],
+        ['command', 'Morning, Sergeant! Colonel Brisket, your new handler. I\'m the voice in your ear. Think of me as your conscience, but with air support.', { cam: 'wide' }], ['wiener', 'Copy, Command. What\'s that squeaking behind you?'], ['command', 'New office floors. Very shiny. Get your people up, Sergeant.']],
         out: [['command', 'Somebody\'s been leaving live rounds on the range. Go take a look. Probably nothing!'], ['wiener', 'Probably nothing. Squad, full kit.']] } },
     { id: 'm2', name: 'Orientation', tier: 0, intro: 'The range. Somebody has been leaving live rounds in the training dummies.',
       objectives: [
@@ -164,11 +165,11 @@ export const CHAPTERS = [
         { kind: 'clear', zone: 'Lanes', count: 12, hint: 'Shoot the targets (they shoot back)', say: [['igor', 'Targets have rifles. Is new. I like it.'], ['wiener', 'Ricky! Stop firing from the hip like a music video!'], ['ricky', 'It\'s WORKING though!']] },
         { kind: 'interact', targets: 3, zone: 'Berm', hint: 'Reset the three target winches', done: [['wiener', 'Somebody wired those dummies the night before. Somebody with keys.'], ['igor', 'And this. A basketball. Signed "O.B.B."']] },
       ],
-      cut: { in: [['wiener', 'Intel says the Ballin\' Brotherhood is building something big. Something that smells.', { cam: 'wide' }], ['igor', 'In my village, we train with one bullet. Today I bring many. Is special occasion.']],
+      cut: { in: [['wiener', 'Intel says the Ballin\' Brotherhood is cooking something. Literally. Something that smells like a war crime.', { cam: 'wide' }], ['igor', 'One bullet is for training. Today I bring four hundred. Is special occasion.']],
         out: [['wiener', 'Osama bin Ballin. In MY range.'], ['command', 'Nothing but net, team! Take a breather. Range is clear now.'], ['cancer', 'He says that a lot. "Nothing but net."'], ['wiener', 'Command\'s a basketball fan. Lot of people are.']] } },
     { id: 'w3', name: 'Ambush', tier: 1, intro: 'Range is clear now, Command said.',
       objectives: [
-        { kind: 'reach', zone: 'Firing Line', hint: 'Walk the range with your squad', say: [['ricky', 'Sarge, real talk. What do you do for fun?'], ['wiener', 'Push-ups.'], ['ricky', 'For FUN.'], ['wiener', 'Angry push-ups.'], ['cancer', 'He has one hobby. It\'s called yelling.'], ['igor', 'In my village, fun was illegal. We had it anyway. Quietly.']] },
+        { kind: 'reach', zone: 'Firing Line', hint: 'Walk the range with your squad', say: [['ricky', 'Sarge, real talk. What do you do for fun?'], ['wiener', 'Push-ups.'], ['ricky', 'For FUN.'], ['wiener', 'Angry push-ups.'], ['cancer', 'He has one hobby. It\'s called yelling.'], ['igor', 'Where I grew up, fun was illegal. We had it anyway. Very quietly.']] },
         { kind: 'collect', item: 'live round', count: 3, hint: 'Pick up the live rounds on the range', say: [['cancer', 'Live rounds on a training range. Again.'], ['ricky', 'Maybe the range is haunted.'], ['cancer', 'Maybe you are.']] },
         { kind: 'interact', targets: 1, zone: 'Berm', hint: 'Check the berm',
           scene: [['igor', '(Igor stops. Listens.)', { cam: 'wide', music: '' }], ['igor', '...Wiener. The birds stopped.', { hold: 0.6 }], ['wiener', 'Everybody down. DOWN!', { sfx: 'explode', music: 'action' }]] },
@@ -211,8 +212,8 @@ export const CHAPTERS = [
         { kind: 'ability', who: 'wiener', hint: 'COMBAT MEDIC: press G (SKILL on a phone, D-pad up on a controller) next to your squad',
           scene: [['ricky', '(They\'re all hurt. Ricky is holding his ribs. Cancer can barely stand.)', { cam: 'wide', music: 'tender' }], ['cancer', 'We need a medic, Frank. You need a medic.'], ['wiener', '(He looks at them. All three. Bleeding.)', { hold: 1.2 }], ['wiener', 'Not again.', { unlock: 'wiener' }]] },
       ],
-      cut: { in: [['wiener', 'Wiener\'s protect their own.', { cam: 'pov_down', vision: 'dying', music: '' }], ['wiener', '(His eyes open.)', { cam: 'pov_down', hold: 1.2 }], ['wiener', '(He gets up.)', { cam: 'close', vision: '', music: 'pulse' }]],
-        out: [['ricky', 'Okay so who taught the hot dog to do surgery?', { cam: 'wide', music: 'tender' }], ['cancer', 'He\'s a hot dog, Ricky. Everything about him is surgery.'], ['igor', 'Wiener. Where did you learn this?'], ['wiener', '(He doesn\'t answer. He\'s already checking their bandages again.)', { hold: 1.5 }], ['ricky', '...Sarge? You good?'], ['wiener', 'Squad. Back to base.']] } },
+      cut: { in: [['wiener', 'Wieners protect their own.', { cam: 'pov_down', vision: 'dying', music: '' }], ['wiener', '(His eyes open.)', { cam: 'pov_down', hold: 1.2 }], ['wiener', '(He gets up.)', { cam: 'close', vision: '', music: 'pulse' }]],
+        out: [['ricky', 'Okay so who taught the hot dog to do surgery?', { cam: 'wide', music: 'tender' }], ['cancer', 'He\'s a hot dog, Ricky. He\'s already a medical procedure.'], ['igor', 'Wiener. Where did you learn this?'], ['wiener', '(He doesn\'t answer. He\'s already checking their bandages again.)', { hold: 1.5 }], ['ricky', '...Sarge? You good?'], ['wiener', 'Squad. Back to base.']] } },
   ] },
   { id: 'c2', map: 'mansion', name: 'The Wrong House', tease: 'Ricky, eight months before he enlisted. A big house that was supposed to be empty.', hub: 'Two weeks later, clearing out his mother\'s closet, Ricky found a shoebox of letters and four old videotapes. Every letter was from the same man.', missions: [
     { id: 'r1', name: 'The Wrong House', tier: 2, featured: 'ricky', vision: 'night', music: '', intro: 'Ricky. Eight months before he enlisted.', loadout: { ricky: { guns: [], armor: false } }, enemyLook: 'suit',
@@ -241,8 +242,8 @@ export const CHAPTERS = [
         { kind: 'clear', zone: 'square', count: 16, hint: 'Clear the town square' },
         { kind: 'collect', item: 'receipt', count: 4, hint: 'Find the Brotherhood\'s receipts', done: [['cancer', 'Chili. Rockets. And a deposit on a pot the size of a hot tub.']] },
       ],
-      cut: { in: [['cancer', 'Brotherhood bought nine thousand bottle rockets and a pallet of expired chili. In cash.'], ['ricky', 'Man, that\'s just a Tuesday where I\'m from.']],
-        out: [['igor', 'Chili and rockets. In my village this is called "dinner and dessert".'], ['command', 'The cook-off! That\'s where they\'re brewing it. Go, go, go!']] } },
+      cut: { in: [['cancer', 'Brotherhood bought nine thousand bottle rockets and a pallet of expired chili. In cash.'], ['ricky', 'Man, that\'s just the Fourth of July where I\'m from.']],
+        out: [['igor', 'Chili and rockets. Back home we call this "date night".'], ['command', 'The cook-off! That\'s where they\'re brewing it. Go, go, go!']] } },
     { id: 'm6', name: 'Chili Cook-Off', tier: 1, intro: 'The chili is the payload. The chef knows the recipe.',
       objectives: [
         { kind: 'interact', targets: 4, puzzle: 'valves', hint: 'Shut the four gas valves in the right order',
@@ -255,7 +256,7 @@ export const CHAPTERS = [
       loadout: { all: { guns: [], armor: false } }, enemyLooks: ['dancer_a', 'dancer_b', 'dancer_c'],
       enemyNames: ['Destiny', 'Crystal', 'Diamond', 'Champagne', 'Cinnamon', 'Bambi', 'Raven', 'Starla', 'Chastity', 'Porsche', 'Paprika', 'Sapphire'],
       objectives: [
-        { kind: 'reach', zone: 'Main Floor', hint: 'Find the Brotherhood\'s money man', say: [['ricky', 'I want it on the record that I was ordered to be here. By the government. I am a patriot.'], ['cancer', 'You are a patriot with a fist full of ones, Ricky.'], ['igor', 'In my country this is called "Tuesday".']] },
+        { kind: 'reach', zone: 'Main Floor', hint: 'Find the Brotherhood\'s money man', say: [['ricky', 'I want it on the record that I was ordered to be here. By the government. I am a patriot.'], ['cancer', 'You are a patriot with a fist full of ones, Ricky.'], ['igor', 'I have been to strip club once. Also front for arms dealers. Is industry standard.']] },
         { kind: 'clear', zone: 'Main Floor', count: 8, hint: 'They\'re not dancers. Slap them down (sabers only)',
           scene: [['headliner', 'Boys. Welcome to the Velvet Rope. Two-drink minimum.', { cam: 'wide' }], ['headliner', '(Every dancer in the club turns around. Every one of them is wearing a bomb vest.)', { cam: 'wide', hold: 1.2 }],
             ['headliner', 'And a one-explosion maximum. Get them, girls.'], ['wiener', 'We have no guns. We have no grenades. We have...'], ['ricky', 'We have DICKS, Sarge. Big rubber ones. FOR GLORY!'], ['cancer', 'This is the worst day of my life and I have cancer.']],
@@ -346,7 +347,7 @@ export const CHAPTERS = [
         out: [['wiener', 'He let us in because you paid him two hundred dollars, Ricky.'], ['ricky', 'And because I\'m charming. Both. Write that down.']] } },
     { id: 'm15', name: 'Hot Tub Time Bomb', tier: 4, intro: 'There is a bomb in the hot tub. Igor volunteers.',
       objectives: [
-        { kind: 'defuse', puzzle: 'wires', hint: 'Defuse the bomb in the hot tub', say: [['igor', 'In my country, water is always this temperature. But frozen.']] },
+        { kind: 'defuse', puzzle: 'wires', hint: 'Defuse the bomb in the hot tub', say: [['igor', 'Back home, hot tub is hole in the ice. This is luxury bomb.']] },
         { kind: 'clear', zone: 'deck', count: 20, hint: 'Clear the party deck',
           scene: [['wiener', 'Where\'s Cancer?'], ['igor', 'Lower deck. On a phone. Whispering.'], ['wiener', 'Who carries a phone on a covert op?'], ['ricky', 'Leave him alone, man. Maybe it\'s a doctor.'], ['wiener', 'At midnight? On Ballin\'s yacht?']] },
       ],
@@ -444,7 +445,7 @@ export const CHAPTERS = [
         { kind: 'reach', zone: 'truck', hint: 'Get on the truck' },
       ],
       cut: { in: [['ricky', 'Real talk, if I don\'t make it, tell my mixtape I loved it.'], ['cancer', 'You\'re going to make it. That\'s an order.'], ['ricky', 'You\'re not my sergeant.'], ['cancer', 'No. I\'m not.']],
-        out: [['command', 'Ballin\' Arena, tomorrow night. Sold out. See you there, team. I\'ll be courtside.'], ['wiener', 'The desert depot first. Then the arena.'], ['igor', 'Tomorrow, we end this. Tonight, we drink. Only water. I am joking. Not water.']] } },
+        out: [['command', 'Ballin\' Arena, tomorrow night. Sold out. See you there, team. I\'ll be courtside.'], ['wiener', 'The desert depot first. Then the arena.'], ['igor', 'Tomorrow, we end this. Tonight, we drink. Vodka. Is not joke, is plan.']] } },
   ] },
   { id: 'c9', map: 'dust', name: 'Dust To Dust', tease: 'The last stop. Bring everything.', hub: 'Espresso.', missions: [
     { id: 'm23', name: 'Long A', tier: 6, intro: 'The Brotherhood\'s desert depot. The last thing between the squad and the arena.',
@@ -471,7 +472,7 @@ export const CHAPTERS = [
       objectives: [
         { kind: 'clear', zone: 'Concourse', count: 18, hint: 'Clear the concourse' },
         { kind: 'boss', zone: 'Court', hint: 'Take down Osama bin Ballin',
-          scene: [['boss', 'You fools! In one hour this pot of chili will gas the entire arena! Nobody will ever smell anything else again!'], ['wiener', 'Your chili is weak and so are you.'], ['command', '(courtside, squeaking) Should\'ve stayed benched, Captain.'], ['cancer', 'I\'ve been benched my whole life, Brisket. Watch me play.'], ['boss', 'Feel... the GOY-BEAM!']] },
+          scene: [['boss', 'Twenty thousand fans. One pot. When this lid comes off, this whole city smells like my bathroom. FOREVER.'], ['wiener', 'Your chili\'s mid and your jump shot\'s worse.'], ['command', '(courtside, squeaking) Should\'ve stayed benched, Captain.'], ['cancer', 'I\'ve been benched my whole life, Brisket. Watch me play.'], ['boss', 'Feel... the GOY-BEAM!']] },
         { kind: 'clear', zone: 'Court', count: 6, hint: 'Arrest Brisket\'s bodyguards', done: [['wiener', 'Colonel Brisket. You\'re under arrest. Forty-one counts.'], ['command', 'You can\'t stop it. Dead-man trigger. Somebody has to walk it into the tank. Through the gas. Good luck finding a volunteer.']] },
       ],
       cut: { in: [['wiener', 'Squad. Proud of you. Whatever happens in there.'], ['igor', 'Is like wedding speech. I hate it. Keep going.']],
@@ -505,10 +506,10 @@ export const MISSIONS = CHAPTERS.flatMap((c, ci) => c.missions.map((m, mi) => ({
 
 // ---- banter: random combat lines (when something happens) -------------------------------------------------------------
 export const BARKS = {
-  wiener: { kill: ['Pain builds character. That one had none.', 'Next!', 'That felt GOOD. Do it again.'], hurt: ['Harder!', 'Is that all you got?', 'Ow. Again.'], ability: ['Chow time, ladies!', 'Mess kit! Bite down!'] },
-  cancer: { kill: ['Terminal.', 'You got the diagnosis.', 'Stage four, buddy.'], hurt: ['I\'ve had worse. This week.', 'Tickles, compared to chemo.'], ability: ['Breathe deep!', 'Fresh from the oncology ward!'] },
-  ricky: { kill: ['Bop!', 'Switch go brrr!', 'That\'s going in the mixtape.', 'Laser said so.'], hurt: ['My chains!', 'Not the fit, not the fit!'], ability: [] },
-  igor: { kill: ['One shot. Like grandmother taught.', 'Is too easy, comrade.', 'Back to the gulag with you.'], hurt: ['Is only flesh.', 'Bah! Mosquito.'], ability: ['Russian Focus.', 'Breathe in. Is discipline.'] },
+  wiener: { kill: ['Pain builds character. That one had none.', 'NEXT!', 'Drop and give me zero. Forever.', 'That felt GOOD. Do it again.'], hurt: ['Harder!', 'Is that all you got?', 'Ow. Again.'], ability: ['Chow time, ladies!', 'Mess kit! Bite down!'] },
+  cancer: { kill: ['Terminal.', 'You got the diagnosis.', 'Stage four, buddy.', 'See you soon. Real soon.'], hurt: ['I\'ve had worse. This week.', 'Tickles, compared to chemo.'], ability: ['Breathe deep!', 'Fresh from the oncology ward!'] },
+  ricky: { kill: ['Bop!', 'Switch go brrr!', 'That\'s going on the mixtape.', 'Clip that. Somebody clip that.', 'Laser said so.'], hurt: ['My chains!', 'Not the fit, not the fit!'], ability: [] },
+  igor: { kill: ['One shot. Like grandmother taught.', 'Too easy, comrade.', 'Back to the gulag with you.'], hurt: ['Is only flesh.', 'Bah! Mosquito.'], ability: ['Russian Focus.', 'Breathe in. Is discipline.'] },
   corrections: [   // Wiener and Cancer roasting Ricky after he says something dumb
     ['ricky', 'Grenades are just guns that stopped trying.', 'cancer', 'That\'s not how anything works.'],
     ['ricky', 'If we\'re losing, the respawn button is right there.', 'wiener', 'It\'s real life, Ricky. There is no respawn.'],

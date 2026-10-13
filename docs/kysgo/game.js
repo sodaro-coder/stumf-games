@@ -353,7 +353,7 @@ export default function start({ cfg, E, N, smoke }) {
     // contrast/colour grade (cool shadows, warm highlights), a vignette and fine film grain. Low and Potato skip it and
     // draw straight to the screen with no post-processing at all.
     const post = { rt: null, w: 0, h: 0 };
-    const POST_FS = `uniform sampler2D tex; uniform sampler2D vmTex; uniform sampler2D depthTex; uniform vec2 res; uniform float time; uniform float exposure; uniform float ads; uniform vec3 camNF; varying vec2 vUv;
+    const POST_FS = `uniform sampler2D tex; uniform sampler2D vmTex; uniform sampler2D depthTex; uniform vec2 res; uniform float time; uniform float exposure; uniform float ads; uniform vec3 camNF; uniform float cine; uniform float focusZ; uniform float aperture; varying vec2 vUv;
         vec3 comp(vec2 p) { vec4 v = texture2D(vmTex, p); return texture2D(tex, p).rgb * (1.0 - v.a) + v.rgb; }   // world + the gun layer (premultiplied)
         vec3 aces(vec3 c) { const mat3 i = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
           const mat3 o = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
@@ -411,6 +411,18 @@ export default function start({ cfg, E, N, smoke }) {
               for (int k = 0; k < 12; k++) { float a = float(k) * 0.5236 + j; b += texture2D(vmTex, vUv + vec2(cos(a), sin(a)) / res * (1.5 + r * (2.0 + float(k) * 0.9))); } g = mix(g, b / 12.0, min(1.0, r * 1.6)); }
           }
           vec4 w4 = texture2D(tex, vUv); vec3 wc = w4.rgb;
+          if (cine > 0.01) {   // cutscenes: a shallow depth of field on whoever is talking, and a touch of lens fringing at the edges
+            vec2 ca = (vUv - 0.5) * 0.0035 * cine; wc.r = mix(wc.r, texture2D(tex, vUv + ca).r, 0.8); wc.b = mix(wc.b, texture2D(tex, vUv - ca).b, 0.8);
+            #if defined(SSAO) || defined(SSR)
+            float coc = clamp(abs(lin(vUv) - focusZ) / max(focusZ, 0.6) * aperture, 0.0, 1.0);
+            #else
+            float coc = smoothstep(0.2, 0.7, length((vUv - 0.5) * vec2(res.x / res.y, 1.0))) * min(1.0, aperture);
+            #endif
+            coc *= cine;
+            if (coc > 0.02) { vec3 b = vec3(0.0); float j = fract(sin(dot(vUv * res, vec2(39.3468, 11.135))) * 43758.5453) * 6.2832;
+              for (int k = 0; k < 12; k++) { float a = float(k) * 0.5236 + j; b += texture2D(tex, vUv + vec2(cos(a), sin(a)) / res * (1.0 + coc * (1.5 + float(k) * 0.45))).rgb; }
+              wc = mix(wc, b / 12.0, min(1.0, coc * 1.2)); }
+          }
           #ifdef SSAO
           wc *= ssao();
           #endif
@@ -433,10 +445,18 @@ export default function start({ cfg, E, N, smoke }) {
           vec2 q = vUv - 0.5; c *= 1.0 - 0.32 * pow(length(q * vec2(1.25, 1.0)) * 1.3, 2.4);   // vignette
           c += (fract(sin(dot(vUv * res + time * 61.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.007;   // grain
           #endif
+          if (cine > 0.01) {   // the film look: teal shadows, warm skin and highlights, deeper contrast, heavier vignette and grain
+            float lc = dot(c, vec3(0.2126, 0.7152, 0.0722));
+            vec3 film = c + (1.0 - smoothstep(0.0, 0.5, lc)) * lc * vec3(-0.02, 0.006, 0.025) + smoothstep(0.3, 1.0, lc) * vec3(0.03, 0.012, -0.022);
+            film = mix(film, film * film * (3.0 - 2.0 * film), 0.12);
+            vec2 q2 = vUv - 0.5; film *= 1.0 - 0.22 * pow(length(q2 * vec2(1.1, 1.0)) * 1.35, 2.2);
+            film += (fract(sin(dot(vUv * res + time * 47.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.014;
+            c = mix(c, film, cine);
+          }
           gl_FragColor = vec4(srgb(clamp(c, 0.0, 1.0)), 1.0);
         }`;
     post.mat = new THREE.ShaderMaterial({
-      uniforms: { tex: { value: null }, vmTex: { value: null }, depthTex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 }, ads: { value: 0 }, camNF: { value: new THREE.Vector3(0.05, 400, 1) }, ssrK: { value: 1 }, upV: { value: new THREE.Vector3(0, 1, 0) } },
+      uniforms: { tex: { value: null }, vmTex: { value: null }, depthTex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 }, ads: { value: 0 }, cine: { value: 0 }, focusZ: { value: 3 }, aperture: { value: 1 }, camNF: { value: new THREE.Vector3(0.05, 400, 1) }, ssrK: { value: 1 }, upV: { value: new THREE.Vector3(0, 1, 0) } },
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: POST_FS, defines: gfx.postDefines(), depthTest: false, depthWrite: false,
     });
@@ -1570,10 +1590,15 @@ export default function start({ cfg, E, N, smoke }) {
         cam.position.set(me.x + (Math.random() - 0.5) * sh, me.y + h + (Math.random() - 0.5) * sh, me.z + (Math.random() - 0.5) * sh); cam.up.set(cine.down ? 0.25 : 0, 1, 0); cam.lookAt(cine.look); cam.up.set(0, 1, 0);
         if (Math.abs(cam.fov - 62) > 0.01) { cam.fov = 62; cam.updateProjectionMatrix(); }
       } else if (cine) {   // keep the camera out of walls: pull it in towards whoever it's looking at
-        const lk2 = cine.look, dx = cine.pos.x - lk2.x, dy = cine.pos.y - lk2.y, dz = cine.pos.z - lk2.z, L = Math.hypot(dx, dy, dz) || 1;
+        const lk2 = cine.look; let dx = cine.pos.x - lk2.x, dy = cine.pos.y - lk2.y, dz = cine.pos.z - lk2.z, L = Math.hypot(dx, dy, dz) || 1;
+        // close shots use a long lens: the camera backs off so the framing stays, and the background compresses and goes soft
+        const tele = L < 3.4, fov2 = tele ? 31 : 44, back = tele ? Math.tan(25 * Math.PI / 180) / Math.tan(fov2 / 2 * Math.PI / 180) : Math.tan(25 * Math.PI / 180) / Math.tan(22 * Math.PI / 180);
+        dx *= back; dy *= back; dz *= back; L *= back;
         const hit = W.ray({ x: lk2.x, y: lk2.y, z: lk2.z }, { x: dx / L, y: dy / L, z: dz / L }, L), k = hit ? Math.max(0.15, (hit.t - 0.25) / L) : 1;
-        cam.position.set(lk2.x + dx * k, lk2.y + dy * k, lk2.z + dz * k); cam.up.set(0, 1, 0); cam.lookAt(lk2.x, lk2.y, lk2.z);
-        if (Math.abs(cam.fov - 50) > 0.01) { cam.fov = 50; cam.updateProjectionMatrix(); }
+        const hand = 0.012 * Math.min(L, 6);   // a slow handheld drift, never a wobble
+        cam.position.set(lk2.x + dx * k + Math.sin(now * 0.53) * hand, lk2.y + dy * k + Math.sin(now * 0.71 + 1.3) * hand * 0.6, lk2.z + dz * k + Math.cos(now * 0.47) * hand); cam.up.set(0, 1, 0); cam.lookAt(lk2.x, lk2.y, lk2.z);
+        if (Math.abs(cam.fov - fov2) > 0.01) { cam.fov = fov2; cam.updateProjectionMatrix(); }
+        post.focus = L * k; post.aperture = tele ? 1.5 : 0.35;
       }
       // bomb
       const b = st.bomb; bombObj.visible = !!b && (b.s === 'planted' || b.s === 'dropped');
@@ -1667,7 +1692,7 @@ export default function start({ cfg, E, N, smoke }) {
         renderer.setRenderTarget(post.vt); const cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha(); renderer.setClearColor(0x000000, 0); renderer.clear();
         if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
         renderer.setClearColor(cc, ca);
-        renderer.setRenderTarget(null); post.mat.uniforms.tex.value = rt.texture; post.mat.uniforms.vmTex.value = post.vt.texture; post.mat.uniforms.ads.value = vm && vm.visible ? me.ads : 0; post.mat.uniforms.time.value = (post.mat.uniforms.time.value + dt) % 100; renderer.render(post.scene, post.cam);
+        renderer.setRenderTarget(null); post.mat.uniforms.tex.value = rt.texture; post.mat.uniforms.vmTex.value = post.vt.texture; post.mat.uniforms.ads.value = vm && vm.visible ? me.ads : 0; post.cineK = (post.cineK || 0) + ((SC && SC.cutscene ? 1 : 0) - (post.cineK || 0)) * Math.min(1, dt * 2.5); post.mat.uniforms.cine.value = post.cineK; post.mat.uniforms.focusZ.value = post.focus || 3; post.mat.uniforms.aperture.value = post.aperture || 1; post.mat.uniforms.time.value = (post.mat.uniforms.time.value + dt) % 100; renderer.render(post.scene, post.cam);
       } else { renderer.toneMappingExposure = 1.08 * (S.bright || 1); renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam); }
       // ---- HUD (throttled) ----
       hudT += dt; radarT += dt;

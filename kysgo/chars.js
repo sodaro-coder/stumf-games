@@ -282,6 +282,28 @@ function curlHand(r, side, amt) {
   const axis = _cN.crossVectors(f, across).cross(f).normalize().cross(f).normalize();               // across the knuckles, square to the fingers
   for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b) turnWorld(b, axis, amt * (side === 'Left' ? -1 : 1) * (k === 1 ? 0.9 : 1.1)); }
 }
+// turn a hand so its fingers (wrist to middle knuckle) run along fWant and its palm faces nWant
+const PALM = { Left: 1, Right: -1 };   // index-to-pinky crossed with the fingers points out of the palm on the right, the back on the left
+function orientHand(r, side, fWant, nWant) {
+  const B = r.bones, h = B[side + 'Hand'], m = B[side + 'HandMiddle1'], ix = B[side + 'HandIndex1'], pk = B[side + 'HandPinky1'];
+  if (!h || !m || !ix || !pk) return;
+  const a = h.getWorldPosition(new THREE.Vector3()), f = m.getWorldPosition(new THREE.Vector3()).sub(a).normalize();
+  rotateWorld(h, f, fWant.clone().normalize());
+  h.getWorldPosition(a); f.copy(m.getWorldPosition(new THREE.Vector3())).sub(a).normalize();
+  const across = ix.getWorldPosition(new THREE.Vector3()).sub(pk.getWorldPosition(new THREE.Vector3()));
+  const n = new THREE.Vector3().crossVectors(f, across).normalize().multiplyScalar(PALM[side]);
+  const nw = nWant.clone().addScaledVector(f, -nWant.dot(f)); if (nw.lengthSq() < 1e-6) return;
+  rotateWorld(h, n, nw.normalize());
+}
+// put the middle of a palm on a point with the hand turned as asked (IK on the wrist, corrected by the palm offset)
+function reachPalm(r, side, palmAt, fWant, nWant, pole) {
+  const B = r.bones, h = B[side + 'Hand'], m = B[side + 'HandMiddle1'], tgt = palmAt.clone(), pa = new THREE.Vector3(), pb = new THREE.Vector3();
+  for (let k = 0; k < 3; k++) {
+    ik2(B[side + 'Arm'], B[side + 'ForeArm'], h, tgt, pole); orientHand(r, side, fWant, nWant);
+    if (!m) break;
+    h.getWorldPosition(pa).lerp(m.getWorldPosition(pb), 0.55); tgt.add(pb.copy(palmAt).sub(pa));
+  }
+}
 // per frame: pick the base animation from how the player moves, then aim, gun and props
 export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
   r.t += dt;
@@ -362,19 +384,23 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       // bent and tucked down by the sides.
       const q = r.g.getWorldQuaternion(_q2.identity()), rt = _t5.set(1, 0, 0).applyQuaternion(q).clone(), fw = _fw.set(0, 0, -1).applyQuaternion(q).clone(), up = new THREE.Vector3(0, 1, 0);
       const hips = B.Hips.getWorldPosition(new THREE.Vector3());
-      const grip = hips.clone().addScaledVector(rt, 0.12).addScaledVector(fw, 0.22).addScaledVector(up, -0.02);
-      const dir = new THREE.Vector3().addScaledVector(rt, -0.84).addScaledVector(fw, 0.42).addScaledVector(up, -0.34).normalize();
-      ik2(B.RightArm, B.RightForeArm, B.RightHand, grip, B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, 0.3).addScaledVector(fw, -0.45));
-      const rh = B.RightHand.getWorldPosition(_t1);
-      if (B.RightHandMiddle1) rh.lerp(B.RightHandMiddle1.getWorldPosition(_t2), 0.55);
+      const grip = hips.clone().addScaledVector(rt, 0.12).addScaledVector(fw, 0.2).addScaledVector(up, 0.0);
+      const dir = new THREE.Vector3().addScaledVector(rt, -0.84).addScaledVector(fw, 0.42).addScaledVector(up, -0.3).normalize();
+      // the rifle is placed first, then each palm is closed onto it: right palm round the pistol grip (fingers forward
+      // under the trigger guard, palm against the grip's right side), left palm up under the handguard, fingers over the far side
       const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _t2.crossVectors(yA, zA);
       _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
       r.g.getWorldQuaternion(_q2).invert(); tg.quaternion.copy(_q2.multiply(_q));
-      tg.position.copy(rh); r.g.worldToLocal(tg.position);
+      tg.position.copy(grip); r.g.worldToLocal(tg.position);
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
-      const fore = rh.clone().addScaledVector(dir, 0.36).addScaledVector(yA, -0.035);
-      ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, fore, B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, -0.35).addScaledVector(fw, -0.3));
+      const X = xA.clone(), Y = yA.clone();
+      reachPalm(r, 'Right', grip.clone().addScaledVector(X, 0.03).addScaledVector(Y, -0.035), dir.clone().addScaledVector(Y, -0.45), X.clone().negate(),
+        B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, 0.3).addScaledVector(fw, -0.45));
+      const fore = grip.clone().addScaledVector(dir, 0.34).addScaledVector(Y, -0.055).addScaledVector(X, -0.01);
+      reachPalm(r, 'Left', fore, X.clone().addScaledVector(dir, 0.35).addScaledVector(Y, 0.2), Y,
+        B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, -0.35).addScaledVector(fw, -0.3));
+      r.restGrip = true;
     } else if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
       // The clips are a rifle set: the hands already hold an (invisible) rifle in a natural, motion-captured pose. So the
       // gun follows the hands, not the other way round: the grip sits in the right palm and the barrel runs out through
@@ -415,6 +441,8 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     }
   }
   if (r.human && !r.dead && !emote && (tg.userData || {}).cat !== 'knife') curlHand(r, 'Left', 0.55);   // the support hand closes round the handguard
+  if (r.human && r.restGrip && !r.dead && !emote) curlHand(r, 'Right', 0.95);   // and the firing hand round the grip
+  r.restGrip = false;
   if (r.reloadT > 0) r.reloadT -= dt;
   // head props follow the head bone
   if (B.Spine2 && r.chest.visible) {   // the vest rides the upper spine

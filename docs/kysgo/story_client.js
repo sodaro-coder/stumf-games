@@ -58,7 +58,10 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   .sc-m{min-width:0;width:100%;max-width:100%}.sc-m em{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sc-boss{top:clamp(42px,6vh,64px);width:min(560px,calc(100vw - 28px))}
   .sc-cut{inset:0;overflow:hidden}
-  .sc-cut:before,.sc-cut:after{height:clamp(28px,9vh,11vh)}
+  .sc-cut{--bar:max(clamp(28px,9vh,11vh),calc((100vh - 41.8vw) / 2))}.sc-cut .sc-line,.sc-cut .sc-title,.sc-cut .sc-skip{z-index:2}
+  .sc-cut .sc-line{bottom:max(6px,calc(var(--bar) - 58px))}
+  .sc-cut:before,.sc-cut:after{height:var(--bar);animation:scbar .7s cubic-bezier(.2,.8,.2,1)}.sc-cut:before{transform-origin:top}.sc-cut:after{transform-origin:bottom}
+  @keyframes scbar{from{transform:scaleY(0)}}
   .sc-line{bottom:calc(env(safe-area-inset-bottom,0px) + clamp(44px,12vh,100px));width:min(760px,calc(100vw - 32px));max-height:46vh;overflow:hidden}
   .sc-line p{font-size:clamp(15px,2.1vw,21px);line-height:1.35;overflow-wrap:anywhere}
   .sc-line p.dir{font-size:clamp(13px,1.8vw,18px)}
