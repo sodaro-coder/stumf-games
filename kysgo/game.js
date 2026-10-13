@@ -1669,6 +1669,11 @@ export default function start({ cfg, E, N, smoke }) {
         }
         const ud = vm.userData;
         if (animReload) reloadPose(vm, w, me.reload > 0 && w ? 1 - me.reload / w.reload : -1);
+        if (ud.pump && w) {   // pump-action: after each shot the forend (and the hand on it) racks back and slams forward
+          const t = me.lastGun === w.id ? (performance.now() - (me.lastShotAt || 0)) / 1000 : 9, k = t > 0.14 && t < 0.56 ? Math.sin(Math.PI * (t - 0.14) / 0.42) : 0;
+          ud.pump.position.z = 0.075 * k; if (ud.leftArm && animReload && me.reload <= 0) ud.leftArm.position.z += 0.075 * k;
+          if (k > 0 && ud.pumpAt !== me.lastShotAt) { ud.pumpAt = me.lastShotAt; audio.play('bolt', 0.7); }
+        }
         if (ud.flop) {   // floppy: each joint is a damped spring kicked by turning, walking, swinging and stroking
           const F = ud.flopS || (ud.flopS = { x: 0, y: 0, vx: 0, vy: 0 }), stroking = me.inspect > 0 && me.inspectStyle === 'stroke';
           const kick = { x: -lookDY * 0.9 + Math.cos(bob * 2) * 0.6 * Math.min(1, sp / 4) + (me.knifeSwing > 0 ? 9 : 0) + (stroking ? Math.sin(me.inspect * 22) * 7 : 0), y: lookDX * 0.9 };

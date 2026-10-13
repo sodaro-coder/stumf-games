@@ -610,6 +610,89 @@ function rifle(G, o) {
   if (o.stock && o.stock !== 'none' && o.stock !== 'fold') G('metal', place(new THREE.TorusGeometry(0.009, 0.0022, 6, 12), [0, rb - 0.03, -(r0 - 0.1)], [0, Math.PI / 2, 0]));   // sling swivel
   return { iron: o.fsight !== false && !o.scope ? [h1 + 0.045, bv + 0.05] : null, grip: [-0.03, rb - 0.055], fore: [(h0 + h1) / 2 - 0.02, rb - 0.006], mount, charge: [r1 - 0.035, rt - 0.023, w / 2 + 0.02] };
 }
+// ---- shotguns: built like the real ones, not as rifles. The barrel sits on top of a tubular magazine that runs most of
+// its length (capped at the end, clamped to the barrel), the receiver is a tall slab with the loading port underneath,
+// the trigger group hangs below it, and the furniture is the gun's own: the Nova's one-piece polymer stock with its
+// ribbed pump, the M4 (XM1014)'s pistol grip, telescoping stock, rail with ghost-ring sights and the twin gas pistons by
+// the forend, the sawed-off's cut-down wooden grip and short wooden pump, the MAG-7's box magazine in the pistol grip,
+// slab pump and stock folded over the top.
+function shotgun(G, o) {
+  const [r0, r1, rb, rt] = o.recv, w = o.w || 0.048, F = 'f~' + (o.furn || 'dark'), B = 'body', PF = o.pump ? 'pump|' + F : F;
+  // receiver: flat sides, the top rounding down at the back into the stock
+  G(B, ext([[r0, rb], [r1, rb], [r1, rt - 0.006], ['q', r1, rt, r1 - 0.012, rt], [r0 + 0.035, rt], ['q', r0 + 0.004, rt - 0.002, r0, rt - 0.03]], w, 0.004));
+  G('dark', blk(r0 + 0.075, r1 - 0.035, rt - 0.034, rt - 0.012, w + 0.002));                                       // ejection port
+  G('metal', blk(r0 + 0.1, r0 + 0.13, rt - 0.03, rt - 0.016, 0.006, w / 2 + 0.003));                                // bolt
+  if (!o.boxMag) G('dark', blk(r0 + 0.07, r1 - 0.015, rb - 0.003, rb + 0.004, w * 0.62));                        // loading port
+  for (const u of [r0 + 0.05, r1 - 0.03]) G('dark', xpin(u, rb + 0.012, w + 0.004, 0.0034));                        // trigger-group pins
+  // barrel over the magazine tube
+  const br = o.br || 0.0115, bv = rt - 0.016, bEnd = r1 + o.blen, mr = o.mr || 0.0125, mv = bv - br - mr - 0.003;
+  G('metal', tube(br, r1 - 0.01, bEnd, bv, 0, 16));
+  G('dark', tube(br * 0.62, bEnd - 0.004, bEnd + 0.0005, bv, 0, 14));                                               // the bore, dark at the muzzle
+  if (o.rib) { G('dark', blk(r1, bEnd - 0.012, bv + br - 0.001, bv + br + 0.004, 0.008)); for (let u = r1 + 0.02; u < bEnd - 0.03; u += 0.04) G('dark', blk(u, u + 0.012, bv + br - 0.002, bv + br + 0.004, 0.004)); }   // vent rib
+  G('steel', place(SPH(0.0032, 10, 8), [0, bv + br + (o.rib ? 0.006 : 0.002), -(bEnd - 0.012)]));                    // brass bead
+  const mEnd = r1 + (o.mlen ?? o.blen - 0.02);
+  if (!o.boxMag) {
+    G('dark', tube(mr, r1 - 0.01, mEnd, mv, 0, 14));
+    G('metal', tube(mr + 0.0018, mEnd, mEnd + 0.024, mv, 0, 14)); G('metal', tube(mr * 0.6, mEnd + 0.024, mEnd + 0.03, mv, 0, 10));   // magazine cap
+    if (o.clamp !== false) G('dark', ext([[mEnd - 0.03, mv - mr - 0.003], [mEnd - 0.006, mv - mr - 0.003], [mEnd - 0.006, bv + br + 0.003], [mEnd - 0.03, bv + br + 0.003]], 0.03, 0.003));   // barrel clamp
+  }
+  // forend: a pump that slides (ribbed), or the M4's fixed forend with the gas pistons ahead of it
+  const [f0, f1] = o.fore, fb = o.boxMag ? rb - 0.012 : mv - mr - 0.009, ft = o.boxMag ? bv - br + 0.002 : mv + mr + 0.004;
+  if (o.foreType === 'ribbed') {
+    G(PF, soft([[f0, fb + 0.006], ['q', f0 + 0.004, fb, f0 + 0.02, fb], [f1 - 0.02, fb], ['q', f1 - 0.004, fb, f1, fb + 0.006], [f1, ft], [f0, ft]], w * 1.02, 0.4));
+    for (let u = f0 + 0.022; u < f1 - 0.018; u += 0.016) G(o.pump ? 'pump|dark' : 'dark', blk(u, u + 0.006, fb - 0.0015, ft - 0.012, w * 1.03));   // grip grooves
+  } else if (o.foreType === 'wood') {
+    G(PF, soft([[f0, fb + 0.004], ['q', (f0 + f1) / 2, fb - 0.006, f1, fb + 0.004], [f1, ft], [f0, ft]], w * 1.04, 0.42));
+    for (let u = f0 + 0.015; u < f1 - 0.012; u += 0.011) G(o.pump ? 'pump|dark' : 'dark', blk(u, u + 0.003, fb + 0.002, fb + 0.02, w * 1.05));
+  } else if (o.foreType === 'slab') {   // MAG-7: a long rectangular pump under the barrel with finger ridges
+    G(PF, soft([[f0, fb], [f1, fb], [f1, ft], [f0, ft]], w * 1.05, 0.25));
+    for (let u = f0 + 0.015; u < f1 - 0.01; u += 0.014) G(o.pump ? 'pump|dark' : 'dark', blk(u, u + 0.005, fb - 0.0015, fb + 0.012, w * 1.06));
+  } else if (o.foreType === 'm4') {
+    G(F, soft([[f0, fb], [f1, fb + 0.004], [f1, bv + br + 0.004], [f0, bv + br + 0.008]], w * 1.04, 0.3));
+    for (let u = f0 + 0.03; u < f1 - 0.03; u += 0.028) G('dark', blk(u, u + 0.016, bv - 0.008, bv + 0.002, w * 1.05));   // vent slots
+    for (const x of [-0.016, 0.016]) G('metal', tube(0.0065, f1, f1 + 0.07, mv + mr * 0.4, x, 10));                     // twin gas pistons
+  }
+  if (o.pump) G('pump|metal', blk(f0 - 0.02, f0 + 0.004, mv + mr - 0.002, mv + mr + 0.005, 0.006, w / 2 - 0.002));   // action bar into the receiver
+  // trigger guard, trigger, safety
+  G(o.guardMat || 'metal', guard(0.0, 0.085, rb - 0.05, rb + 0.002, 0.013)); G('metal', blk(0.03, 0.038, rb - 0.032, rb, 0.006));
+  G('dark', xpin(0.09, rb - 0.006, w + 0.012, 0.0042));                                                               // cross-bolt safety
+  // stock and grip
+  const st = o.stock; let grip = [-0.035, rb - 0.055];
+  if (st === 'nova') {   // one piece with the receiver: a comb, a swept wrist the hand wraps, a thick recoil pad
+    G(B, soft([[r0 + 0.012, rt - 0.012], ['q', r0 - 0.12, rt - 0.012, r0 - 0.3, rt - 0.03], [r0 - 0.312, rt - 0.032], [r0 - 0.322, rb - 0.108], ['q', r0 - 0.2, rb - 0.07, r0 - 0.1, rb - 0.028],
+      ['q', r0 - 0.066, rb - 0.024, r0 - 0.062, rb - 0.108], [r0 - 0.012, rb - 0.118], ['q', r0 + 0.006, rb - 0.06, r0 + 0.05, rb + 0.002], [r0 + 0.05, rt - 0.03]], w * 0.95, 0.38));   // comb, butt, belly, then the moulded pistol grip
+    G('dark', soft([[r0 - 0.312, rt - 0.032], [r0 - 0.338, rt - 0.034], [r0 - 0.348, rb - 0.112], [r0 - 0.322, rb - 0.108]], w * 0.97, 0.3));   // recoil pad
+    for (let k = 0; k < 5; k++) G('dark', blk(r0 - 0.05 + k * 0.009, r0 - 0.046 + k * 0.009, rb - 0.1 + k * 0.004, rb - 0.06 + k * 0.004, w * 0.97));   // grip texture
+    grip = [r0 - 0.03, rb - 0.055];
+  } else if (st === 'm4') {   // pistol grip, telescoping tube, a flat-topped skeleton stock with a cheek rest
+    G(F, soft([[-0.042, rb + 0.004], [0.004, rb + 0.004], [-0.014, rb - 0.112], [-0.066, rb - 0.118], ['q', -0.072, rb - 0.06, -0.042, rb + 0.004]], w * 0.86, 0.34));
+    G('dark', tube(0.015, r0 - 0.26, r0, rt - 0.03, 0, 12));
+    G(F, ext([[r0 - 0.15, rt - 0.004], [r0 - 0.3, rt - 0.004], [r0 - 0.31, rb - 0.085], [r0 - 0.27, rb - 0.085], ['q', r0 - 0.2, rb - 0.04, r0 - 0.15, rt - 0.045]], w * 0.82, 0.004, [[[r0 - 0.2, rt - 0.03], [r0 - 0.27, rt - 0.03], [r0 - 0.275, rb - 0.06], [r0 - 0.235, rb - 0.035]]]));
+    G('dark', blk(r0 - 0.322, r0 - 0.305, rb - 0.088, rt - 0.002, w * 0.9));                                          // butt pad
+    G('dark', blk(r0 - 0.05, r0, rb + 0.01, rt - 0.012, w * 0.9));                                                    // stock adapter
+    grip = [-0.04, rb - 0.06];
+  } else if (st === 'birdshead') {   // sawn-off: the wooden stock cut down to a rounded bird's-head pistol grip
+    G('f~wood', soft([[r0 + 0.03, rt - 0.006], [r0 - 0.04, rt - 0.016], ['q', r0 - 0.11, rt - 0.03, r0 - 0.12, rb - 0.06], ['q', r0 - 0.122, rb - 0.115, r0 - 0.08, rb - 0.12], [r0 - 0.05, rb - 0.112],
+      ['q', r0 - 0.03, rb - 0.06, r0 + 0.04, rb + 0.002]], w * 0.95, 0.42));
+    G('metal', blk(r0 - 0.126, r0 - 0.105, rb - 0.122, rb - 0.1, w * 0.8));                                           // grip cap
+    grip = [r0 - 0.05, rb - 0.05];
+  } else if (st === 'mag7') {   // the magazine goes in through the pistol grip; the stock folds over the top of the receiver
+    G(F, soft([[-0.05, rb + 0.004], [0.012, rb + 0.004], [0.0, rb - 0.1], [-0.064, rb - 0.104], ['q', -0.07, rb - 0.05, -0.05, rb + 0.004]], w * 1.02, 0.25));
+    G('mag|dark', blk(-0.058, 0.0, rb - 0.15, rb - 0.098, w * 0.8)); G('mag|metal', blk(-0.062, 0.004, rb - 0.156, rb - 0.146, w * 0.86));   // mag base under the grip
+    for (const x of [-(w / 2 + 0.004), w / 2 + 0.004]) G('dark', blk(r0 - 0.01, r1 - 0.03, rt - 0.012, rt - 0.002, 0.006, x));   // folded stock arms along the top
+    G('dark', blk(r1 - 0.045, r1 - 0.025, rt - 0.012, rt + 0.03, w + 0.016)); G('grip', blk(r1 - 0.048, r1 - 0.022, rt + 0.026, rt + 0.034, w + 0.02));   // butt plate up front
+    G('dark', blk(r0 - 0.02, r0, rb + 0.006, rt - 0.006, w * 0.8));                                                   // stock hinge
+    grip = [-0.035, rb - 0.05];
+  }
+  if (o.rail) {   // M4: a full-length rail with a ghost-ring rear sight and a protected front post
+    for (let k = 0; k * 0.022 < r1 - r0 - 0.03; k++) G('dark', blk(r0 + 0.02 + k * 0.022, r0 + 0.034 + k * 0.022, rt, rt + 0.01, w * 0.68));
+    G('dark', blk(r0 + 0.02, r0 + 0.045, rt + 0.01, rt + 0.035, 0.03)); G('dark', place(new THREE.TorusGeometry(0.009, 0.0025, 8, 16), [0, rt + 0.044, -(r0 + 0.032)]));
+  }
+  const iron = o.rail ? [bEnd - 0.04, bv + br + 0.03] : null;
+  if (iron) { G('dark', blk(bEnd - 0.055, bEnd - 0.025, bv + br - 0.002, bv + br + 0.012, 0.02)); for (const x of [-0.01, 0.01]) G('dark', blk(bEnd - 0.05, bEnd - 0.03, bv + br + 0.01, iron[1] + 0.004, 0.004, x)); G('dark', blk(iron[0] - 0.003, iron[0] + 0.003, bv + br + 0.01, iron[1], 0.003)); }
+  G('metal', place(new THREE.TorusGeometry(0.008, 0.002, 6, 12), [0, mv - mr - 0.006, -(mEnd - 0.04)], [0, Math.PI / 2, 0]));   // sling loop
+  return { iron, ownSights: !!iron, grip, fore: [(f0 + f1) / 2, fb + 0.004], mount: o.rail ? [r0 + (r1 - r0) * 0.45, rt + 0.01] : [r0 + (r1 - r0) * 0.45, rt], charge: [(f0 + f1) / 2, fb, 0] };
+}
 // muzzle devices (looks only; the suppressor only makes the gun quieter)
 function muzzle(G, kind, bEnd, bv) {
   switch (kind) {
@@ -691,10 +774,10 @@ R('g3sg1', (G) => rifle(G, { recv: [-0.12, 0.26, -0.032, 0.032], hgType: 'slab',
 R('scar20', (G) => rifle(G, { recv: [-0.12, 0.26, -0.032, 0.032], rail: true, hgType: 'quad', hg: [0.26, 0.46], blen: 0.24, muzzle: 'brake', mag: 'straight', stock: 'm4', scope: [-0.06, 0.18], rear: false }));
 R('m249', (G) => rifle(G, { recv: [-0.13, 0.25, -0.035, 0.04], w: 0.06, rail: true, hgType: 'slab', hg: [0.25, 0.4], blen: 0.24, muzzle: 'bird', mag: 'mg', mag0: 0.06, stock: 'skel', bipod: true }));
 R('negev', (G) => rifle(G, { recv: [-0.13, 0.25, -0.035, 0.04], w: 0.06, hgType: 'round', hgR: 0.03, hg: [0.25, 0.4], blen: 0.22, muzzle: 'bird', mag: 'mg', mag0: 0.06, stock: 'm4', bipod: true }));
-R('nova', (G) => { const r = rifle(G, { fsight: false, bead: true, recv: [-0.1, 0.2, -0.03, 0.028], hgType: 'none', hg: [0.2, 0.2], blen: 0.42, br: 0.013, muzzle: 'none', mag: 'none', stock: 'm4', rear: false }); G('dark', tube(0.014, 0.2, 0.55, -0.012)); G('grip', tube(0.024, 0.26, 0.4, -0.012, 0, 10)); r.fore = [0.33, -0.03]; return r; });
-R('xm1014', (G) => { const r = rifle(G, { fsight: false, bead: true, recv: [-0.11, 0.22, -0.03, 0.03], rail: true, hgType: 'none', hg: [0.22, 0.22], blen: 0.38, br: 0.013, muzzle: 'none', mag: 'none', stock: 'm4' }); G('dark', tube(0.014, 0.22, 0.56, -0.014)); G('dark', blk(0.22, 0.4, -0.035, 0.01, 0.05)); r.fore = [0.32, -0.04]; return r; });
-R('sawedoff', (G) => { const r = rifle(G, { recv: [-0.06, 0.12, -0.03, 0.03], furn: 'wood', gripMat: 'wood', hgType: 'none', hg: [0.12, 0.12], blen: 0.22, br: 0.014, bv: 0.008, muzzle: 'none', mag: 'none', stock: 'none', rear: false }); G('metal', tube(0.014, 0.1, 0.34, -0.018)); G('wood', tube(0.024, 0.13, 0.26, -0.016, 0, 10)); r.fore = [0.2, -0.035]; return r; });
-R('mag7', (G) => { const r = rifle(G, { fsight: false, bead: true, recv: [-0.1, 0.2, -0.04, 0.03], w: 0.055, hgType: 'slab', hg: [0.2, 0.3], blen: 0.1, br: 0.014, muzzle: 'none', mag: 'box', mag0: -0.02, stock: 'fold' }); r.fore = [0.25, -0.05]; return r; });
+R('nova', (G) => shotgun(G, { recv: [-0.06, 0.19, -0.034, 0.03], w: 0.046, blen: 0.46, rib: true, fore: [0.24, 0.42], foreType: 'ribbed', pump: true, stock: 'nova', guardMat: 'f~dark' }));   // Benelli Nova
+R('xm1014', (G) => shotgun(G, { recv: [-0.09, 0.19, -0.034, 0.03], w: 0.046, blen: 0.4, mlen: 0.3, fore: [0.19, 0.4], foreType: 'm4', stock: 'm4', rail: true }));   // Benelli M4 Super 90
+R('sawedoff', (G) => shotgun(G, { recv: [-0.06, 0.16, -0.032, 0.03], w: 0.046, furn: 'wood', blen: 0.17, mlen: 0.15, br: 0.0125, fore: [0.18, 0.31], foreType: 'wood', pump: true, stock: 'birdshead', clamp: false }));   // sawn-off pump
+R('mag7', (G) => shotgun(G, { recv: [-0.1, 0.16, -0.04, 0.032], w: 0.056, blen: 0.2, br: 0.013, boxMag: true, fore: [0.17, 0.33], foreType: 'slab', pump: true, stock: 'mag7' }));   // Techno Arms MAG-7
 R('mac10', (G) => { pistol(G, { slide: [-0.1, 0.1], sh: 0.06, w: 0.045, bl: 0.03, mag: 0.14 }); return { grip: [-0.06, -0.06], fore: null, mount: [-0.03, 0.06] }; });
 R('mp9', (G) => { const r = rifle(G, { recv: [-0.06, 0.16, -0.025, 0.03], w: 0.042, rail: true, hgType: 'none', hg: [0.16, 0.16], blen: 0.04, muzzle: 'none', mag: 'straight', mag0: -0.045, stock: 'fold' }); r.fore = [0.13, -0.03]; return r; });
 R('mp7', (G) => { const r = rifle(G, { recv: [-0.08, 0.18, -0.028, 0.03], w: 0.045, rail: true, hgType: 'slab', hg: [0.18, 0.24], blen: 0.05, muzzle: 'none', mag: 'straight', mag0: -0.045, stock: 'fold' }); r.fore = [0.2, -0.03]; return r; });
@@ -769,7 +852,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     for (const [k, list] of Object.entries(buckets)) { geos[k] = merge(list); geos[k].computeBoundingBox(); if (k === 'body') box = geos[k].boundingBox; }
     // the skin wraps the whole gun side-on (u along the barrel, v up): receiver and, when skinned, the furniture too,
     // like a real hydro-dip, with the barrel, bolt and small metal parts left bare
-    const painted = Object.keys(geos).filter((k) => k === 'body' || (tex && k.startsWith('f~')));
+    const painted = Object.keys(geos).filter((k) => k === 'body' || (tex && (k.startsWith('f~') || k.startsWith('pump|f~'))));
     if (box && geos.body) {
       const u = new THREE.Box3(); for (const k of painted) u.union(geos[k].boundingBox);
       const du = u.max.z - u.min.z || 1, dv = u.max.y - u.min.y || 1;
@@ -777,7 +860,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     }
     for (const wk of ['wood', 'f~wood']) if (geos[wk] && !painted.includes(wk)) { const p = geos[wk].attributes.position, uv = geos[wk].attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, -p.getZ(i) * 3, p.getY(i) * 3 + p.getX(i) * 3); }
     let len = 0; for (const g of Object.values(geos)) { g.computeBoundingBox(); len = Math.max(len, -g.boundingBox.min.z); }
-    if (hold.iron && !opt) {   // iron sights, R6-style: a raised sight line over the gun, a front post and (long guns) a rear aperture ring
+    if (hold.iron && !opt && !hold.ownSights) {   // iron sights, R6-style: a raised sight line over the gun, a front post and (long guns) a rear aperture ring
       const fz = -hold.iron[0]; let top = hold.iron[1];
       for (const [k, g] of Object.entries(geos)) { if (k.startsWith('mag|')) continue; const p = g.attributes.position;
         for (let i = 0; i < p.count; i++) if (Math.abs(p.getX(i)) < 0.012 && p.getZ(i) > fz + 0.03) top = Math.max(top, p.getY(i)); }
@@ -798,12 +881,13 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     cg = { geos, hold, len };
     geoCache.set(ckey, cg);
   }
-  const g = new THREE.Group(), magGroup = new THREE.Group(); g.add(magGroup);
-  for (const [k, geo] of Object.entries(cg.geos)) {
-    if (k.startsWith('mag|')) { magGroup.add(new THREE.Mesh(geo, gm(k.slice(4)))); continue; }
-    const furn = k.startsWith('f~');
-    g.add(new THREE.Mesh(geo, k === 'body' || (furn && tex) ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(furn ? k.slice(2) : k === 'ironpost' ? 'dark' : k)));
+  const g = new THREE.Group(), magGroup = new THREE.Group(), pumpGroup = new THREE.Group(); g.add(magGroup);
+  for (const [k0, geo] of Object.entries(cg.geos)) {
+    if (k0.startsWith('mag|')) { magGroup.add(new THREE.Mesh(geo, gm(k0.slice(4)))); continue; }
+    const k = k0.startsWith('pump|') ? k0.slice(5) : k0, furn = k.startsWith('f~');   // pump|: the slide of a pump-action, moved as one piece
+    (k0 === k ? g : pumpGroup).add(new THREE.Mesh(geo, k === 'body' || (furn && tex) ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(furn ? k.slice(2) : k === 'ironpost' ? 'dark' : k)));
   }
+  if (pumpGroup.children.length) g.add(pumpGroup);
   const magBox = new THREE.Box3().setFromObject(magGroup), magPos = magGroup.children.length ? magBox.getCenter(new THREE.Vector3()) : null;
   const grip = new THREE.Vector3(0, cg.hold.grip[1], -cg.hold.grip[0]), fore = cg.hold.fore ? new THREE.Vector3(0, cg.hold.fore[1], -cg.hold.fore[0]) : null;
   let leftArm = null, leftHand = null;
@@ -818,7 +902,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
   }
   g.add(muzzleFlash(cg.len + (w.silenced ? 0.04 : 0.02), w.cat === 'pistol' ? 0.6 : 1));
   const ch = cg.hold.charge;
-  g.userData = { magGroup: magGroup.children.length ? magGroup : null, magPos, leftArm, leftHand, charge: ch ? new THREE.Vector3(ch[2], ch[1], -ch[0]) : null, flash: g.children[g.children.length - 1], len: cg.len, grip, fore, sight: cg.hold.sight ? new THREE.Vector3(0, cg.hold.sight[1], -cg.hold.sight[0]) : null, optic: opt, iron: !opt && cg.hold.iron ? new THREE.Vector3(0, cg.hold.iron[1], -cg.hold.iron[0]) : null };
+  g.userData = { magGroup: magGroup.children.length ? magGroup : null, pump: pumpGroup.children.length ? pumpGroup : null, magPos, leftArm, leftHand, charge: ch ? new THREE.Vector3(ch[2], ch[1], -ch[0]) : null, flash: g.children[g.children.length - 1], len: cg.len, grip, fore, sight: cg.hold.sight ? new THREE.Vector3(0, cg.hold.sight[1], -cg.hold.sight[0]) : null, optic: opt, iron: !opt && cg.hold.iron ? new THREE.Vector3(0, cg.hold.iron[1], -cg.hold.iron[0]) : null };
   return g;
 }
 let armMatC = null;
