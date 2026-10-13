@@ -54,53 +54,15 @@ export class Particles {
 }
 
 // ---- floating comic text ("BANG!", "PEW") ----
-// Pooled: pre-renders common kill texts once, reuses sprites. Falls back to
-// one-off canvas for unseen text (then caches it). No per-pop rAF loops:
-// active pops are ticked from a single list.
-const _textPool = { sprites: [], texCache: new Map(), active: [] };
-function _textTex(text, color) {
-  const key = text + '|' + color;
-  let t = _textPool.texCache.get(key);
-  if (!t) {
-    const c = document.createElement('canvas'); c.width = 256; c.height = 96; const g = c.getContext('2d');
-    g.font = '900 64px Impact, "Arial Black", system-ui'; g.textAlign = 'center'; g.lineWidth = 10; g.strokeStyle = '#000'; g.strokeText(text, 128, 72); g.fillStyle = color; g.fillText(text, 128, 72);
-    t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    _textPool.texCache.set(key, t);
-  }
-  return t;
+export function textPop(scene, x, y, z, text, color = '#ffd23a') {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 96; const g = c.getContext('2d');
+  g.font = '900 64px Impact, "Arial Black", system-ui'; g.textAlign = 'center'; g.lineWidth = 10; g.strokeStyle = '#000'; g.strokeText(text, 128, 72); g.fillStyle = color; g.fillText(text, 128, 72);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+  s.position.set(x, y, z); s.scale.set(1.6, 0.6, 1); s.renderOrder = 9; scene.add(s);
+  const t0 = performance.now();
+  const step = () => { const k = (performance.now() - t0) / 900; if (k >= 1) { scene.remove(s); s.material.map.dispose(); s.material.dispose(); return; } s.position.y = y + k * 0.8; s.material.opacity = 1 - k * k; s.scale.set(1.6 + k * 0.6, 0.6 + k * 0.22, 1); requestAnimationFrame(step); };
+  requestAnimationFrame(step);
 }
-export function textPop(scene, x, y, z, text, color = '#ffd23a', scale = 1) {
-  let s = _textPool.sprites.pop();
-  if (!s) {
-    s = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
-    s.renderOrder = 9;
-  }
-  s.material.map = _textTex(text, color);
-  s.material.opacity = 1; s.material.needsUpdate = true;
-  s.position.set(x, y, z); s.scale.set(1.6 * scale, 0.6 * scale, 1); s.visible = true;
-  scene.add(s);
-  _textPool.active.push({ s, scene, y, t: 0, scale: scale || 1 });
-}
-export function textPopTick(dt) {
-  const a = _textPool.active;
-  for (let i = a.length - 1; i >= 0; i--) {
-    const q = a[i]; q.t += dt;
-    const k = q.t / 0.9;
-    if (k >= 1) {
-      q.scene.remove(q.s); q.s.visible = false;
-      _textPool.sprites.push(q.s);
-      a.splice(i, 1);
-      continue;
-    }
-    const sc = q.scale || 1;
-    q.s.position.y = q.y + k * 0.8;
-    q.s.material.opacity = 1 - k * k;
-    q.s.scale.set((1.6 + k * 0.6) * sc, (0.6 + k * 0.22) * sc, 1);
-  }
-}
-
-// Expose the pooled ticker for perf_patch.js (plain script, no module import).
-try { if (typeof window !== 'undefined') window.__textPopTick = textPopTick; } catch (e) { /* no window */ }
 
 // ---- sky: an inside-out sphere (horizon haze to deep blue, a warm glow around the sun) with the cloud layer painted
 // on in the same pass (no full-screen transparent layer: that alone halved the frame rate on weak machines), and the sun.
@@ -110,13 +72,6 @@ let cloudT = null;
 // its sun sits where the map's sun is; the painted gradient shows until it has loaded (and stays without it)
 const skyTexCache = new Map();
 export function skyTexture(name, size = 2048) {
-  // Perf: on low tiers, halve the sky photo resolution (it's a distant backdrop).
-  try {
-    var t = null;
-    if (typeof window !== 'undefined' && window.__cs && window.__cs.gfx) t = window.__cs.gfx.tier;
-    else if (typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(window.navigator ? window.navigator.userAgent : '')) t = 'low';
-    if (t === 'potato' || t === 'low') size = Math.min(size, 1024);
-  } catch (e) { /* ignore */ }
   const key = name + size;
   if (!skyTexCache.has(key)) skyTexCache.set(key, new Promise((res) => new THREE.TextureLoader().load(`sky_${name}_${size}.jpg`, (t) => {
     t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; res(t);
@@ -176,19 +131,12 @@ export function funnyKey(skin) {
   const d = skin && ITEM_BY_ID[skin.def]; if (!d) return null;
   return d.kind === 'knife' ? ((KNIFE_BY_ID[d.weapon] || {}).joke ? KNIFE_BY_ID[d.weapon].model : null) : (SKIN_STYLE[d.finish] ? d.finish : null);
 }
-export const inspectStyle = (key) => {
-  const s = KNIFE_STYLE[key] || SKIN_STYLE[key] || null;
-  // For Funny/Mythic skins, return "Finish:style" so each has its own sound
-  if (s && SKIN_STYLE[key] && key !== s) return `${key}:${s}`;
-  return s;
-};
+export const inspectStyle = (key) => KNIFE_STYLE[key] || SKIN_STYLE[key] || null;
 export const INSPECT_SOUND = { mythic: 'shimmer', stroke: 'squelch', jiggle: 'boing', squeeze: 'squeak', plunge: 'fwoop', twirl: 'whoosh', flop: 'flop', spin: 'pewpew', shake: 'fart' };
 // apply the funny inspect on top of the normal pose (k = 0..1 through the animation)
 export function applyInspect(vm, style, k) {
   const s = Math.sin(k * Math.PI);
-  // Handle "Finish:style" composite keys — use the base style for animation
-  const base = style && style.includes(':') ? style.split(':')[1] : style;
-  switch (base) {
+  switch (style) {
     case 'mythic': vm.position.y += s * 0.035; vm.position.z += s * 0.03; vm.rotation.y += s * 0.35; vm.rotation.z += Math.sin(k * Math.PI * 3) * 0.08 * s; break;   // a slow showcase while the veins flare and spark
     case 'stroke': vm.rotation.y += s * 0.55; vm.rotation.x += s * 0.25; vm.position.x -= s * 0.06; vm.position.y += s * 0.05; break;   // hold it up to admire; the hand does the rest
     case 'jiggle': vm.rotation.z += Math.sin(k * 40) * 0.35 * s; vm.scale.y *= 1 + Math.sin(k * 30) * 0.15 * s; vm.position.y += s * 0.05; break;
@@ -201,193 +149,6 @@ export function applyInspect(vm, style, k) {
     default: break;
   }
 }
-
-// ---- Funny/Mythic: every finish gets its own inspect style + sound ----
-// Format: 'Finish Name' -> 'style', and INSPECT_SOUND['Finish Name:style'] -> sound
-Object.assign(SKIN_STYLE, {
-  'Amber Fade': 'spin',
-  'Ballpark Special': 'shake',
-  'Bioluminescent Booty': 'jiggle',
-  'Blackened': 'squeeze',
-  'Blackout': 'shake',
-  'Burnout': 'shake',
-  'Bussin': 'twirl',
-  'Butter Churn': 'shake',
-  'Candy Fade': 'jiggle',
-  'Cheek Clapper': 'shake',
-  'Chernobyl Nutsack': 'mythic',
-  'Chrome': 'shake',
-  'Closet Dark': 'shake',
-  'Clown Fart Rave': 'shake',
-  'Confetti Fade': 'twirl',
-  'Crimson Web': 'squeeze',
-  'Crop Duster': 'shake',
-  'Dark Matter': 'squeeze',
-  'Desert Heat': 'twirl',
-  'Doppler': 'spin',
-  'Ecto-Snot': 'squeeze',
-  'Electric Fade': 'shake',
-  'Face Melter Deluxe': 'twirl',
-  'Fade': 'twirl',
-  'Fryer Oil': 'shake',
-  'Fuel Fade': 'shake',
-  'Fume': 'spin',
-  'Gamer Fuel': 'jiggle',
-  'Ghost Fade': 'spin',
-  'Glacier': 'jiggle',
-  'Glowing Booger': 'mythic',
-  'Glowing Cow Pie': 'mythic',
-  'Gold Plated': 'squeeze',
-  'Grease Fade': 'shake',
-  'Greasepaint': 'shake',
-  'Gunmetal': 'squeeze',
-  'Hot Lava Larry': 'twirl',
-  'Infinite Aura Overload': 'mythic',
-  'Ink Cloud': 'jiggle',
-  'Jellyfish Pee': 'squeeze',
-  'Jungle Fade': 'twirl',
-  'Lava Lamp Lube': 'squeeze',
-  'Licorice': 'jiggle',
-  'Low Tide': 'twirl',
-  'Lowkey Cooked': 'squeeze',
-  'Manure Glaze': 'squeeze',
-  'Marble Fade': 'jiggle',
-  'Midnight': 'jiggle',
-  'Monkey Fling Neon': 'mythic',
-  'Night Vision Wedgie': 'squeeze',
-  'Nuclear Swamp Ass': 'mythic',
-  'Oil Slick': 'shake',
-  'Plasma Daddy': 'mythic',
-  'Polar Night': 'twirl',
-  'Printer Ink Diarrhea': 'squeeze',
-  'RGB Hemorrhoids': 'mythic',
-  'Radioactive Nugget': 'mythic',
-  'Radioactive Shart': 'shake',
-  'Raptor Dookie Plasma': 'shake',
-  'Rave Boner': 'jiggle',
-  'Reactor Core Ronnie': 'mythic',
-  'Rewind': 'spin',
-  'Riptide': 'shake',
-  'Royal Fade': 'squeeze',
-  'Royal Flush (Literally)': 'squeeze',
-  'Sand In My Crack': 'shake',
-  'Shade': 'jiggle',
-  'Sir Poops-a-Lot': 'shake',
-  'Slime Fade': 'squeeze',
-  'Spreadsheet Fade': 'squeeze',
-  'Star Fade': 'jiggle',
-  'Static': 'shake',
-  'Sugar Shits': 'shake',
-  'Sunset Fade': 'spin',
-  'Tar': 'jiggle',
-  'Tiger Tooth': 'jiggle',
-  'Touch Grass': 'squeeze',
-  'Tower Dark': 'spin',
-  'Truck Stop Toilet Glow': 'plunge',
-  'Tung Tung Tung Sahur': 'twirl',
-  'Uranus Glow': 'mythic',
-  'Vanilla': 'shake',
-  'Void Walker 9000': 'mythic',
-  'Yellow Snow Reactor': 'mythic',
-});
-Object.assign(INSPECT_SOUND, {
-  'Amber Fade:spin': 'doing',
-  'Ballpark Special:shake': 'pewpew',
-  'Bioluminescent Booty:jiggle': 'boing',
-  'Blackened:squeeze': 'fart',
-  'Blackout:shake': 'squish',
-  'Burnout:shake': 'doing',
-  'Bussin:twirl': 'squeak',
-  'Butter Churn:shake': 'crunch',
-  'Candy Fade:jiggle': 'doing',
-  'Cheek Clapper:shake': 'fart',
-  'Chernobyl Nutsack:mythic': 'shimmer',
-  'Chrome:shake': 'crunch',
-  'Closet Dark:shake': 'squeak',
-  'Clown Fart Rave:shake': 'fart',
-  'Confetti Fade:twirl': 'squeak',
-  'Crimson Web:squeeze': 'fart',
-  'Crop Duster:shake': 'fart',
-  'Dark Matter:squeeze': 'doing',
-  'Desert Heat:twirl': 'fart',
-  'Doppler:spin': 'pewpew',
-  'Ecto-Snot:squeeze': 'squirt',
-  'Electric Fade:shake': 'whoosh',
-  'Face Melter Deluxe:twirl': 'doing',
-  'Fade:twirl': 'boing',
-  'Fryer Oil:shake': 'crunch',
-  'Fuel Fade:shake': 'squeak',
-  'Fume:spin': 'squish',
-  'Gamer Fuel:jiggle': 'boing',
-  'Ghost Fade:spin': 'squish',
-  'Glacier:jiggle': 'doing',
-  'Glowing Booger:mythic': 'shimmer',
-  'Glowing Cow Pie:mythic': 'shimmer',
-  'Gold Plated:squeeze': 'boing',
-  'Grease Fade:shake': 'crunch',
-  'Greasepaint:shake': 'crunch',
-  'Gunmetal:squeeze': 'squish',
-  'Hot Lava Larry:twirl': 'fart',
-  'Infinite Aura Overload:mythic': 'shimmer',
-  'Ink Cloud:jiggle': 'fart',
-  'Jellyfish Pee:squeeze': 'squirt',
-  'Jungle Fade:twirl': 'squish',
-  'Lava Lamp Lube:squeeze': 'squirt',
-  'Licorice:jiggle': 'pewpew',
-  'Low Tide:twirl': 'boing',
-  'Lowkey Cooked:squeeze': 'boing',
-  'Manure Glaze:squeeze': 'squish',
-  'Marble Fade:jiggle': 'whoosh',
-  'Midnight:jiggle': 'squeak',
-  'Monkey Fling Neon:mythic': 'shimmer',
-  'Night Vision Wedgie:squeeze': 'doing',
-  'Nuclear Swamp Ass:mythic': 'shimmer',
-  'Oil Slick:shake': 'pewpew',
-  'Plasma Daddy:mythic': 'shimmer',
-  'Polar Night:twirl': 'boing',
-  'Printer Ink Diarrhea:squeeze': 'crunch',
-  'RGB Hemorrhoids:mythic': 'shimmer',
-  'Radioactive Nugget:mythic': 'shimmer',
-  'Radioactive Shart:shake': 'fart',
-  'Raptor Dookie Plasma:shake': 'fart',
-  'Rave Boner:jiggle': 'boing',
-  'Reactor Core Ronnie:mythic': 'shimmer',
-  'Rewind:spin': 'fart',
-  'Riptide:shake': 'fart',
-  'Royal Fade:squeeze': 'doing',
-  'Royal Flush (Literally):squeeze': 'squeak',
-  'Sand In My Crack:shake': 'doing',
-  'Shade:jiggle': 'squish',
-  'Sir Poops-a-Lot:shake': 'fart',
-  'Slime Fade:squeeze': 'squish',
-  'Spreadsheet Fade:squeeze': 'boing',
-  'Star Fade:jiggle': 'pewpew',
-  'Static:shake': 'boing',
-  'Sugar Shits:shake': 'fart',
-  'Sunset Fade:spin': 'pewpew',
-  'Tar:jiggle': 'doing',
-  'Tiger Tooth:jiggle': 'fart',
-  'Touch Grass:squeeze': 'whoosh',
-  'Tower Dark:spin': 'whoosh',
-  'Truck Stop Toilet Glow:plunge': 'fwoop',
-  'Tung Tung Tung Sahur:twirl': 'squish',
-  'Uranus Glow:mythic': 'shimmer',
-  'Vanilla:shake': 'doing',
-  'Void Walker 9000:mythic': 'shimmer',
-  'Yellow Snow Reactor:mythic': 'shimmer',
-});
-
-Object.assign(INSPECT_SOUND, {
-  'Finger Gun:spin': 'pewpew',
-  'BRRRT:shake': 'fart',
-  'Fart Cloud:shake': 'fart',
-  'Poop Emoji Party:shake': 'fart',
-  'Thicc Boi:jiggle': 'boing',
-  'Dong Doppler:jiggle': 'boing',
-  'Golden Shower:spin': 'squirt',
-  'Hot Dog Water:squeeze': 'squirt',
-});
-
 // kill effects: particles + a sound (+ text) at the victim
 export const KILL_FX = {
   dildo: { colors: ['#ff4ad2', '#7a2aff', '#ffffff', '#ffd23a'], n: 40, speed: 4, sound: 'doing', text: 'BOING!', textColor: '#ff4ad2' },

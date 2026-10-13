@@ -81,9 +81,8 @@ export function costumeOf(L) {
   const cs = {
     head: c(L.head, '#c89a74'), torso: c(L.body), arms: c(L.arms || L.body), hips: c(L.speedo || L.bikini || L.hips || L.legs), legs: c(L.legs),
     skin: skin ? 1 : 0, speedo: L.speedo || L.bikini ? 1 : 0, bikini: L.bikini ? 1 : 0, stripes: L.stripes ? 1 : 0, mustard: L.mustard ? 1 : 0, bands: L.hat === 'cone' ? 1 : 0, belly: L.belly ? 1 : 0,
-    gown: L.gown ? 1 : 0,
   };
-  cs.key = [L.head, L.body, L.legs, L.speedo, L.stripes, L.mustard, L.hat, L.belly, L.bikini, L.gown].join(',');
+  cs.key = [L.head, L.body, L.legs, L.speedo, L.stripes, L.mustard, L.hat, L.belly, L.bikini].join(',');
   return cs;
 }
 function dye(m, cs) {
@@ -92,7 +91,7 @@ function dye(m, cs) {
   m.onBeforeCompile = (sh, r) => {
     prev(sh, r);
     Object.assign(sh.uniforms, { cHead: { value: cs.head }, cTorso: { value: cs.torso }, cArms: { value: cs.arms }, cHips: { value: cs.hips }, cLegs: { value: cs.legs },
-      cFlags: { value: new THREE.Vector4(cs.skin, cs.stripes, cs.mustard, cs.bands) }, cFlags2: { value: new THREE.Vector4(cs.speedo, cs.belly, cs.bikini || 0, cs.gown || 0) } });
+      cFlags: { value: new THREE.Vector4(cs.skin, cs.stripes, cs.mustard, cs.bands) }, cFlags2: { value: new THREE.Vector4(cs.speedo, cs.belly, cs.bikini || 0, 0) } });
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;\nuniform vec3 cHead; uniform vec3 cTorso; uniform vec3 cArms; uniform vec3 cHips; uniform vec3 cLegs; uniform vec4 cFlags; uniform vec4 cFlags2;')
       .replace('#include <map_fragment>', `#include <map_fragment>
@@ -106,56 +105,14 @@ function dye(m, cs) {
 		else if (z < 106.0) { c = cHips; if (cFlags2.x > 0.5) skinR = 0.0; }
 		if (cFlags.y > 0.5 && z > 96.0 && z < 152.0 && ax < 20.0 && fract(z / 11.0) < 0.5) c = vec3(0.05);   // mime stripes
 		if (cFlags.w > 0.5 && ((z > 112.0 && z < 120.0) || (z > 128.0 && z < 136.0))) c = vec3(0.92, 0.94, 0.9);   // reflective cone bands
-		if (cFlags2.w > 0.5 && z < 152.0) {   // hospital gown: pale blue with a faint diamond print, open at the back
-			vec2 gp = vec2((vRest.x + vRest.y * 0.5) / 7.0, z / 7.0);
-			float dia = abs(fract(gp.x + gp.y) - 0.5) + abs(fract(gp.x - gp.y) - 0.5);
-			vec3 gownC = vec3(0.75, 0.85, 0.92);
-			if (dia < 0.08) gownC = vec3(0.55, 0.7, 0.85);   // the print
-			if (vRest.y < -8.0 && z > 96.0 && z < 150.0) gownC *= 0.85;   // the open back shows a shadowed gap
-			c = gownC; skinR = 0.0;
-		}
 		if (cFlags.z > 0.5 && vRest.y > 4.0 && z > 92.0 && z < 150.0 && abs(vRest.x - sin(z * 0.55) * 7.0) < 2.2) c = vec3(0.95, 0.72, 0.05);   // mustard
 		if (cFlags2.z > 0.5 && z > 124.0 && z < 135.0 && ax < 17.0) { c = cHips; skinR = 0.0; }   // a bikini top
 		c = max(c, vec3(0.05));   // near-black outfits still show their folds and plates
 		// plates take the colour with the photo's light and scratches; the undersuit a darker, matte cut of it
 		float detail = plate > 0.5 ? clamp(lum / 0.36, 0.35, 1.35) : clamp(0.55 + lum * 9.0, 0.5, 1.2);
 		vec3 dyed = c * mix(0.42 * detail, detail, plate);
-		// ---- hyper-real skin & cloth: two-scale pores, mottling, blemishes, veins, red-shifted SSS,
-		// joint wrinkles, ground dirt, edge wear (all inline: no function defs allowed in this block)
-		float pore1 = fract(sin(dot(floor(vRest.xy * 22.0) + floor(vRest.zz * 22.0), vec2(12.9898, 78.233))) * 43758.5453);
-		float pore2 = fract(sin(dot(floor(vRest.xy * 47.0) + floor(vRest.zz * 47.0), vec2(39.346, 11.135))) * 24634.6345);
-		float pore = pore1 * 0.65 + pore2 * 0.35;
-		float weave = fract(sin(dot(floor(vRest.xy * 9.0), vec2(39.346, 11.135))) * 24634.6345);
-		float weave2 = fract(sin(dot(floor(vRest.xy * 23.0) + floor(vRest.yy * 23.0), vec2(74.231, 13.571))) * 9358.1234);
-		float mottle = sin(vRest.x * 0.35 + sin(vRest.z * 0.31) * 2.0) * sin(vRest.y * 0.33 + sin(vRest.x * 0.27) * 2.0);   // large soft blotches
-		float freckH = fract(sin(dot(floor(vRest.xy * 6.0) + floor(vRest.zz * 6.0), vec2(12.9898, 78.233))) * 43758.5453);
-		float blemish = step(0.986, freckH);   // sparse moles / freckles
-		float veinPat = abs(sin(vRest.x * 1.1 + sin(vRest.z * 0.9) * 3.0) * sin(vRest.y * 0.8 + vRest.z * 0.5));
-		float vein = smoothstep(0.93, 1.0, veinPat);   // thin branching lines
-		vec3 bare = c * mix(0.88, 1.06, smoothstep(0.0, 0.4, lum));
-		bare *= 0.94 + pore * 0.1;   // pores, two scales
-		bare *= 1.0 + mottle * 0.04;   // skin is never one flat tone
-		bare = mix(bare, bare * vec3(0.68, 0.48, 0.4), blemish * 0.6);   // blemishes read darker/redder
-		bare = mix(bare, vec3(0.36, 0.46, 0.62), vein * 0.13 * skinR);   // veins show blue-green through skin
-		float hollow = smoothstep(0.5, 0.08, lum);
-		vec3 sss = bare * vec3(1.1, 0.8, 0.7) + vec3(0.04, 0.009, 0.004);   // scattered light is red-shifted, like flesh
-		bare = mix(bare, sss, hollow * 0.68);   // deeper, warmer SSS in the hollows
-		float neckBand = smoothstep(138.0, 143.0, z) * (1.0 - smoothstep(150.0, 152.0, z)) * step(3.0, vRest.y);
-		float tendon = smoothstep(3.0, 0.8, abs(abs(vRest.x) - 4.5)) * neckBand;   // sternocleidomastoid: the neck's cords
-		bare *= 1.0 - tendon * 0.09 * skinR;
-		vec3 cloth = dyed * (0.93 + weave * 0.08 + weave2 * 0.05);   // woven fabric, two thread scales
-		float elbowW = smoothstep(4.0, 0.5, abs(z - 120.0)) * step(20.0, ax) * step(96.0, z);   // wrinkles gather at joints
-		float kneeW = smoothstep(5.0, 0.5, abs(z - 54.0)) * (1.0 - smoothstep(8.0, 16.0, ax)) * step(z, 90.0);
-		float wristW = smoothstep(3.0, 0.5, abs(z - 98.0)) * step(20.0, ax) * step(90.0, z) * step(z, 104.0);
-		float wrLine = sin(z * 6.0 + sin(vRest.x * 2.0) * 2.0) * 0.5 + 0.5;
-		cloth *= 1.0 - (elbowW + kneeW * 0.8 + wristW * 0.5) * (0.05 + wrLine * 0.07) * (1.0 - skinR);
-		float dirt = smoothstep(26.0, 3.0, z) * (1.0 - skinR);   // ground grime on boots and cuffs
-		vec3 dirtC = dyed * vec3(0.8, 0.72, 0.6);
-		dyed = mix(dyed, dirtC, dirt * 0.45);
-		cloth = mix(cloth, dirtC * 0.9, dirt * 0.4);
-		float wear = smoothstep(0.72, 0.95, lum) * plate;   // worn edges catch the light
-		dyed = mix(dyed, dyed * 1.1 + vec3(0.025, 0.022, 0.018), wear * 0.55);
-		diffuseColor.rgb = mix(mix(dyed, cloth, (1.0 - plate) * 0.7), bare, skinR);
+		vec3 bare = c * mix(0.88, 1.06, smoothstep(0.0, 0.4, lum));   // skin: the armour detail smoothed away
+		diffuseColor.rgb = mix(dyed, bare, skinR);
 	}`);
   };
   const k0 = m.customProgramCacheKey;
@@ -185,74 +142,10 @@ function humanColors(L, team) {
     human_helmet: L.hat === 'helmet' ? (L.hatColor || '#2a3646') : (ct ? '#2a3646' : '#5e5944'), human_shemagh: L.hatColor || '#d8c6a0', human_visor: '#0c0e12',
   };
 }
-// ---- procedural micro-detail (shader-side, no UVs needed: the human meshes carry no UV attribute) ----
-// Eyes, skin and the hospital gown get their detail from onBeforeCompile injections further down,
-// computed from the bind-pose rest position. Canvas textures would need UVs the meshes don't have.
 function humanMat(part, L, team, hq) {
   const col = humanColors(L, team)[part] || '#888', cloth = CLOTH[part], plaid = (part === 'human_shirt' && team !== 'CT') || part === 'human_shemagh' ? 1 : 0;
-  const key = `h|${part}|${col}|${hq}|${plaid}|${L.gown ? 'gown' : ''}`;
+  const key = `h|${part}|${col}|${hq}|${plaid}`;
   if (D.mats.has(key)) return D.mats.get(key);
-  if (L.gown && part === 'human_shirt') {   // hospital gown instead of a shirt (Cancer): pale blue diamond print, procedural (no UVs on the mesh)
-    const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, metalness: 0 });
-    litPatch(m, 'dyn');
-    const lit0 = m.onBeforeCompile;   // baked-AO hook + procedural gown print, own cache key
-    m.onBeforeCompile = (sh, r) => {
-      lit0(sh, r);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;\nvarying vec3 vGownP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;\nvGownP = position;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;\nvarying vec3 vGownP;')
-        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;')
-        .replace('#include <map_fragment>', `#include <map_fragment>
-        {
-          vec2 gp = vec2((vGownP.x + vGownP.y * 0.5) / 7.0, vGownP.z / 7.0);
-          float dia = abs(fract(gp.x + gp.y) - 0.5) + abs(fract(gp.x - gp.y) - 0.5);
-          vec3 gc = vec3(0.75, 0.83, 0.90);
-          if (dia < 0.09) gc = vec3(0.55, 0.68, 0.82);   // the diamond print
-          float fab = fract(sin(dot(floor(vGownP.xy * 4.0), vec2(12.9898, 78.233))) * 43758.5453);
-          gc *= 0.96 + fab * 0.07;   // thin cotton, slightly uneven
-          diffuseColor.rgb = gc;
-        }`);
-    };
-    m.customProgramCacheKey = () => 'human-gown';
-    D.mats.set(key, m); return m;
-  }
-  if (part === 'human_eye' || part === 'human_iris') {   // wet, glossy eyes: clearcoat cornea + procedural iris (bind-space, faces +y)
-    const isIris = part === 'human_iris';
-    const m = new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.08, metalness: 0, clearcoat: 1.0, clearcoatRoughness: 0.06 });
-    litPatch(m, 'dyn');
-    const lit0 = m.onBeforeCompile;   // baked-AO hook + procedural eye detail, own cache key (physical shader)
-    m.onBeforeCompile = (sh, r) => {
-      lit0(sh, r);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nvarying float vAO;\nvarying vec3 vEyeP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao;\nvEyeP = position;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAO;\nvarying vec3 vEyeP;')
-        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;')
-        .replace('#include <map_fragment>', `#include <map_fragment>
-        {
-          vec2 ipc = vec2(abs(vEyeP.x) - 3.0, vEyeP.z - 174.7);   // nearest iris centre, disc plane (bind space, cm)
-          float ir = length(ipc);
-          float ang = atan(ipc.y, ipc.x + 1e-4);
-          if (${isIris}) {
-            float fib = sin(ang * 90.0 + sin(ang * 23.0) * 4.0 + ir * 22.0) * 0.5 + 0.5;   // radial iris fibers
-            vec3 irisC = mix(vec3(0.16, 0.10, 0.05), vec3(0.48, 0.32, 0.15), fib);
-            irisC *= 0.85 + 0.3 * smoothstep(1.0, 0.4, ir);
-            float pupil = 1.0 - smoothstep(0.30, 0.42, ir);
-            float limbal = smoothstep(0.86, 1.0, ir);   // dark limbal ring
-            vec3 c = mix(irisC, vec3(0.02, 0.015, 0.01), pupil);
-            c = mix(c, vec3(0.05, 0.035, 0.02), limbal * 0.9);
-            float glint = 1.0 - smoothstep(0.10, 0.22, length(ipc - vec2(0.35, 0.30)));   // catchlight
-            c = mix(c, vec3(1.0), glint * 0.9);
-            diffuseColor.rgb = c;
-          } else {
-            float veinN = abs(sin(vEyeP.x * 2.2 + sin(vEyeP.z * 1.7) * 3.0) * sin(vEyeP.z * 1.9 + vEyeP.x * 1.3));
-            float vein = smoothstep(0.93, 1.0, veinN);   // faint sclera vessels
-            vec3 c = vec3(0.91, 0.89, 0.84);
-            c = mix(c, vec3(0.72, 0.42, 0.38), vein * 0.4);
-            diffuseColor.rgb = c;
-          }
-        }`);
-    };
-    m.customProgramCacheKey = () => 'human-eye';
-    D.mats.set(key, m); return m;
-  }
   const rough = part === 'human_eye' || part === 'human_iris' || part === 'human_visor' ? 0.15 : part === 'human_skin' ? 0.55 : part === 'human_boot' ? 0.6 : part === 'human_helmet' ? 0.6 : 0.95;
   const m = new THREE.MeshStandardMaterial({ color: col, roughness: rough, metalness: part === 'human_visor' ? 0.4 : 0 });
   if (part === 'human_boot') m.side = THREE.DoubleSide;   // the lofted boot's end caps
@@ -266,28 +159,6 @@ function humanMat(part, L, team, hq) {
         .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;');
     };
     m.customProgramCacheKey = () => 'human-ao';
-  }
-  if (part === 'human_skin') {   // procedural pores, blotches, blemishes (bind-space; the mesh has no UVs)
-    const litS = m.onBeforeCompile;
-    m.onBeforeCompile = (sh, r) => {
-      litS(sh, r);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vSkinP;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSkinP = position;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vSkinP;')
-        .replace('#include <map_fragment>', `#include <map_fragment>
-        {
-          float sp1 = fract(sin(dot(floor(vSkinP.xy * 3.0) + floor(vSkinP.zz * 3.0), vec2(12.9898, 78.233))) * 43758.5453);
-          float sp2 = fract(sin(dot(floor(vSkinP.xy * 7.0) + floor(vSkinP.yy * 7.0), vec2(39.346, 11.135))) * 24634.6345);
-          float blotch = sin(vSkinP.x * 0.5 + sin(vSkinP.z * 0.4) * 2.0) * sin(vSkinP.y * 0.45);   // skin is never one flat tone
-          float blem = step(0.988, fract(sin(dot(floor(vSkinP.xy * 0.9), vec2(12.9898, 78.233))) * 43758.5453));
-          diffuseColor.rgb *= 0.94 + sp1 * 0.06 + sp2 * 0.04;   // pores, two scales
-          diffuseColor.rgb *= 1.0 + blotch * 0.035;
-          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 0.5, 0.42), blem * 0.5);   // blemishes
-          float hollowS = 1.0 - vAO;   // baked AO marks the creases: scattered light pools warm there
-          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.08, 0.86, 0.78) + vec3(0.02, 0.004, 0.002), hollowS * 0.45);
-        }`);
-    };
-    m.customProgramCacheKey = () => 'human-skin';
   }
   if (cloth && hq) {
     const lit = m.onBeforeCompile, det = clothTex(cloth), nrm = clothTex(cloth + 'n');   // (lighting + AO already patched in)
@@ -311,15 +182,7 @@ vec4 tri3(sampler2D t, vec3 p, vec3 w) { return texture2D(t, p.yz * tileK) * w.x
 		float thin = smoothstep(0.03, 0.0, abs(g.x - 0.3)) + smoothstep(0.03, 0.0, abs(g.y - 0.3));
 		diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55, clamp(band, 0.0, 1.0) * 0.8) + vec3(0.06, 0.05, 0.035) * thin;
 	}
-	if (soleOn > 0.5 && vRestP.z < 2.8) diffuseColor.rgb *= 0.3;   // rubber sole
-	float dirtM = smoothstep(30.0, 4.0, vRestP.z) * dirtOn;   // ground grime creeps up boots and cuffs
-	diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.58), dirtM * 0.55);
-	float elbowW = smoothstep(5.0, 1.0, abs(vRestP.z - 118.0)) * jointOn;   // fabric bunches at elbows and knees
-	float kneeW = smoothstep(6.0, 1.0, abs(vRestP.z - 52.0)) * jointOn;
-	float wrL = sin(vRestP.z * 5.0 + sin(vRestP.x * 1.7) * 2.5) * 0.5 + 0.5;
-	diffuseColor.rgb *= 1.0 - (elbowW + kneeW) * (0.04 + wrL * 0.06);
-	float edgeW = smoothstep(0.75, 1.0, hDet);   // raised weave threads catch the light: worn highs
-	diffuseColor.rgb += vec3(0.03, 0.028, 0.024) * edgeW;`)
+	if (soleOn > 0.5 && vRestP.z < 2.8) diffuseColor.rgb *= 0.3;   // rubber sole`)
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = clamp(roughnessFactor * mix(0.75, 1.15, tN.b), 0.05, 1.0);');
     };
     m.customProgramCacheKey = () => 'human-cloth';
@@ -344,7 +207,6 @@ export function makeSoldier(look, team, hq = true) {
   let humanHelm = null;
   if (L.model !== 'log') for (const m of D.meshes) {
     if (m.name.startsWith('human_') !== human) continue;
-    if (L.gown && m.name === 'human_vest') continue;   // no plate carrier over a hospital gown
     const wear = HEADGEAR[m.name] ? HEADGEAR[m.name](L) : true;
     if (!wear && m.name !== 'human_helmet') continue;   // the helmet is kept (hidden) so a bought one can show
     const sm = new THREE.SkinnedMesh(m.g, human ? humanMat(m.name, L, team, hq) : mat); sm.frustumCulled = false; root.add(sm);
@@ -415,23 +277,20 @@ const _cA = new THREE.Vector3(), _cB = new THREE.Vector3(), _cC = new THREE.Vect
 function curlHand(r, side, amt) {
   const B = r.bones, hand = B[side + 'Hand'], mid = B[side + 'HandMiddle1'], th = B[side + 'HandThumb1'], idx = B[side + 'HandIndex1'], pin = B[side + 'HandPinky1'];
   if (!hand || !mid || !idx || !pin || !th) return;
-  idx.getWorldPosition(_cC); pin.getWorldPosition(_cN); const across = _cC.sub(_cN).normalize();     // index to pinky: the knuckle axis the fingers hinge about
-  const axis = across;   // curl = rotate each joint about the knuckle line (fingers swing toward the palm)
-  for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b) turnWorld(b, axis, amt * (side === 'Left' ? 1 : -1) * (k === 1 ? 0.9 : 1.1)); }
+  hand.getWorldPosition(_cA); mid.getWorldPosition(_cB); const f = _cB.sub(_cA).normalize();       // along the fingers
+  idx.getWorldPosition(_cC); pin.getWorldPosition(_cN); const across = _cC.sub(_cN).normalize();     // index to pinky
+  const axis = _cN.crossVectors(f, across).cross(f).normalize().cross(f).normalize();               // across the knuckles, square to the fingers
+  for (const fn of ['Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) { const b = B[side + 'Hand' + fn + k]; if (b) turnWorld(b, axis, amt * (side === 'Left' ? -1 : 1) * (k === 1 ? 0.9 : 1.1)); }
 }
 // per frame: pick the base animation from how the player moves, then aim, gun and props
-export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0, ads = 0 }) {
+export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
   r.t += dt;
   if (dead) {
-    if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; if (!d) return; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; r.dieT2 = 0; }
-    else r.dieT2 = (r.dieT2 || 0) + dt;
+    if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
   } else {
     if (r.dead) { r.dead = false; r.act.die.stop(); r.base = ''; base(r, 'idle'); }
     const sp = Math.hypot(vx, vz), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const f = -(vx * sy) - vz * cy, side = vx * cy - vz * sy;   // speed along where they face, and to their right
-    let dyaw = yaw - (r.prevYaw ?? yaw); dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));   // wrapped turn rate
-    const yawVel = dt > 0 ? dyaw / dt : 0; r.prevYaw = yaw;
-    const wasFalling = (r.prevVy ?? 0) < -4.5; r.prevVy = vy;   // for the landing dip below
     if (r.rootS) r.root.scale.copy(r.rootS); else r.rootS = r.root.scale.clone();   // emotes may squash the whole body: reset first
     if (emote) {
       const a = emote.anim, BASE = { dance: 'dance', floss: 'dance', chicken: 'dance', griddy: 'run', twerk: 'crouch', sit: 'crouch', zombie: 'walk', tbag: Math.floor(r.t * 5) % 2 ? 'crouch' : 'idle', lmao: 'crouch' };
@@ -440,72 +299,16 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     }
     else if (Math.abs(vy) > 2.2) base(r, 'jump');
     else if (crouch > 0.5) { if (sp > 0.3) base(r, 'crouchWalk', Math.min(1.6, sp / SPEED.crouchWalk)); else base(r, 'crouch'); }
-    else if (sp < 0.35) {
-      // standing turn: the upper body leads with a real pivot step instead of sliding round
-      if (!rest && Math.abs(yawVel) > 1.5 && r.act.turnLeft) base(r, yawVel > 0 ? 'turnLeft' : 'turnRight', Math.min(1.6, Math.abs(yawVel) / 2.2));
-      else base(r, 'idle');
-    }
+    else if (sp < 0.35) base(r, 'idle');
     else {
       const run = sp > 3.4, ax = Math.abs(f) >= Math.abs(side) * 0.8;
       const name = ax ? (f >= 0 ? (run ? 'run' : 'walk') : (run ? 'runBack' : 'walkBack')) : (side > 0 ? (run ? 'runRight' : 'walkRight') : (run ? 'runLeft' : 'walkLeft'));
       base(r, name, Math.max(0.6, Math.min(1.7, sp / SPEED[name])));
     }
-    if (wasFalling && Math.abs(vy) < 2.2 && !emote) r.landT = 0.3;   // touchdown: absorb it below
   }
   r.mixer.update(dt);
   r.g.updateMatrixWorld(true);
   const B = r.bones;
-  if (!r.dead && !emote && r.base === 'idle') {   // breathing: chest rises, shoulders roll, weight shifts
-    const br = r.t * 1.7, inhale = (Math.sin(br) + 1) / 2;
-    _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // character's right
-    if (B.Spine2) turnWorld(B.Spine2, _v, -0.018 - inhale * 0.014);   // chest lifts on inhale
-    if (B.Spine1) turnWorld(B.Spine1, _v, -0.008 - inhale * 0.008);
-    if (B.Head) turnWorld(B.Head, _v, 0.006 + inhale * 0.006);   // chin lifts slightly
-    const sway = Math.sin(r.t * 0.45) * 0.012;   // slow weight shift
-    _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
-    if (B.Hips) turnWorld(B.Hips, _fw, sway);
-    if (B.Spine) turnWorld(B.Spine, _fw, -sway * 0.6);   // counter-sway keeps the head level
-    if (!rest) {   // alive micro-behaviour: every few seconds the head drifts to a glance and back
-      r.lookT = (r.lookT ?? 2.5) - dt;
-      if (r.lookT <= 0) { r.lookT = 3 + Math.random() * 5; r.lookYawT = (Math.random() - 0.5) * 0.7; r.lookPitT = (Math.random() - 0.5) * 0.2; }
-      r.lookYaw = (r.lookYaw || 0) + ((r.lookYawT || 0) - (r.lookYaw || 0)) * Math.min(1, dt * 2.5);
-      r.lookPit = (r.lookPit || 0) + ((r.lookPitT || 0) - (r.lookPit || 0)) * Math.min(1, dt * 2.5);
-      _t1.set(0, 1, 0);   // world up: a glance, not an aim change
-      if (B.Neck) turnWorld(B.Neck, _t1, r.lookYaw * 0.55);
-      if (B.Head) { turnWorld(B.Head, _t1, r.lookYaw * 0.45); turnWorld(B.Head, _v, r.lookPit * 0.5); }
-    }
-  }
-  // ---- locomotion realism: weight shift, head bob, strafe lean, landing dip, death settle ----
-  if (r.rootY === undefined) r.rootY = r.root.position.y;
-  let rootDy = 0;
-  if (!r.dead && !emote && /^(walk|run|crouchWalk)/.test(r.base)) {
-    const sp2 = Math.hypot(vx, vz), cy2 = Math.cos(yaw), sy2 = Math.sin(yaw), side2 = vx * cy2 - vz * sy2;
-    r.stride = (r.stride || 0) + dt * Math.max(0.5, sp2) * 5.2;   // stride phase from ground speed
-    const s1 = Math.sin(r.stride), s2 = Math.sin(r.stride * 2);
-    _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // facing
-    if (B.Hips) turnWorld(B.Hips, _fw, s1 * 0.04);                  // weight shifts side to side each step
-    if (B.Spine) turnWorld(B.Spine, _fw, -s1 * 0.022);              // torso counter-rotates, head stays level
-    _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
-    if (B.Head) turnWorld(B.Head, _v, s2 * 0.012);                  // tiny head bob, twice per stride
-    rootDy -= Math.abs(s2) * 0.018;                                 // vertical bob, lowest mid-stride
-    if (Math.abs(side2) > 0.6 && B.Spine1) turnWorld(B.Spine1, _fw, -side2 * 0.028);   // lean into strafes
-  }
-  if ((r.landT || 0) > 0 && !r.dead && !emote) {   // touchdown: knees give, body absorbs it
-    r.landT -= dt; const k = Math.max(0, r.landT / 0.3), dip = Math.sin(k * Math.PI);
-    rootDy -= dip * 0.07;
-    _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // character's right
-    for (const s of ['Left', 'Right']) {
-      if (B[s + 'UpLeg']) turnWorld(B[s + 'UpLeg'], _v, dip * 0.22);
-      if (B[s + 'Leg']) turnWorld(B[s + 'Leg'], _v, -dip * 0.34);
-    }
-  }
-  r.root.position.y += (r.rootY + rootDy - r.root.position.y) * Math.min(1, dt * 18);   // eased, never snaps
-  if (r.dead && (r.dieT2 || 0) > 1.5) {   // the mocap fall is done: settle — chest sinks, head lolls
-    const k = Math.min(1, (r.dieT2 - 1.5) / 1.4);
-    _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
-    if (B.Spine2) turnWorld(B.Spine2, _v, 0.06 * k);
-    if (B.Head) turnWorld(B.Head, _v, 0.14 * k);
-  }
   if (!r.dead) {
     // aim: bend the spine and head with the pitch; procedural emotes on top of the idle pose
     _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // the character's right
@@ -564,9 +367,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       ik2(B.RightArm, B.RightForeArm, B.RightHand, grip, B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, 0.3).addScaledVector(fw, -0.45));
       const rh = B.RightHand.getWorldPosition(_t1);
       if (B.RightHandMiddle1) rh.lerp(B.RightHandMiddle1.getWorldPosition(_t2), 0.55);
-      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y);
-      if (yA.lengthSq() < 1e-6) yA.set(0, 0, 1);   // aiming straight up/down: pick any perpendicular for the frame
-      yA.normalize(); const xA = _t2.crossVectors(yA, zA);
+      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _t2.crossVectors(yA, zA);
       _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
       r.g.getWorldQuaternion(_q2).invert(); tg.quaternion.copy(_q2.multiply(_q));
       tg.position.copy(rh); r.g.worldToLocal(tg.position);
@@ -594,45 +395,23 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       if (dir.lengthSq() < 0.01) dir.set(0, Math.sin(ap), -Math.cos(ap)).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
       dir.normalize();
       // the gun's frame in world space: barrel (-z) along the hand line, up as close to world up as the barrel allows
-      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y);
-      if (yA.lengthSq() < 1e-6) yA.set(0, 0, 1);   // aiming straight up/down: pick any perpendicular for the frame
-      yA.normalize(); const xA = _fw.crossVectors(yA, zA);
+      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _fw.crossVectors(yA, zA);
       _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
       r.g.getWorldQuaternion(_q2).invert(); tg.quaternion.copy(_q2.multiply(_q));
       tg.position.copy(rh); r.g.worldToLocal(tg.position);
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
       if (pistol) {   // two-handed pistol: the support hand comes back from where the rifle's handguard would be onto the grip
-        const sup = tg.localToWorld(_t2.set(-0.045, -0.035, 0.01));
-        const pole = _t1.copy(B.LeftArm.getWorldPosition(_t6)).addScaledVector(_t4.set(0, -1, 0), 0.6).addScaledVector(rt, -0.35);   // elbow down and slightly in
-        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, sup, pole);
+        const sup = tg.localToWorld(_t2.set(-0.045, -0.035, 0.01)), D = _t4.set(0, -1, 0);
+        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, sup, _t5.copy(B.LeftArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(rt, -0.35));
       } else if (r.reloadT > 0 && B.Hips) {   // reload: the left hand drops to the mag pouch and brings a fresh one up
         const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(_t6).addScaledVector(rt, -0.18).add(_t4.set(0, 0.05, 0));
         ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, _t5.copy(lh).lerp(pouch, out), _t1.copy(B.LeftArm.getWorldPosition(_t1)).add(_t4.set(0, -0.6, 0)));
-        // tilt the whole gun inward so the mag well faces the incoming hand (like a real reload)
-        tg.rotateOnAxis(_t6.set(0, 0, 1).applyQuaternion(tg.getWorldQuaternion(_q2.identity())), out * 0.5);
-        tg.rotateOnAxis(_t6.set(1, 0, 0).applyQuaternion(tg.getWorldQuaternion(_q2.identity())), out * 0.2);
-      }
-      // trigger finger: the right index stays straighter on the trigger while the rest of the hand grips
-      const ri1 = B.RightHandIndex1, rp1 = B.RightHandPinky1;
-      if (ri1 && rp1) {
-        ri1.getWorldPosition(_t1); rp1.getWorldPosition(_t2); _t3.copy(_t1).sub(_t2).normalize();   // the knuckle line
-        for (let k = 1; k <= 3; k++) { const fb = B['RightHandIndex' + k]; if (fb) turnWorld(fb, _t3, 0.28); }   // + = uncurl for the right hand
-      }
-      if (ads > 0.5 && !pistol) {   // aimed in: cheek drops to the stock, head rolls onto it, elbows tuck
-        _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // right
-        _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())); // forward
-        if (B.Head) { turnWorld(B.Head, _v, 0.07 * ads); turnWorld(B.Head, _fw, 0.05 * ads); }   // cheek weld
-        if (B.RightArm) turnWorld(B.RightArm, _fw, -0.06 * ads);   // firing elbow tucks down-in
       }
     } else {   // knife, grenade, bomb: carried in the right hand as animated
       hand.getWorldPosition(_v); r.g.worldToLocal(_v);
       tg.position.copy(_v); tg.rotation.set(ap, 0, 0, 'YXZ');
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
-      if (cat === 'knife' && B.RightForeArm && !r.dead && !emote) {   // knife guard: forearm rises, blade up-forward
-        _t1.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
-        turnWorld(B.RightForeArm, _t1, 0.18);
-      }
     }
   }
   if (r.human && !r.dead && !emote && (tg.userData || {}).cat !== 'knife') curlHand(r, 'Left', 0.55);   // the support hand closes round the handguard
@@ -648,10 +427,9 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
   }
 }
 // emotes the clips don't cover: a few big readable poses built from world-axis bone turns
-const _eUp = new THREE.Vector3(0, 1, 0), _eRight = new THREE.Vector3(), _eFwd = new THREE.Vector3();
 function emotePose(r, e, rightIn) {
   // the poses were authored when the model stood turned round: keep their axes (forward = the body's front, "right" = its left side)
-  const right = _eRight.copy(rightIn).negate(), B = r.bones, t = e.t, s = Math.sin, up = _eUp, fwd = _eFwd.crossVectors(up, right).negate();
+  const right = rightIn.clone().negate(), B = r.bones, t = e.t, s = Math.sin, up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3().crossVectors(up, right).negate();
   switch (e.anim) {
     case 'wave': turnWorld(B.RightArm, fwd, -2.3); turnWorld(B.RightForeArm, fwd, -0.6 + s(t * 10) * 0.5); break;
     case 'salute': turnWorld(B.RightArm, fwd, -1.7); turnWorld(B.RightForeArm, up, 2.2); break;
@@ -681,20 +459,20 @@ function emotePose(r, e, rightIn) {
   }
 }
 
-// Tung Tung Tung Sahur: an original brainrot character riding the soldier's skeleton. A smooth, polished wooden log for a body with
-// huge bulging cartoon eyes, a wide creepy smile, thin stick arms and legs, and flat bare feet. Parts hang off the bones, so every
-// animation (walk, run, crouch, die, emotes) moves it, janky stick limbs and all. The game's weapon system puts a gun in his hands.
+// Tung Tung Tung Sahur: an original brainrot character riding the soldier's skeleton. A bark-covered log for a body with a
+// wide-eyed face, stick arms and legs, and a baseball bat slung on its back. Parts hang off the bones, so every
+// animation (walk, run, crouch, die, emotes) moves it, janky stick limbs and all.
 let logMats = null;
 function logBody(B, hq) {
   if (!logMats) {
-    const wood = hq ? new THREE.MeshStandardMaterial({ color: '#c98f52', roughness: 0.5, metalness: 0 }) : new THREE.MeshLambertMaterial({ color: '#c98f52' });
-    if (hq) gunSurface(wood, 'gwood', { tile: 2, albedo: 0.8, normal: 0.7 });
+    const bark = hq ? new THREE.MeshStandardMaterial({ color: '#7a5030', roughness: 0.9, metalness: 0 }) : new THREE.MeshLambertMaterial({ color: '#7a5030' });
+    if (hq) gunSurface(bark, 'gwood', { tile: 4, albedo: 1.4, normal: 1.6 });
     const end = new THREE.MeshLambertMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); x.fillStyle = '#d8b07a'; x.fillRect(0, 0, 128, 128);
       for (let r = 6; r < 64; r += 5 + Math.random() * 3) { x.strokeStyle = `rgba(120,80,40,${0.25 + Math.random() * 0.3})`; x.lineWidth = 1.5; x.beginPath(); x.arc(64 + Math.random() * 2, 64 + Math.random() * 2, r, 0, 7); x.stroke(); }
       x.strokeStyle = '#6a4424'; x.lineWidth = 6; x.beginPath(); x.arc(64, 64, 61, 0, 7); x.stroke(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })() });
-    logMats = { wood, end, white: new THREE.MeshLambertMaterial({ color: '#f6f2ea' }), black: new THREE.MeshBasicMaterial({ color: '#0a0806' }), stick: wood };
+    logMats = { bark, end, white: new THREE.MeshLambertMaterial({ color: '#f6f2ea' }), black: new THREE.MeshBasicMaterial({ color: '#0a0806' }), stick: bark, bat: hq ? new THREE.MeshStandardMaterial({ color: '#c8a070', roughness: 0.45 }) : new THREE.MeshLambertMaterial({ color: '#c8a070' }) };
     for (const m of [logMats.end, logMats.white]) litPatch(m, 'dyn');
-    if (!hq) litPatch(logMats.wood, 'dyn');
+    if (!hq) litPatch(logMats.bark, 'dyn');
   }
   const M = logMats, wp = (b) => b.getWorldPosition(new THREE.Vector3());
   const add = (bone, mesh) => { if (bone) bone.attach(mesh); };
@@ -704,23 +482,26 @@ function logBody(B, hq) {
   };
   // the log: from the hips to well above the head, ends showing growth rings
   const hip = wp(B.Hips), top = wp(B.Head).add(new THREE.Vector3(0, 0.28, 0)), H = top.y - hip.y + 0.12;
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.215, H, 18, 1, true), M.wood); body.position.set(hip.x, hip.y - 0.12 + H / 2, hip.z); add(B.Spine, body);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.215, H, 18, 1, true), M.bark); body.position.set(hip.x, hip.y - 0.12 + H / 2, hip.z); add(B.Spine, body);
   for (const [y, rx] of [[hip.y - 0.12 + H, -Math.PI / 2], [hip.y - 0.12, Math.PI / 2]]) { const e = new THREE.Mesh(new THREE.CircleGeometry(0.2, 18), M.end); e.position.set(hip.x, y, hip.z); e.rotation.x = rx; add(B.Spine, e); }
-  // the face, on the front (players face -z): huge bulging cartoon eyes and a wide creepy smile
+  for (let k = 0; k < 3; k++) { const kn = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), M.bark); kn.scale.set(1, 0.6, 0.5); kn.position.set(hip.x + (k - 1) * 0.12, hip.y + 0.2 + k * 0.22, hip.z + 0.19 * (k === 1 ? -1 : 1)); add(B.Spine, kn); }   // knots
+  // the face, on the front (players face -z)
   const hd = wp(B.Head), fz = -0.2;
   for (const sd of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.105, 18, 14), M.white); eye.scale.set(1, 1.25, 0.55); eye.position.set(hd.x + sd * 0.115, hd.y + 0.1, hd.z + fz); add(B.Spine2 || B.Spine, eye);
-    const pu = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 10), M.black); pu.position.set(hd.x + sd * 0.105, hd.y + 0.095, hd.z + fz - 0.055); add(B.Spine2 || B.Spine, pu);
-    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), M.white); glint.position.set(hd.x + sd * 0.118, hd.y + 0.112, hd.z + fz - 0.092); add(B.Spine2 || B.Spine, glint);   // catchlight on the pupil surface
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.058, 14, 10), M.white); eye.scale.set(1, 1.25, 0.6); eye.position.set(hd.x + sd * 0.075, hd.y + 0.08, hd.z + fz); add(B.Spine2 || B.Spine, eye);
+    const pu = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), M.black); pu.position.set(hd.x + sd * 0.07, hd.y + 0.075, hd.z + fz - 0.035); add(B.Spine2 || B.Spine, pu);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.016, 0.02), M.black); brow.position.set(hd.x + sd * 0.075, hd.y + 0.17, hd.z + fz - 0.01); brow.rotation.z = sd * 0.35; add(B.Spine2 || B.Spine, brow);
   }
-  const smile = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.016, 8, 24, Math.PI * 0.85), M.black); smile.position.set(hd.x, hd.y - 0.07, hd.z + fz + 0.01); smile.rotation.z = Math.PI + (Math.PI - Math.PI * 0.85) / 2; smile.scale.x = 1.5; add(B.Spine2 || B.Spine, smile);
-  // thin stick limbs, small hands, flat bare feet
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 6, 14, Math.PI), M.black); mouth.position.set(hd.x, hd.y - 0.06, hd.z + fz - 0.005); mouth.rotation.z = Math.PI; add(B.Spine2 || B.Spine, mouth);
+  // stick limbs and stubby hands/feet
   for (const s of ['Left', 'Right']) {
-    between(B[s + 'Arm'], B[s + 'ForeArm'], 0.018, M.stick, 0.02); between(B[s + 'ForeArm'], B[s + 'Hand'], 0.015, M.stick, 0.02);
-    between(B[s + 'UpLeg'], B[s + 'Leg'], 0.024, M.stick, 0.02); between(B[s + 'Leg'], B[s + 'Foot'], 0.02, M.stick, 0.02);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), M.stick); hand.position.copy(wp(B[s + 'Hand'])); add(B[s + 'Hand'], hand);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.22), M.stick); foot.position.copy(wp(B[s + 'Foot'])).add(new THREE.Vector3(0, -0.03, -0.05)); add(B[s + 'Foot'], foot);
+    between(B[s + 'Arm'], B[s + 'ForeArm'], 0.026, M.stick, 0.02); between(B[s + 'ForeArm'], B[s + 'Hand'], 0.022, M.stick, 0.02);
+    between(B[s + 'UpLeg'], B[s + 'Leg'], 0.034, M.stick, 0.02); between(B[s + 'Leg'], B[s + 'Foot'], 0.03, M.stick, 0.02);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), M.stick); hand.position.copy(wp(B[s + 'Hand'])); add(B[s + 'Hand'], hand);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.16), M.stick); foot.position.copy(wp(B[s + 'Foot'])).add(new THREE.Vector3(0, -0.03, -0.04)); add(B[s + 'Foot'], foot);
   }
+  // the bat, slung across the back
+  const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.016, 0.8, 12), M.bat); bat.position.set(hd.x - 0.05, hd.y - 0.35, hd.z + 0.25); bat.rotation.z = 0.7; add(B.Spine1 || B.Spine, bat);
 }
 
 // joke agents keep their signature headgear, worn over the soldier's helmet (local origin = the head bone)
@@ -734,14 +515,7 @@ function hat(head, L) {
     geo.setAttribute('color', new THREE.BufferAttribute(arr, 3)); parts.push(geo.index ? geo.toNonIndexed() : geo);
   };
   switch (L.hat) {
-    case 'bun': {
-      add(new THREE.CapsuleGeometry(0.075, 0.24, 3, 8), c, -0.14, 0.14, 0, 0, 0, 0.1, 1, 1, 0.8); add(new THREE.CapsuleGeometry(0.075, 0.24, 3, 8), c, 0.14, 0.14, 0, 0, 0, -0.1, 1, 1, 0.8);
-      for (let k = 0; k < 14; k++) {   // sesame seeds scattered on the bun
-        const sx = (k % 2 ? -0.14 : 0.14) + ((k * 53) % 11 - 5) / 100, sy = 0.2 + ((k * 29) % 7) / 100, sz = ((k * 71) % 9 - 4) / 100;
-        add(new THREE.SphereGeometry(0.012, 6, 4), '#f4e0b0', sx, sy, sz, 0, 0, 0, 1, 0.7, 1.4);
-      }
-      break;
-    }
+    case 'bun': add(new THREE.CapsuleGeometry(0.075, 0.24, 3, 8), c, -0.14, 0.14, 0, 0, 0, 0.1, 1, 1, 0.8); add(new THREE.CapsuleGeometry(0.075, 0.24, 3, 8), c, 0.14, 0.14, 0, 0, 0, -0.1, 1, 1, 0.8); break;
     case 'swirl': for (let k = 0; k < 3; k++) add(new THREE.TorusGeometry(0.11 - k * 0.028, 0.048 - k * 0.009, 6, 14), c, 0, 0.3 + k * 0.07, 0, Math.PI / 2); add(new THREE.ConeGeometry(0.035, 0.09, 8), c, 0.01, 0.52, 0); break;
     case 'curlers': for (let k = 0; k < 5; k++) add(new THREE.CylinderGeometry(0.026, 0.026, 0.1, 8), c, -0.09 + k * 0.045, 0.3, 0.01 - (k % 2) * 0.04, Math.PI / 2); break;
     case 'beak': add(new THREE.ConeGeometry(0.045, 0.16, 8), c, 0, 0.13, -0.17, -Math.PI / 2); break;
@@ -758,58 +532,15 @@ function hat(head, L) {
     case 'helmet': if (L.plain && !L.human) break; add(new THREE.SphereGeometry(0.155, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.17, 0.01, 0, 0, 0, 1.06, 0.92, 1.12); add(new THREE.CylinderGeometry(0.165, 0.17, 0.03, 16), c, 0, 0.17, 0.01, 0, 0, 0, 1, 1, 1.08);
       if (L.visor) add(new THREE.BoxGeometry(0.23, 0.07, 0.025), '#0e1014', 0, 0.13, -0.16, 0.12); break;
     case 'cap': add(new THREE.SphereGeometry(0.135, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.45), c, 0, 0.22, 0); add(new THREE.CylinderGeometry(0.1, 0.1, 0.014, 14), c, 0, 0.26, -0.11, 0, 0, 0, 1.05, 1, 1.1); break;
-    case 'dreads': {
-      add(new THREE.SphereGeometry(0.135, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), c, 0, 0.17, 0.01);
-      const dc = ['#17100c', '#1d130d', '#120d09', '#1a110b'];   // subtle color variation between locks
-      for (let k = 0; k < 18; k++) {   // fuller head of locs: varied lengths, natural outward fall, some over shoulders
-        const a = k / 18 * Math.PI * 2 + (k % 3) * 0.12, dx = Math.cos(a), dz = Math.sin(a);
-        const len = 0.3 + ((k * 37) % 10) / 10 * 0.22, front = dz < -0.3;   // longer in back, some drape forward
-        const y0 = front ? -0.02 : 0.03, cy = y0 - len / 2 + 0.12;
-        add(new THREE.CylinderGeometry(0.026, 0.02, len, 7), dc[k % 4], dx * 0.108, cy, dz * 0.108 + 0.01, dz * 0.24, 0, -dx * 0.24);
-        const tip = new THREE.Vector3(0, -len / 2, 0).applyEuler(new THREE.Euler(dz * 0.24, 0, -dx * 0.24));   // the true end of the tilted lock
-        add(new THREE.SphereGeometry(0.024, 7, 5), dc[(k + 1) % 4], dx * 0.108 + tip.x, cy + tip.y, dz * 0.108 + 0.01 + tip.z);   // rounded tips
-      }
-      break;
-    }
-    case 'ushanka': {
-      add(new THREE.SphereGeometry(0.145, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), c, 0, 0.18, 0.01);
-      add(new THREE.BoxGeometry(0.09, 0.14, 0.02), c, -0.12, 0.08, 0, 0, 0, 0.15); add(new THREE.BoxGeometry(0.09, 0.14, 0.02), c, 0.12, 0.08, 0, 0, 0, -0.15);
-      for (let k = 0; k < 10; k++) {   // fur tufts around the rim
-        const a = k / 10 * Math.PI * 2;
-        add(new THREE.ConeGeometry(0.018, 0.05, 5), c, Math.cos(a) * 0.145, 0.1, Math.sin(a) * 0.145 + 0.01, Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
-      }
-      add(new THREE.CylinderGeometry(0.03, 0.03, 0.014, 5), '#c02020', 0, 0.245, -0.138, Math.PI / 2.25);   // red star (pentagon)
-      add(new THREE.CylinderGeometry(0.012, 0.012, 0.016, 10), '#e8b820', 0, 0.245, -0.14, Math.PI / 2.25);   // gold center
-      break;
-    }
     default: break;
   }
   if (L.eyes) for (const sd of [-1, 1]) { add(new THREE.SphereGeometry(0.04, 10, 7), '#ffffff', sd * 0.05, 0.15, -0.13); add(new THREE.SphereGeometry(0.019, 8, 5), '#111111', sd * 0.05, 0.15, -0.168); }
-  if (L.grill) {   // gold grill: a curved row of gold teeth over the smile
-    for (let k = 0; k < 8; k++) {
-      const a = (k - 3.5) / 3.5 * 0.5, gx = Math.sin(a) * 0.055, gz = -Math.cos(a) * 0.055 - 0.1;
-      add(new THREE.BoxGeometry(0.016, 0.02, 0.012), k % 2 ? '#e8c020' : '#f4d040', gx, 0.055, gz, 0, a, 0);
-    }
-    add(new THREE.BoxGeometry(0.12, 0.008, 0.02), '#c8a010', 0, 0.068, -0.145);   // the gold bar they sit on
-  }
-  if (L.chains) {   // two gold chains: a choker and a longer one with a pendant
-    for (let k = 0; k < 14; k++) {   // choker: tight ring of links at the throat
-      const a = k / 14 * Math.PI * 2;
-      add(new THREE.TorusGeometry(0.016, 0.006, 5, 8), '#e8c020', Math.cos(a) * 0.075, -0.045, Math.sin(a) * 0.075 - 0.01, 0, a, 0.4);
-    }
-    for (let k = 0; k < 10; k++) {   // long chain: draped catenary with bigger links
-      const t = k / 9, cx = (t - 0.5) * 0.16, cy = -0.06 - Math.sin(t * Math.PI) * 0.1;
-      add(new THREE.TorusGeometry(0.02, 0.007, 5, 8), '#f4d040', cx, cy, -0.055 - Math.sin(t * Math.PI) * 0.02, 0.3, t * 1.2, 0);
-    }
-    add(new THREE.CylinderGeometry(0.028, 0.028, 0.008, 6), '#e8c020', 0, -0.175, -0.075, Math.PI / 2.2);   // pendant: gold medallion
-    add(new THREE.TorusGeometry(0.014, 0.004, 5, 12), '#f4d040', 0, -0.175, -0.082, 0, 0, 0);   // its ring
-  }
   if (!parts.length) return;
   let n = 0; for (const p of parts) n += p.attributes.position.count;
   const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
   for (const p of parts) { p.computeVertexNormals(); const k = p.attributes.position.count; pos.set(p.attributes.position.array, o * 3); nor.set(p.attributes.normal.array, o * 3); col.set(p.attributes.color.array, o * 3); o += k; }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const hm = new THREE.Mesh(g, hatMat); hm.castShadow = true; head.add(hm);
+  head.add(new THREE.Mesh(g, hatMat));
   if (L.hat === 'dunce') head.add(betaTag());
 }
 // "BETA" on the front of the dunce cap

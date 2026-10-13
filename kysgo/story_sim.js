@@ -19,7 +19,6 @@ export class StoryMatch extends Match {
     this.mission = MISSIONS[story.mission] || MISSIONS[0]; this.mi = story.mission | 0;
     this.diff = STORY_DIFF[story.diff] || STORY_DIFF.normal; this.diffKey = STORY_DIFF[story.diff] ? story.diff : 'normal';
     this.botLevel = this.diff.bot; this.wantChar = story.host || 'wiener';
-    if (story.solo && this.mission.lead) this.wantChar = this.mission.lead;   // solo: you ARE the level's main character; AI squadmates still fill in (fillSquad is untouched)
     this.obj = -1; this.state = null; this.markers = []; this.enemies = new Set(); this.npc = null; this.boss = null; this.beams = []; this.balls = [];
     this.cutT = 0; this.failT = 0; this.result = null; this.eid = 1; this.waveT = 0; this.alarm = 0; this.lastSend = 0; this.zoneCache = new Map();
     this.abilityT = new Map(); this.nadeUsed = new Set(); this.focusT = new Map(); this.kills = 0;
@@ -642,7 +641,7 @@ export class StoryMatch extends Match {
             if (this.alarm <= 0) { this.alarm = 6; this.event('banner', { text: 'WRONG ORDER', sub: `start with ${st.next}` }); this.wave(2); for (const q of this.markers) q.prog = 0; this.push(true); }
             continue;
           }
-          m.prog = Math.min(1, m.prog + dt / 1.6); if (m.prog >= 1) { m.done = true; st.have++; st.next++; this.event('sound', { s: 'pickup', x: m.x, z: m.z }); if (this.mission.id === 'm1' && o.zone === 'Armory') { for (const q of this.players.values()) if (q.squad && q.alive && !q.spectator) { this.give2(q, 'ak47'); this.give2(q, q.char === 'ricky' ? 'glock_sw' : 'p2000'); q.nades = ['he', 'flash']; q.armor = 100; q.helmet = true; this.sendInv(q); } this.event('banner', { text: 'ARMORY KIT ISSUED', sub: 'Rifle, sidearm, grenades and armor acquired' }); } }
+          m.prog = Math.min(1, m.prog + dt / 1.6); if (m.prog >= 1) { m.done = true; st.have++; st.next++; this.event('sound', { s: 'pickup', x: m.x, z: m.z }); if (o.zone === 'Armory' && st.have >= st.need && !st.kit) { st.kit = true; for (const q of this.players.values()) if (q.squad && q.alive && !q.spectator) { this.give2(q, 'ak47'); this.give2(q, q.char === 'ricky' ? 'glock_sw' : 'p2000'); q.nades = ['he', 'flash']; q.armor = 100; q.helmet = true; this.sendInv(q); } this.event('banner', { text: 'ARMORY KIT ISSUED', sub: 'Rifle, sidearm, grenades and armor acquired' }); } }
           this.push();
         }
         this.alarm -= dt; done = st.have >= st.need; break;

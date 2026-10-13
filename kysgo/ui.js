@@ -11,9 +11,7 @@ import { cardInto, cardImage, gradeBadge } from './cards.js';
 import * as WAL from './wallet.js';
 import { VOICE_PACKS } from './voices.js';
 import { ATTACH, slotsFor, optionsFor, gunLevel, xpForLevel, GUN_MAX } from './guns.js';
-import { AIM_DRAINS, AIM_SIZES, AIM_SPEEDS, AIM_PACES, AIM_DURS, aimWeapons, defaultAimCfg, getAimPB, aimPBKey } from './aim_trainer.js';
 import { topUp as sdkTopUp } from '../sdk/topup.js';
-import { loadRejoin, clearRejoin } from './reconnect.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -79,9 +77,9 @@ const CSS = `
 .cs-hud.touch .bl{left:50%;bottom:6px;transform:translateX(-80%);gap:6px}.cs-hud.touch .stat{font-size:17px;min-width:58px;padding:2px 8px 2px 6px}.cs-hud.touch .stat .ic{font-size:13px}
 .cs-hud.touch .br{right:auto;left:calc(50% + 74px);bottom:6px}
 @media (max-height:520px){.cs-hud.touch .bl{top:38px;bottom:auto;left:50%;transform:translateX(-100%) translateX(-6px)}.cs-hud.touch .br{top:38px;bottom:auto;left:calc(50% + 6px)}}   /* phones in landscape: health and ammo under the score, clear of the thumb buttons */.cs-hud.touch .ammo{font-size:22px}.cs-hud.touch .ammo small{font-size:12px}
-.cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:calc(4px + env(safe-area-inset-top,0px));transform:translateX(-50%) scale(.72);transform-origin:top center;max-width:calc(100vw - 8px)}
+.cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:4px;transform:translateX(-50%) scale(.72);transform-origin:top center}
 .cs-hud.touch .banner{font-size:18px;padding:6px 14px}.cs-hud.touch .center{top:16%}
-.cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 16px);top:calc(8px + env(safe-area-inset-top,0px))}
+.cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px}
 .cs-hud .team{display:flex;gap:3px}.cs-hud .team i{width:16px;height:22px;border-radius:3px;display:block}
 .cs-hud .team i.dead{opacity:.25}
 .cs-hud .scoreb{font-size:22px;min-width:34px;text-align:center;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.45)}
@@ -102,31 +100,20 @@ const CSS = `
 .cs-hud .chat div{background:rgba(0,0,0,.35);padding:2px 6px;border-radius:3px}
 .cs-hud .dmgdir{position:absolute;left:50%;top:50%;width:180px;height:180px;margin:-90px;border-radius:50%;border-top:6px solid rgba(255,40,40,.8);opacity:0;transition:opacity .5s}
 .cs-xh{position:absolute;left:50%;top:50%;width:0;height:0}.cs-hm{position:fixed;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:31;opacity:0}.cs-hm i{position:absolute;width:11px;height:2px;background:#fff;box-shadow:0 0 2px #000;left:-5.5px;top:-1px}.cs-hm i:nth-child(1){transform:rotate(45deg) translateX(-12px)}.cs-hm i:nth-child(2){transform:rotate(135deg) translateX(-12px)}.cs-hm i:nth-child(3){transform:rotate(225deg) translateX(-12px)}.cs-hm i:nth-child(4){transform:rotate(315deg) translateX(-12px)}.cs-hm.head i{background:#ffd54a}.cs-hm.kill i{background:#ff3b3b;width:14px}.cs-hm.on{animation:csHm .26s ease-out}@keyframes csHm{0%{opacity:1;transform:scale(1.35)}35%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.9)}}.cs-xh i{position:absolute;background:var(--xc,#5f5);box-shadow:0 0 0 1px rgba(0,0,0,var(--xo,.6))}
-.cs-scope{position:fixed;inset:0;z-index:19;pointer-events:none;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 32.5vh,rgba(0,0,0,.35) 33.6vh,rgba(0,0,0,.96) 34.6vh,#000 35.5vh)}
+.cs-scope{position:fixed;inset:0;z-index:19;pointer-events:none;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 34vh,#000 34.2vh)}
 .cs-scope.ret:before,.cs-scope.ret:after{display:none}
-.cs-ads{position:fixed;inset:0;z-index:18;pointer-events:none;display:none;--ret-gain:1}
-.cs-ads .dot{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:radial-gradient(circle,#fff8f0 0%,#ff5040 35%,#ff2010 70%);box-shadow:0 0 2px 1px rgba(255,240,220,calc(.9*var(--ret-gain))),0 0 8px 3px rgba(255,45,35,calc(.75*var(--ret-gain))),0 0 20px 8px rgba(255,30,20,calc(.3*var(--ret-gain)))}
-.cs-ads .holo{position:absolute;left:50%;top:50%;width:11vh;height:11vh;transform:translate(-50%,-50%);filter:drop-shadow(0 0 1px rgba(255,90,70,calc(.95*var(--ret-gain)))) drop-shadow(0 0 4px rgba(255,45,35,calc(.7*var(--ret-gain)))) drop-shadow(0 0 12px rgba(255,30,20,calc(.35*var(--ret-gain))))}
+.cs-ads{position:fixed;inset:0;z-index:18;pointer-events:none;display:none}
+.cs-ads .dot{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#ff2a2a;box-shadow:0 0 6px 2px rgba(255,40,40,.7)}
+.cs-ads .holo{position:absolute;left:50%;top:50%;width:10vh;height:10vh;transform:translate(-50%,-50%);filter:drop-shadow(0 0 3px rgba(255,50,50,.8))}
 .cs-ads.reddot{background:radial-gradient(circle at 50% 50%,rgba(120,180,255,.04) 0,rgba(120,180,255,.06) 24vh,rgba(10,12,14,.85) 25.5vh,rgba(22,24,28,.97) 30vh,rgba(10,12,14,.9) 33vh,transparent 36vh)}
-.cs-ads.reddot::after{content:'';position:absolute;left:50%;top:50%;width:52vh;height:52vh;transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 6vh rgba(0,0,0,.45),inset 0 0 1px rgba(140,180,220,.25)}
-.cs-ads.holo::before{content:'';position:absolute;left:50%;top:48%;width:68vh;height:46vh;transform:translate(-50%,-50%);border-radius:3vh;background:linear-gradient(180deg,#2b2d34 0%,#1b1c21 12%,#141518 100%);box-shadow:0 0 0 1px rgba(0,0,0,.92),inset 0 2px 3px rgba(255,255,255,.14),inset 0 -4px 8px rgba(0,0,0,.65),0 4px 24px rgba(0,0,0,.5)}
-.cs-ads.holo::after{content:'';position:absolute;left:50%;top:48%;width:54vh;height:32vh;transform:translate(-50%,-50%);border-radius:1.6vh;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.10) 46%,rgba(255,255,255,.03) 51%,transparent 56%),radial-gradient(ellipse at 50% 38%,rgba(130,190,210,.12) 0%,rgba(90,150,170,.06) 55%,transparent 100%),linear-gradient(180deg,rgba(45,75,95,.14) 0%,rgba(25,45,60,.09) 100%);box-shadow:inset 0 0 0 1px rgba(0,0,0,.75),inset 0 0 4vh rgba(0,0,0,.4),inset 0 1px 2px rgba(160,210,235,.18)}
+.cs-ads.reddot::after{content:'';position:absolute;left:50%;top:50%;width:52vh;height:52vh;transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 6vh rgba(0,0,0,.45)}
+.cs-ads.holo::before{content:'';position:absolute;left:50%;top:48%;width:64vh;height:42vh;transform:translate(-50%,-50%);border:4.5vh solid rgba(20,22,26,.96);border-radius:2.5vh;box-shadow:0 0 0 1px rgba(255,255,255,.08),inset 0 0 5vh rgba(80,140,255,.12)}
 .cs-ads.acog{background:radial-gradient(circle at 50% 50%,transparent 0,transparent 31vh,rgba(0,0,0,.55) 33vh,rgba(0,0,0,.94) 35vh)}
-.cs-ads.acog::after{content:'';position:absolute;left:50%;top:50%;width:62vh;height:62vh;transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 8vh rgba(0,0,0,.5)}
-.cs-ads .chev{position:absolute;left:50%;top:50%;width:34vh;height:34vh;transform:translate(-50%,-50%);filter:drop-shadow(0 0 2px rgba(255,60,40,calc(.9*var(--ret-gain)))) drop-shadow(0 0 8px rgba(255,40,30,calc(.4*var(--ret-gain))))}
+.cs-ads .chev{position:absolute;left:50%;top:50%;width:34vh;height:34vh;transform:translate(-50%,-50%)}
 .cs-scope:before,.cs-scope:after{content:"";position:absolute;background:#000}.cs-scope:before{left:0;right:0;top:50%;height:1px}.cs-scope:after{top:0;bottom:0;left:50%;width:1px}
 .cs-flash{position:fixed;inset:0;z-index:25;background:#fff;pointer-events:none;opacity:0}
 .cs-hurt{position:fixed;inset:0;z-index:18;pointer-events:none;background:radial-gradient(transparent 55%,rgba(200,0,0,.55));opacity:0;transition:opacity .25s}
 .cs-panel{position:fixed;z-index:120;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px;pointer-events:auto;max-width:96vw;max-height:92vh;overflow:auto}
-.cs-hud .vtalk{position:absolute;left:14px;bottom:110px;display:flex;flex-direction:column;gap:5px;pointer-events:none}
-.cs-hud .vt{display:flex;align-items:center;gap:7px;background:rgba(8,12,18,.82);border:1px solid #2f7cf6;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;animation:vtPulse 1.1s ease-in-out infinite}
-.cs-hud .vt.me{border-color:#7ed957}
-.cs-hud .vt.dim{opacity:.55;border-color:#5a6472}
-@keyframes vtPulse{0%,100%{opacity:1}50%{opacity:.55}}
-.cs-sb tr.speaking td:first-child{box-shadow:inset 3px 0 0 #7ed957}
-.cs-sb .vmut{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:14px;padding:2px 7px;line-height:1.2}
-.cs-sb .vmut:hover{border-color:#2f7cf6}
-.cs-sb .vmut.off{opacity:.5}
 .cs-buy{width:min(900px,96vw)}.cs-buy .cats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
 .cs-buy .cat h4{margin:0 0 6px;font-size:12px;letter-spacing:.1em;color:var(--mut);text-transform:uppercase}
 .cs-buy .it{display:flex;justify-content:space-between;gap:6px;width:100%;text-align:left;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:12px}
@@ -353,21 +340,13 @@ const MENU_CSS = `
 @media(prefers-reduced-motion:reduce){.cs *, .cs *::before, .cs *::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 
 
-/* KYS:GO premium launch-screen redesign + robust phone/tablet layouts */
-.cs-menu{grid-template-columns:clamp(62px,5.6vw,84px) minmax(0,1fr);background:radial-gradient(ellipse at 76% 18%,#364352 0%,#1a2029 35%,#090c11 78%)}
-.cs-side{padding:clamp(8px,1.5vh,18px) 6px;gap:8px;background:linear-gradient(180deg,#0d1118f5,#10151de8);border-right:1px solid #ffffff16}
-.cs-side button{width:100%;min-height:52px;height:auto;padding:8px 3px;border:1px solid transparent;border-radius:9px;letter-spacing:.08em}
-.cs-side button.on{background:linear-gradient(135deg,#f2a33a26,#f2a33a08);border-color:#f2a33a52;box-shadow:inset 3px 0 #f2a33a}
-.cs-top{min-height:68px;padding:12px clamp(14px,2vw,30px);background:#0b0f15eF;border-bottom:1px solid #ffffff18;box-shadow:0 8px 26px #0003}
-.cs-logo{font-size:clamp(19px,1.7vw,27px);letter-spacing:.1em}
-.cs-body{padding:clamp(12px,2vw,30px);scrollbar-gutter:stable}
-.cs-home{position:relative;isolation:isolate;min-height:100%;overflow:hidden;background:linear-gradient(90deg,#0b0e13 0%,#0b0e13ee 25%,#0b0e1390 48%,#0b0e1310 100%)}
-.cs-home:before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 76% 25%,#9d74442e,transparent 42%),linear-gradient(125deg,#161d27 0%,#0c1017 54%,#111721 100%);pointer-events:none}
-.cs-hero{max-width:min(780px,70%);padding:clamp(20px,4vw,64px) clamp(16px,3vw,46px);position:relative}
-.cs-hero h1,.cs-hero .title{font-size:clamp(40px,7vw,94px);line-height:.94;letter-spacing:-.055em;font-weight:950;text-wrap:balance;text-shadow:0 6px 30px #0008}
+/* launch screen: hero type, raised cards, touch HUD (the 3D agent stays visible behind the home page) */
+.cs-hero{position:relative;padding:clamp(12px,2vw,28px) 0}
+.cs-hero h1,.cs-hero .title{font-size:clamp(40px,4.6vw,76px);line-height:.94;letter-spacing:-.02em;white-space:nowrap;font-weight:950;text-wrap:balance;text-shadow:0 6px 30px #0008}
 .cs-hero p,.cs-hero .sub{max-width:570px;font-size:clamp(15px,1.65vw,22px);line-height:1.55;color:#b5c0cf}
 .cs-hero .cs-btn{min-height:58px;min-width:min(260px,100%);padding:16px 28px;font-size:clamp(15px,1.5vw,20px);letter-spacing:.12em;text-transform:uppercase;background:linear-gradient(180deg,#78bd3d,#4b8526);color:#fff!important;border:1px solid #a4e36b70;box-shadow:0 10px 30px #0005,inset 0 1px #ffffff45}
 .cs-hero .cs-btn:hover{filter:brightness(1.12);transform:translateY(-1px)}
+.cs-hero .cs-go,.cs-hero .cs-btn{display:flex;width:min(300px,100%);min-width:0;justify-content:center;box-sizing:border-box}
 .cs-home .cs-card,.cs-home .cs-panel2{background:linear-gradient(145deg,#1b222dF2,#10151df2);border-color:#ffffff18;box-shadow:0 18px 48px #0004}
 .cs-view{background:radial-gradient(ellipse at 50% 34%,#596371 0%,#262e39 46%,#0d1118 100%);box-shadow:inset 0 0 0 1px #ffffff18,inset 0 -50px 80px #0008}
 .cs-item canvas{background:radial-gradient(ellipse at 50% 35%,#384250,#10151c 75%);border:1px solid #ffffff10;box-shadow:inset 0 0 35px #0005}
@@ -379,28 +358,11 @@ const MENU_CSS = `
 .cs-grid{grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr))}
 .cs-reel{max-width:100%}
 @media(max-width:900px){
- .cs-menu{grid-template-columns:58px minmax(0,1fr)}
- .cs-side button{font-size:9px;min-height:46px}
- .cs-top{gap:8px;padding:10px 12px;flex-wrap:wrap}
  .cs-chip{font-size:12px;padding:5px 8px}
- .cs-body{padding:12px}
- .cs-hero{max-width:88%;padding:24px 18px}
  .cs-hero h1,.cs-hero .title{font-size:clamp(38px,8vw,68px)}
 }
 @media(max-width:600px){
- .cs-menu{inset:0;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
- .cs-side{grid-row:2;flex-direction:row;justify-content:space-around;align-items:stretch;padding:5px 4px calc(5px + env(safe-area-inset-bottom,0px));gap:3px;border-right:0;border-top:1px solid #ffffff18;min-width:0}
- .cs-side button{flex:1;width:auto;min-width:0;min-height:48px;padding:5px 1px;font-size:8px;letter-spacing:0;gap:3px}
- .cs-side button b{font-size:18px}
- .cs-main{grid-row:1;min-height:0;overflow:hidden}
- .cs-top{padding:8px 10px;min-height:54px;gap:6px}
- .cs-logo{font-size:18px}
- .cs-top .sp{flex-basis:100%;height:0;display:none}
  .cs-chip{font-size:11px;padding:4px 7px}
- .cs-body{padding:10px;overflow:auto;min-height:0}
- .cs-home{overflow:auto;background:linear-gradient(180deg,#0b0e13c7,#0b0e13f7 72%)}
- .cs-home:before{background:radial-gradient(ellipse at 78% 12%,#9d74443a,transparent 40%),linear-gradient(180deg,#19212c 0%,#0b0e13 65%)}
- .cs-hero{max-width:100%;width:100%;padding:clamp(18px,5vw,28px) 10px}
  .cs-hero h1,.cs-hero .title{font-size:clamp(38px,12vw,58px);line-height:.96}
  .cs-hero p,.cs-hero .sub{font-size:15px;line-height:1.45}
  .cs-hero .cs-btn{width:100%;min-height:52px}
@@ -419,8 +381,6 @@ const MENU_CSS = `
  .cs-hud.touch .top{top:calc(env(safe-area-inset-top,0px) + 5px);transform:translateX(-50%) scale(.78)}
 }
 @media(max-height:520px) and (max-width:900px){
- .cs-side button{min-height:40px}
- .cs-top{min-height:44px;padding:5px 10px}
  .cs-hero{padding-top:12px;padding-bottom:12px}
  .cs-hero h1,.cs-hero .title{font-size:clamp(30px,7vh,52px)}
  .cs-modal>.cs-card{max-height:94dvh}
@@ -440,7 +400,6 @@ const MENU_CSS = `
 @media(max-width:600px){
  .cs-page{padding:8px!important;overflow-x:hidden}
  .cs-home{display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;gap:10px!important;min-height:0!important;height:auto!important;max-height:none!important;padding:0!important;overflow:visible!important;background:transparent!important}
- .cs-home:before{content:none!important}
  .cs-home>*{width:100%!important;max-width:100%!important;min-width:0!important}
  .cs-hero{padding:14px 12px!important;margin:0!important;border-radius:12px}
  .cs-hero h1,.cs-hero .title{font-size:clamp(30px,9vw,42px)!important;line-height:1!important;margin:4px 0 10px!important}
@@ -492,7 +451,6 @@ const MENU_CSS = `
  .cs-nav button{padding:0 7px;font-size:10px;letter-spacing:.04em;gap:4px}
  .cs-acct{gap:4px;padding:0 5px}
  .cs-home{grid-template-columns:minmax(220px,.9fr) minmax(240px,1fr);gap:12px}
- .cs-home>.cs-featured,.cs-home>.cs-right,.cs-home>.cs-side2{grid-column:2}
 }
 @media (min-width:1501px){
  .cs-nav button{padding-left:14px;padding-right:14px}
@@ -590,23 +548,23 @@ const ICON = {  // nav icons (simple inline SVG paths)
   story: 'M3 5c3-1 6-1 8 1v14c-2-2-5-2-8-1zM21 5c-3-1-6-1-8 1v14c2-2 5-2 8-1z',
   guns: 'M11 2h2v4h-2zM11 18h2v4h-2zM2 11h4v2H2zM18 11h4v2h-4zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z',
   home: 'M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z', play: 'M7 4l13 8-13 8z', pass: 'M5 3h14v18l-7-4-7 4z', inv: 'M4 7h16v13H4zM8 7V4h8v3', crates: 'M3 8l9-5 9 5v8l-9 5-9-5zM12 13v8M3 8l9 5 9-5',
-  market: 'M4 9l2-5h12l2 5zM5 9h14v11H5zM9 14h6', aim: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm0 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4z', quests: 'M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z', friends: 'M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1 21c0-4 3-7 7-7s7 3 7 7zM17 11a3 3 0 1 0 0-6M16 14c4 0 7 3 7 7h-6', admin: 'M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6z', profile: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22c1-5 5-8 9-8s8 3 9 8z', settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 2h4l1 3 3 1 3-1 2 3-2 3 1 2-1 2 2 3-2 3-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-3 2-3-1-2 1-2-2-3 2-3 3 1 3-1z',
+  market: 'M4 9l2-5h12l2 5zM5 9h14v11H5zM9 14h6', quests: 'M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z', friends: 'M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1 21c0-4 3-7 7-7s7 3 7 7zM17 11a3 3 0 1 0 0-6M16 14c4 0 7 3 7 7h-6', admin: 'M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6z', profile: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 22c1-5 5-8 9-8s8 3 9 8z', settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 2h4l1 3 3 1 3-1 2 3-2 3 1 2-1 2 2 3-2 3-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-3 2-3-1-2 1-2-2-3 2-3 3 1 3-1z',
 };
 const svg = (k) => `<svg viewBox="0 0 24 24"><path d="${ICON[k]}"/></svg>`;
 // sniper scope reticles (drawn over the scope view) and the aim-down-sights optics' reticles
 const RS = (inner) => `<svg viewBox="-100 -100 200 200" style="position:absolute;left:50%;top:50%;width:68vh;height:68vh;transform:translate(-50%,-50%)">${inner}</svg>`;
 const RETICLES = {
-  duplex: RS('<path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="4.5" opacity="0.35"/><path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#0a0a0a" stroke-width="3"/><path d="M-22 0H22M0 -22V22" stroke="#000" stroke-width="1.6" opacity="0.35"/><path d="M-22 0H22M0 -22V22" stroke="#0a0a0a" stroke-width="0.8"/>'),
-  mildot: RS('<path d="M-100 0H100M0 -100V100" stroke="#000" stroke-width="1.8" opacity="0.35"/><path d="M-100 0H100M0 -100V100" stroke="#0a0a0a" stroke-width="0.8"/>' + [-60, -45, -30, -15, 15, 30, 45, 60].map((k) => `<circle cx="${k}" cy="0" r="2.6" fill="#000" opacity="0.35"/><circle cx="${k}" cy="0" r="1.8"/><circle cx="0" cy="${k}" r="2.6" fill="#000" opacity="0.35"/><circle cx="0" cy="${k}" r="1.8"/>`).join('')),
-  dotret: RS('<path d="M-100 0H-30M30 0H100M0 -100V-30M0 30V100" stroke="#000" stroke-width="3" opacity="0.35"/><path d="M-100 0H-30M30 0H100M0 -100V-30M0 30V100" stroke="#0a0a0a" stroke-width="2"/><circle r="3.4" fill="#ff2a1a" opacity="0.5"/><circle r="2.4" fill="#ff2a1a"/><circle r="1" fill="#ffe0cc"/>'),
-  circle: RS('<circle r="23.5" fill="none" stroke="#000" stroke-width="2.4" opacity="0.35"/><circle r="22" fill="none" stroke="#0a0a0a" stroke-width="1.2"/><path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="2" opacity="0.35"/><path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#0a0a0a" stroke-width="1"/><circle r="1.8" fill="#000" opacity="0.4"/><circle r="1" />'),
-  chevret: RS('<path d="M-9 9L0 0L9 9" fill="none" stroke="#ff3a22" stroke-width="2.6" opacity="0.45"/><path d="M-9 9L0 0L9 9" fill="none" stroke="#ff3a22" stroke-width="1.6"/><circle r="0.8" fill="#ffe0cc"/><path d="M0 14V100M-100 0H-40M40 0H100" stroke="#000" stroke-width="2.2" opacity="0.35"/><path d="M0 14V100M-100 0H-40M40 0H100" stroke="#0a0a0a" stroke-width="1.2"/>'),
-  hotdog: RS('<ellipse rx="16" ry="5" fill="#d8a050"/><ellipse rx="18" ry="3" fill="#b8402a"/><path d="M-14 -1Q-10 -4 -6 -1T2 -1T10 -1" stroke="#f2d33c" fill="none" stroke-width="1.2"/><path d="M-100 0H-24M24 0H100M0 -100V-12M0 12V100" stroke="#000" stroke-width="2" opacity="0.35"/><path d="M-100 0H-24M24 0H100M0 -100V-12M0 12V100" stroke="#0a0a0a" stroke-width="1"/>'),
+  duplex: RS('<path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="3"/><path d="M-22 0H22M0 -22V22" stroke="#000" stroke-width="0.8"/>'),
+  mildot: RS('<path d="M-100 0H100M0 -100V100" stroke="#000" stroke-width="0.8"/>' + [-60, -45, -30, -15, 15, 30, 45, 60].map((k) => `<circle cx="${k}" cy="0" r="1.8"/><circle cx="0" cy="${k}" r="1.8"/>`).join('')),
+  dotret: RS('<path d="M-100 0H-30M30 0H100M0 -100V-30M0 30V100" stroke="#000" stroke-width="2"/><circle r="2.4" fill="#ff2a2a"/>'),
+  circle: RS('<circle r="22" fill="none" stroke="#000" stroke-width="1.2"/><path d="M-100 0H-22M22 0H100M0 -100V-22M0 22V100" stroke="#000" stroke-width="1"/><circle r="1" />'),
+  chevret: RS('<path d="M-9 9L0 0L9 9" fill="none" stroke="#ff3a2a" stroke-width="1.6"/><path d="M0 14V100M-100 0H-40M40 0H100" stroke="#000" stroke-width="1.2"/>'),
+  hotdog: RS('<ellipse rx="16" ry="5" fill="#d8a050"/><ellipse rx="18" ry="3" fill="#b8402a"/><path d="M-14 -1Q-10 -4 -6 -1T2 -1T10 -1" stroke="#f2d33c" fill="none" stroke-width="1.2"/><path d="M-100 0H-24M24 0H100M0 -100V-12M0 12V100" stroke="#000" stroke-width="1"/>'),
 };
 const ADS_RET = {
   reddot: '<div class="dot"></div>',
-  holo: '<svg viewBox="-20 -20 40 40" class="holo"><g fill="none" stroke="#ff2e1e"><circle r="13" stroke-width="1.2" opacity="0.95"/><path d="M0 -13V-9.5M0 13V9.5M-13 0H-9.5M13 0H9.5" stroke-width="1.2"/></g><circle r="1.7" fill="#ff2e1e"/><circle r="0.7" fill="#ffe8d8"/></svg>',
-  acog: '<svg viewBox="-20 -20 40 40" class="chev"><path d="M-4 3.5L0 -1L4 3.5" fill="none" stroke="#ff3a22" stroke-width="1.1"/><circle r="0.55" fill="#ffe0cc"/><path d="M0 4V15M-13 0H-7M7 0H13" stroke="#151515" stroke-width="0.7"/></svg>',
+  holo: '<svg viewBox="-20 -20 40 40" class="holo"><circle r="13" fill="none" stroke="#ff3030" stroke-width="1.3"/><circle r="1.6" fill="#ff3030"/><path d="M0 -13V-9M0 13V9M-13 0H-9M13 0H9" stroke="#ff3030" stroke-width="1.3"/></svg>',
+  acog: '<svg viewBox="-20 -20 40 40" class="chev"><path d="M-3.5 3L0 -0.5L3.5 3" fill="none" stroke="#ff3a2a" stroke-width="1"/><path d="M0 3.5V14M-12 0H-6M6 0H12" stroke="#111" stroke-width="0.6"/></svg>',
 };
 // a case drawn from its pull set's colours (a box with a stripe and the case's name)
 function drawCase(c, crate) {
@@ -634,7 +592,7 @@ export class Menu {
     this.root = document.createElement('div'); this.root.className = 'cs cs-menu';
     const title = esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`);
     this.root.innerHTML = `<canvas class="cs-stage"></canvas><div class="cs-vig"></div>
-      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${(this.h.back ? [['inv', 'Inventory'], ['guns', 'Gunsmith'], ['settings', 'Settings']] : [['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['aim', 'Aim Trainer'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])])
+      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${(this.h.back ? [['inv', 'Inventory'], ['guns', 'Gunsmith'], ['settings', 'Settings']] : [['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])])
         .map(([k, n]) => `<button data-tab="${k}">${svg(k)}<span>${n}</span></button>`).join('')}</nav>
         <div class="cs-acct"><button class="cs-coinbox" id="mTop" style="cursor:pointer;color:#7ed957">＋ TOP UP</button><span class="cs-coinbox" id="mCoins"></span><div class="cs-rank"><b id="mLvlN">1</b><div><div style="font:700 11px system-ui;color:#c8d0da" id="mName"></div><div class="xp"><i id="mXp"></i></div></div></div>
         ${this.h.back ? '<button class="cs-btn" id="mBack" style="margin-right:8px">◀ BACK TO PARTY</button>' : ''}<button class="cs-ibtn" id="mFull" title="Fullscreen (also makes Ctrl-crouch safe)">⛶</button></div></div>
@@ -673,8 +631,6 @@ export class Menu {
     B.classList.toggle('solid', this.tab !== 'home');
     if (this.P.admin !== this.adminShown) { this.adminShown = this.P.admin; this.hide(); this.show(); return; }
     if (this.tab !== 'play' && this.tab !== 'home' && this.lb) { this.lb.close(); this.lb = null; }
-    // keep the main-menu 3D agent showcase in sync with the equipped agent
-    if (this.stage && this.stage.set) { try { this.stage.set(this.stageLook()); } catch (e) {} }
     this['tab_' + this.tab](B);
   }
   // ---- HOME: the stage, a big GO, and the side panels ----
@@ -730,8 +686,7 @@ export class Menu {
               <div class="cs-small cs-mut">${rk.n < PLACEMENTS ? `Placement matches: ${rk.n}/${PLACEMENTS} (double rating swings)` : `${rk.rr} RR${nx ? ` · ${nx.rr - rk.rr} to ${esc(nx.name)}` : ' · top rank'}`} · ${rk.w} wins</div>
               <div class="cs-small cs-mut" style="margin-top:6px">Ranked rules: bots only on Normal or Hard, and one team must be all real players before it starts. Wins vs bot opponents count half. First time you reach a rank: 300 coins × its tier.${this.P.cloud && !this.P.signedIn ? ' <b>Sign in to save your rank.</b>' : ''}</div></div></div>`; })() : ''}
           <div style="margin-top:22px"><button class="cs-go" id="pGo">GO</button></div></div>
-        <div>${(() => { const rj = loadRejoin(); if (!rj) return ''; const ago = Math.max(0, Math.round((Date.now() - (rj.t || Date.now())) / 60000)); const mm = (typeof MODES[rj.mode] !== 'undefined' && MODES[rj.mode].name) || '', mp = (MAPS[rj.map] || {}).name || ''; return `<div class="cs-panel2" style="border-color:#7cf29c"><h3>🔄 Rejoin match</h3><div class="bd"><div class="cs-row"><div style="flex:1;min-width:0"><b style="color:#7cf29c">${esc(rj.code)}</b> <span class="cs-mut cs-small">${esc(mm)}${mp ? ' · ' + esc(mp) : ''} · ${ago < 1 ? 'just now' : ago + ' min ago'}</span></div><button class="cs-btn" id="pRejoin">Rejoin</button><button class="cs-btn alt sm" id="pRejoinX" title="dismiss">✕</button></div><div class="cs-mut cs-small" style="margin-top:6px">Your slot is kept for a few minutes after a disconnect.</div></div></div>`; })()}
-          <div class="cs-panel2"><h3>Join a friend</h3><div class="bd"><div class="cs-row"><input id="pCode" maxlength="5" placeholder="INVITE CODE" style="flex:1;text-transform:uppercase"><button class="cs-btn" id="pJoin">Join</button></div></div></div>
+        <div><div class="cs-panel2"><h3>Join a friend</h3><div class="bd"><div class="cs-row"><input id="pCode" maxlength="5" placeholder="INVITE CODE" style="flex:1;text-transform:uppercase"><button class="cs-btn" id="pJoin">Join</button></div></div></div>
           <div class="cs-panel2"><h3>Open lobbies</h3><div class="bd" id="pList"><span class="cs-mut cs-small">Looking for lobbies…</span></div></div></div></div>`;
     B.querySelectorAll('[data-mode]').forEach((e) => (e.onclick = () => { s.mode = e.dataset.mode; this.render(); }));
     B.querySelectorAll('[data-map]').forEach((e) => (e.onclick = () => { s.map = e.dataset.map; this.render(); }));
@@ -742,8 +697,6 @@ export class Menu {
       this.h.play({ mode: s.mode, map: s.map, bot: s.bot, host: true, solo: s.host === 'bots', pub: s.host === 'pub' || rkd, ranked: rkd }); };
     const code = $('#pCode', B); const hash = location.hash.slice(1).toUpperCase(); if (/^[A-Z0-9]{5}$/.test(hash)) code.value = hash;
     $('#pJoin', B).onclick = () => { const c = code.value.trim().toUpperCase(); if (c.length === 5) this.h.play({ code: c, host: false }); };
-    const pr = $('#pRejoin', B); if (pr) pr.onclick = () => { const rj = loadRejoin(); if (rj) this.h.play({ code: rj.code, host: false, rejoin: true }); };
-    const px = $('#pRejoinX', B); if (px) px.onclick = () => { clearRejoin(); this.render(); };
     if (!this.lb) this.lb = this.h.lobbies((list) => { this.lobbies = list; const el = $('#pList', this.root); if (!el) return;
       el.innerHTML = list.length ? '' : '<span class="cs-mut cs-small">No open lobbies right now: host one!</span>';
       for (const l of list) { const r = document.createElement('div'); r.className = 'cs-row'; r.style.marginBottom = '8px'; r.innerHTML = '<div style="flex:1;min-width:0"><b class="n" style="display:block;font-size:13px"></b><span class="cs-mut cs-small m"></span></div><button class="cs-btn sm">Join</button>';
@@ -780,52 +733,6 @@ export class Menu {
     $('#sGo', B).onclick = () => this.h.play({ story: { mission: s.mission, diff: s.diff, host: s.char }, bot: STORY_DIFF[s.diff].bot, host: true, solo: s.host === 'solo', pub: false });
     const cont = $('#sCont', B); if (cont) cont.onclick = () => this.h.play({ story: { mission: saved.mission, obj: saved.obj | 0, diff: saved.diff || 'normal', host: saved.char || s.char, runId: saved.runId }, bot: (STORY_DIFF[saved.diff] || STORY_DIFF.normal).bot, host: true, solo: s.host === 'solo', pub: false });
   }
-  // ---- AIM TRAINER: drill setup ----
-  tab_aim(B) {
-    const c = this.aimCfg || (this.aimCfg = defaultAimCfg());
-    const pb = getAimPB();
-    const pbFor = (drill) => { const k = aimPBKey(drill, c.weapon, c.size), p = pb[k]; return p ? `${p.score.toLocaleString()} pts · ${p.acc}%` : 'no runs yet'; };
-    const seg = (opts, cur, fn) => `<div class="cs-seg">${opts.map(([k, n]) => `<button data-v="${k}" class="${cur === k || cur === +k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
-    const guns = aimWeapons(), cats = ['pistol', 'smg', 'rifle', 'sniper', 'heavy'];
-    const catName = { pistol: 'Pistols', smg: 'SMGs', rifle: 'Rifles', sniper: 'Snipers', heavy: 'Heavy' };
-    B.innerHTML = `<div class="cs-sec">Aim Trainer · practice range</div>
-      <div class="cs-small cs-mut" style="margin:-6px 0 14px">Pick a drill, pick a gun, run it. Scores and personal bests are saved on this device.</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:18px">
-        ${Object.entries(AIM_DRAINS).map(([k, d]) => `<div class="cs-panel2" data-drill="${k}" style="cursor:pointer;${c.drill === k ? 'border-color:#f2a33a' : ''}"><h3>${d.icon} ${d.name}</h3>
-          <div class="bd cs-small"><div class="cs-mut" style="margin-bottom:8px">${d.desc}</div><div>🏆 <b>${pbFor(k)}</b></div></div></div>`).join('')}
-      </div>
-      <div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px" class="cs-aimsetup">
-        <div>
-          <div class="cs-sec">Weapon</div>
-          <select id="aWep" style="width:100%;max-width:340px;padding:10px;border-radius:8px;background:#151b24;color:#e8ecf0;border:1px solid #2c3442;font-size:15px">
-            ${cats.map((cat) => `<optgroup label="${catName[cat]}">${guns.filter((g) => g.cat === cat).map((g) => `<option value="${g.id}" ${c.weapon === g.id ? 'selected' : ''}>${g.name}</option>`).join('')}</optgroup>`).join('')}
-          </select>
-          <div class="cs-small cs-mut" style="margin-top:6px">Uses your equipped skin when you own one. Infinite reserve ammo, R to reload.</div>
-          <div class="cs-sec" style="margin-top:14px">Target size</div><div id="aSize">${seg(Object.entries(AIM_SIZES).map(([k, s]) => [k, s.name]), c.size)}</div>
-          ${c.drill === 'tracking' ? `<div class="cs-sec" style="margin-top:14px">Target speed</div><div id="aSpeed">${seg(Object.entries(AIM_SPEEDS).map(([k, s]) => [k, s.name]), c.speed)}</div>` : ''}
-          ${c.drill === 'flick' ? `<div class="cs-sec" style="margin-top:14px">Pace</div><div id="aPace">${seg(Object.entries(AIM_PACES).map(([k, s]) => [k, `${s.name} · ${s.max} tgt/${s.life}s`]), c.pace)}</div>` : ''}
-          <div class="cs-sec" style="margin-top:14px">Duration</div><div id="aDur">${seg(AIM_DURS.map((d) => [d, d + 's']), c.dur)}</div>
-          <div class="cs-sec" style="margin-top:14px">Sensitivity <span class="cs-mut" id="aSensV">${(+c.sens).toFixed(2)}×</span></div>
-          <input id="aSens" type="range" min="0.3" max="2.5" step="0.05" value="${c.sens}" style="width:100%;max-width:340px">
-          <div style="margin-top:20px"><button class="cs-go" id="aGo" style="max-width:340px">▶ START DRILL</button></div>
-        </div>
-        <div><div class="cs-panel2"><h3>Personal bests</h3><div class="bd cs-small">
-          ${Object.entries(pb).length ? Object.entries(pb).sort((a, b) => b[1].score - a[1].score).slice(0, 8).map(([k, p]) => { const [dr, wid, sz] = k.split('|'); return `<div class="cs-row" style="margin-bottom:6px"><span>${(AIM_DRAINS[dr] || {}).icon || ''} ${(AIM_DRAINS[dr] || {}).name || dr} · ${((guns.find((g) => g.id === wid) || {}).name || wid)} · ${sz}</span><span style="flex:1"></span><b style="color:#ffd24a">${p.score.toLocaleString()}</b></div>`; }).join('') : '<span class="cs-mut">No runs yet. Set one.</span>'}
-        </div></div>
-        <div class="cs-panel2" style="margin-top:10px"><h3>How scoring works</h3><div class="bd cs-small cs-mut">
-          🎯 Precision: 100 pts per target + speed bonus for clearing all 24.<br>🛰️ Tracking: damage dealt + 200 per target destroyed.<br>⚡ Flick: 100 per hit + speed bonus, −50 per expired target.
-        </div></div></div>
-      </div>`;
-    B.querySelectorAll('[data-drill]').forEach((e) => (e.onclick = () => { c.drill = e.dataset.drill; this.h.sound('tick'); this.render(); }));
-    const bindSeg = (id, fn) => { const el = $(id, B); if (el) el.querySelectorAll('[data-v]').forEach((b) => (b.onclick = () => { fn(b.dataset.v); this.render(); })); };
-    bindSeg('#aSize', (v) => (c.size = v));
-    bindSeg('#aSpeed', (v) => (c.speed = v));
-    bindSeg('#aPace', (v) => (c.pace = v));
-    bindSeg('#aDur', (v) => (c.dur = +v));
-    $('#aWep', B).onchange = (e) => { c.weapon = e.target.value; this.render(); };
-    const sens = $('#aSens', B); sens.oninput = () => { c.sens = +sens.value; $('#aSensV', B).textContent = (+c.sens).toFixed(2) + '×'; };
-    $('#aGo', B).onclick = () => { this.h.sound('tick'); this.h.aim({ ...c }); };
-  }
   // ---- INVENTORY ----
   tab_inv(B) {
     const P = this.P, f = this.invFilter || 'all', rk = (it) => { const i = itemInfo(it); return i ? i.tier * 1e7 + i.value : -1; };
@@ -861,9 +768,7 @@ export class Menu {
         ${P.signedIn ? (it.listed ? '<button class="cs-btn alt sm" data-unlist>Remove listing</button>' : '<input type="number" min="1" id="lp" placeholder="price" style="width:100px"><button class="cs-btn alt sm" data-list>List on market</button>') : ''}</div></div>`;
     document.body.appendChild(m);
     const v = viewer($('canvas', m), it); if (!v) drawItem($('canvas', m), it);
-    const close = () => { try { if (v) v.stop(); } catch (e) {} m.remove(); document.removeEventListener('keydown', escClose); };
-    const escClose = (e) => { if (e.key === 'Escape') close(); };
-    document.addEventListener('keydown', escClose);
+    const close = () => { if (v) v.stop(); m.remove(); };
     // 3D model or collector's card
     m.querySelectorAll('[data-vw]').forEach((b) => (b.onclick = () => {
       const card = b.dataset.vw === 'card';
@@ -899,9 +804,7 @@ export class Menu {
     document.body.appendChild(m);
     const lo = P.loadoutFor('T'), perf = AGENT_BY_ID[lo.agent] || AGENT_BY_ID.a_t_default;   // performed by your own outfit
     const v = viewer($('canvas', m), it, { performer: { look: perf.look, team: perf.team } }); if (!v) drawItem($('canvas', m), it);
-    const rm0 = m.remove.bind(m); m.remove = () => { try { if (v) v.stop(); } catch (e) {} rm0(); document.removeEventListener('keydown', escClose2); };
-    const escClose2 = (e) => { if (e.key === 'Escape') m.remove(); };
-    document.addEventListener('keydown', escClose2);
+    const rm0 = m.remove.bind(m); m.remove = () => { if (v) v.stop(); rm0(); };
     $('[data-x]', m).onclick = () => m.remove(); m.onclick = (e) => { if (e.target === m) m.remove(); };
     m.querySelectorAll('[data-slot]').forEach((b) => (b.onclick = () => { P.setWheel(+b.dataset.slot, info.weapon); this.h.toast('On your emote wheel'); m.remove(); }));
     $('[data-sell]', m).onclick = async () => { if (!confirm('Sell ' + info.finish + '?')) return; try { await P.sell(it.uid); } catch (e) { this.h.toast(e.message); } m.remove(); this.render(); };
@@ -1198,55 +1101,14 @@ export class Menu {
         <div class="cs-card" style="display:grid;place-items:center;min-height:90px;background:#3a4a3a"><div class="cs-xh" style="position:relative;left:auto;top:auto;width:1px;height:1px" id="xPrev"></div></div></div>
       <div class="cs-h">Graphics</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Quality</div><select data-k="quality"><option value="0">Auto (keeps 40+ fps)</option><option value="0.5">Potato (fastest)</option><option value="0.75">Low</option><option value="1">Medium</option><option value="1.5">High</option><option value="2">Ultra (4K, gaming PCs)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Show FPS</div><select data-k="fps"><option value="0">Off</option><option value="1">On</option></select></label>
-        <label class="cs-card"><div class="cs-small cs-mut">Damage numbers</div><select data-k="dmgNums"><option value="1">On</option><option value="0">Off</option></select></label>
-        <label class="cs-card"><div class="cs-small cs-mut">Killcam (death replay)</div><select data-k="killcam"><option value="1">On</option><option value="0">Off</option></select></label>
-        <label class="cs-card"><div class="cs-small cs-mut">Gore (blood & gibs)</div><select data-k="gore"><option value="1">On</option><option value="0">Off</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
         <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · same as phones)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
-      <div class="cs-h">Voice chat</div><div class="cs-grid">
-        <label class="cs-card"><div class="cs-small cs-mut">Voice chat (P2P · no server)</div><select data-k="voiceChat"><option value="1">On</option><option value="0">Off</option></select></label>
-        <label class="cs-card"><div class="cs-small cs-mut">Hear voice from</div><select data-k="vcHear"><option value="all">Everyone</option><option value="friends">Friends only (strangers muted)</option><option value="none">Nobody</option></select></label>
-        <div class="cs-card"><div class="cs-small cs-mut">Push to talk: <b>Keybinds → Comms</b> below</div><div class="cs-small" style="margin:6px 0">Hold the key in a match to talk. Strangers are muted by default.</div><button class="cs-btn alt sm" id="vMicTest">Test microphone</button><div id="vMicOut" style="margin-top:6px"></div></div></div>
-      <div class="cs-h">Accessibility</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Colorblind mode</div><select data-k="colorblind"><option value="none">Off</option><option value="deuteranopia">Deuteranopia (red-green · most common)</option><option value="protanopia">Protanopia (red-blind)</option><option value="tritanopia">Tritanopia (blue-yellow · rare)</option></select><div class="cs-small cs-mut" style="margin-top:8px">CT / T / alert preview</div><div id="cbPrev" style="display:flex;gap:6px;margin-top:4px"></div></label></div>
-      <div class="cs-h">Keybinds <span style="flex:1"></span><button class="cs-btn alt sm" id="kbReset">Reset defaults</button></div>
-      <div class="cs-small cs-mut" style="margin-bottom:8px">Click a key, then press the new key (or a mouse button). Esc cancels.</div>
-      <div id="kbList"></div>`;
-    const renderCbPrev = () => { const el = $('#cbPrev', B); if (!el || !window.__CB__) return; const p = __CB__.swatch(S.colorblind || 'none'); el.innerHTML = [p.ct, p.t, p.bombPlanted, p.hmHead].map((c) => `<span title="${c}" style="width:26px;height:18px;border-radius:4px;background:${c};border:1px solid #000"></span>`).join(''); };
-    if (window.__CB__) __CB__.set(S.colorblind || 'none');
-    renderCbPrev();
-    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'voicePack' || k === 'colorblind' || k === 'vcHear' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); if (k === 'colorblind' && window.__CB__) { __CB__.set(e.value); renderCbPrev(); } if (k === 'vcHear' && this.h.voiceHear) this.h.voiceHear(e.value); drawXh($('#xPrev', B), S, 0); }; });
-    const vcSel = B.querySelector('[data-k="voiceChat"]');
-    if (vcSel) vcSel.addEventListener('change', () => { if (this.h.voiceSet) this.h.voiceSet(vcSel.value === '1'); });
-    const micT = $('#vMicTest', B);
-    if (micT) micT.onclick = (e) => { e.preventDefault(); if (this.h.voiceTest) this.h.voiceTest($('#vMicOut', B)); };
+      <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift sprint · Ctrl (or C) crouch · Z prone · Space jump · Mouse1 fire · Mouse2 scope / aim down sights (hold) · Q / E lean while aiming · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · V X C radio · T emotes · F inspect · Esc menu</div>`;
+    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
     drawXh($('#xPrev', B), S, 0);
     $('#vTry', B).onclick = (e) => { e.preventDefault(); this.h.announce('planted'); };
-    this.keybindUI(B);
-  }
-  keybindUI(B) {
-    const kb = this.h.keybinds && this.h.keybinds();
-    const list = $('#kbList', B);
-    if (!kb || !list) return;
-    const render = () => {
-      const cur = kb.cur();
-      list.innerHTML = kb.groups.map(([g, acts]) => `<div class="cs-h" style="margin:10px 0 6px">${g}</div><div class="cs-grid">` +
-        acts.map((a) => `<div class="cs-card"><div class="cs-row" style="align-items:center"><span class="cs-small" style="flex:1">${kb.labels[a]}</span><button class="cs-btn sm kb-btn" data-act="${a}" style="min-width:86px">${kb.name((cur[a] || [])[0] || '?')}</button></div></div>`).join('') + `</div>`).join('');
-      list.querySelectorAll('.kb-btn').forEach((b) => { b.onclick = () => capture(b); });
-    };
-    const capture = (b) => {
-      const act = b.dataset.act;
-      b.textContent = 'press key…'; b.classList.add('alt');
-      const done = () => { window.removeEventListener('keydown', onK, true); window.removeEventListener('mousedown', onM, true); render(); };
-      const apply = (code) => { const r = kb.set(act, code); if (!r.ok) this.h.toast(r.err === 'duplicate' ? `That key is already bound to ${r.other}` : r.err); done(); };
-      const onK = (e) => { e.preventDefault(); e.stopPropagation(); if (e.code === 'Escape') { done(); return; } if (e.target && e.target.tagName === 'INPUT') { done(); return; } apply(e.code); };
-      const onM = (e) => { e.preventDefault(); e.stopPropagation(); if (e.button > 2) { done(); return; } apply('M' + e.button); };
-      window.addEventListener('keydown', onK, true);
-      window.addEventListener('mousedown', onM, true);
-    };
-    const rs = $('#kbReset', B);
-    if (rs) rs.onclick = () => { kb.reset(); render(); this.h.toast('Keybinds reset to defaults'); };
-    render();
   }
 }
 
@@ -1267,7 +1129,7 @@ export class Hud {
     this.el = document.createElement('div'); this.el.className = 'cs cs-hud';
     this.el.innerHTML = `<div class="tl"><canvas class="radar" width="190" height="190"></canvas><div class="loc"></div><div class="money"></div><div class="buyic"></div></div>
       <div class="top"><div class="team" id="hT"></div><div class="scoreb" id="hsT" style="color:var(--tt)">0</div><div class="timer" id="hTime">0:00</div><div class="scoreb" id="hsCT" style="color:var(--ct)">0</div><div class="team" id="hCT"></div></div>
-      <div class="feed"></div><div class="vtalk"></div><div class="center"></div><div class="prog" style="display:none"><span></span><div class="cs-bar"><i></i></div></div><div class="hint" style="display:none"></div>
+      <div class="feed"></div><div class="center"></div><div class="prog" style="display:none"><span></span><div class="cs-bar"><i></i></div></div><div class="hint" style="display:none"></div>
       <div class="chat"></div><div class="spec" style="display:none"></div><div class="dmgdir"></div>
       <div class="bl"><div class="stat" id="hHp"><span class="ic">✚</span><span>100</span></div><div class="stat" id="hAr"><span class="ic">⛨</span><span>0</span></div></div>
       <div class="br"><div class="slots"></div><div class="ammo"></div></div><div class="cs-xh"></div>`;
@@ -1308,13 +1170,6 @@ export class Hud {
     if (this.adsKind === kind) return; this.adsKind = kind;
     this.ads.style.display = kind ? 'block' : 'none'; this.ads.innerHTML = kind ? (ADS_RET[kind] || '') : ''; this.ads.className = 'cs-ads ' + (kind || '');
   }
-  // reticle brightness follows the environment (brighter in daylight): 0.7 dim .. 1.4 bright
-  setReticleGain(g) {
-    const v = Math.max(0.5, Math.min(1.6, g || 1));
-    if (this.retGain === v) return; this.retGain = v;
-    this.ads.style.setProperty('--ret-gain', v.toFixed(2));
-  }
-  }
   feed(e, mineId) {
     const box = this.q('.feed'), row = document.createElement('div'); row.className = 'kf' + (e.kid === mineId || e.vid === mineId ? ' mine' : '');
     const n = (t, team) => { const s = document.createElement('span'); s.textContent = t; s.style.color = team === 'CT' ? 'var(--ct)' : 'var(--tt)'; return s; };
@@ -1331,14 +1186,6 @@ export class Hud {
   hint(t) { const h = this.q('.hint'); h.style.display = t ? '' : 'none'; if (t) h.textContent = t; }
   spec(t) { const h = this.q('.spec'); h.style.display = t ? '' : 'none'; if (t) h.textContent = t; }
   chat(name, team, text, teamOnly) { const box = this.q('.chat'), d = document.createElement('div'); const n = document.createElement('b'); n.textContent = (teamOnly ? '(Team) ' : '') + name + ': '; n.style.color = team === 'CT' ? 'var(--ct)' : 'var(--tt)'; d.appendChild(n); d.appendChild(document.createTextNode(text)); box.appendChild(d); while (box.children.length > 6) box.firstChild.remove(); setTimeout(() => d.remove(), 9000); }
-  // voice chat: who's talking right now (HUD portraits strip)
-  voiceHUD(speakers, meTalking, meName) {
-    const box = this.q('.vtalk'); if (!box) return;
-    const html = (meTalking ? `<div class="vt me"><i>🎤</i><b>${esc(meName || 'You')}</b></div>` : '') +
-      (speakers || []).map((s) => `<div class="vt${s.muted ? ' dim' : ''}"><i>${s.muted ? '🔇' : '🔊'}</i><b>${esc(s.name)}</b></div>`).join('');
-    if (this.last.vt === html) return; this.last.vt = html;
-    box.innerHTML = html; box.style.display = html ? '' : 'none';
-  }
   hurt(angle) { this.hurtEl.style.opacity = 1; setTimeout(() => (this.hurtEl.style.opacity = 0), 200); if (angle != null) { const d = this.q('.dmgdir'); d.style.transform = `rotate(${angle}rad)`; d.style.opacity = 1; clearTimeout(this.dt); this.dt = setTimeout(() => (d.style.opacity = 0), 700); } }
   flashAmt(a) { this.flash.style.opacity = Math.max(0, Math.min(1, a)); }
   // ---- radar ----
@@ -1346,7 +1193,7 @@ export class Hud {
     const c = document.createElement('canvas'); c.width = W.w * 2; c.height = W.d * 2; const g = c.getContext('2d');
     for (let z = 0; z < W.d; z++) for (let x = 0; x < W.w; x++) { const i = z * W.w + x, open = W.flag[i] === 2 || W.flag[i] === 3; const h = W.h[i];
       g.fillStyle = W.flag[i] === 3 ? '#a33' : open ? `rgb(${120 + h * 20},${118 + h * 20},${108 + h * 18})` : h < 3 ? '#4a4d52' : '#1c1f24'; g.fillRect(x * 2, z * 2, 2, 2); }
-    g.font = 'bold 18px system-ui'; g.fillStyle = window.__CB__ ? __CB__.site() : '#ff6a4a'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 18px system-ui'; g.fillStyle = '#ff6a4a'; g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const [n, r] of Object.entries(W.B.sites)) g.fillText(n, (r[0] + r[2]), (r[1] + r[3]));
     this.base = c; this.W = W;
   }
@@ -1356,8 +1203,8 @@ export class Hud {
     g.translate(R / 2, R / 2); g.rotate(me.yaw); g.scale(scale / 2, scale / 2); g.translate(-me.x * 2, -me.z * 2);
     g.globalAlpha = 0.85; g.drawImage(this.base, 0, 0); g.globalAlpha = 1;
     const dot = (x, z, col, r = 5) => { g.fillStyle = col; g.beginPath(); g.arc(x * 2, z * 2, r, 0, 7); g.fill(); g.strokeStyle = '#000'; g.lineWidth = 1; g.stroke(); };
-    for (const p of list) if (p.alive) dot(p.x, p.z, window.__CB__ ? __CB__.team(p.team) : (p.team === 'CT' ? '#5d9cec' : '#e0a83a'), p.spotted ? 4 : 4);
-    if (bomb) { g.fillStyle = window.__CB__ ? __CB__.bomb(bomb.s) : (bomb.s === 'planted' ? '#ff3a2a' : '#ffd45a'); g.fillRect(bomb.x * 2 - 4, bomb.z * 2 - 4, 8, 8); }
+    for (const p of list) if (p.alive) dot(p.x, p.z, p.team === 'CT' ? '#5d9cec' : '#e0a83a', p.spotted ? 4 : 4);
+    if (bomb) { g.fillStyle = bomb.s === 'planted' ? '#ff3a2a' : '#ffd45a'; g.fillRect(bomb.x * 2 - 4, bomb.z * 2 - 4, 8, 8); }
     g.restore();
     g.fillStyle = '#fff'; g.beginPath(); g.moveTo(R / 2, R / 2 - 7); g.lineTo(R / 2 - 5, R / 2 + 5); g.lineTo(R / 2 + 5, R / 2 + 5); g.fill();
   }
@@ -1383,16 +1230,11 @@ export class Hud {
   scoreboard(show, d) {
     if (!show) { if (this.panel && this.panel.dataset.k === 'sb') { this.panel.remove(); this.panel = null; } return; }
     if (!this.panel || this.panel.dataset.k !== 'sb') { if (this.panel) this.panel.remove(); this.panel = document.createElement('div'); this.panel.className = 'cs cs-panel cs-sb'; this.panel.dataset.k = 'sb'; document.body.appendChild(this.panel); }
-    const vc = d.vc || null;   // voice chat: {muted, speaking, onMute}
-    const rows = (team) => d.players.filter((p) => p.team === team).sort((a, b) => b.score - a.score).map((p) => {
-      const sp = vc && vc.speaking[p.id], mu = vc && vc.muted[p.id], canMute = vc && !p.bot && p.id !== d.me;
-      return `<tr class="${team} ${p.alive ? '' : 'dead'} ${p.id === d.me ? 'me' : ''}${sp ? ' speaking' : ''}"><td>${p.bot ? '🤖 ' : ''}${esc(p.name)}${sp ? ' 🔊' : ''}</td><td>${d.myTeam === team ? '$' + p.money : ''}</td><td>${p.k}</td><td>${p.a}</td><td>${p.d}</td><td>${p.mvp ? '★' + p.mvp : ''}</td><td>${p.score}</td><td>${p.bot ? 'BOT' : (p.ping | 0)}</td>${vc ? `<td>${canMute ? `<button class="vmut${mu ? ' off' : ''}" data-mute="${esc(p.id)}" title="${mu ? 'Unmute their voice' : 'Mute their voice'}">${mu ? '🔇' : '🔊'}</button>` : ''}</td>` : ''}</tr>`;
-    }).join('');
+    const rows = (team) => d.players.filter((p) => p.team === team).sort((a, b) => b.score - a.score).map((p) => `<tr class="${team} ${p.alive ? '' : 'dead'} ${p.id === d.me ? 'me' : ''}"><td>${p.bot ? '🤖 ' : ''}${esc(p.name)}</td><td>${d.myTeam === team ? '$' + p.money : ''}</td><td>${p.k}</td><td>${p.a}</td><td>${p.d}</td><td>${p.mvp ? '★' + p.mvp : ''}</td><td>${p.score}</td><td>${p.bot ? 'BOT' : (p.ping | 0)}</td></tr>`).join('');
     const hist = (d.history || []).map((h) => `<i style="background:${h.w === 'T' ? 'var(--tt)' : h.w === 'CT' ? 'var(--ct)' : '#555'}" title="${esc(h.r)}">${h.r === 'bomb' ? '💥' : h.r === 'defuse' ? '✂' : h.r === 'time' ? '⏱' : ''}</i>`).join('');
-    this.panel.innerHTML = `<div class="cs-row"><b>${esc(d.title)}</b><span style="flex:1"></span><span>Round ${d.round}</span></div><div class="hist">${hist}</div>${vc ? '<div class="cs-small cs-mut" style="margin:4px 0">🎤 Voice: strangers muted by default — click 🔊 to mute / unmute</div>' : ''}
-      <table><tr class="cs-mut"><th>Counter-Terrorists · ${d.score.CT}</th><th>Money</th><th>K</th><th>A</th><th>D</th><th>MVP</th><th>Score</th><th>Ping</th>${vc ? '<th title="Voice chat">🎤</th>' : ''}</tr>${rows('CT')}
-      <tr class="cs-mut"><th>Terrorists · ${d.score.T}</th><th></th><th></th><th></th><th></th><th></th><th></th><th></th>${vc ? '<th></th>' : ''}</tr>${rows('T')}</table>`;
-    if (vc && vc.onMute) this.panel.querySelectorAll('[data-mute]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); vc.onMute(b.dataset.mute); }; });
+    this.panel.innerHTML = `<div class="cs-row"><b>${esc(d.title)}</b><span style="flex:1"></span><span>Round ${d.round}</span></div><div class="hist">${hist}</div>
+      <table><tr class="cs-mut"><th>Counter-Terrorists · ${d.score.CT}</th><th>Money</th><th>K</th><th>A</th><th>D</th><th>MVP</th><th>Score</th><th>Ping</th></tr>${rows('CT')}
+      <tr class="cs-mut"><th>Terrorists · ${d.score.T}</th><th></th><th></th><th></th><th></th><th></th><th></th><th></th></tr>${rows('T')}</table>`;
   }
   radio(open, team, onPick) {
     if (this.radioEl) { this.radioEl.remove(); this.radioEl = null; }

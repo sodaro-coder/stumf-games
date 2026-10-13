@@ -42,14 +42,12 @@ export const PROFILES = {
   // MEDIUM: balanced. Full-resolution textures (bias 0), short-range player shadows, colour grade + cheap bloom, 2x MSAA
   medium: { ...BASE, q: 1, texSize: 1024, normalMaps: true, aniso: 4, shadows: { cascades: [{ r: 9, size: 1024 }], pcf: 1 },
     post: true, bloom: 6, grade: true, ssao: true, msaa: 2, hqModels: true, env: true, pixel: { start: 1, max: 1, min: 0.55 } },
-  // HIGH: any laptop should hit 60fps here. 8x anisotropic, two soft shadow cascades,
-  // full stack (SSAO, bloom, ACES grade), 4x MSAA, screen-space reflections
-  high: { ...BASE, q: 1.5, texSize: 1024, normalMaps: true, detail: true, aniso: 8, bakeK: 7, shadows: { cascades: [{ r: 7, size: 2048 }, { r: 26, size: 1024 }], pcf: 9 },
-    post: true, bloom: 12, grade: true, ssao: true, ssr: 24, msaa: 4, hqModels: true, env: true, pixel: { start: 1, max: 1.5, min: 0.55 } },
-  // ULTRA: gaming PC, no compromises. 16x filtering, 4096px shadow cascades, heavy bloom,
-  // deep SSR ray-march, 8x MSAA (clamped to what the GPU supports), densest lightmap
-  ultra: { ...BASE, q: 2, texSize: 1024, normalMaps: true, detail: true, aniso: 16, bakeK: 10, shadows: { cascades: [{ r: 8, size: 4096 }, { r: 32, size: 2048 }], pcf: 9 },
-    post: true, bloom: 14, grade: true, ssao: true, ssr: 48, msaa: 8, hqModels: true, env: true, pixel: { start: 2, max: 2, min: 1 }, targetMs: 21 },
+  // HIGH: 8x anisotropic, two soft shadow cascades, full stack (SSAO, bloom, ACES grade), 4x MSAA
+  high: { ...BASE, q: 1.5, texSize: 1024, normalMaps: true, detail: true, aniso: 8, bakeK: 6, shadows: { cascades: [{ r: 7, size: 2048 }, { r: 26, size: 1024 }], pcf: 9 },
+    post: true, bloom: 10, grade: true, ssao: true, ssr: 20, msaa: 4, hqModels: true, env: true, pixel: { start: 1, max: 1.5, min: 0.55 } },
+  // ULTRA: High plus 16x filtering, sharper cascades, finer lightmap and up to 2x the screen's pixels (4K on 1080p)
+  ultra: { ...BASE, q: 2, texSize: 1024, normalMaps: true, detail: true, aniso: 16, bakeK: 8, shadows: { cascades: [{ r: 8, size: 4096 }, { r: 32, size: 2048 }], pcf: 9 },
+    post: true, bloom: 10, grade: true, ssao: true, ssr: 32, msaa: 4, hqModels: true, env: true, pixel: { start: 2, max: 2, min: 1 }, targetMs: 30 },
 };
 export const tierOf = (q) => { let best = 0; QSTEPS.forEach((s, i) => { if (Math.abs(s - q) < Math.abs(QSTEPS[best] - q)) best = i; }); return TIERS[best]; };
 

@@ -122,7 +122,7 @@ export class RecoilState {
   kick(w, ads = false, scale = 1) {
     const n0 = this.spray;
     recoilAt(w, n0 + 1, RA); recoilAt(w, n0, RB);
-    const kv = ads ? 0.45 : 0.78, ks = ads ? 0.4 : 0.7;
+    const kv = ads ? 0.62 : 0.78, ks = ads ? 0.55 : 0.7;
     this.dPitch = (RA.up - RB.up) * kv * scale; this.dYaw = (RA.side - RB.side) * ks * scale;
     this.spray = n0 + 1; this.idle = 0;
     return this;

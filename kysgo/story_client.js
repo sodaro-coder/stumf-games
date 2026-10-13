@@ -8,7 +8,7 @@ import * as THREE from '../sdk/three.module.min.js';
 import { CHARACTERS, MISSIONS, CHAPTERS, SQUAD } from './story.js';
 
 const COLORS = { headliner: '#d070ff', radio: '#a8b4bc', dad: '#c8a050', danny: '#f2b080', doctor: '#cfe0ea', nurse: '#cfe0ea', enemy: '#c8c8c8', wiener: '#e8613a', cancer: '#9ad0ff', ricky: '#c07aff', igor: '#8fd06a', recruit: '#d8d8a0', boss: '#ff3b3b', command: '#ffb04a', tape: '#9ad0ff', squad: '#ffffff' };
-const VOICE = { headliner: [1.35, 0.9], radio: [0.85, 1.25], dad: [0.55, 0.92], danny: [1.7, 1.1], doctor: [0.95, 0.95], nurse: [1.15, 1.0], bouncer: [0.6, 1.0], boss: [0.6, 1.0], ricky: [0.65, 0.88], igor: [0.75, 0.95], cancer: [0.9, 0.95], tape: [0.88, 0.92], wiener: [0.8, 1.05], command: [1.0, 1.15], recruit: [1.25, 1.1] };
+const VOICE = { headliner: [1.35, 0.9], radio: [0.85, 1.25], dad: [0.55, 0.92], danny: [1.7, 1.1], doctor: [0.95, 0.95], nurse: [1.15, 1.0], bouncer: [0.6, 1.0], boss: [0.6, 1.0], ricky: [1.2, 1.05], igor: [0.75, 0.95], cancer: [0.9, 0.95], tape: [0.88, 0.92], wiener: [0.8, 1.05], command: [1.0, 1.15], recruit: [1.25, 1.1] };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const lineTime = (l) => 1.6 + String(l.text).length * 0.045 + ((l.o && l.o.hold) || 0);   // the same pace the host uses (story_sim.js scene())
 const stage = (t) => /^\(.*\)$|^\*.*\*$/.test(String(t).trim());   // "(laughing)", "*coughs*": a stage direction, not spoken
@@ -108,26 +108,10 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   @media(prefers-reduced-motion:reduce){.sc-line,.sc-card,.sc-vis,.sc-talk,.sc-bark{transition:none}}
   `;
 
-  /* ---- cinematography pass: film grain, vignette, breathing letterbox ---- */
-  css.textContent += `
-  .sc-cut:before,.sc-cut:after{transition:height .8s cubic-bezier(.65,0,.35,1)}
-  .sc-cut.tall:before,.sc-cut.tall:after{height:14.5vh}
-  .sc-grain{position:absolute;inset:-120px;pointer-events:none;opacity:0;transition:opacity 1.4s;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
-    animation:scgr .8s steps(4) infinite}
-  body.sc-cutting .sc-grain{opacity:.08}
-  @keyframes scgr{0%{transform:translate(0,0)}25%{transform:translate(-34px,22px)}50%{transform:translate(24px,-28px)}75%{transform:translate(-18px,-14px)}100%{transform:translate(0,0)}}
-  .sc-vig{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 1.4s;
-    background:radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,.58) 100%)}
-  body.sc-cutting .sc-vig{opacity:1}
-  .sc-line{transition:opacity .3s}
-  @media(prefers-reduced-motion:reduce){.sc-grain{animation:none}.sc-cut:before,.sc-cut:after{transition:none}}
-  `;
-
   document.head.appendChild(css);
   const ui = document.createElement('div'); ui.className = 'sc-ui';
   ui.innerHTML = `<div class="sc-vis"></div><div class="sc-watch"></div><div class="sc-unlock"></div><div class="sc-focus"></div><div class="sc-obj"><b></b><span></span><i></i></div><div class="sc-squad"></div><div class="sc-boss"><b></b><div><i></i></div><em></em></div>
-    <div class="sc-talk"></div><div class="sc-bark"></div><div class="sc-cut"><div class="sc-title"></div><div class="sc-line"><b></b><p></p></div><div class="sc-skip">tap / Space / A: skip</div></div><div class=\"sc-grain\"></div><div class=\"sc-vig\"></div>
+    <div class="sc-talk"></div><div class="sc-bark"></div><div class="sc-cut"><div class="sc-title"></div><div class="sc-line"><b></b><p></p></div><div class="sc-skip">tap / Space / A: skip</div></div>
     <div class="sc-card"><div><small></small><h1></h1><p></p><em></em><div class="rw"></div></div></div><div class="sc-hub"></div>`;
   document.body.appendChild(ui);
   const $ = (s) => ui.querySelector(s);
@@ -173,7 +157,6 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     night: { f: 'saturate(.85) brightness(.95) hue-rotate(6deg)', bg: 'radial-gradient(ellipse at center, transparent 55%, #00061888 100%)', o: 1, m: 0 },
     blizzard: { f: 'contrast(.9) brightness(1.05) saturate(.7)', bg: 'radial-gradient(ellipse at center, #ffffff10 30%, #eef3f8b0 100%)', o: 1, m: 0.15 },
     nuke: { f: 'sepia(.4) saturate(1.6) brightness(1.15) contrast(1.2) hue-rotate(-12deg)', bg: 'radial-gradient(ellipse at 50% 90%, #ffb04866 0%, #3a100088 100%)', o: 1, m: 0.5 },
-    warm: { f: 'saturate(1.12) brightness(1.03) contrast(.94)', bg: 'radial-gradient(ellipse at center, transparent 48%, #3a1e0866 100%)', o: 1, m: 0.08 },
   };
   let visNow = null;
   function vision(mode) {
@@ -201,26 +184,6 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   const shadows = { drink: null, beat: null };
   const shadowMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.6), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })); shadowMesh.visible = false;
   let shadowPose = '', shadowT = 0;
-  // ---- the cinematic lighting rig: a rim light behind whoever is talking and a soft key from the camera
-  // side, both tinted by the scene's mood. Only alive during cutscenes; the game's own sun does the rest.
-  const rim = new THREE.SpotLight(0xffffff, 0, 45, 0.65, 0.55, 1.1); grp.add(rim); grp.add(rim.target);
-  const keyL = new THREE.PointLight(0xfff0dd, 0, 22, 1.8); grp.add(keyL);
-  let rimI = 0, keyI = 0;
-  const RIMMOOD = {   // vision -> [rim color, rim intensity, key color, key intensity]
-    '': [0x9db8e8, 1.7, 0xcfd8ea, 0.5],
-    flashback: [0x7aa0e8, 2.4, 0x4a5a7a, 0.35],
-    memory: [0xffe0b8, 2.1, 0x8a7a66, 0.55],
-    warm: [0xffb85e, 2.8, 0xffe0b0, 0.75],
-    dread: [0xff4030, 1.7, 0x2a1214, 0.25],
-    dread_dark: [0xff3020, 1.9, 0x1a0c0c, 0.2],
-    dread_last: [0xff5040, 1.5, 0x2a1410, 0.3],
-    dying: [0xff3020, 1.6, 0x200c0c, 0.2],
-    night: [0x8fa8ff, 1.9, 0x5a6a9a, 0.4],
-    blizzard: [0xcfe8ff, 2.3, 0x9ab4d8, 0.55],
-    nuke: [0xff9a3c, 3.2, 0xffc080, 0.65],
-    black: [0x000000, 0, 0x000000, 0],
-  };
-  const _rv = new THREE.Vector3();
   function showShadow(pose) {
     if (!pose) { shadowMesh.visible = false; shadowPose = ''; return; }
     const mk = zoneAt('Shadow Wall'); if (!mk) return;
@@ -246,8 +209,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   function showLine() {
     const l = cutQ[0]; document.body.classList.toggle('sc-cutting', !!l);
     if (!l) { $('.sc-cut').style.display = 'none'; return; }
-    $('.sc-cut').style.display = 'block'; $('.sc-cut').classList.toggle('tall', !!(l.o && l.o.bars === 'tall'));
-    $('.sc-line').style.setProperty('--c', COLORS[l.who] || '#fff');
+    $('.sc-cut').style.display = 'block'; $('.sc-line').style.setProperty('--c', COLORS[l.who] || '#fff');
     $('.sc-line b').textContent = stage(l.text) || l.who === 'credits' ? '' : l.name; const p = $('.sc-line p'); p.textContent = l.text; p.className = l.who === 'credits' ? 'credits' : stage(l.text) ? 'dir' : '';
     cutT = lineTime(l); lineIdx++; shotT = 0; say(l);
     const o = l.o; if (o) {   // the line's stage directions, on this screen
@@ -282,7 +244,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     if (!S) return;
     $('.sc-obj b').textContent = `Objective ${Math.min(S.obj + 1, S.n)} / ${S.n}`; $('.sc-obj span').textContent = S.hint || '';
     const pct = (k) => `${Math.round(((S.markers[k] || {}).prog || 0) * 100)}%`;
-    const tl = S.kind === 'defend' || S.kind === 'survive' ? `${Math.max(0, S.need - S.have)}s left` : S.kind === 'defuse' ? `${pct(0)} · hold USE` : S.kind === 'revive' ? `${pct(0)} · hold USE on them` : S.kind === 'interact' ? `${pct(0)} · hold USE` : ['stealth', 'carry', 'reach'].includes(S.kind) ? '' : `${S.have} / ${S.need}`;
+    const tl = S.kind === 'defend' || S.kind === 'survive' ? `${Math.max(0, S.need - S.have)}s left` : S.kind === 'defuse' ? `${pct(0)} · hold USE` : S.kind === 'revive' ? `${pct(0)} · hold USE on them` : ['stealth', 'carry', 'reach'].includes(S.kind) ? '' : `${S.have} / ${S.need}`;
     $('.sc-obj i').textContent = (S.need ? tl : '') + (S.next ? ` · next: #${S.next}` : '');
     $('.sc-squad').innerHTML = (S.chars || []).map((c) => { const C = CHARACTERS[c.char] || CHARACTERS.ricky, ab = C.ability; return `<div class="sc-m${c.alive ? '' : ' dead'}" style="--c:${COLORS[c.char] || '#fff'}"><em>${esc(C.short)}${c.id === myId ? ' (you)' : ''}</em><span class="bar"><i style="width:${Math.max(0, Math.min(100, c.hp / (c.max || 100) * 100))}%"></i></span><small>${ab ? (c.lock ? '🔒' : ab.id === 'cancer_nade' ? (c.nade ? 'G' : '–') : c.cd ? c.cd + 's' : 'G') : ''}</small></div>`; }).join('');
     const b = S.boss; $('.sc-boss').style.display = b ? 'block' : 'none';
@@ -300,97 +262,52 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   }
 
   // ---- the director: where the camera goes while a scene plays ----
-  // A shot language: close-ups on whoever is talking (rule-of-thirds framing, alternating sides, a slow push in),
-  // two-shots for the scenes between two people, over-the-shoulder for confrontations, low angles for power and
-  // dread, tracking dollies and crane rises for movement, a high establishing orbit under the title; voices with no
-  // body here (Command on the radio, the tape) get the wide unless o.on frames a listener instead.
-  // New per-line directions: cam 'low'|'over'|'two'|'track'|'crane', o.on (frame this char instead of the speaker),
-  // o.with/o.over (the other party), o.handheld/o.shake (unease), o.push (push-in speed), o.bars 'tall'.
+  // close-ups on whoever is talking (alternating sides, a slow push in), an over-the-shoulder two-shot every few lines,
+  // a high establishing orbit under the title; voices with no body here (Command on the radio, the tape) get the wide.
   const cam = { p: new THREE.Vector3(), l: new THREE.Vector3(), init: false };
-  const _fp = new THREE.Vector3(), _fl = new THREE.Vector3(), _hp = new THREE.Vector3(), _hl = new THREE.Vector3();
-  let spkPos = null;   // the current speaker's world pos, for the lighting rig in tick()
   function shot(now, posOf) {
-    const l = cutQ[0]; if (!l) { cam.init = false; spkPos = null; return null; }
+    const l = cutQ[0]; if (!l) { cam.init = false; return null; }
     const chars = (S && S.chars) || [], squad = chars.map((c) => posOf(c.id)).filter(Boolean);
     const avg = (k) => (squad.length ? squad.reduce((s, p) => s + p[k], 0) / squad.length : 0), cx = avg('x'), cy = avg('y'), cz = avg('z');
-    const o = l.o || {}, subj = o.on || l.who;   // o.on: frame a listener while a bodiless voice speaks
-    const charPos = (k) => { const c = chars.find((q) => q.char === k && q.alive); if (c) { const q = posOf(c.id); if (q) return q; } const a = ((S && S.actors) || []).find((q) => q.who === k); return a ? posOf(a.id) : null; };
-    const who = l.who === 'boss' ? (S && S.boss ? posOf(S.boss.id) : null) : charPos(subj);
+    const who = l.who === 'boss' ? (S && S.boss ? posOf(S.boss.id) : null) : (() => { const c = chars.find((q) => q.char === l.who && q.alive); return c ? posOf(c.id) : null; })();
     const title = !!$('.sc-title').textContent && lineIdx <= 1;   // cleared after the first line
-    const cam1 = o.cam, me = posOf(myId);
-    const framed = () => {   // handheld unease, applied after the smoothing so it never gets eaten
-      const hh = (o.handheld || 0) + (o.shake || 0) * 2.2;
-      if (!hh) return { pos: cam.p, look: cam.l };
-      const t = now * 6.1, t2 = now * 9.7;
-      _hp.set((Math.sin(t * 1.13) + Math.sin(t2 * 0.71 + 1.7) * 0.6) * 0.035 * hh, (Math.sin(t * 0.97 + 0.6) + Math.sin(t2 * 1.31 + 3.1) * 0.6) * 0.03 * hh, (Math.sin(t * 1.41 + 2.2) + Math.sin(t2 * 0.83 + 0.4) * 0.6) * 0.035 * hh);
-      _hl.set((Math.sin(t * 1.29 + 4.0) + Math.sin(t2 * 0.93 + 2.0) * 0.6) * 0.055 * hh, (Math.sin(t * 1.07 + 1.1) + Math.sin(t2 * 1.17 + 5.3) * 0.6) * 0.045 * hh, 0);
-      return { pos: _fp.copy(cam.p).add(_hp), look: _fl.copy(cam.l).add(_hl) };
-    };
+    const cam1 = l.o && l.o.cam, me = posOf(myId);
     if (cam1 === 'pov' || cam1 === 'pov_down') {   // through the eyes (a child in a hallway; a man on the ground)
-      const lk = zoneAt(o.look) || (me ? { x: me.x - Math.sin(me.yaw || 0) * 4, y: me.y, z: me.z - Math.cos(me.yaw || 0) * 4 } : null);
+      const lk = zoneAt(l.o.look) || (me ? { x: me.x - Math.sin(me.yaw || 0) * 4, y: me.y, z: me.z - Math.cos(me.yaw || 0) * 4 } : null);
       if (!me || !lk) return null;
-      spkPos = { x: me.x, y: me.y, z: me.z };
-      const hk = (o.handheld || 0) * 0.5 + (o.shake || 0);
-      return { pov: true, down: cam1 === 'pov_down', look: new THREE.Vector3(lk.x, (lk.y || 0) + (cam1 === 'pov_down' ? 3.5 : 1.4), lk.z), shake: (cam1 === 'pov_down' ? 0.02 : 0.006) + hk * 0.05 };
+      return { pov: true, down: cam1 === 'pov_down', look: new THREE.Vector3(lk.x, (lk.y || 0) + (cam1 === 'pov_down' ? 3.5 : 1.4), lk.z), shake: cam1 === 'pov_down' ? 0.02 : 0.006 };
     }
     let p, look;
     const bossP = S && S.boss ? posOf(S.boss.id) : null, actor = (k) => { const a = ((S && S.actors) || []).find((q) => q.who === k); return a ? posOf(a.id) : null; };
-    const who2 = who || actor(subj);
-    spkPos = who2 ? { x: who2.x, y: who2.y, z: who2.z } : (squad.length ? { x: cx, y: cy, z: cz } : null);
-    const pushK = o.push || 1;
+    const who2 = who || actor(l.who);
     if (cam1 === 'grave') {   // the headstone, low and still
       const g = zoneAt('Grave'); if (!g) return null;
       p = new THREE.Vector3(g.x + 1.6, g.y + 0.9, g.z + 3.4); look = new THREE.Vector3(g.x, g.y + 0.6, g.z - 0.2);
     } else if (cam1 === 'boss' && bossP) {   // looking up at them
       const s2 = bossP.scale || 1, fx = -Math.sin(bossP.yaw || 0), fz = -Math.cos(bossP.yaw || 0);
       p = new THREE.Vector3(bossP.x + fx * 3.2 * s2, bossP.y + 0.9, bossP.z + fz * 3.2 * s2); look = new THREE.Vector3(bossP.x, bossP.y + 1.5 * s2, bossP.z);
-    } else if (cam1 === 'low' && who2) {   // near the ground, looking up: power, dread, a child staring up at a giant
-      const s2 = who2.scale || 1, fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0), d = 2.3 * s2;
-      p = new THREE.Vector3(who2.x + fx * d, who2.y + 0.5 * s2, who2.z + fz * d); look = new THREE.Vector3(who2.x, who2.y + 1.75 * s2, who2.z);
-    } else if (cam1 === 'over' && who2) {   // over someone's shoulder, at the speaker: confrontations
-      const sh = charPos(o.over);
-      if (sh) { const dx = who2.x - sh.x, dz = who2.z - sh.z, L = Math.hypot(dx, dz) || 1;
-        p = new THREE.Vector3(sh.x - dx / L * 1.1 + dz / L * 0.55, sh.y + 2.05, sh.z - dz / L * 1.1 - dx / L * 0.55);
-        look = new THREE.Vector3(who2.x, who2.y + 1.5 * (who2.scale || 1), who2.z);
-      }
-    } else if (cam1 === 'two' && who2) {   // the two of them, in profile, pushing in slowly: the scenes between two people
-      let o2 = charPos(o.with);
-      if (!o2 && squad.length > 1) { let bd = 1e9; for (const q of squad) { const d = (q.x - who2.x) ** 2 + (q.z - who2.z) ** 2; if (d > 0.0001 && d < bd) { bd = d; o2 = q; } } }
-      if (o2) { const mx = (who2.x + o2.x) / 2, my = (who2.y + o2.y) / 2, mz = (who2.z + o2.z) / 2;
-        let dx = o2.x - who2.x, dz = o2.z - who2.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-        const sgn = lineIdx % 2 ? 1 : -1, d = (3.4 - Math.min(0.8, shotT * 0.06 * pushK));
-        p = new THREE.Vector3(mx - dz * d * sgn, my + 1.9, mz + dx * d * sgn); look = new THREE.Vector3(mx, my + 1.35, mz);
-      }
-    } else if (cam1 === 'track' && who2) {   // a slow lateral dolly around the speaker: movement, restlessness
-      const s2 = who2.scale || 1, a = (who2.yaw || 0) + Math.PI / 2 + shotT * 0.22 * (o.dir === -1 ? -1 : 1), r = 3.6 * s2;
-      p = new THREE.Vector3(who2.x + Math.sin(a) * r, who2.y + 1.7 * s2, who2.z + Math.cos(a) * r); look = new THREE.Vector3(who2.x, who2.y + 1.45 * s2, who2.z);
-    } else if (cam1 === 'crane' && who2) {   // starts low and close, rises and pulls back: resolves, goodbyes
-      const s2 = who2.scale || 1, k = Math.min(1, shotT / 5), fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0), d = 2.2 + k * 7, h = 1.2 + k * 6;
-      p = new THREE.Vector3(who2.x + fx * d, who2.y + h * s2, who2.z + fz * d); look = new THREE.Vector3(who2.x, who2.y + 1.4 * s2, who2.z);
     } else if (cam1 === 'pull' && who2) {   // behind and above, pulling away as they walk off
       const k = Math.min(1, shotT / 6), back = 3 + k * 9, up = 1.8 + k * 5, fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0);
       p = new THREE.Vector3(who2.x - fx * back, who2.y + up, who2.z - fz * back); look = new THREE.Vector3(who2.x + fx * 2, who2.y + 1.2, who2.z + fz * 2);
-      if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } else { cam.p.lerp(p, 0.02); cam.l.lerp(look, 0.05); } return framed();
+      if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } else { cam.p.lerp(p, 0.02); cam.l.lerp(look, 0.05); } return { pos: cam.p, look: cam.l };
     } else if (cam1 === 'close' && who2) {
-      const s2 = who2.scale || 1, fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0), d = (1.7 - Math.min(0.3, shotT * 0.04 * pushK)) * s2, side = 0.45 * s2;
-      p = new THREE.Vector3(who2.x + fx * d + fz * side, who2.y + 1.6 * s2, who2.z + fz * d - fx * side);
-      look = new THREE.Vector3(who2.x - fz * 0.3 * s2 * Math.sign(side), who2.y + 1.5 * s2, who2.z + fx * 0.3 * s2 * Math.sign(side));   // rule of thirds
+      const s2 = who2.scale || 1, fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0), d = (1.7 - Math.min(0.3, shotT * 0.04)) * s2, side = 0.45 * s2;
+      p = new THREE.Vector3(who2.x + fx * d + fz * side, who2.y + 1.6 * s2, who2.z + fz * d - fx * side); look = new THREE.Vector3(who2.x, who2.y + 1.5 * s2, who2.z);
     }
-    if (p) { if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } else { cam.p.lerp(p, 0.04); cam.l.lerp(look, 0.08); } return framed(); }
-    if (title || cam1 === 'wide' || !who || (!o.on && stage(l.text)) || (!o.on && /^\(radio\)/.test(l.text))) {   // radio voices: the squad listening, not a face   // establishing or wide: a slow orbit around the squad
+    if (p) { if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } else { cam.p.lerp(p, 0.04); cam.l.lerp(look, 0.08); } return { pos: cam.p, look: cam.l }; }
+    if (title || cam1 === 'wide' || !who || stage(l.text) || /^\(radio\)/.test(l.text)) {   // radio voices: the squad listening, not a face   // establishing or wide: a slow orbit around the squad
       const r = title ? 11 : 6.5, h = title ? 6 : 2.6, a = now * (title ? 0.12 : 0.08) + lineIdx * 0.9;
       p = new THREE.Vector3(cx + Math.sin(a) * r, cy + h, cz + Math.cos(a) * r); look = new THREE.Vector3(cx, cy + 1.2, cz);
     } else if (lineIdx % 4 === 0 && squad.length > 1) {   // over the speaker's shoulder, towards the rest of the squad
       const dx = cx - who.x, dz = cz - who.z, L = Math.hypot(dx, dz) || 1;
       p = new THREE.Vector3(who.x - dx / L * 2.4 + dz / L * 0.9, who.y + 2.0, who.z - dz / L * 2.4 - dx / L * 0.9); look = new THREE.Vector3(cx, cy + 1.3, cz);
-    } else {   // close-up: in front of the speaker's face, a little to one side, pushing in slowly, face on the thirds
-      const s = who.scale || 1, side = (lineIdx % 2 ? 0.55 : -0.55) * s, fx = -Math.sin(who.yaw || 0), fz = -Math.cos(who.yaw || 0), d = (1.9 - Math.min(0.35, shotT * 0.05 * pushK)) * s;
-      p = new THREE.Vector3(who.x + fx * d + fz * side, who.y + 1.62 * s, who.z + fz * d - fx * side);
-      look = new THREE.Vector3(who.x - fz * 0.34 * s * Math.sign(side), who.y + 1.52 * s, who.z + fx * 0.34 * s * Math.sign(side));
+    } else {   // close-up: in front of the speaker's face, a little to one side, pushing in slowly
+      const s = who.scale || 1, side = (lineIdx % 2 ? 0.55 : -0.55) * s, fx = -Math.sin(who.yaw || 0), fz = -Math.cos(who.yaw || 0), d = (1.9 - Math.min(0.35, shotT * 0.05)) * s;
+      p = new THREE.Vector3(who.x + fx * d + fz * side, who.y + 1.62 * s, who.z + fz * d - fx * side); look = new THREE.Vector3(who.x, who.y + 1.55 * s, who.z);
     }
     if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; }   // a hard cut on every new line
     else { cam.p.lerp(p, 0.04); cam.l.lerp(look, 0.08); }
-    return framed();
+    return { pos: cam.p, look: cam.l };
   }
 
   const card = (small, h1, p, em, rw) => { const c = $('.sc-card'); $('.sc-card small').textContent = small || ''; $('.sc-card h1').textContent = h1 || ''; $('.sc-card p').textContent = p || ''; $('.sc-card em').textContent = em || ''; $('.sc-card .rw').textContent = rw || ''; c.style.display = 'grid'; c.style.opacity = 1; };
@@ -400,7 +317,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
       if (type === 'cutSkip') { flushCut(); endCut(); }
       if (type === 'skipVotes') $('.sc-skip').textContent = `skip: ${data.n} of ${data.need} want to skip`;
       if (type === 'talk') { talkQ.push(...(data.lines || [])); if (talkT <= 0) nextTalk(); }
-      if (type === 'story') { S = data; window.__storyState = S; render(); }
+      if (type === 'story') { S = data; render(); }
       if (type === 'obj' && audio) audio.play('radio');
       if (type === 'bark' && !talkT) { const el = $('.sc-bark'); el.style.setProperty('--c', COLORS[data.who] || '#fff'); el.innerHTML = `<b>${esc(data.name)}:</b> ${esc(data.text)}`; el.style.opacity = 1; barkT = 3.2; }
       if (type === 'focus') { focusT = data.dur || 15; $('.sc-focus').style.display = 'block'; }
@@ -476,22 +393,6 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
       for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i]; r.t += dt; const k = r.t / 0.9; r.m.scale.setScalar(1 + k * r.r * 1.6); r.m.material.opacity = 0.8 * (1 - k); if (k >= 1) { grp.remove(r.m); rings.splice(i, 1); } }
       if (snow.visible && camRef) { const a = snowGeo.attributes.position.array; for (let i = 0; i < SN; i++) { a[i * 3 + 1] -= dt * (2.2 + (i % 5) * 0.3); a[i * 3] += dt * 3.2; if (a[i * 3 + 1] < 0) { a[i * 3 + 1] = 14; a[i * 3] = (Math.random() - 0.5) * 40; a[i * 3 + 2] = (Math.random() - 0.5) * 40; } if (a[i * 3] > 20) a[i * 3] -= 40; } snowGeo.attributes.position.needsUpdate = true; snow.position.set(camRef.position.x, camRef.position.y - 6, camRef.position.z); }
       if (shadowMesh.visible) { shadowT += dt; shadowMesh.rotation.z = shadowPose === 'beat' ? Math.sin(shadowT * 7) * 0.12 : Math.sin(shadowT * 1.3) * 0.05; shadowMesh.scale.setScalar(1 + Math.sin(shadowT * (shadowPose === 'beat' ? 7 : 1.3)) * 0.04); }
-      {   // the lighting rig follows the speaker: rim from behind them (relative to the camera), key from the front
-        let rT = 0, kT = 0, rc = 0x9db8e8, kc = 0xcfd8ea;
-        if (cutQ.length && spkPos && camRef) {
-          const m = RIMMOOD[visNow] || RIMMOOD[''];
-          rc = m[0]; rT = m[1]; kc = m[2]; kT = m[3];
-          _rv.set(camRef.position.x - spkPos.x, 0, camRef.position.z - spkPos.z);
-          if (_rv.lengthSq() > 0.01) _rv.normalize();
-          rim.position.set(spkPos.x - _rv.x * 5.5, spkPos.y + 3.6, spkPos.z - _rv.z * 5.5);
-          rim.target.position.set(spkPos.x, spkPos.y + 1.3, spkPos.z);
-          keyL.position.set(spkPos.x + _rv.x * 3.2, spkPos.y + 2.2, spkPos.z + _rv.z * 3.2);
-          if (visNow === 'dread' || visNow === 'dread_dark' || visNow === 'dying') rT *= 0.8 + 0.35 * Math.abs(Math.sin(now * 13.7) + Math.sin(now * 7.3) * 0.5);   // horror flicker
-        }
-        const kk = Math.min(1, dt * 3);
-        rimI += (rT - rimI) * kk; keyI += (kT - keyI) * kk;
-        rim.intensity = rimI; keyL.intensity = keyI; rim.color.setHex(rc); keyL.color.setHex(kc);
-      }
       const bl = (S && S.balls) || [];
       while (balls.length < bl.length) { const m = new THREE.Mesh(ballGeo, ballMat); grp.add(m); balls.push(m); }
       balls.forEach((m, i) => { m.visible = i < bl.length; if (m.visible) m.position.set(bl[i][0], bl[i][1], bl[i][2]); });

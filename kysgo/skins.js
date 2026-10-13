@@ -3,7 +3,6 @@
 // Rarity: Common, Uncommon, Rare, Epic, Legendary, Funny and Mythic (the two rarest, same odds). Mythic finishes and
 // outfits glow and animate, and have their own inspect. Odds are shown on every crate. Crates open with coins earned in-game only.
 import { WEAPONS } from './data.js';
-import { econPrice, econEvent, econTrend } from './market_econ.js';
 
 export const RARITY = [  // index = tier; Funny and Mythic are the rarest
   { key: 'common', name: 'Common', color: '#b0c3d9', odds: 69.8, value: 20 },
@@ -154,147 +153,17 @@ function makeCrate(id, name, desc, theme, seed, knives, price) {
 // The other cases: a theme = palette + 15 finish names (5 Common, 4 Uncommon, 3 Rare, 2 Epic, 1 Legendary gun),
 // two classic knives (Legendary) and a joke knife (Funny). Ids are crate:weapon:finish, fixed forever once shipped.
 const PAT = [['camo', 'solid', 'checker', 'stripes', 'dots'], ['tiger', 'hex', 'circuit', 'marble', 'damascus'], ['geo', 'galaxy', 'flames', 'scales', 'web'], ['fade', 'wave'], ['wave']];
-// Finish overrides: corrected patterns/palettes so each finish looks like its name.
-// Generated from the skins audit (144 mismatches).
-const FINISH_OVERRIDES = {
-  'Abyssal': { t: 'solid' },
-  'Acid Rain': { t: 'stripes' },
-  'Alien Probe': { t: 'solid', c: ['#a8adb6', '#6a6e76'] },
-  'Asteroid Belt': { t: 'dots', c: ['#6a6a70', '#4a4a50', '#8a8a90'] },
-  'Ballroom': { t: 'checker', c: ['#1a1a1a', '#f4f0e0'] },
-  'Barnacle': { t: 'dots', c: ['#9aa0a8', '#6a7078'] },
-  'Bat Cave': { t: 'solid', c: ['#0a0a0a', '#1a1a1a'] },
-  'Beach Towel': { t: 'stripes' },
-  'Beef Jerky': { t: 'smear', c: ['#7a3a1a', '#5a2a10', '#8a4a20'] },
-  'Big Top': { t: 'stripes' },
-  'Black Ice': { t: 'solid', c: ['#0a0f18', '#1a2433'] },
-  'Blizzard': { t: 'clouds' },
-  'Boardwalk': { t: 'stripes', c: ['#8a6a4a', '#6a4a2e'] },
-  'Bone Daddy': { t: 'solid', c: ['#e8e0d0', '#c8bca8'] },
-  'Bone Dry': { t: 'solid', c: ['#e8e0d0', '#c8bca8'] },
-  'Boombox': { t: 'solid', c: ['#1a1a1a', '#3a3a3a'] },
-  'Brown Stain': { t: 'smear', c: ['#8a5a2a', '#6a421e'] },
-  'Cave Painting': { t: 'marble' },
-  'Cheeto Dust': { t: 'dots', c: ['#ff9a2a', '#e8862a', '#c86a1a'] },
-  'Chem Spill': { t: 'smear' },
-  'Chicken Coop': { t: 'stripes' },
-  'Classified Intel': { t: 'stripes', c: ['#0a0a0a', '#1a1a1a'] },
-  'Cobweb': { t: 'web', c: ['#e8e8e8', '#c8c8c8'] },
-  'Coconut': { t: 'solid', c: ['#6a4a2a', '#f4f0e8'] },
-  'Coffee Stain': { t: 'smear', c: ['#6a4a2a', '#4a3018'] },
-  'Coral Bleach': { t: 'scales', c: ['#f4efe4', '#d8d0c0'] },
-  'County Fair': { t: 'dots' },
-  'Creepy Smile': { t: 'smear', c: ['#ffffff', '#ff4a4a'] },
-  'Crumpet Crumbs': { t: 'dots', c: ['#d8b878', '#c8a050'] },
-  'Dead Tamagotchi': { t: 'dots', c: ['#e8e8e8', '#a8a8a8'] },
-  'Dino Nuggets': { t: 'dots' },
-  'Disco Ball': { t: 'checker', c: ['#e8eaee', '#8a8f98', '#c8ccd4'] },
-  'Dog Tags': { t: 'solid', c: ['#a8adb6', '#8a8f98'] },
-  'Drill Sergeant': { t: 'solid', c: ['#2a2a22', '#1a1a1a'] },
-  'Ectoplasm': { t: 'smear', c: ['#7aff4a', '#4ae82a'] },
-  'Face Melter': { t: 'flames', c: ['#1a0a06', '#ff5a1a', '#ffd23a'] },
-  'Fart Mixtape': { t: 'stripes', c: ['#1a1a1a', '#2a2a2a'] },
-  'Five Star': { t: 'dots', c: ['#e4ae39', '#c89628', '#8a6a1a'] },
-  'Floppy Disk': { t: 'solid', c: ['#1a1a1a', '#2a2a2a'] },
-  'Full Moon': { t: 'solid', c: ['#f4f0e0', '#e8e0c8'] },
-  'Gamer Pee Bottle': { t: 'solid', c: ['#f8e040', '#e8b020'] },
-  'Gingerbread': { t: 'solid', c: ['#8a5a2a', '#6a421e'] },
-  'Glow Worm': { t: 'wave' },
-  'Golden Arches-ish': { t: 'solid', c: ['#f2d33c', '#e8b020'] },
-  'Golden Parachute': { t: 'solid', c: ['#e4ae39', '#8a6a1a'] },
-  'Golden Temple': { t: 'solid', c: ['#e8c040', '#8a6a1a'] },
-  'Golden Toilet': { t: 'solid', c: ['#e4ae39', '#f4f0e0'] },
-  'Grim Reaper': { t: 'solid', c: ['#0a0a0a', '#2a2a2a'] },
-  'Hazard Tape': { t: 'stripes', c: ['#f2d33c', '#1a1a1a'] },
-  'Headset Hair': { t: 'smear' },
-  'Hen Party': { t: 'dots' },
-  'Jaguar': { t: 'dots' },
-  'Jet Ski': { t: 'solid', c: ['#2ad2ff', '#1a8ac8'] },
-  'Jurassic Spark': { t: 'galaxy', c: ['#2a1a0a', '#ffd23a', '#fff28a'] },
-  'Kelp Forest': { t: 'wave' },
-  'Kevlar': { t: 'checker' },
-  'Kraken Ink': { t: 'clouds' },
-  'Lava Lamp': { t: 'marble' },
-  'Leather Jacket': { t: 'solid', c: ['#1a1a1a', '#0a0a0a'] },
-  'Long A': { t: 'damascus' },
-  'Lost Idol': { t: 'solid', c: ['#e8c040', '#c89628'] },
-  'Medal of Honor': { t: 'stripes', c: ['#1a2a5a', '#e4ae39', '#f4f0e0'] },
-  'Meltdown': { t: 'flames', c: ['#2a0a06', '#ff5a1a', '#ffd23a'] },
-  'Mermaid Scales': { t: 'scales' },
-  'Meteor Strike': { t: 'flames', c: ['#ff7a1a', '#ff3a1a', '#2a2a1a'] },
-  'Midnight Burrito': { t: 'smear', c: ['#d8b878', '#c8a050', '#a8823a'] },
-  'Milkshake Machine': { t: 'solid', c: ['#c8c8c8', '#8a8a8a'] },
-  'Mom Said Bedtime': { t: 'dots', c: ['#0d0d1f', '#1a1a3a', '#2a2a4a'] },
-  'Moo Point': { t: 'dots' },
-  'Mullet': { t: 'smear', c: ['#6a4a2a', '#8a5a2a'] },
-  'Napkin Dispenser': { t: 'solid', c: ['#f4f4f0', '#ffffff'] },
-  'Navy Night': { t: 'solid', c: ['#0a1a3a', '#1a2a5a'] },
-  'Nebula': { t: 'galaxy' },
-  'Night Vision': { t: 'solid', c: ['#061206', '#0a2a0a'] },
-  'Northern Lights': { t: 'wave' },
-  'Office Fart': { t: 'clouds', c: ['#7a9a4a', '#5a7a3a'] },
-  'Pie In The Face': { t: 'smear', c: ['#f4f0e0', '#e8e0d0'] },
-  'Pooped Pants': { t: 'smear', c: ['#6b4423', '#4a2f18'] },
-  'Prize Pumpkin': { t: 'stripes' },
-  'Pterodactyl': { t: 'wave' },
-  'Purple Heart': { t: 'solid', c: ['#5a2a8a', '#3a1a5a'] },
-  'Pyro': { t: 'flames', c: ['#1a0a06', '#ff5a1a', '#ffd23a'] },
-  'Quarterly Loss': { t: 'fade', c: ['#c8402a', '#8a2010'] },
-  'Rainforest': { t: 'camo' },
-  'Red Planet': { t: 'marble' },
-  'Reply All Fart': { t: 'clouds', c: ['#7a9a4a', '#8ab85a'] },
-  'Retina Damage': { t: 'flames' },
-  'Roller Grill': { t: 'stripes' },
-  'Rotten Tooth': { t: 'smear', c: ['#4a3a20', '#2a1f10'] },
-  'Satellite Dish': { t: 'solid', c: ['#8a8f98', '#5a5f68'] },
-  'Scarecrow': { t: 'checker' },
-  'Seagull Theft': { t: 'solid', c: ['#e8e8e8', '#c8c8c8'] },
-  'Sewer Rat': { t: 'solid', c: ['#6a625a', '#4a443c'] },
-  'Space Junk': { t: 'solid', c: ['#8a8f98', '#5a5f68'] },
-  'Spiked Collar': { t: 'dots', c: ['#1a1a1a', '#c8c8c8'] },
-  'Sticky Fingers': { t: 'smear', c: ['#b8e8ff', '#8ad2ff', '#e8f4ff'] },
-  'Swamp Ass': { t: 'camo', c: ['#4a5a2a', '#2a3a1a', '#6a7a3a'] },
-  'Swamp Thing': { t: 'camo' },
-  'Sweatband': { t: 'stripes' },
-  'Sweaty Pits': { t: 'smear', c: ['#d8cc80', '#b8a860', '#8a7a40'] },
-  'TPS Report': { t: 'solid', c: ['#f4f0e8', '#ffffff'] },
-  'Tan Lines': { t: 'stripes' },
-  'Tar Pit': { t: 'solid', c: ['#0a0a0a', '#1a1a1a'] },
-  'Throne Room': { t: 'solid', c: ['#8a1a2a', '#e4ae39'] },
-  'Tiki Bar': { t: 'solid', c: ['#8a5a2a', '#6a421e'] },
-  'Toilet Break': { t: 'solid', c: ['#f4f4f0', '#e8e8e8'] },
-  'Toilet Tax': { t: 'smear', c: ['#6b4423', '#4a2f18'] },
-  'Totally Crusty': { t: 'marble', c: ['#8a7a5a', '#6a5a40'] },
-  'Tractor Pull': { t: 'stripes' },
-  'Triple Stack': { t: 'stripes' },
-  'Truck Stop': { t: 'stripes' },
-  'Unicycle': { t: 'dots' },
-  'Uninstalled': { t: 'solid', c: ['#3a3a3a', '#2a2a2a'] },
-  'Used Napkin': { t: 'solid', c: ['#e8e4d8', '#c8c4b8'] },
-  'VHS Tape': { t: 'solid', c: ['#101010', '#2a2a2a'] },
-  'Velvet Rope': { t: 'solid', c: ['#8a1a2a', '#5a0e1a'] },
-  'Volcano': { t: 'flames', c: ['#8a2a1a', '#ff5a1a', '#2a0a0a'] },
-  'Willy\'s Factory': { t: 'solid', c: ['#5a2a6a', '#3a1a4a'] },
-  'Wood Panel': { t: 'stripes', c: ['#6a4a2a', '#5a3a1e', '#7a5632'] },
-  'Yeti': { t: 'camo' },
-};
-
 function themedCrate(n, id, name, desc, pal, names, knives, joke, price = 250) {
   const items = [], counts = [5, 4, 3, 2, 1];
   let k = 0;
   counts.forEach((c, tier) => {
     const pool = tier >= 3 ? STAR_GUNS : GUNS, guns = pick(pool, c, 101 + n * 17 + tier * 7);
     for (let j = 0; j < c; j++, k++) {
-      const ov = FINISH_OVERRIDES[names[k]];
-      const t = (ov && ov.t) || PAT[tier][(j + n) % PAT[tier].length];
-      let cc;
-      if (ov && ov.c) cc = ov.c;
-      else { const c0 = pal[(j + tier) % pal.length], c1 = pal[(j + tier + 1) % pal.length], c2 = pal[(j + tier + 2) % pal.length]; cc = [c0, c1, c2]; }
-      items.push({ id: `${id}:${guns[j]}:${names[k]}`, kind: 'skin', weapon: guns[j], finish: names[k], paint: { t, c: cc }, tier });
+      const t = PAT[tier][(j + n) % PAT[tier].length], c0 = pal[(j + tier) % pal.length], c1 = pal[(j + tier + 1) % pal.length], c2 = pal[(j + tier + 2) % pal.length];
+      items.push({ id: `${id}:${guns[j]}:${names[k]}`, kind: 'skin', weapon: guns[j], finish: names[k], paint: { t, c: tier >= 3 ? [c0, c1, c2] : [c0, c1, c2] }, tier });
     }
   });
-  const kfDef = [['Vanilla', { t: 'solid', c: ['#a8adb6', '#6a6e76'] }], [names[15] || 'Case Hardened', { t: 'fade', c: [pal[0], pal[1], pal[2]] }], [names[16] || 'Night Shift', { t: 'web', c: [pal[3] || pal[0], '#111111'] }]];
-  const kf = kfDef.map(([nm, pt]) => { const ov = FINISH_OVERRIDES[nm]; return F(nm, ov ? { t: ov.t || pt.t, c: ov.c || pt.c } : pt); });
+  const kf = [F('Vanilla', { t: 'solid', c: ['#a8adb6', '#6a6e76'] }), F(names[15] || 'Case Hardened', { t: 'fade', c: [pal[0], pal[1], pal[2]] }), F(names[16] || 'Night Shift', { t: 'web', c: [pal[3] || pal[0], '#111111'] })];
   for (const kn of knives) for (const f of kf) items.push({ id: `${id}:${kn}:${f.name}`, kind: 'knife', weapon: kn, finish: f.name, paint: f.paint, tier: 4 });
   for (const f of kf.slice(1)) items.push({ id: `${id}:${joke}:${f.name}`, kind: 'knife', weapon: joke, finish: f.name, paint: f.paint, tier: 5 });
   return { id, name, desc, price, items };
@@ -420,9 +289,9 @@ export function rollCrate(crate, rnd = Math.random) {
 let uidN = 0;
 export const newItem = (def, float, st, seed) => ({ uid: Date.now().toString(36) + (uidN++).toString(36) + Math.floor(Math.random() * 1e6).toString(36), def, float: +float.toFixed(5), st: !!st, seed, kills: 0, t: Date.now() });
 // what players see for some old finish names (the stored ids keep the original names, so owned items never change)
-const SHOWN = { 'Thicc Boi': 'Gyatt', 'Touch Grass': 'Never Showered', 'Main Character': 'Sweaty Pits', 'Ranked Anxiety': 'Mom Said Bedtime',
-  'Diamond Hands': 'Sticky Fingers', 'Reply All': 'Reply All Fart', 'Team Building': 'Office Fart', 'Unpaid Overtime': 'Toilet Break',
-  'Micromanager': 'Bathroom Camper', 'CEO Bonus': 'Golden Toilet', 'Participation Trophy': 'Last Place Loser',
+const SHOWN = { 'Thicc Boi': 'Gyatt', 'Touch Grass': 'Never Showered', 'Main Character': 'Sweaty Pits', 'Ranked Anxiety': 'Mom Said Bedtime', 'Smurf Account': "Ur Mom's Account",
+  'Diamond Hands': 'Sticky Fingers', 'Synergy': 'Butt Dial', 'Reply All': 'Reply All Fart', 'Team Building': 'Office Fart', 'Unpaid Overtime': 'Toilet Break',
+  'Casual Friday': 'No Pants Friday', 'Micromanager': 'Bathroom Camper', 'CEO Bonus': 'Golden Toilet', 'Participation Trophy': 'Last Place Loser',
   'Grass Toucher': 'Booger Picker', 'Touch Grass Pro': 'Mouth Breather', 'Sweaty Palms': 'Swamp Ass', 'Crumpet': 'Crumpet Crumbs', 'Corgi': 'Corgi Butt',
   'Tea Stain': 'Brown Stain', 'Fancy Napkin': 'Used Napkin', 'Peasant Tax': 'Toilet Tax', 'Mixtape': 'Fart Mixtape', 'Tamagotchi': 'Dead Tamagotchi',
   'Y2K Panic': 'Pooped Pants', 'Totally Radical': 'Totally Crusty', 'Gamer Fuel': 'Gamer Pee Bottle' };
@@ -431,25 +300,9 @@ export function itemInfo(it) {
   const d = ITEM_BY_ID[it.def]; if (!d) return null;
   const wpn = d.kind === 'skin' ? (WEAPONS.find((w) => w.id === d.weapon) || {}).name : d.kind === 'knife' ? KNIFE_BY_ID[d.weapon].name : d.kind === 'emote' ? 'Emote' : 'Agent';
   const wear = d.kind === 'agent' || d.kind === 'emote' ? null : wearOf(it.float);
-  // AI market economy: dynamic price based on rarity (odds) and supply/demand
-  const baseVal = RARITY[d.tier].value, odds = RARITY[d.tier].odds;
-  const aiPrice = econPrice(it.def, baseVal, odds);
-  const value = Math.round(aiPrice * (wear ? wear.mult : 1) * (it.st ? 2 : 1) * (d.kind === 'agent' ? 1.5 : d.kind === 'emote' ? 0.8 : 1));
+  const value = Math.round(RARITY[d.tier].value * (wear ? wear.mult : 1) * (it.st ? 2 : 1) * (d.kind === 'agent' ? 1.5 : d.kind === 'emote' ? 0.8 : 1));
   const finish = shownFinish(d.finish);
-  const trend = econTrend(it.def);
-  return { ...d, finish, wpn, wear, value, trend, rarity: RARITY[d.tier], label: (it.st ? 'StatTrak™ ' : '') + `${wpn} | ${finish}` };
-}
-
-// Record a case opening for the AI market (increases supply → gentle downward pressure)
-export function econCaseOpened(defId, tier) {
-  const baseVal = RARITY[tier] ? RARITY[tier].value : 20, odds = RARITY[tier] ? RARITY[tier].odds : 69.8;
-  econEvent('case_open', defId, baseVal, odds);
-}
-
-// Record a market trade for the AI market (revealed demand → upward pressure)
-export function econTraded(defId, tier) {
-  const baseVal = RARITY[tier] ? RARITY[tier].value : 20, odds = RARITY[tier] ? RARITY[tier].odds : 69.8;
-  econEvent('trade', defId, baseVal, odds);
+  return { ...d, finish, wpn, wear, value, rarity: RARITY[d.tier], label: (it.st ? 'StatTrak™ ' : '') + `${wpn} | ${finish}` };
 }
 
 // ---- painting: recipe -> canvas (deterministic by seed), then wear ----
@@ -462,24 +315,24 @@ export function paintSkin(canvas, paint, seed = 1, float = 0.1, scale = 0) {
   g.fillStyle = c[0]; g.fillRect(0, 0, W, H);
   const blob = (x, y, rr, col) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, rr, rr * (0.5 + r()), r() * 3, 0, 7); g.fill(); };
   switch (paint.t) {
-    case 'camo': for (let i = 0; i < 34; i++) blob(r() * W, r() * H, 5 + r() * 12, c[1 + (i % 2)] || c[1]); break;
-    case 'solid': g.fillStyle = c[1]; g.fillRect(0, H * 0.62, W, H * 0.38); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, H * 0.62, W, Math.max(1, H * 0.03)); break;
+    case 'camo': for (let i = 0; i < 26; i++) blob(r() * W, r() * H, 4 + r() * 10, c[1 + (i % 2)] || c[1]); break;
+    case 'solid': g.fillStyle = c[1]; g.fillRect(0, H * 0.75, W, H * 0.25); break;
     case 'checker': for (let y = 0; y < H; y += 8) for (let x = 0; x < W; x += 8) if (((x + y) / 8) % 2) { g.fillStyle = c[1]; g.fillRect(x, y, 8, 8); } break;
-    case 'stripes': g.fillStyle = c[1]; for (let x = -H; x < W; x += 14) { g.beginPath(); g.moveTo(x, H); g.lineTo(x + 7, H); g.lineTo(x + 7 + H, 0); g.lineTo(x + H, 0); g.fill(); } break;
-    case 'tiger': g.fillStyle = c[1]; for (let i = 0; i < 18; i++) { const x = r() * W; g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + (r() - 0.5) * 20, H / 2, x + (r() - 0.5) * 10, H); g.lineWidth = 3 + r() * 4; g.strokeStyle = c[1]; g.stroke(); } break;
+    case 'stripes': g.fillStyle = c[1]; for (let x = -H; x < W; x += 12) { g.beginPath(); g.moveTo(x, H); g.lineTo(x + 6, H); g.lineTo(x + 6 + H, 0); g.lineTo(x + H, 0); g.fill(); } break;
+    case 'tiger': g.fillStyle = c[1]; for (let i = 0; i < 14; i++) { const x = r() * W; g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + (r() - 0.5) * 20, H / 2, x + (r() - 0.5) * 10, H); g.lineWidth = 2 + r() * 3; g.strokeStyle = c[1]; g.stroke(); } break;
     case 'hex': g.strokeStyle = c[1]; g.lineWidth = 1.5; for (let y = 0; y < H + 8; y += 7) for (let x = 0; x < W + 8; x += 8) { const ox = (y / 7) % 2 ? 4 : 0; g.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; g.lineTo(x + ox + Math.cos(a) * 4, y + Math.sin(a) * 4); } g.closePath(); g.stroke(); } break;
     case 'circuit': g.strokeStyle = c[1]; g.lineWidth = 1; for (let i = 0; i < 30; i++) { let x = r() * W, y = r() * H; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 4; k++) { if (r() < 0.5) x += (r() - 0.5) * 24; else y += (r() - 0.5) * 24; g.lineTo(x, y); } g.stroke(); g.fillStyle = c[1]; g.fillRect(x - 1, y - 1, 3, 3); } break;
     case 'marble': for (let i = 0; i < 40; i++) { g.strokeStyle = c[1] + (r() < 0.5 ? '88' : 'cc'); g.lineWidth = 0.5 + r() * 2; g.beginPath(); let x = r() * W, y = r() * H; g.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (r() - 0.5) * 20; y += (r() - 0.5) * 10; g.lineTo(x, y); } g.stroke(); } break;
     case 'damascus': g.strokeStyle = c[1]; for (let y = 0; y < H; y += 3) { g.beginPath(); for (let x = 0; x <= W; x += 2) g.lineTo(x, y + Math.sin(x / 6 + y / 4 + seed) * 2.5); g.stroke(); } break;
     case 'geo': { g.fillStyle = c[1]; for (let i = 0; i < 6; i++) { const x = r() * W; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 10 + r() * 14, 0); g.lineTo(x - 6 + r() * 10, H); g.lineTo(x - 16, H); g.fill(); } g.fillStyle = c[2]; for (let i = 0; i < 5; i++) g.fillRect(r() * W, r() * H, 6 + r() * 16, 2 + r() * 3); break; }
     case 'galaxy': { const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, c[0]); gr.addColorStop(0.5, c[1]); gr.addColorStop(1, c[0]); g.fillStyle = gr; g.fillRect(0, 0, W, H); g.fillStyle = c[2]; for (let i = 0; i < 60; i++) g.fillRect(r() * W, r() * H, r() < 0.9 ? 1 : 2, r() < 0.9 ? 1 : 2); break; }
-    case 'flames': for (let i = 0; i < 26; i++) { const x = r() * W, hh = H * (0.5 + r() * 0.6); g.fillStyle = i % 2 ? c[1] : c[2]; g.beginPath(); g.moveTo(x - 7, H); g.quadraticCurveTo(x - 5, H - hh / 2, x + (r() - 0.5) * 6, H - hh); g.quadraticCurveTo(x + 5, H - hh / 2, x + 7, H); g.fill(); } break;
+    case 'flames': for (let i = 0; i < 18; i++) { const x = r() * W, hh = H * (0.4 + r() * 0.6); g.fillStyle = i % 2 ? c[1] : c[2]; g.beginPath(); g.moveTo(x - 6, H); g.quadraticCurveTo(x - 4, H - hh / 2, x + (r() - 0.5) * 6, H - hh); g.quadraticCurveTo(x + 4, H - hh / 2, x + 6, H); g.fill(); } break;
     case 'scales': g.strokeStyle = c[2]; g.fillStyle = c[1]; for (let y = 0; y < H + 6; y += 5) for (let x = 0; x < W + 6; x += 6) { g.beginPath(); g.arc(x + ((y / 5) % 2 ? 3 : 0), y, 3, 0, Math.PI); if (r() < 0.15) g.fill(); g.stroke(); } break;
     case 'fade': case 'wave': { const gr = g.createLinearGradient(0, 0, W, paint.t === 'wave' ? H : 0); c.forEach((col, k) => gr.addColorStop(k / (c.length - 1), col)); g.fillStyle = gr; g.fillRect(0, 0, W, H);
       if (paint.t === 'wave') { g.strokeStyle = 'rgba(255,255,255,.25)'; for (let k = 0; k < 6; k++) { g.beginPath(); for (let x = 0; x <= W; x += 2) g.lineTo(x, H * (k + 0.5) / 6 + Math.sin(x / 7 + seed + k) * 3); g.stroke(); } } break; }
-    case 'smear': g.strokeStyle = c[1]; g.lineCap = 'round'; for (let i = 0; i < 15; i++) { g.lineWidth = 3 + r() * 7; g.beginPath(); const x = r() * W, y = r() * H; g.moveTo(x, y); g.quadraticCurveTo(x + 10, y + (r() - 0.5) * 8, x + 14 + r() * 22, y + (r() - 0.5) * 6); g.stroke(); } break;
-    case 'clouds': for (let i = 0; i < 26; i++) { const x = r() * W, y = r() * H; for (let k = 0; k < 4; k++) { g.fillStyle = c[1] + 'aa'; g.beginPath(); g.arc(x + k * 4, y + (k % 2) * 2, 3.5 + r() * 3.5, 0, 7); g.fill(); } } break;
-    case 'dots': g.fillStyle = c[1]; for (let y = 3; y < H; y += 8) for (let x = 3 + ((y / 8) % 2) * 4; x < W; x += 8) { g.beginPath(); g.arc(x, y, 2.8, 0, 7); g.fill(); } break;
+    case 'smear': g.strokeStyle = c[1]; g.lineCap = 'round'; for (let i = 0; i < 9; i++) { g.lineWidth = 2 + r() * 5; g.beginPath(); const x = r() * W, y = r() * H; g.moveTo(x, y); g.quadraticCurveTo(x + 10, y + (r() - 0.5) * 8, x + 14 + r() * 20, y + (r() - 0.5) * 6); g.stroke(); } break;
+    case 'clouds': for (let i = 0; i < 18; i++) { const x = r() * W, y = r() * H; for (let k = 0; k < 3; k++) { g.fillStyle = c[1] + 'aa'; g.beginPath(); g.arc(x + k * 4, y + (k % 2) * 2, 3 + r() * 3, 0, 7); g.fill(); } } break;
+    case 'dots': g.fillStyle = c[1]; for (let y = 3; y < H; y += 8) for (let x = 3 + ((y / 8) % 2) * 4; x < W; x += 8) { g.beginPath(); g.arc(x, y, 2, 0, 7); g.fill(); } break;
     case 'web': g.strokeStyle = c[1]; g.lineWidth = 1; { const cx = W * r(), cy = H * r(); for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * W, cy + Math.sin(a) * W); g.stroke(); } for (let rr = 5; rr < W; rr += 6) { g.beginPath(); g.arc(cx, cy, rr, 0, 7); g.stroke(); } } break;
     case 'text': g.fillStyle = c[1]; g.font = `900 ${Math.max(7, H / 4)}px system-ui,sans-serif`; for (let y = H / 4; y < H + 4; y += H / 4) for (let x = ((y / (H / 4)) % 2) * -10; x < W; x += g.measureText(paint.s + ' ').width) g.fillText(paint.s, x, y); break;
     case 'hotdogs': for (let i = 0; i < 10; i++) { const x = r() * W, y = r() * H; g.fillStyle = c[0] === '#f2d8a0' ? '#d8a050' : c[0]; g.fillRect(x - 5, y - 2, 10, 4); g.fillStyle = c[1]; g.fillRect(x - 6, y - 1, 12, 2); g.fillStyle = '#f2d33c'; g.fillRect(x - 4, y - 0.5, 8, 0.8); } break;
@@ -498,40 +351,10 @@ export function paintSkin(canvas, paint, seed = 1, float = 0.1, scale = 0) {
     g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = px * 1.5; for (const x of [W * 0.28, W * 0.52, W * 0.74]) { g.beginPath(); g.moveTo(x, H * 0.12); g.lineTo(x, H * 0.88); g.stroke(); }
     g.fillStyle = 'rgba(0,0,0,.35)'; for (const [x, y] of [[0.3, 0.2], [0.3, 0.8], [0.54, 0.5], [0.76, 0.25]]) { g.beginPath(); g.arc(W * x, H * y, px * 3, 0, 7); g.fill(); }
     g.fillStyle = 'rgba(255,255,255,.18)'; for (const [x, y] of [[0.3, 0.2], [0.3, 0.8], [0.54, 0.5], [0.76, 0.25]]) g.fillRect(W * x - px, H * y - px * 2, px * 2, px);
-    // a maker's badge stuck on the receiver flat: metallic, embossed, with a soft drop shadow so it reads as a
-    // physical sticker sitting on the paint, not part of the print. High-float badges peel at one corner.
-    if (!['hotdogs', 'poops', 'text'].includes(paint.t) && r() < 0.55) {
-      const ex = W * 0.47, ey = H * 0.44, er = H * 0.17;
-      g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(ex, ey + er * 0.16, er * 1.02, er * 0.9, 0, 0, 7); g.fill();
-      const mg = g.createRadialGradient(ex - er * 0.3, ey - er * 0.35, er * 0.1, ex, ey, er);
-      mg.addColorStop(0, '#f4f6f8'); mg.addColorStop(0.55, '#9aa0a8'); mg.addColorStop(1, '#4a4e55');
-      g.fillStyle = mg; g.beginPath(); g.arc(ex, ey, er, 0, 7); g.fill();
-      g.strokeStyle = 'rgba(20,22,26,.85)'; g.lineWidth = Math.max(px, er * 0.07); g.stroke();
-      const kind = Math.floor(r() * 3); g.fillStyle = '#2b2e34';
-      if (kind === 0) { g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? er * 0.32 : er * 0.62; g[k ? 'lineTo' : 'moveTo'](ex + Math.cos(a) * rr, ey + Math.sin(a) * rr); } g.closePath(); g.fill(); }
-      else if (kind === 1) { g.beginPath(); g.moveTo(ex + er * 0.18, ey - er * 0.6); g.lineTo(ex - er * 0.28, ey + er * 0.18); g.lineTo(ex + er * 0.02, ey + er * 0.18); g.lineTo(ex - er * 0.18, ey + er * 0.6); g.lineTo(ex + er * 0.28, ey - er * 0.14); g.lineTo(ex - er * 0.02, ey - er * 0.14); g.closePath(); g.fill(); }
-      else { g.beginPath(); g.arc(ex, ey - er * 0.08, er * 0.34, 0, 7); g.fill(); g.fillRect(ex - er * 0.34, ey + er * 0.12, er * 0.68, er * 0.26); }
-      g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = Math.max(px, er * 0.045); g.beginPath(); g.arc(ex, ey, er * 0.86, Math.PI * 1.05, Math.PI * 1.55); g.stroke();
-      g.strokeStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.arc(ex, ey, er * 0.9, Math.PI * 0.15, Math.PI * 0.6); g.stroke();
-      if (float > 0.25) { const pa = Math.PI * 0.78, cxp = ex + Math.cos(pa) * er * 0.92, cyp = ey + Math.sin(pa) * er * 0.92;
-        g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(cxp + er * 0.06, cyp + er * 0.1, er * 0.3, er * 0.14, pa, 0, 7); g.fill();
-        g.fillStyle = '#d7dbe0'; g.beginPath(); g.moveTo(cxp, cyp); g.lineTo(cxp + er * 0.34, cyp + er * 0.1); g.lineTo(cxp + er * 0.1, cyp - er * 0.3); g.closePath(); g.fill();
-        g.strokeStyle = 'rgba(90,94,102,.8)'; g.lineWidth = px; g.stroke(); }
-    }
-    if (float < 0.06) { const fg = g.createLinearGradient(0, 0, W, H); fg.addColorStop(0.42, 'rgba(255,255,255,0)'); fg.addColorStop(0.5, 'rgba(255,255,255,.10)'); fg.addColorStop(0.58, 'rgba(255,255,255,0)'); g.fillStyle = fg; g.fillRect(0, 0, W, H); }   // fresh clearcoat sheen on factory-new
   }
-  // wear: scratches, chips down to the metal and grime, all growing with the float (fine lines at full resolution).
-  // scratches cluster where hands actually rub: the grip, the forend and around the ejection port (u along the
-  // barrel, v up, matching the hydro-dip UV layout), instead of speckling uniformly like noise.
+  // wear: scratches, chips down to the metal and grime, all growing with the float (fine lines at full resolution)
   const n = Math.floor(float * 220 * Math.min(4, sc));
-  const zones = [[0.48, 0.02, 0.72, 0.35], [0.12, 0.25, 0.42, 0.55], [0.42, 0.5, 0.58, 0.78]];
-  for (let i = 0; i < n; i++) {
-    g.fillStyle = r() < 0.55 ? 'rgba(210,210,215,.45)' : 'rgba(30,25,20,.4)';
-    let x, y;
-    if (r() < 0.65) { const z = zones[(r() * zones.length) | 0]; x = (z[0] + r() * (z[2] - z[0])) * W; y = (z[1] + r() * (z[3] - z[1])) * H; }
-    else { x = r() * W; y = r() * H; }
-    const len = 1 + r() * 4 * float; g.save(); g.translate(x, y); g.rotate((r() - 0.5) * 0.6); g.fillRect(0, 0, len, Math.max(px, 0.5 * px * sc / 2)); g.restore();
-  }
+  for (let i = 0; i < n; i++) { g.fillStyle = r() < 0.55 ? 'rgba(210,210,215,.45)' : 'rgba(30,25,20,.4)'; const x = r() * W, y = r() * H, len = 1 + r() * 4 * float; g.save(); g.translate(x, y); g.rotate((r() - 0.5) * 0.6); g.fillRect(0, 0, len, Math.max(px, 0.5 * px * sc / 2)); g.restore(); }
   if (float > 0.15) for (let i = 0; i < float * 40; i++) { const e = r() < 0.5 ? r() * H * 0.12 : H - r() * H * 0.12; g.fillStyle = 'rgba(150,150,155,.55)'; g.beginPath(); g.ellipse(r() * W, e, px * (2 + r() * 6), px * (1 + r() * 3), r() * 3, 0, 7); g.fill(); }   // edge chips
   if (float > 0.38) { g.fillStyle = `rgba(60,50,40,${(float - 0.38) * 0.5})`; g.fillRect(0, 0, W, H); }
   g.setTransform(1, 0, 0, 1, 0, 0);

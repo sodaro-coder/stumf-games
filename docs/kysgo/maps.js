@@ -132,8 +132,7 @@ function nuke() {
   B.block(26, 24, 27, 27, 0.9, 'concrete'); B.block(45, 24, 46, 27, 0.9, 'concrete');  // planters
   B.zone('Green Backyard', 0, 0, 12, 52).zone('Yellow Backyard', 60, 0, 72, 52).zone('Green House', 12, 12, 26, 38).zone('Yellow House', 46, 14, 60, 40)
     .zone('Bus', 30, 16, 41, 34).zone('Truck', 26, 2, 34, 14).zone('North Street', 26, 2, 46, 16).zone('South Street', 26, 34, 46, 50)
-    .zone('Green Garage Side', 12, 2, 26, 12).zone('Green Pool Side', 12, 38, 26, 50).zone('Yellow Garage Side', 46, 2, 60, 14).zone('Yellow Pool Side', 46, 40, 60, 50)
-    .zone('lobby', 14, 32, 20, 37).zone('control', 47, 16, 52, 28).zone('vents', 19, 13, 25, 37);
+    .zone('Green Garage Side', 12, 2, 26, 12).zone('Green Pool Side', 12, 38, 26, 50).zone('Yellow Garage Side', 46, 2, 60, 14).zone('Yellow Pool Side', 46, 40, 60, 50);
   B.zone('Green Upstairs', 19, 13, 25, 37).zone('Yellow Upstairs', 47, 15, 53, 39);   // later zones win
   B.site('A', 26, 2, 46, 14).site('B', 26, 36, 46, 50);
   B.buyzone('T', 2, 2, 12, 50).buyzone('CT', 60, 2, 70, 50);
@@ -161,8 +160,7 @@ function ship() {
   for (const [x, z] of [[13, 14], [25, 24], [12, 25], [27, 14], [15, 33], [26, 5], [3, 16], [36, 24], [19, 24]]) B.block(x, z, x + 1, z + 1, 1.0, 'crate');
   B.block(14, 14, 15, 15, 2.0, 'crate');
   B.block(2, 2, 4, 4, 2.4, 'potty'); B.block(36, 36, 38, 38, 2.4, 'potty');
-  B.zone('North', 2, 2, 38, 7).zone('South', 2, 33, 38, 38).zone('West Lane', 2, 7, 6, 33).zone('East Lane', 34, 7, 38, 33).zone('Center', 12, 12, 28, 28)
-    .zone('deck', 10, 10, 30, 30).zone('bridge', 22, 2, 30, 6).zone('lifeboat', 8, 35, 15, 37);
+  B.zone('North', 2, 2, 38, 7).zone('South', 2, 33, 38, 38).zone('West Lane', 2, 7, 6, 33).zone('East Lane', 34, 7, 38, 33).zone('Center', 12, 12, 28, 28);
   B.site('A', 3, 12, 15, 18).site('B', 25, 22, 37, 28);
   B.buyzone('T', 2, 33, 38, 38).buyzone('CT', 2, 2, 38, 7);
   for (let k = 0; k < 5; k++) { B.spawn('T', 8 + k * 6, 36, 0); B.spawn('CT', 8 + k * 6, 4, Math.PI); }
@@ -219,8 +217,7 @@ function town() {
   B.block(25, 40, 27, 41, 1.2, 'rock'); B.block(37, 23, 39, 24, 1.2, 'rock');
   B.block(25, 12, 26, 14, 1.0, 'crate'); B.block(38, 46, 39, 48, 1.0, 'crate'); B.block(30, 40, 32, 41, 1.0, 'crate'); B.block(31, 22, 33, 23, 1.0, 'crate');
   B.zone('Bank', 4, 4, 22, 22).zone('Vault', 7, 7, 13, 11).zone('Saloon', 42, 4, 60, 22).zone('Diner', 4, 42, 22, 60).zone('Fire Station', 42, 42, 60, 60)
-    .zone('Crater', 27, 27, 37, 37).zone('North Road', 24, 2, 40, 27).zone('South Road', 24, 37, 40, 62).zone('West Road', 2, 24, 27, 40).zone('East Road', 37, 24, 62, 40)
-    .zone('stand', 8, 28, 14, 34).zone('square', 24, 24, 40, 40).zone('van', 26, 52, 32, 58).zone('bridge', 26, 30, 28, 34);
+    .zone('Crater', 27, 27, 37, 37).zone('North Road', 24, 2, 40, 27).zone('South Road', 24, 37, 40, 62).zone('West Road', 2, 24, 27, 40).zone('East Road', 37, 24, 62, 40);
   B.zone('Bank Upstairs', 5, 16, 21, 21).zone('Saloon Upstairs', 43, 16, 59, 21).zone('Balcony', 44, 21, 58, 25);
   B.site('A', 5, 5, 21, 16).site('B', 43, 5, 59, 16);
   B.buyzone('T', 24, 52, 40, 59).buyzone('CT', 24, 5, 40, 12);
@@ -236,7 +233,6 @@ function town() {
     .prop('tree', 3, 26, {}).prop('tree', 61, 38, {});
   B.sky = 0x46405a; B.fog = 0x6a4a44; B.sunColor = 0xffa860; B.amb = [0xb8a8c0, 0x4a3430]; B.sunDir = [0.75, 0.38, 0.3]; B.sunI = 2.5; B.ambI = 1.3;
   B.photo = 'dusk';   // the real sky over it (sky_<name>_*.jpg)
-  B.litWindows = 0.22;   // a few windows glow at dusk
   return B;
 }
 
@@ -265,8 +261,7 @@ function crust() {
   B.ramp(36, 38, 42, 41, 0, 1.0, 'x', 'sand'); B.open(42, 38, 45, 41, 1.0, 'sand');
   B.block(6, 6, 8, 8, 1.1, 'crate').block(40, 6, 44, 8, 2.6, 'cred').block(32, 14, 34, 16, 1.1, 'crate').block(12, 34, 14, 36, 1.1, 'crate');
   B.zone('West Yard', 2, 2, 14, 46).zone('East Yard', 34, 2, 46, 46).zone('Pipes', 2, 28, 14, 40).zone('Shack', 18, 3, 30, 11).zone('Containers', 16, 36, 32, 46)
-    .zone('Under the Tower', 14, 18, 34, 30).zone('Tower', 19, 19, 29, 29).zone("Crow's Nest", 23, 20, 27, 23)
-    .zone('kitchen', 19, 4, 23, 8).zone('dining', 25, 4, 29, 10).zone('oven', 19, 4, 29, 10).zone('roof', 21, 21, 27, 27);
+    .zone('Under the Tower', 14, 18, 34, 30).zone('Tower', 19, 19, 29, 29).zone("Crow's Nest", 23, 20, 27, 23);
   B.site('A', 19, 4, 29, 10).site('B', 16, 36, 32, 45);
   B.buyzone('T', 2, 14, 9, 34).buyzone('CT', 39, 14, 46, 34);
   for (let k = 0; k < 5; k++) { B.spawn('T', 5, 16 + k * 4, -Math.PI / 2); B.spawn('CT', 43, 16 + k * 4, Math.PI / 2); }
@@ -308,8 +303,7 @@ function yacht() {
   B.block(62, 13, 66, 17, 2.8, 'tile').block(63, 14, 65, 16, 2.6, 'cblue');
   B.block(58, 9, 60, 11, 3.0, 'crate').block(68, 18, 70, 20, 3.0, 'crate').block(58, 19, 60, 21, 3.0, 'crate');
   B.zone('Stern', 6, 7, 24, 23).zone('Pool', 10, 12, 18, 18).zone('Port Side', 24, 7, 58, 10).zone('Starboard Side', 24, 20, 58, 23)
-    .zone('Deckhouse', 26, 10, 46, 20).zone('Bridge', 47, 10, 57, 21).zone('Bow', 58, 7, 72, 23).zone('Hot Tub', 61, 12, 67, 18).zone('Bow Tip', 72, 10, 78, 20)
-    .zone('jetski', 6, 10, 10, 20);
+    .zone('Deckhouse', 26, 10, 46, 20).zone('Bridge', 47, 10, 57, 21).zone('Bow', 58, 7, 72, 23).zone('Hot Tub', 61, 12, 67, 18).zone('Bow Tip', 72, 10, 78, 20);
   B.site('A', 27, 11, 45, 19).site('B', 58, 8, 71, 22);
   B.buyzone('T', 6, 8, 16, 22).buyzone('CT', 70, 10, 78, 20);
   for (let k = 0; k < 5; k++) { B.spawn('T', 9, 10 + k * 2.5, -Math.PI / 2); B.spawn('CT', 73.5, 11 + k * 2, Math.PI / 2); }
@@ -407,7 +401,7 @@ function barracks(night = false) {
   B.prop('lamp', 20, 17, {}).prop('lamp', 44, 37, {}).prop('lamp', 20, 37, {}).prop('lamp', 44, 17, {}).prop('tree', 4, 22, {}).prop('tree', 60, 32, {}).prop('tree', 26, 50, {})
     .prop('barrel', 25, 40, {}).prop('barrel', 47, 20, {}).prop('tv', 8, 9, {});
   B.photo = night ? 'night' : 'sunrise'; if (night) B.photoTint = [0.5, 0.6, 1.0];   // the real sky over it
-  if (night) { B.litWindows = 0.55; B.sky = 0x0b1230; B.fog = 0x141c34; B.sunColor = 0x9fb4ff; B.amb = [0x3a4a78, 0x14121a]; B.sunDir = [0.3, 0.75, -0.4]; B.sunI = 1.25; B.ambI = 1.05; }
+  if (night) { B.sky = 0x0b1230; B.fog = 0x141c34; B.sunColor = 0x9fb4ff; B.amb = [0x3a4a78, 0x14121a]; B.sunDir = [0.3, 0.75, -0.4]; B.sunI = 1.25; B.ambI = 1.05; }
   else { B.sky = 0xf0b878; B.fog = 0xe8c8a0; B.sunColor = 0xffd8a8; B.amb = [0xf0d0b0, 0x6a5a4a]; B.sunDir = [-0.7, 0.35, 0.3]; B.sunI = 2.2; B.ambI = 1.1; }   // dawn
   return B;
 }
@@ -486,7 +480,6 @@ function stadium() {
   B.prop('lamp', 6, 30, {}).prop('lamp', 84, 30, {}).prop('lamp', 6, 44, {}).prop('lamp', 84, 44, {}).prop('tv', 45, 60, {});
   B.sky = 0x241a3a; B.fog = 0x3a2a4a; B.sunColor = 0xffc890; B.amb = [0x8a70b0, 0x302030]; B.sunDir = [-0.5, 0.45, 0.4]; B.sunI = 1.8; B.ambI = 1.0;   // dusk
   B.photo = 'sunset'; B.photoTint = [0.95, 0.8, 1.0];   // the real sky over it (sky_<name>_*.jpg)
-  B.litWindows = 0.2;   // a few windows glow at sunset
   return B;
 }
 
@@ -523,7 +516,6 @@ function wienerHouse() {
   B.prop('tv', 24, 13, {}).prop('lamp', 34, 20, {}).prop('tree', 36, 6, {}).prop('tree', 3, 34, {}).prop('barrel', 18, 6, {});
   B.sky = 0x1c1626; B.fog = 0x2a2030; B.sunColor = 0xffb070; B.amb = [0xffb878, 0x3a2418]; B.sunDir = [0.5, 0.5, 0.3]; B.sunI = 1.2; B.ambI = 1.15; B.fogNear = 20; B.fogFar = 90;
   B.photo = 'night'; B.photoTint = [0.55, 0.62, 0.95];   // the real sky over it (sky_<name>_*.jpg)
-  B.litWindows = 0.55;   // most windows glow at night
   return B;
 }
 
@@ -577,7 +569,6 @@ function club() {
   for (let z = 10; z <= 18; z += 2) B.prop('stool', 44.6, z + 0.5);
   B.sky = 0x140a1e; B.fog = 0x2a1434; B.sunColor = 0xffc8f0; B.amb = [0xf4c0f4, 0x7a4a80]; B.sunDir = [0.3, 0.8, 0.2]; B.sunI = 1.7; B.ambI = 2.1; B.fogNear = 18; B.fogFar = 80;
   B.photo = 'night'; B.photoTint = [0.55, 0.62, 0.95];   // the real sky over it (sky_<name>_*.jpg)
-  B.litWindows = 0.55;   // most windows glow at night
   B.wet = 3.4;   // screen-space reflections: a polished dance floor
   return B;
 }
@@ -614,7 +605,6 @@ function mansion() {
   B.prop('lamp', 30, 46, {}).prop('lamp', 40, 46, {}).prop('lamp', 10, 50, {}).prop('lamp', 60, 50, {}).prop('tree', 6, 36, {}).prop('tree', 66, 38, {}).prop('palm', 26, 34, {}).prop('palm', 44, 34, {}).prop('tv', 36, 28, {});
   B.sky = 0x0a0e1e; B.fog = 0x10142a; B.sunColor = 0x9aaeff; B.amb = [0x46507a, 0x16121a]; B.sunDir = [0.4, 0.7, 0.3]; B.sunI = 1.1; B.ambI = 1.0; B.fogNear = 30; B.fogFar = 150;
   B.photo = 'night'; B.photoTint = [0.55, 0.62, 0.95];   // the real sky over it (sky_<name>_*.jpg)
-  B.litWindows = 0.55;   // most windows glow at night
   B.wet = 3.0;   // screen-space reflections: marble and lacquered wood
   return B;
 }
