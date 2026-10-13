@@ -16,7 +16,7 @@ export function loadChars() {
 export const charsReady = () => !!D;
 
 const UPPER = /Spine|Neck|Head|Shoulder|Arm|Hand/;
-const LEANF = -0.14;   // negative about the rig's right (+x) tips the chest forward   // radians of forward lean for an armed stance (spread over the three spine bones)   // bones an upper-body overlay (fire, reload, throw, hit) may move
+const LEANF = 0;   // negative about the rig's right (+x) tips the chest forward   // radians of forward lean for an armed stance (spread over the three spine bones)   // bones an upper-body overlay (fire, reload, throw, hit) may move
 function build(j, bin) {
   const c = j.characters[0];
   const meshes = c.meshes.map((m) => {
@@ -238,7 +238,8 @@ export function makeSoldier(look, team, hq = true) {
 // swap the looping base animation with a short cross-fade
 function base(r, name, scale = 1) {
   const a = r.act[name]; if (!a) return;
-  a.timeScale = scale;
+  a.timeScale = name === 'crouch' ? 0 : scale;   // the crouch clip stands all the way up and back down every 3 s: hold its crouched frame
+  if (name === 'crouch') a.time = 0;
   if (r.base === name) return;
   const prev = r.act[r.base];
   a.reset().setEffectiveWeight(1).play(); if (prev) prev.crossFadeTo(a, 0.22, false);
@@ -260,8 +261,8 @@ function rotateWorld(b, from, to) {   // turn bone b so the world direction `fro
 function ik2(upper, lower, end, target, pole) {
   if (!upper || !lower || !end) return;
   upper.getWorldPosition(_ia); lower.getWorldPosition(_ib); end.getWorldPosition(_ic);
-  const la = _ia.distanceTo(_ib), lb = _ib.distanceTo(_ic);
-  _id.copy(target).sub(_ia); const dist = Math.min(Math.max(_id.length(), Math.abs(la - lb) + 1e-3), la + lb - 1e-3); _id.normalize();
+  const la = _ia.distanceTo(_ib), lb = _ib.distanceTo(_ic), shut = Math.sqrt(la * la + lb * lb - 2 * la * lb * Math.cos(0.6));   // elbows and knees close to ~35 degrees at most, like a person's
+  _id.copy(target).sub(_ia); const dist = Math.min(Math.max(_id.length(), shut), la + lb - 1e-3); _id.normalize();
   const cosA = (la * la + dist * dist - lb * lb) / (2 * la * dist), sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
   _in.copy(pole).sub(_ia); _in.addScaledVector(_id, -_in.dot(_id)); if (_in.lengthSq() < 1e-8) _in.set(0, -1, 0); _in.normalize();
   _ie.copy(_ia).addScaledVector(_id, la * cosA).addScaledVector(_in, la * sinA);   // where the elbow should be
@@ -300,11 +301,111 @@ function orientHand(r, side, fWant, nWant) {
 }
 // put the middle of a palm on a point with the hand turned as asked (IK on the wrist, corrected by the palm offset)
 function reachPalm(r, side, palmAt, fWant, nWant, pole) {
-  const B = r.bones, h = B[side + 'Hand'], m = B[side + 'HandMiddle1'], tgt = palmAt.clone(), pa = new THREE.Vector3(), pb = new THREE.Vector3();
-  for (let k = 0; k < 3; k++) {
-    ik2(B[side + 'Arm'], B[side + 'ForeArm'], h, tgt, pole); orientHand(r, side, fWant, nWant);
-    if (!m) break;
-    h.getWorldPosition(pa).lerp(m.getWorldPosition(pb), 0.55); tgt.add(pb.copy(palmAt).sub(pa));
+  const B = r.bones, h = B[side + 'Hand'], m = B[side + 'HandMiddle1'], pa = new THREE.Vector3(), pb = new THREE.Vector3();
+  for (let pass = 0; pass < 3; pass++) {
+    const tgt = palmAt.clone();
+    for (let k = 0; k < 3; k++) {
+      ik2(B[side + 'Arm'], B[side + 'ForeArm'], h, tgt, pole); orientHand(r, side, fWant, nWant);
+      if (!m) break;
+      h.getWorldPosition(pa).lerp(m.getWorldPosition(pb), 0.55); tgt.add(pb.copy(palmAt).sub(pa));
+    }
+    const out = outOfBody(r, B[side + 'ForeArm'].getWorldPosition(pa)); if (!out) break;   // the elbow went into the ribs: swing it out and solve again
+    pole = pole.clone().addScaledVector(out, 0.6);
+  }
+}
+// the torso as a capsule (hips to neck, vest thickness): a point inside it gets the outward direction to push it along
+const TORSO_R = 0.17;
+function outOfBody(r, p) {
+  const B = r.bones; if (!B.Hips || !B.Neck) return null;
+  const a = B.Hips.getWorldPosition(new THREE.Vector3()), ax = B.Neck.getWorldPosition(new THREE.Vector3()).sub(a);
+  const t = Math.max(0, Math.min(1, p.clone().sub(a).dot(ax) / ax.lengthSq())), d = p.clone().sub(a.addScaledVector(ax, t));
+  const len = d.length(); if (len >= TORSO_R) return null;
+  return len < 1e-4 ? null : d.multiplyScalar(1 / len);
+}
+// ---- posture: the converted rifle clips all lean back 12-28 degrees with the head tipped up and the hips pushed forward
+// (a limbo, not a soldier). Every frame, whatever clip is playing, the torso is set to a real stance's forward lean,
+// the arms are turned back by the same amount so the gun stays exactly where the clip aimed it, the head is levelled,
+// and when standing still the feet come in under the hips.
+const STANCE = { idle: 0.12, turnLeft: 0.12, turnRight: 0.12, walk: 0.24, walkBack: 0.14, walkLeft: 0.2, walkRight: 0.2, run: 0.38, runBack: 0.12,
+  runLeft: 0.3, runRight: 0.3, crouch: 0.42, crouchWalk: 0.46, jump: 0.22, fire: 0.12, reload: 0.14, hit: 0.14 };
+const _pa = new THREE.Vector3(), _pb = new THREE.Vector3(), _pf = new THREE.Vector3(), _pu = new THREE.Vector3();
+function leanOf(a, b, fw) { a.getWorldPosition(_pa); b.getWorldPosition(_pb); _pb.sub(_pa); return Math.atan2(_pb.dot(fw), _pb.y); }
+function leanTo(r, rt, want) {
+  const B = r.bones; if (!B.Hips || !B.Neck) return;
+  const fw = _pf.set(0, 1, 0).cross(rt).normalize();
+  for (let it = 0; it < 3; it++) {   // the joints sit above the hips, so it takes a couple of passes to land on the angle
+    const d = Math.max(-0.7, Math.min(0.7, want - leanOf(B.Hips, B.Neck, fw))); if (Math.abs(d) < 0.01) break;
+    for (const [n, k] of [['Spine', 0.3], ['Spine1', 0.35], ['Spine2', 0.35]]) if (B[n]) turnWorld(B[n], rt, -d * k * 1.25);   // negative about the right = forward
+    for (const n of ['LeftArm', 'RightArm']) if (B[n]) turnWorld(B[n], rt, d * 1.25);   // the arms keep their aim
+  }
+}
+function posture(r, rt, rest, later = false) {
+  const B = r.bones; if (!B.Hips || !B.Neck || !B.Spine) return;
+  const want = rest ? 0.04 : STANCE[r.base]; if (want == null) return;
+  const fw = _pf.set(0, 1, 0).cross(rt).normalize();   // forward = up x right
+  if (!later) leanTo(r, rt, want);
+  if (B.Head) {   // the gaze level (a touch down), whatever the clip did with the neck
+    _pu.set(0, 1, 0).applyQuaternion(B.Head.getWorldQuaternion(_q)); const tilt = Math.atan2(_pu.dot(fw), _pu.y), e = Math.max(-0.8, Math.min(0.8, 0.06 - tilt));
+    if (B.Neck) turnWorld(B.Neck, rt, -e * 0.45); turnWorld(B.Head, rt, -e * 0.55);
+  }
+}
+// ---- range of motion: no joint turns further from its relaxed (bind) pose than a person's can. Elbows and knees are
+// hinges solved by ik2 (bend one way only, ~35 degrees fully shut); the spine, neck and head are capped here.
+const ROM = { Spine: 0.5, Spine1: 0.5, Spine2: 0.5, Neck: 0.6, Head: 0.75 };
+const _rq = new THREE.Quaternion(), _rI = new THREE.Quaternion();
+function limitJoints(r, names = ROM) {
+  const B = r.bones;
+  for (const n in names) {
+    const b = B[n], q0 = b && b.userData.q0; if (!q0) continue;
+    _rq.copy(q0).invert().multiply(b.quaternion); if (_rq.w < 0) { _rq.x *= -1; _rq.y *= -1; _rq.z *= -1; _rq.w *= -1; }
+    const ang = 2 * Math.acos(Math.min(1, _rq.w)), max = names[n]; if (ang <= max) continue;
+    _rq.slerp(_rI.identity(), 1 - max / ang); b.quaternion.copy(q0).multiply(_rq); b.updateMatrixWorld(true);
+  }
+}
+// ---- legs: the converted clips bend every knee backwards (a bird's leg) and stand on locked knees with the hips thrust
+// out past the feet. Each frame both legs are solved again hip -> knee -> ankle with the knee pointing forward over the
+// toes (a touch outward), the ankle keeping the clip's foot angle. Standing still the feet go under the hips, shoulder
+// width, one a half step ahead, and the hips drop a few cm so the knees keep a soft bend; crouched the feet sit ahead of
+// the hips (sitting back on the heels, knees over the toes) instead of under them.
+const STILL = new Set(['idle', 'turnLeft', 'turnRight', 'fire', 'reload', 'hit']);
+function legs(r, rt, rest, crouched, moving) {
+  const B = r.bones; if (!B.Hips || !B.LeftUpLeg || !B.RightUpLeg) return;
+  const up = _pu.set(0, 1, 0), fw = _pf.set(0, 1, 0).cross(rt).normalize().clone();
+  const still = !moving && (rest || STILL.has(r.base) || crouched);
+  if (still && !crouched) for (let it = 0; it < 2; it++) {   // the idle clip stands with one hip hitched up: level the pelvis (the spine turned back so the chest stays put)
+    const hl = B.LeftUpLeg.getWorldPosition(_pa), hr = B.RightUpLeg.getWorldPosition(_pb), w = hr.distanceTo(hl), roll = Math.asin(Math.max(-0.5, Math.min(0.5, (hr.y - hl.y) / w)));
+    if (Math.abs(roll) > 0.005) { turnWorld(B.Hips, fw, roll); if (B.Spine) turnWorld(B.Spine, fw, -roll); }
+  }
+  const hips = B.Hips.getWorldPosition(new THREE.Vector3());
+  const L = {};
+  for (const [side, sx] of [['Left', -1], ['Right', 1]]) {
+    const hp = B[side + 'UpLeg'], kn = B[side + 'Leg'], ft = B[side + 'Foot']; if (!hp || !kn || !ft) return;
+    const foot = ft.getWorldPosition(new THREE.Vector3()), q = ft.getWorldQuaternion(new THREE.Quaternion());
+    let tgt = foot.clone();
+    if (still) {   // planted: placed from the hips, not from the clip
+      const ahead = crouched ? (sx < 0 ? 0.24 : 0.02) : (sx < 0 ? 0.06 : -0.05), wide = crouched ? 0.15 : 0.12;
+      tgt = hips.clone().addScaledVector(rt, sx * wide).addScaledVector(fw, ahead); tgt.y = crouched ? foot.y : Math.min(B.LeftFoot.getWorldPosition(_pa).y, B.RightFoot.getWorldPosition(_pb).y);   // both heels down
+    }
+    const len = hp.getWorldPosition(_pa).distanceTo(kn.getWorldPosition(_pb)) + _pb.distanceTo(foot);
+    L[side] = { hp, kn, ft, tgt, q, sx, len };
+  }
+  // hips down until each leg reaches with a soft knee (standing ~165 degrees, never locked straight)
+  // hips height: both knees softly bent (~166 degrees on average), neither leg forced past straight, the feet staying put
+  let soft = 0, hard = -0.04, n = 0;
+  for (const k in L) { const l = L[k], d = l.hp.getWorldPosition(_pa).y - l.tgt.y, h2 = (_pa.x - l.tgt.x) ** 2 + (_pa.z - l.tgt.z) ** 2;
+    soft += d - Math.sqrt(Math.max(0, (l.len * 0.992) ** 2 - h2)); hard = Math.max(hard, d - Math.sqrt(Math.max(0, (l.len * 0.999) ** 2 - h2))); n++; }
+  const drop = Math.min(0.1, still && !crouched ? Math.max(hard, soft / n) : Math.max(0, hard));
+  if (Math.abs(drop) > 1e-3) { hips.y -= drop; const p = hips.clone(); B.Hips.parent.worldToLocal(p); B.Hips.position.copy(p); B.Hips.updateMatrixWorld(true); }
+  for (const k in L) {
+    const l = L[k], hp = l.hp.getWorldPosition(new THREE.Vector3());
+    const pole = hp.clone().lerp(l.tgt, 0.5).addScaledVector(fw, 0.6).addScaledVector(rt, l.sx * 0.12);   // knee forward, a little out over the little toe
+    ik2(l.hp, l.kn, l.ft, l.tgt, pole);
+    l.ft.parent.getWorldQuaternion(_q).invert(); l.ft.quaternion.copy(_q.multiply(l.q)); l.ft.updateMatrixWorld(true);   // the foot keeps its angle to the ground
+    if (still) {   // toes ahead (turned out a touch), heel-to-toe level as the clip had it
+      const toe = B[k + 'ToeBase'];
+      if (toe) { const a = l.ft.getWorldPosition(new THREE.Vector3()), d = toe.getWorldPosition(new THREE.Vector3()).sub(a), h = Math.hypot(d.x, d.z);
+        const want = fw.clone().addScaledVector(rt, l.sx * 0.18).normalize().multiplyScalar(h); want.y = d.y; rotateWorld(l.ft, d.normalize(), want.normalize()); }
+    }
   }
 }
 // per frame: pick the base animation from how the player moves, then aim, gun and props
@@ -323,7 +424,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       if (a === 'tbag') { const ac = r.act[r.base]; if (ac) ac.time = 0.5; }
     }
     else if (Math.abs(vy) > 2.2) base(r, 'jump');
-    else if (crouch > 0.5) { if (sp > 0.3) base(r, 'crouchWalk', Math.min(1.6, sp / SPEED.crouchWalk)); else base(r, 'crouch'); }
+    else if (crouch > 0.5) { if (sp > 0.3) base(r, 'crouchWalk', Math.min(1.6, sp / SPEED.crouchWalk)); else base(r, 'crouchWalk', 0); }   // still: the squat held
     else if (sp < 0.35) base(r, 'idle');
     else {
       const run = sp > 3.4, ax = Math.abs(f) >= Math.abs(side) * 0.8;
@@ -337,35 +438,16 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
   if (!r.dead) {
     // aim: bend the spine and head with the pitch; procedural emotes on top of the idle pose
     _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // the character's right
+    if (rest && !emote && B.Hips && B.RightArm && B.LeftArm) {   // the rifle clip stands bladed (right shoulder back): square the body to the front first
+      const want = _t5.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), sh = B.RightArm.getWorldPosition(_t1).sub(B.LeftArm.getWorldPosition(_t2)); sh.y = 0;
+      if (sh.lengthSq() > 1e-4) { sh.normalize(); const ang = Math.atan2(sh.x * want.z - sh.z * want.x, sh.x * want.x + sh.z * want.z); turnWorld(B.Hips, _t3.set(0, 1, 0), -ang); }
+    }
+    const gunCat = (r.tpGun && r.tpGun.userData && r.tpGun.userData.cat) || 'rifle', aimedGun = !rest && r.tpGun && r.tpGun.children.length && !['knife', 'grenade', 'c4'].includes(gunCat);
+    if (!emote) posture(r, _v, rest, aimedGun);   // every pose: a human lean for the stance, a level head (an aimed gun leans after it's aimed, below)
+    if (!emote) legs(r, _v, rest, crouch > 0.5, Math.hypot(vx, vz) > 0.3 || Math.abs(vy) > 2.2);   // knees forward, hips over the feet
     const p = Math.max(-1.2, Math.min(1.2, pitch)) + crouch * 0.15;
     if (!emote) for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], _v, p * 0.27);
     if (B.Head) turnWorld(B.Head, _v, p * 0.15);
-    if (rest && !emote) { if (B.Spine2) turnWorld(B.Spine2, _v, 0.03); if (B.Head) turnWorld(B.Head, _v, 0.03); }   // at rest: stand tall, chin up
-    if (r.human && B.Head) turnWorld(B.Head, _v, -0.16);   // the human's head sits higher on the neck than the soldier's: level its gaze
-    if (rest && !emote) {   // at rest: stand up straight (the clip leans into its aim) and look ahead, not down the rifle line
-      if (B.Hips && B.RightArm && B.LeftArm) {   // the rifle clip stands bladed (right shoulder back): square the body to the front first
-        const want = _t5.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), sh = B.RightArm.getWorldPosition(_t1).sub(B.LeftArm.getWorldPosition(_t2)); sh.y = 0;
-        if (sh.lengthSq() > 1e-4) { sh.normalize(); const ang = Math.atan2(sh.x * want.z - sh.z * want.x, sh.x * want.x + sh.z * want.z); turnWorld(B.Hips, _t3.set(0, 1, 0), -ang); }
-      }
-      for (const [n, k] of [['Spine', 0.5], ['Spine1', 0.6], ['Spine2', 0.7], ['Neck', 0.7], ['Head', 0.85]]) {
-        const b = B[n]; if (!b) continue;
-        const d = _t1.set(0, 1, 0).applyQuaternion(b.getWorldQuaternion(_q2)).normalize();
-        rotateWorld(b, _t2.copy(d), _t3.copy(d).lerp(_t4.set(0, 1, 0), k).normalize());
-      }
-      if (B.Neck && B.Head) { _fw.set(0, 1, 0); turnWorld(B.Neck, _fw, -0.32); turnWorld(B.Head, _fw, -0.38); }
-      // feet planted shoulder-width apart, the left a half step ahead, knees forward (the clip's bladed stance crosses them)
-      const q = r.g.getWorldQuaternion(_q2.identity()), rtv = new THREE.Vector3(1, 0, 0).applyQuaternion(q), fwv = new THREE.Vector3(0, 0, -1).applyQuaternion(q), base = r.g.getWorldPosition(new THREE.Vector3());
-      for (const [side, sx, ahead] of [['Left', -1, 0.05], ['Right', 1, -0.04]]) {
-        const up = B[side + 'UpLeg'], lo = B[side + 'Leg'], ft = B[side + 'Foot']; if (!up || !lo || !ft) continue;
-        // swing the whole leg from the hip (no knee or hip bend, so the clip's straight standing leg is kept)
-        const hip = up.getWorldPosition(new THREE.Vector3()), foot = ft.getWorldPosition(new THREE.Vector3());
-        const tgt = base.clone().addScaledVector(rtv, sx * 0.105).addScaledVector(fwv, ahead); tgt.y = foot.y;
-        rotateWorld(up, foot.clone().sub(hip).normalize(), tgt.sub(hip).normalize());
-        const toe = B[side + 'ToeBase'];   // the foot points ahead (toes turned out just a touch), heel to toe level as before
-        if (toe) { const a = ft.getWorldPosition(new THREE.Vector3()), d = toe.getWorldPosition(new THREE.Vector3()).sub(a), h = Math.hypot(d.x, d.z);
-          const want = fwv.clone().addScaledVector(rtv, sx * 0.18).normalize().multiplyScalar(h); want.y = d.y; rotateWorld(ft, d.normalize(), want.normalize()); }
-      }
-    }
     if (lean && !emote) {   // leaning (Q / E while aimed in): the spine rolls about the facing direction
       _fw.set(0, 0, -1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
       for (const n of ['Spine', 'Spine1', 'Spine2']) if (B[n]) turnWorld(B[n], _fw, lean * 0.2);
@@ -376,6 +458,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       if (B.Spine1) turnWorld(B.Spine1, ax, k * 0.5); if (B.Spine2) turnWorld(B.Spine2, ax, k * 0.6); if (B.Head) turnWorld(B.Head, ax, k * 0.4 * (f.k || 1));
       f.t -= dt;
     }
+    if (!emote) limitJoints(r);
     if (emote) emotePose(r, emote, _v);
   }
   // the gun: shouldered for rifles, held out in both hands for pistols, pointing where the player aims. The animation
@@ -396,8 +479,8 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       // bent and tucked down by the sides.
       const q = r.g.getWorldQuaternion(_q2.identity()), rt = _t5.set(1, 0, 0).applyQuaternion(q).clone(), fw = _fw.set(0, 0, -1).applyQuaternion(q).clone(), up = new THREE.Vector3(0, 1, 0);
       const hips = B.Hips.getWorldPosition(new THREE.Vector3());
-      const grip = hips.clone().addScaledVector(rt, 0.2).addScaledVector(fw, 0.27).addScaledVector(up, 0.06);   // out at the hip and forward: the arm hangs outside the ribs and vest, elbow bent
-      const dir = new THREE.Vector3().addScaledVector(rt, -0.84).addScaledVector(fw, 0.42).addScaledVector(up, -0.3).normalize();
+      const grip = hips.clone().addScaledVector(rt, 0.15).addScaledVector(fw, 0.21).addScaledVector(up, 0.12);   // pistol grip at the right belt, a fist in front of the vest
+      const dir = new THREE.Vector3().addScaledVector(rt, -0.8).addScaledVector(fw, 0.5).addScaledVector(up, 0.2).normalize();   // across the belly, muzzle up towards the left shoulder
       // the rifle is placed first, then each palm is closed onto it: right palm round the pistol grip (fingers forward
       // under the trigger guard, palm against the grip's right side), left palm up under the handguard, fingers over the far side
       const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _t2.crossVectors(yA, zA);
@@ -407,55 +490,65 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
       const X = xA.clone(), Y = yA.clone();
-      reachPalm(r, 'Right', grip.clone().addScaledVector(X, 0.03).addScaledVector(Y, -0.035), dir.clone().addScaledVector(Y, -0.45), X.clone().negate(),
-        B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.45).addScaledVector(rt, 0.75).addScaledVector(fw, -0.15));   // elbow out to the side, not into the ribs
-      const fore = grip.clone().addScaledVector(dir, 0.34).addScaledVector(Y, -0.055).addScaledVector(X, -0.01);
+      reachPalm(r, 'Right', grip.clone().addScaledVector(X, 0.03).addScaledVector(Y, -0.012), dir.clone().addScaledVector(Y, -0.45), X.clone().negate(),
+        B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.6).addScaledVector(rt, 0.4).addScaledVector(fw, -0.3));   // elbow down and back by the ribs (kept out of them)
+      const fore = (gm.userData.fore ? gm.localToWorld(gm.userData.fore.clone()) : grip.clone().addScaledVector(dir, 0.3)).addScaledVector(Y, -0.035).addScaledVector(X, -0.01);   // palm against the underside of the handguard
       reachPalm(r, 'Left', fore, X.clone().addScaledVector(dir, 0.35).addScaledVector(Y, 0.2), Y,
-        B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.6).addScaledVector(rt, -0.6).addScaledVector(fw, 0.05));
+        B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, -0.35).addScaledVector(fw, -0.05));   // elbow down at the side, bent ~90 degrees
       r.restGrip = true;
     } else if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
-      // The clips are a rifle set: the hands already hold an (invisible) rifle in a natural, motion-captured pose. So the
-      // gun follows the hands, not the other way round: the grip sits in the right palm and the barrel runs out through
-      // the left hand. Aiming up and down bends the upper spine until that hand line points where the player aims, so
-      // the arms never have to be twisted onto the gun.
-      const pistol = cat === 'pistol', rt = _t5.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
-      if (!prone) for (const [n, a] of [['Spine', LEANF * 0.4], ['Spine1', LEANF * 0.35], ['Spine2', LEANF * 0.25]]) if (B[n]) turnWorld(B[n], rt, a);
-      const palm = (h, f, out) => { h.getWorldPosition(out); if (f) out.lerp(f.getWorldPosition(_t6), 0.55); return out; };
-      for (let pass = 0; pass < 2; pass++) {   // two small passes: bend the spine, re-read the hands
-        const rh = palm(B.RightHand, B.RightHandMiddle1, _t1), lh = palm(B.LeftHand, B.LeftHandMiddle1, _t2), d = _t3.copy(lh).sub(rh);
-        if (d.lengthSq() < 0.01) break;
-        const cur = Math.atan2(d.y, Math.hypot(d.x, d.z)), want = ap * (pistol ? 0.9 : 1), delta = Math.max(-0.9, Math.min(0.9, want - cur));
-        if (Math.abs(delta) < 0.01) break;
-        for (const [n, k] of [['Spine', 0.2], ['Spine1', 0.35], ['Spine2', 0.45]]) if (B[n]) turnWorld(B[n], rt, delta * k);
-      }
-      const rh = palm(B.RightHand, B.RightHandMiddle1, _t1), lh = palm(B.LeftHand, B.LeftHandMiddle1, _t2);
-      const dir = _t3.copy(lh).sub(rh);
-      if (dir.lengthSq() < 0.01) dir.set(0, Math.sin(ap), -Math.cos(ap)).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
-      dir.normalize();
-      // the gun's frame in world space: barrel (-z) along the hand line, up as close to world up as the barrel allows
-      const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _fw.crossVectors(yA, zA);
+      // The gun is placed from the body, then the arms are solved onto it (like a real shooter, and like the menu pose):
+      // the stock in the right shoulder pocket, the sights just under the eyes, pointing where the player aims (lower at
+      // the ready, level the moment they fire). Right palm round the grip, left palm under the handguard, elbows bending
+      // out and down like a person's. The clip only drives the legs, hips and back, whatever it does with its arms.
+      const pistol = cat === 'pistol', gq = r.g.getWorldQuaternion(_q2.identity()).clone(), rt = new THREE.Vector3(1, 0, 0).applyQuaternion(gq), up = new THREE.Vector3(0, 1, 0);
+      const fwv = new THREE.Vector3(0, 0, -1).applyQuaternion(gq);
+      if (!prone) leanTo(r, rt, STANCE[r.base] ?? 0.2);
+      const dir = fwv.clone().multiplyScalar(Math.cos(ap)).addScaledVector(up, Math.sin(ap)).normalize();
+      const zA = dir.clone().negate(), yA = up.clone().addScaledVector(zA, -zA.y).normalize(), xA = new THREE.Vector3().crossVectors(yA, zA);
+      const eye = B.Head.getWorldPosition(new THREE.Vector3()).addScaledVector(up, 0.075).addScaledVector(fwv, 0.08);
+      const grip = pistol
+        ? eye.clone().addScaledVector(dir, 0.46).addScaledVector(yA, -0.06 - (1 - (r.aimK || 0)) * 0.1).addScaledVector(xA, 0.015)   // arms out, a little lower between shots
+        : eye.clone().addScaledVector(dir, 0.11).addScaledVector(yA, -0.095).addScaledVector(xA, 0.045);   // the pistol grip a hand's width in front of the cheek
       _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
-      r.g.getWorldQuaternion(_q2).invert(); tg.quaternion.copy(_q2.multiply(_q));
-      tg.position.copy(rh); r.g.worldToLocal(tg.position);
+      tg.quaternion.copy(gq.clone().invert().multiply(_q));
+      tg.position.copy(grip); r.g.worldToLocal(tg.position);
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
-      if (pistol) {   // two-handed pistol: the support hand comes back from where the rifle's handguard would be onto the grip
-        const sup = tg.localToWorld(_t2.set(-0.045, -0.035, 0.01)), D = _t4.set(0, -1, 0);
-        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, sup, _t5.copy(B.LeftArm.getWorldPosition(_t6)).addScaledVector(D, 0.6).addScaledVector(rt, -0.35));
-      } else if (r.reloadT > 0 && B.Hips) {   // reload: the left hand drops to the mag pouch and brings a fresh one up
-        const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(_t6).addScaledVector(rt, -0.18).add(_t4.set(0, 0.05, 0));
-        ik2(B.LeftArm, B.LeftForeArm, B.LeftHand, _t5.copy(lh).lerp(pouch, out), _t1.copy(B.LeftArm.getWorldPosition(_t1)).add(_t4.set(0, -0.6, 0)));
+      const shR = B.RightArm.getWorldPosition(new THREE.Vector3()), shL = B.LeftArm.getWorldPosition(new THREE.Vector3());
+      reachPalm(r, 'Right', grip.clone().addScaledVector(xA, 0.03).addScaledVector(yA, -0.012), dir.clone().addScaledVector(yA, -0.45), xA.clone().negate(),
+        shR.clone().addScaledVector(up, -0.5).addScaledVector(xA, 0.6).addScaledVector(dir, -0.1));   // elbow out and down
+      r.restGrip = true;
+      let fore = gm.userData.fore ? gm.localToWorld(gm.userData.fore.clone()) : grip.clone().addScaledVector(dir, 0.3);
+      if (pistol) fore = grip.clone().addScaledVector(xA, -0.045).addScaledVector(yA, -0.03).addScaledVector(dir, 0.01);   // the support hand wraps the grip
+      else {
+        fore.addScaledVector(yA, -0.04);
+        const reach = 0.92 * (B.LeftArm.getWorldPosition(_t1).distanceTo(B.LeftForeArm.getWorldPosition(_t2)) + B.LeftForeArm.getWorldPosition(_t1).distanceTo(B.LeftHand.getWorldPosition(_t2)) + 0.07);
+        for (let k = 0; k < 12 && fore.distanceTo(shL) > reach; k++) fore.addScaledVector(dir, -0.025);   // out of reach: the hand slides back along the handguard (a shorter, C-clamp style hold)
       }
+      if (!pistol && r.reloadT > 0 && B.Hips) {   // reload: the left hand drops to the mag pouch and brings a fresh one up
+        const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(new THREE.Vector3()).addScaledVector(rt, -0.18).addScaledVector(up, 0.05);
+        fore.lerp(pouch, out);
+      }
+      reachPalm(r, 'Left', fore, pistol ? dir.clone().addScaledVector(yA, -0.3) : xA.clone().addScaledVector(dir, 0.35).addScaledVector(yA, 0.2), pistol ? xA.clone() : yA.clone(),
+        shL.clone().addScaledVector(up, -0.7).addScaledVector(xA, -0.25).addScaledVector(dir, 0.15));   // elbow down under the gun
     } else {   // knife, grenade, bomb: carried in the right hand as animated
       hand.getWorldPosition(_v); r.g.worldToLocal(_v);
       tg.position.copy(_v); tg.rotation.set(ap, 0, 0, 'YXZ');
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
     }
   }
-  if (r.human && !r.dead && !emote && (tg.userData || {}).cat !== 'knife') curlHand(r, 'Left', 0.55);   // the support hand closes round the handguard
+  if (r.human && !r.dead && !emote && (tg.userData || {}).cat !== 'knife') curlHand(r, 'Left', rest ? 0.85 : 0.55);   // the support hand closes round the handguard
   if (r.human && r.restGrip && !r.dead && !emote) curlHand(r, 'Right', 0.95);   // and the firing hand round the grip
   r.restGrip = false;
   if (r.reloadT > 0) r.reloadT -= dt;
+  if (!r.dead && !emote && B.Head) {   // last word on the head: level, following the aim (the gun passes above move the spine)
+    const rtv = _t5.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity())), fwv = _t6.set(0, 1, 0).cross(rtv).normalize();
+    _t4.set(0, 1, 0).applyQuaternion(B.Head.getWorldQuaternion(_q)); const tilt = Math.atan2(_t4.dot(fwv), _t4.y);
+    const want = rest ? 0.28 : 0.06 - Math.max(-1.2, Math.min(1.2, pitch)) * 0.55;
+    turnWorld(B.Head, rtv, -Math.max(-0.6, Math.min(0.6, want - tilt)) * 0.85);
+    limitJoints(r, { Head: ROM.Head });
+  }
   // head props follow the head bone
   if (B.Spine2 && r.chest.visible) {   // the vest rides the upper spine
     B.Spine2.getWorldPosition(_v); r.g.worldToLocal(_v); r.chest.position.copy(_v);
