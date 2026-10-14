@@ -1149,29 +1149,56 @@ export default function start({ cfg, E, N, smoke }) {
     function kcLerp(a, b, k) {
       return a.map((v, j) => typeof v !== 'number' || typeof b[j] !== 'number' ? (k < 0.5 ? v : b[j]) : j === 3 ? v + Math.atan2(Math.sin(b[j] - v), Math.cos(b[j] - v)) * k : v + (b[j] - v) * k);
     }
-    function kcApply(t) {
-      if (!kc || t < kc.start) return null;
-      const el = t - kc.start, tp = el < 2.2 ? kc.t0 + el : kc.t0 + 2.2 + (el - 2.2) * 0.4;   // real time, then slow motion into the kill
-      if (tp > kc.tEnd || (specNext && el > 0.3) || me.alive) { kc = null; specNext = false; return null; }
-      let i = 1; while (i < kcBuf.length - 1 && kcBuf[i].t < tp) i++;
-      const a = kcBuf[i - 1], b = kcBuf[i]; if (!a || !b) { kc = null; return null; }
+    function poseAt(buf, tp, die) {   // everyone (and you) where they were at time tp; undone by kcRestore after the frame
+      let lo = 0, hi = buf.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (buf[m].t < tp) lo = m; else hi = m; }
+      const a = buf[lo], b = buf[hi]; if (!a || !b) return null;
       const k = Math.max(0, Math.min(1, (tp - a.t) / Math.max(1e-3, b.t - a.t))), fr = { me: kcLerp(a.me, b.me, k), tp };
       kcSaved = [];
       for (const p of st.players.values()) {
         const fa = a.ps[p.id], fb = b.ps[p.id] || fa; if (!fa) continue;
-        const r = rigs.get(p.id); kcSaved.push([p, KC_F.map((x) => p[x]), r, r ? r.dieT : null]);
+        const r = rigs.get(p.id); kcSaved.push([p, KC_F.map((x) => p[x]), r, r ? r.dieT : null, die]);
+        if (r && die) r.dieT = die.has(p.id) ? die.get(p.id) : (fa[6] ? null : 9);   // replays keep their own fall timers
         kcLerp(fa, fb, k).forEach((v, j) => { p[KC_F[j]] = v; });
       }
+      return fr;
+    }
+    function kcApply(t) {
+      if (!kc || t < kc.start) return null;
+      const el = t - kc.start, tp = el < 2.2 ? kc.t0 + el : kc.t0 + 2.2 + (el - 2.2) * 0.4;   // real time, then slow motion into the kill
+      if (tp > kc.tEnd || (specNext && el > 0.3) || me.alive) { kc = null; specNext = false; return null; }
+      const fr = poseAt(kcBuf, tp, null); if (!fr) { kc = null; return null; }
       if (tp >= kc.tDeath && !kc.shot) { kc.shot = true; specFlashT = 0.07; specKick = 0.03; }
       return fr;
     }
+    // match replay: the whole match at 10 frames a second plus the kill feed, watched from the end screen on the same map
+    const mRec = [], mKills = []; let mRecT = 0, rp = null;
+    const myFrame = () => [me.x, me.y, me.z, me.yaw, me.pitch, me.crouch || 0, me.alive, (curWeapon() || {}).id || 'knife', me.lean || 0, me.prone || 0];
+    function mRecord(t) {
+      if (t - mRecT < 0.1 || mRec.length > 30000 || ended) return; mRecT = t; const ps = {};
+      for (const p of st.players.values()) ps[p.id] = KC_F.map((k) => p[k]);
+      mRec.push({ t, ps, me: myFrame() });
+    }
+    function startReplay(back) {
+      if (mRec.length < 20) return back();
+      const names = [{ id: myId, name: myName + ' (you)' }, ...[...st.players.values()].filter((p) => !String(p.id).startsWith('actor_')).map((p) => ({ id: p.id, name: (st.roster.get(p.id) || {}).name || p.id }))];
+      rp = { t: mRec[0].t, t0: mRec[0].t, t1: mRec[mRec.length - 1].t, play: true, speed: 1, follow: myId, die: new Map(), ki: 0, uiT: 0,
+             cam: { x: me.x, y: me.y + 4, z: me.z, yaw: me.yaw, pitch: -0.4 }, back, ui0: uiOpen };
+      uiOpen = 'replay';   // clicks drive the replay controls, not the game
+      rp.ui = hud.replayBar(true, { players: names, toggle: () => { rp.play = !rp.play; if (rp.t >= rp.t1) rp.t = rp.t0; }, speed: (v) => { rp.speed = v; },
+        follow: (id) => { rp.follow = id || null; if (!id) { rp.cam.x = cam.position.x; rp.cam.y = cam.position.y; rp.cam.z = cam.position.z; rp.cam.yaw = cam.rotation.y; rp.cam.pitch = cam.rotation.x; } },
+        seek: (f) => { rp.t = rp.t0 + (rp.t1 - rp.t0) * f; rp.die.clear(); rp.ki = mKills.findIndex((k) => k.t > rp.t); if (rp.ki < 0) rp.ki = mKills.length; }, exit: stopReplay });
+    }
+    function stopReplay() { if (!rp) return; const b = rp.back; uiOpen = rp.ui0; rp = null; hud.replayBar(false); kcRestore(); b && b(); }
+    let rpDrag = null;
+    addEventListener('mousemove', (e) => { if (!rp || rp.follow || !(e.buttons & 1) || e.target.closest('.cs-rpbar')) return; rp.cam.yaw -= e.movementX * 0.004; rp.cam.pitch = Math.max(-1.5, Math.min(1.5, rp.cam.pitch - e.movementY * 0.004)); });
+    void rpDrag;
     function kcStart(kid, name) {
       if (!st.players.has(kid) || kcBuf.length < 20) return false;
       const t = performance.now() / 1000; kc = { kid, name: name || '', start: t + 1.3, t0: Math.max(kcBuf[0].t, t - 3.4), tDeath: t, tEnd: t + 0.5 }; return true;
     }
     function kcRestore() {   // the live match's values go back after the frame is drawn (and dying players keep their fall)
       if (!kcSaved) return;
-      for (const [p, v, r, dieT] of kcSaved) { KC_F.forEach((x, j) => { p[x] = v[j]; }); if (r) { r.dieT = dieT; r.x = p.x; r.z = p.z; r.y = p.y; } }
+      for (const [p, v, r, dieT, die] of kcSaved) { if (r && die) die.set(p.id, r.dieT); KC_F.forEach((x, j) => { p[x] = v[j]; }); if (r) { r.dieT = dieT; r.x = p.x; r.z = p.z; r.y = p.y; } }
       kcSaved = null;
     }
     // clips: instant replay (opt-in: video encoding costs power). Two recorders take turns so one always holds 20-40 s.
@@ -1252,7 +1279,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (type === 'kz' && data.id === myId) { stats.kz = (stats.kz || 0) + 1; }
       if (type === 'kz' && data.id === myId) { try { const k = 'kysgo_kz_' + mapId, old = +localStorage.getItem(k) || 0; if (!old || data.t < old) { localStorage.setItem(k, String(data.t)); toast(`🏁 Personal best on ${MAPS[mapId].short}: ${data.t.toFixed(2)} s`); } } catch (e) { /* private mode */ } }
       if (type === 'kill') {
-        hud.feed(data, myId);
+        hud.feed(data, myId); if (mode !== 'story' && !ended) mKills.push({ t: performance.now() / 1000, d: data });
         if (cfx && data.weapon !== 'bomb') { const v = data.vid === myId ? me : st.players.get(data.vid); if (v) setTimeout(() => cfx && cfx.pool(v.x, v.y, v.z), 700); }
         if (data.kid === myId && data.vteam !== me.team) {
           const now = performance.now(); mkN = now - mkT < 4500 && mkR === st.round ? mkN + 1 : 1; mkT = now; mkR = st.round;
@@ -1585,6 +1612,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (ammoT > 1) { ammoT = 0; sendAmmo(); }
       }
 
+      if (rp) { pressed.clear(); E.input.touch.tapped.clear(); mdx = mdy = 0; return; }   // watching a replay: no playing
       // ---- local input ----
       const typing = !!hud.chatIn;
       const frozen = st.phase === 'freeze' || storyHold();
@@ -1717,8 +1745,16 @@ export default function start({ cfg, E, N, smoke }) {
     }, (alpha, dt) => {
       if (!W) return;
       gov(dt); fpsM(dt); autoCheck(dt);
-      const kcNow = performance.now() / 1000; if (!kc || kcNow < kc.start) kcRecord(kcNow);
-      const kcFr = kcApply(kcNow);
+      const kcNow = performance.now() / 1000; if (!rp && (!kc || kcNow < kc.start)) kcRecord(kcNow);
+      if (!rp && mode !== 'story') mRecord(kcNow);
+      const kcFr = rp ? null : kcApply(kcNow);
+      let rpFr = null;
+      if (rp) {   // replay: advance, pose everyone, play the kill feed as it happened
+        if (rp.play) { rp.t = Math.min(rp.t1, rp.t + dt * rp.speed); if (rp.t >= rp.t1) rp.play = false; }
+        while (rp.ki < mKills.length && mKills[rp.ki].t <= rp.t) hud.feed(mKills[rp.ki++].d, myId);
+        rpFr = poseAt(mRec, rp.t, rp.die);
+        if ((rp.uiT -= dt) <= 0 && rp.ui) { rp.uiT = 0.2; rp.ui(rp.t - rp.t0, rp.t1 - rp.t0, rp.play, rp.follow); }
+      }
       // ---- camera: own eyes, or spectate a teammate ----
       const lo = leanOff(me); let viewYaw = me.yaw, viewPitch = me.pitch + me.punch * 0.35 + camKick, ex = me.x + lo.x, ey = me.y + eyeHeight(me) * (mineStory().scale || 1) - Math.abs(me.lean) * 0.05, ez = me.z + lo.z, viewRoll = -me.lean * 0.2;
       let spectating = null;
@@ -1732,7 +1768,14 @@ export default function start({ cfg, E, N, smoke }) {
           viewYaw = specYaw; viewPitch = specPitch + specKick; viewRoll = -(p.lean || 0) * 0.2; }
         else { viewPitch = -0.5; ey = me.y + 3.5; }
       }
-      const kcP = kcFr && st.players.get(kc.kid);
+      const kcP = kcFr ? st.players.get(kc.kid) : rpFr && rp.follow && rp.follow !== myId ? st.players.get(rp.follow) : null;
+      if (rpFr && rp.follow === myId) { const f = rpFr.me; ex = f[0]; ey = f[1] + eyeHeight({ crouch: f[5] || 0, prone: f[9] || 0 }); ez = f[2]; viewYaw = f[3]; viewPitch = f[4]; viewRoll = 0; spectating = null; }
+      else if (rpFr && !rp.follow) {   // free camera
+        const c = rp.cam, sp2 = (kd('ShiftLeft') ? 22 : 8) * dt, fx2 = -Math.sin(c.yaw), fz2 = -Math.cos(c.yaw);
+        const f2 = (kd('KeyW') ? 1 : 0) - (kd('KeyS') ? 1 : 0), s2 = (kd('KeyD') ? 1 : 0) - (kd('KeyA') ? 1 : 0), u2 = (kd('KeyE') || kd('Space') ? 1 : 0) - (kd('KeyQ') ? 1 : 0);
+        c.x += (fx2 * f2 * Math.cos(c.pitch) - fz2 * s2) * sp2; c.z += (fz2 * f2 * Math.cos(c.pitch) + fx2 * s2) * sp2; c.y += (Math.sin(c.pitch) * f2 + u2) * sp2;
+        ex = c.x; ey = c.y; ez = c.z; viewYaw = c.yaw; viewPitch = c.pitch; viewRoll = 0; spectating = null; viewY = c.y;
+      }
       if (kcP) {   // killcam: your killer's eyes, exactly where they were looking
         spectating = kcP; if (specId !== kcP.id) { specId = kcP.id; svmKey = ''; }
         specYaw = kcP.yaw || 0; specPitch = kcP.pitch || 0; specKick = Math.max(0, specKick - dt * 0.35);
@@ -1805,10 +1848,10 @@ export default function start({ cfg, E, N, smoke }) {
           cam.position.set(o.x + d.x * dist, o.y + d.y * dist, o.z + d.z * dist); cam.lookAt(me.x, me.y + 1.2, me.z);
         }
       }
-      if (kcP) {   // you, as they saw you
-        const sr = rigFor(myId), f = kcFr.me; sr.t += dt * 0.6; sr.g.visible = true; if (sr.blob) sr.blob.visible = false;
+      if (kcP || (rpFr && rp.follow !== myId)) {   // you, as they saw you
+        const fr0 = kcFr || rpFr, sr = rigFor(myId), f = fr0.me; sr.t += dt * 0.6; sr.g.visible = kcFr ? true : !!f[6]; if (sr.blob) sr.blob.visible = false;
         sr.g.position.set(f[0], f[1], f[2]); sr.g.rotation.y = f[3]; setTpGun(sr, f[7] || 'knife', null);
-        const dead = kcFr.tp >= kc.tDeath ? 1 : 0;
+        const dead = kcFr ? (kcFr.tp >= kc.tDeath ? 1 : 0) : 0;
         if (sr.soldier) { setGear(sr, me.armor || 0, me.helmet); poseSoldier(sr, { dt: dt * 0.6, vx: 0, vz: 0, vy: 0, yaw: f[3], crouch: f[5] || 0, pitch: f[4] || 0, dead, lean: f[8] || 0, prone: f[9] || 0 }); }
         else posePlayer(sr, { speed: 0, t: sr.t, crouch: f[5] || 0, pitch: f[4] || 0, dead });
       }
@@ -1832,7 +1875,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (bombObj.visible) { bombLcd(b.s === 'planted' ? b.t : null); bombObj.position.set(b.x, b.y + 0.02, b.z); bombObj.userData.led.visible = b.s !== 'planted' || (now * (1 + (40 - (b.t || 40)) / 8)) % 1 < 0.5; }
       // ---- view model ----
       if (vm) {
-        vm.visible = me.alive && !(me.scoped && w && w.zoom) && !spectating && !me.emote && !cine && !(me.ads > 0.9 && ['acog', 'reddot', 'holo'].includes(vm.userData.optic));   // aimed through an optic: you look through the glass, not at the gun
+        vm.visible = me.alive && !rp && !(me.scoped && w && w.zoom) && !spectating && !me.emote && !cine && !(me.ads > 0.9 && ['acog', 'reddot', 'holo'].includes(vm.userData.optic));   // aimed through an optic: you look through the glass, not at the gun
         const base = vm.userData.base, sp = speedOf(me);
         const animReload = !!(vm.userData.leftArm && (vm.userData.magGroup || (w && w.shellReload)));
         const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
@@ -1966,7 +2009,8 @@ export default function start({ cfg, E, N, smoke }) {
         if (match && !started && session) hint = 'Lobby: start the match from the panel';
         hud.hint(hint);
         hud.spec(spectating ? `Spectating ${(st.roster.get(spectating.id) || {}).name || ''} · ${itemName(spectating.wid) || ''} · ${mob ? 'tap' : 'click'} for next` : !me.alive && st.phase !== 'warmup' ? 'You are dead' : '');
-        if (kcP) hud.spec(`▶ KILLCAM · ${kc.name} · ${itemName(kcP.wid) || ''} · ${mob ? 'tap' : 'click'} to skip`);
+        if (rp) hud.spec('');
+        else if (kcP) hud.spec(`▶ KILLCAM · ${kc.name} · ${itemName(kcP.wid) || ''} · ${mob ? 'tap' : 'click'} to skip`);
       }
       if (radarT > 0.1) {
         radarT = 0;
@@ -1989,7 +2033,7 @@ export default function start({ cfg, E, N, smoke }) {
       document.exitPointerLock && document.exitPointerLock();
       const won = d.winner === me.team, draw = !d.winner;
       const mine = (d.players || []).find((p) => p.id === myId) || { k: stats.k, d: stats.d, a: stats.a, mvp: stats.mvp, hs: stats.hs };
-      const set = hud.endScreen({ title: draw ? 'DRAW' : won ? 'VICTORY' : 'DEFEAT', score: d.score, me: mine }, quit);
+      const set = hud.endScreen({ title: draw ? 'DRAW' : won ? 'VICTORY' : 'DEFEAT', score: d.score, me: mine, replay: mRec.length > 50 ? startReplay : null }, () => { stopReplay(); quit(); });
       audio.play(won ? 'win' : 'lose');
       const humans = match ? [...match.players.values()].filter((p) => !p.bot).length : st.roster.size ? [...st.roster.values()].filter((r) => !r.bot).length : 1;
       if (match && humans <= 1 && botLevel === 'auto' && !smoke) try {   // adaptive bots: a win or a good K/D makes the next match a bit harder
@@ -2027,11 +2071,11 @@ export default function start({ cfg, E, N, smoke }) {
       if (session) session.leave(); if (lobby) lobby.close();
       if (lobbyPanel) { clearInterval(lobbyPanel.iv); lobbyPanel.remove(); }
       if (SC) { SC.dispose(); SC = null; }
-      replayOn(false); hud.destroy(); renderer.dispose(); renderer.domElement.remove();
+      replayOn(false); hud.replayBar(false); hud.destroy(); renderer.dispose(); renderer.domElement.remove();
       document.querySelectorAll('.bd-stick,.bd-btns,.bd-look').forEach((e) => e.remove());
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip, startReplay, get rp() { return rp; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

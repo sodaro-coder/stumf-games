@@ -1392,13 +1392,39 @@ export class Hud {
     const cl = $('[data-clip]', p); if (cl) cl.onclick = () => { h.clip(); cl.disabled = true; };
     const rh = $('[data-rh]', p); if (rh) rh.onclick = () => { h.setRecoilHelp(!h.S.recoilHelp); rh.textContent = 'RECOIL HELP: ' + (h.S.recoilHelp ? 'ON' : 'OFF'); };
   }
+  // the match replay's controls: play / pause, a seek bar, speed, whose eyes (or a free camera), exit
+  replayBar(on, h) {
+    let el = document.querySelector('.cs-rpbar');
+    if (this.el) this.el.classList.toggle('rp', !!on);   // watching a replay: only the scores, the feed and the timer stay up
+    if (!on) { if (el) el.remove(); return null; }
+    if (!document.getElementById('cs-rp-css')) { const st = document.createElement('style'); st.id = 'cs-rp-css'; st.textContent = '.cs-hud.rp>*:not(.top):not(.feed):not(.tl){display:none!important}.cs-hud.rp .tl>*:not(.radar){display:none!important}'; document.head.appendChild(st); }
+    if (!el) {
+      el = document.createElement('div'); el.className = 'cs cs-rpbar';
+      el.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:60;background:rgba(10,12,16,.86);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:#fff;font:13px system-ui;width:min(820px,94vw)';
+      el.innerHTML = `<button class="cs-btn sm" data-pp style="min-width:64px">Pause</button><input type="range" data-seek min="0" max="1000" value="0" style="flex:1;min-width:160px"><span data-tm style="min-width:86px;text-align:center">0:00</span>
+        <select data-sp>${[0.25, 0.5, 1, 2, 4].map((v) => `<option value="${v}" ${v === 1 ? 'selected' : ''}>${v}×</option>`).join('')}</select>
+        <select data-fo><option value="">🎥 Free camera</option>${h.players.map((p) => `<option value="${esc(p.id)}">👁 ${esc(p.name)}</option>`).join('')}</select><button class="cs-btn alt sm" data-x>EXIT</button>
+        <div class="cs-mut cs-small" style="width:100%;text-align:center">Free camera: WASD fly · Q/E down/up · Shift fast · drag to look</div>`;
+      document.body.appendChild(el);
+      $('[data-pp]', el).onclick = () => h.toggle(); $('[data-x]', el).onclick = () => h.exit();
+      $('[data-seek]', el).oninput = (e) => h.seek(+e.target.value / 1000);
+      $('[data-sp]', el).onchange = (e) => h.speed(+e.target.value); $('[data-fo]', el).onchange = (e) => h.follow(e.target.value);
+    }
+    const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+    return (t, total, playing, follow) => {
+      const sk = $('[data-seek]', el); if (document.activeElement !== sk) sk.value = String(Math.round(t / Math.max(1, total) * 1000));
+      $('[data-tm]', el).textContent = `${fmt(t)} / ${fmt(total)}`; $('[data-pp]', el).textContent = playing ? 'Pause' : 'Play';
+      const fo = $('[data-fo]', el); if (document.activeElement !== fo && fo.value !== (follow || '')) fo.value = follow || '';
+    };
+  }
   endScreen(d, onDone) {
     if (this.panel) this.panel.remove();
     const p = document.createElement('div'); p.className = 'cs cs-panel'; p.dataset.k = 'end'; this.panel = p;
     p.innerHTML = `<div style="min-width:min(520px,90vw)"><b style="font-size:24px">${esc(d.title)}</b><div style="font-size:20px;margin:6px 0">T ${d.score.T} : ${d.score.CT} CT</div>
       <div class="cs-grid" style="margin:10px 0">${[['Kills', d.me.k], ['Deaths', d.me.d], ['Assists', d.me.a], ['MVPs', d.me.mvp], ['HS', d.me.hs]].map(([n, v]) => `<div class="cs-card"><div class="cs-mut cs-small">${n}</div><b style="font-size:20px">${v}</b></div>`).join('')}</div>
-      <div id="eRew" class="cs-coin" style="font-size:18px">Adding up your rewards…</div><div class="cs-row" style="margin-top:12px"><button class="cs-btn" data-d>CONTINUE</button></div></div>`;
+      <div id="eRew" class="cs-coin" style="font-size:18px">Adding up your rewards…</div><div class="cs-row" style="margin-top:12px"><button class="cs-btn" data-d>CONTINUE</button>${d.replay ? '<button class="cs-btn alt" data-rp>▶ WATCH REPLAY</button>' : ''}</div></div>`;
     document.body.appendChild(p); $('[data-d]', p).onclick = onDone;
+    const rpb = $('[data-rp]', p); if (rpb) rpb.onclick = () => { p.style.display = 'none'; d.replay(() => { p.style.display = ''; }); };
     return (txt) => { const e = $('#eRew', p); if (e) e.textContent = txt; };
   }
 }
