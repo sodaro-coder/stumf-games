@@ -13,6 +13,7 @@ import { CHAPTERS, MISSIONS, CHARACTERS, SQUAD, STORY_DIFF } from './story.js';
 import { thumb, stage, viewer, caseShot } from './thumbs.js';
 import { cardInto, cardImage, gradeBadge } from './cards.js';
 import { PAD_LAYOUTS } from './gamepad.js';
+import { MapEditor, registerCustom, localMaps, deleteLocal, cleanDef } from './mapedit.js';
 import * as WAL from './wallet.js';
 import { VOICE_PACKS } from './voices.js';
 import { ATTACH, slotsFor, optionsFor, gunLevel, xpForLevel, GUN_MAX } from './guns.js';
@@ -707,6 +708,7 @@ export class Menu {
     B.innerHTML = `<div class="cs-tabs">${Object.entries(MODES).filter(([, m]) => !m.hidden).map(([k, m]) => `<button data-mode="${k}" class="${s.mode === k ? 'on' : ''}">${esc(m.name)}</button>`).join('')}</div>
       <div class="cs-small cs-mut" style="margin:-6px 0 14px">${MODES[s.mode].about ? esc(MODES[s.mode].about) + (MODES[s.mode].kind === 'kz' ? '' : ' · bots fill empty slots') : `${MODES[s.mode].bomb ? 'Bomb defusal' : 'Combat only: no kill when time runs out = draw'} · first to ${MODES[s.mode].winTo} · bots fill empty slots`}</div>
       <div class="cs-maps">${Object.values(MAPS).filter(fits).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="cs-btn alt" id="pEdit">🛠 Map editor</button><button class="cs-btn alt" id="pComm">🌍 Community maps</button>${MAPS[s.map] && MAPS[s.map].custom ? '<button class="cs-btn alt" id="pEditThis">✏️ Edit this map</button>' : ''}</div>
       <div style="display:grid;grid-template-columns:1fr 340px;gap:22px;margin-top:20px">
         <div><div class="cs-sec">Lobby</div><div class="cs-seg">${[['bots', 'Offline with bots'], ['pub', 'Host public'], ['priv', 'Host private'], ['ranked', '🏆 Ranked']].map(([k, n]) => `<button data-host="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
           <div class="cs-sec">Weather</div><div class="cs-seg">${Object.entries(WEATHER).map(([k, w]) => `<button data-wx="${k}" class="${(s.weather || 'day') === k ? 'on' : ''}">${esc(w.name)}</button>`).join('')}</div>
@@ -725,6 +727,9 @@ export class Menu {
     B.querySelectorAll('[data-host]').forEach((e) => (e.onclick = () => { s.host = e.dataset.host; this.render(); }));
     B.querySelectorAll('[data-wx]').forEach((e) => (e.onclick = () => { s.weather = e.dataset.wx; this.render(); }));
     B.querySelectorAll('canvas[data-mapprev]').forEach((c) => this.h.mapPreview(c, c.dataset.mapprev));
+    $('#pEdit', B).onclick = () => this.openEditor(null);
+    $('#pComm', B).onclick = () => this.communityMaps();
+    const pet = $('#pEditThis', B); if (pet) pet.onclick = () => this.openEditor(MAPS[s.map].def);
     $('#pGo', B).onclick = () => { const rkd = s.host === 'ranked'; if (rkd && !RANKED_BOTS.includes(s.bot)) s.bot = 'hard';
       this.h.play({ mode: s.mode, map: s.map, bot: s.bot, host: true, solo: s.host === 'bots', pub: s.host === 'pub' || rkd, ranked: rkd, weather: rkd ? 'day' : s.weather || 'day' }); };
     const code = $('#pCode', B); const hash = location.hash.slice(1).toUpperCase(); if (/^[A-Z0-9]{5}$/.test(hash)) code.value = hash;
@@ -741,6 +746,42 @@ export class Menu {
         $('button', r).onclick = () => this.h.play({ code: l.code, host: false }); el.appendChild(r); } });
   }
   // ---- STORY: "Operation Ballin' Out", co-op missions (story.js / story_sim.js) ----
+  // ---- maps you make: the editor, and everyone's published maps ----
+  openEditor(def) {
+    new MapEditor({ toast: this.h.toast,
+      test: (d) => { try { const id = registerCustom(d); this.sel.map = id; this.sel.mode = 'dm'; this.h.play({ mode: 'dm', map: id, bot: 'normal', host: true, solo: true, pub: false, ranked: false, weather: 'day' }); } catch (e) { this.h.toast(e.message); } },
+      publish: (d) => this.P.publishMap(cleanDef({ ...d, author: this.P.d.username || this.P.d.name || '' })),
+      close: () => this.render() }, def);
+  }
+  communityMaps(sort = 'top') {
+    const m = document.createElement('div'); m.className = 'cs cs-modal';
+    m.innerHTML = `<div class="cs-card" style="width:min(820px,96vw)"><div class="cs-row" style="justify-content:space-between"><b style="font-size:18px">🌍 Community maps</b><button class="cs-btn alt sm" data-x>✕</button></div>
+      <div class="cs-seg" style="margin:10px 0">${[['top', 'Most liked'], ['new', 'Newest'], ['played', 'Most played']].map(([k, n]) => `<button data-sort="${k}" class="${sort === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <div class="cs-h">On this device</div><div data-local></div><div class="cs-h">Published</div><div data-list><span class="cs-mut cs-small">Loading…</span></div></div>`;
+    document.body.appendChild(m);
+    const close = () => { m.remove(); this.render(); };
+    $('[data-x]', m).onclick = close; m.onclick = (e) => { if (e.target === m) close(); };
+    m.querySelectorAll('[data-sort]').forEach((b) => (b.onclick = () => { m.remove(); this.communityMaps(b.dataset.sort); }));
+    const pick = (def, extra) => { try { const id = registerCustom(def, extra); this.sel.map = id; const md = MAPS[id].modes; if (!md.includes(this.sel.mode)) this.sel.mode = md.includes('5v5') ? '5v5' : 'dm'; this.tab = 'play'; close(); this.h.toast(`${def.name}: pick a mode and press GO`); } catch (e) { this.h.toast(e.message); } };
+    const loc = localMaps();
+    $('[data-local]', m).innerHTML = loc.length ? loc.map((d, i) => `<div class="cs-row" style="gap:8px;padding:6px 0;border-bottom:1px solid #ffffff12"><b style="flex:1">${esc(d.name)}</b><span class="cs-small cs-mut">${d.w}×${d.d} m</span>
+      <button class="cs-btn sm" data-lp="${i}">Play</button><button class="cs-btn alt sm" data-le="${i}">Edit</button><button class="cs-btn alt sm" data-ld="${i}">Delete</button></div>`).join('') : '<div class="cs-small cs-mut">None yet: open the Map editor from the Play tab.</div>';
+    m.querySelectorAll('[data-lp]').forEach((b) => (b.onclick = () => pick(loc[+b.dataset.lp])));
+    m.querySelectorAll('[data-le]').forEach((b) => (b.onclick = () => { m.remove(); this.openEditor(loc[+b.dataset.le]); }));
+    m.querySelectorAll('[data-ld]').forEach((b) => (b.onclick = () => { if (confirm('Delete this map from this device?')) { deleteLocal(loc[+b.dataset.ld].name); m.remove(); this.communityMaps(sort); } }));
+    this.P.mapList(sort).then((rows) => {
+      const L = $('[data-list]', m); if (!L) return;
+      if (!rows.length) { L.innerHTML = `<div class="cs-small cs-mut">${this.P.cloud ? 'No published maps yet: be the first.' : 'Community maps need the game\'s online service.'}</div>`; return; }
+      L.innerHTML = rows.map((r) => `<div class="cs-row" style="gap:8px;padding:6px 0;border-bottom:1px solid #ffffff12"><div style="flex:1"><b>${esc(r.name)}</b><div class="cs-small cs-mut">by ${esc(r.author || 'someone')} · 👍 ${r.likes | 0} · ▶ ${r.plays | 0}</div></div>
+        <button class="cs-btn sm" data-op="${r.id}">Play</button><button class="cs-btn alt sm" data-ol="${r.id}">👍</button><button class="cs-btn alt sm" data-or="${r.id}">Remix</button>${r.mine ? `<button class="cs-btn alt sm" data-od="${r.id}">Delete</button>` : `<button class="cs-btn alt sm" data-ox="${r.id}" title="Report">⚑</button>`}</div>`).join('');
+      const get = (id) => this.P.mapGet(+id).then((d) => { if (!d) throw new Error('That map is gone'); return d; });
+      L.querySelectorAll('[data-op]').forEach((b) => (b.onclick = () => get(b.dataset.op).then((d) => { this.P.mapPlayed(+b.dataset.op); pick(d, { cid: +b.dataset.op }); }).catch((e) => this.h.toast(e.message))));
+      L.querySelectorAll('[data-ol]').forEach((b) => (b.onclick = () => this.P.mapLike(+b.dataset.ol).then((n) => { b.textContent = '👍 ' + (n | 0); b.disabled = true; }).catch((e) => this.h.toast(e.message))));
+      L.querySelectorAll('[data-or]').forEach((b) => (b.onclick = () => get(b.dataset.or).then((d) => { m.remove(); this.openEditor({ ...d, name: (d.name + ' remix').slice(0, 28) }); }).catch((e) => this.h.toast(e.message))));
+      L.querySelectorAll('[data-od]').forEach((b) => (b.onclick = () => { if (confirm('Unpublish this map?')) this.P.mapDelete(+b.dataset.od).then(() => { m.remove(); this.communityMaps(sort); }).catch((e) => this.h.toast(e.message)); }));
+      L.querySelectorAll('[data-ox]').forEach((b) => (b.onclick = () => { if (confirm('Report this map as offensive or broken?')) this.P.mapReport(+b.dataset.ox).then(() => { b.disabled = true; this.h.toast('Reported: thanks'); }).catch((e) => this.h.toast(e.message)); }));
+    }).catch((e) => { const L = $('[data-list]', m); if (L) L.innerHTML = `<div class="cs-small cs-mut">${esc(e.message || e)}</div>`; });
+  }
   tab_story(B) {
     let sp = { unlocked: 0, best: {}, chars: {} }; try { sp = Object.assign(sp, JSON.parse(localStorage.getItem('cs:story:v1') || '{}')); } catch (e) { /* private mode */ }
     const s = this.story || (this.story = { mission: Math.min(sp.unlocked, MISSIONS.length - 1), diff: 'normal', char: (() => { try { return localStorage.getItem('cs:story:char') || 'ricky'; } catch (e) { return 'ricky'; } })(), host: 'solo' });

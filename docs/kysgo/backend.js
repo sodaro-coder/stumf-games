@@ -260,6 +260,14 @@ export class Profile {
     }
     this.changed(); return out;
   }
+  // community maps (the map data is checked again by every game that loads it)
+  async publishMap(def) { if (!this.signedIn) return { error: 'Sign in to publish (your map is saved on this device)' }; return this.rpc('cs_map_publish', { p_name: def.name, p_def: def }); }
+  async mapList(sort) { if (!this.cloud) return []; return (await this.req('/rest/v1/rpc/cs_map_list', { p_sort: sort }, 'POST', this.signedIn)) || []; }
+  async mapGet(id) { return this.req('/rest/v1/rpc/cs_map_get', { p_id: id }, 'POST', this.signedIn); }
+  async mapLike(id) { if (!this.signedIn) throw new Error('Sign in to like maps'); return this.rpc('cs_map_like', { p_id: id }); }
+  async mapReport(id) { if (!this.signedIn) throw new Error('Sign in to report'); return this.rpc('cs_map_report', { p_id: id }); }
+  async mapDelete(id) { return this.rpc('cs_map_delete', { p_id: id }); }
+  mapPlayed(id) { if (this.cloud) this.req('/rest/v1/rpc/cs_map_play', { p_id: id }, 'POST', this.signedIn).catch(() => {}); }
   // stickers: up to 4 per weapon skin; scraping wears one down 15% at a time and peels it at 100%
   async applySticker(itemUid, stkUid) {
     const it = this.d.inventory.find((i) => i.uid === itemUid), st = this.d.inventory.find((i) => i.uid === stkUid);

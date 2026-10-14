@@ -14,6 +14,7 @@ import { PVS_DATA } from './pvs_data.js';
 import { MAPS } from './maps.js';
 import { mobileControls } from './mobile.js';
 import { gamepadControls } from './gamepad.js';
+import { registerCustom, registerLocal } from './mapedit.js';
 import { Match, moveStep, traceShot, eyeHeight, eyePos, leanOff, LEAN, spreadOf, recoilAt, nadeStep, speedOf, aimDir } from './sim.js';
 import { Bots, botNames } from './bots.js';
 import { StoryMatch } from './story_sim.js';
@@ -293,6 +294,8 @@ export default function start({ cfg, E, N, smoke }) {
     for (let z = 0; z < B.d; z++) for (let x = 0; x < B.w; x++) { const i = z * B.w + x; if (B.flag[i] === 2 || B.flag[i] === 3) { g.fillStyle = B.flag[i] === 3 ? '#c43' : `hsl(35,${20 + B.h[i] * 5}%,${44 + B.h[i] * 6}%)`; g.fillRect(ox + x * s, oz + z * s, Math.ceil(s), Math.ceil(s)); } }
     g.fillStyle = '#ff6a4a'; g.font = 'bold 13px system-ui'; for (const [n, r] of Object.entries(B.sites)) g.fillText(n, ox + (r[0] + r[2]) / 2 * s - 4, oz + (r[1] + r[3]) / 2 * s + 4);
   };
+  const cmapOf = (id) => (MAPS[id] && MAPS[id].custom ? MAPS[id].def : undefined);
+  try { registerLocal(); } catch (e) { /* no saved maps */ }
   let menu = null;
   const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, audio, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
   if (smoke) { let m = 'dust', md = '5v5'; try { const u = new URLSearchParams(location.search), q = u.get('map'), qm = u.get('mode'); if (MAPS[q]) m = q; if (MODES[qm] && !MODES[qm].hidden) md = qm; var wq = u.get('weather'); } catch (e) { /* no page */ } runMatch({ mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true, weather: wq }); }
@@ -612,7 +615,7 @@ export default function start({ cfg, E, N, smoke }) {
     function startLevel() {
       camp.phase = 'level'; campHold = false; started = true;
       saveCamp(camp.mission, match.startObj || 0);
-      match.start(); send('lobby', { mode, map: mapId, bot: botLevel, started: true, ranked, weather });
+      match.start(); send('lobby', { mode, map: mapId, bot: botLevel, started: true, ranked, weather, cmap: cmapOf(mapId) });
       send('camp', { phase: 'go', mission: camp.mission }); SC.hideCard(); SC.hub(null); if (!smoke) lock();
     }
     // ---- the chapter hub (between chapters, same party) ----
@@ -994,7 +997,7 @@ export default function start({ cfg, E, N, smoke }) {
         }
         if (mode === 'story') { camp.info.set(peer, clean); const hp = camp.party.get(peer); if (hp) clean.char = hp.char; }
         match.add(peer, clean);
-        send('lobby', { mode, map: mapId, bot: botLevel, started, ranked, weather }, peer);
+        send('lobby', { mode, map: mapId, bot: botLevel, started, ranked, weather, cmap: cmapOf(mapId) }, peer);
         if (mode === 'story' && started) campWelcome(peer);
         if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
         return;
@@ -1386,6 +1389,7 @@ export default function start({ cfg, E, N, smoke }) {
     } else {
       hud.banner('Joining…', 'connecting to the host', 0);
       session.on('lobby', (d, peer) => {
+        if (d && peer === session.hostId && d.cmap && !MAPS[d.map] && /^c_[a-z0-9]+$/.test(String(d.map))) { try { if (registerCustom(d.cmap) !== d.map) delete MAPS[d.map]; } catch (e) { /* a broken map: not joined */ } }   // the host's own map travels in the lobby message
         if (peer !== session.hostId || !d || !MODES[d.mode] || !MAPS[d.map]) return;
         mode = d.mode; botLevel = d.bot; ranked = !!d.ranked; const wx = WEATHER[d.weather] ? d.weather : 'day';
         if (!W || mapId !== d.map || wx !== weather) { weather = wx; buildMap(d.map); }
@@ -1440,7 +1444,7 @@ export default function start({ cfg, E, N, smoke }) {
       uiOpen = null; started = true;
       if (mode !== 'story' && MODES[mode].kind !== 'kz') match.fillBots(botNames(Math.floor(Math.random() * 18)));
       else { storyUI().transition(camp.mission, ''); setTimeout(() => SC.hideCard(), 2600); saveCamp(camp.mission, match.startObj || 0); }
-      match.start(); send('lobby', { mode, map: mapId, bot: botLevel, started: true, ranked, weather });
+      match.start(); send('lobby', { mode, map: mapId, bot: botLevel, started: true, ranked, weather, cmap: cmapOf(mapId) });
       if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
     }
 

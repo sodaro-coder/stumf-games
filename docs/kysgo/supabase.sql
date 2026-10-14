@@ -1759,3 +1759,59 @@ create or replace function cs_stickers() returns json language sql security defi
 $$;
 revoke all on function cs_sticker_apply(text, text), cs_sticker_scrape(text, int), cs_stickers() from public, anon;
 grant execute on function cs_sticker_apply(text, text), cs_sticker_scrape(text, int), cs_stickers() to authenticated;
+
+-- ---- community maps: anyone signed in can publish (20 maps each, 6 a day); 3 reports hide a map --------------------
+create table if not exists cs_maps (id bigserial primary key, owner uuid not null references auth.users on delete cascade, name text not null, author text not null default '',
+  def jsonb not null, likes int not null default 0, plays int not null default 0, reports int not null default 0, created timestamptz not null default now(), updated timestamptz not null default now());
+create unique index if not exists cs_maps_owner_name on cs_maps (owner, lower(name));
+create table if not exists cs_map_votes (map bigint not null references cs_maps on delete cascade, uid uuid not null, kind text not null, primary key (map, uid, kind));
+alter table cs_maps enable row level security; alter table cs_map_votes enable row level security;
+create or replace function cs_map_publish(p_name text, p_def jsonb) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); nm text := left(regexp_replace(coalesce(p_name, ''), '[^[:alnum:] ''!?.&-]', '', 'g'), 28); au text; mid bigint;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  if length(trim(nm)) < 2 then raise exception 'Give your map a name'; end if;
+  if p_def is null or jsonb_typeof(p_def) <> 'object' or length(p_def::text) > 60000 then raise exception 'That map is too big'; end if;
+  select coalesce(username, name, 'Player') into au from cs_profiles where id = me;
+  update cs_maps set def = p_def, author = coalesce(au, ''), updated = now() where owner = me and lower(name) = lower(trim(nm)) returning id into mid;
+  if mid is null then
+    if (select count(*) from cs_maps where owner = me) >= 20 then raise exception 'You can publish 20 maps: delete one first'; end if;
+    if (select count(*) from cs_maps where owner = me and created > now() - interval '1 day') >= 6 then raise exception '6 new maps a day: try again tomorrow'; end if;
+    insert into cs_maps (owner, name, author, def) values (me, trim(nm), coalesce(au, ''), p_def) returning id into mid;
+  end if;
+  return json_build_object('id', mid);
+end $$;
+create or replace function cs_map_list(p_sort text) returns json language sql security definer set search_path = public as $$
+  select coalesce(json_agg(x), '[]'::json) from (
+    select id, name, author, likes, plays, created, owner = auth.uid() as mine from cs_maps where reports < 3 or owner = auth.uid()
+    order by case when p_sort = 'new' then extract(epoch from created) when p_sort = 'played' then plays else likes end desc, id desc limit 60) x;
+$$;
+create or replace function cs_map_get(p_id bigint) returns jsonb language sql security definer set search_path = public as $$
+  select def from cs_maps where id = p_id and (reports < 3 or owner = auth.uid());
+$$;
+create or replace function cs_map_like(p_id bigint) returns int language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); n int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  insert into cs_map_votes values (p_id, me, 'like') on conflict do nothing;
+  if found then update cs_maps set likes = likes + 1 where id = p_id returning likes into n; else select likes into n from cs_maps where id = p_id; end if;
+  return coalesce(n, 0);
+end $$;
+create or replace function cs_map_report(p_id bigint) returns void language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid();
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  insert into cs_map_votes values (p_id, me, 'report') on conflict do nothing;
+  if found then update cs_maps set reports = reports + 1 where id = p_id; end if;
+end $$;
+create or replace function cs_map_play(p_id bigint) returns void language sql security definer set search_path = public as $$
+  update cs_maps set plays = plays + 1 where id = p_id;
+$$;
+create or replace function cs_map_delete(p_id bigint) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'sign in first'; end if;
+  delete from cs_maps where id = p_id and owner = auth.uid();
+end $$;
+revoke all on function cs_map_publish(text, jsonb), cs_map_list(text), cs_map_get(bigint), cs_map_like(bigint), cs_map_report(bigint), cs_map_play(bigint), cs_map_delete(bigint) from public;
+grant execute on function cs_map_list(text), cs_map_get(bigint), cs_map_play(bigint) to anon, authenticated;
+grant execute on function cs_map_publish(text, jsonb), cs_map_like(bigint), cs_map_report(bigint), cs_map_delete(bigint) to authenticated;
