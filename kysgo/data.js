@@ -110,8 +110,20 @@ export const MODES = {
   '2v2': { name: '2v2 Wingmen', size: 2, bomb: true, winTo: 4, half: 3, max: 7, freeze: 10, round: 90, buyTime: 20, bombSite: 'A' },
   '3v3': { name: '3v3 Trios', size: 3, bomb: true, winTo: 4, half: 3, max: 7, freeze: 12, round: 105, buyTime: 20 },
   '5v5': { name: '5v5 Competitive', size: 5, bomb: true, winTo: 4, half: 3, max: 7, freeze: 15, round: 115, buyTime: 20 },
+  dm: { name: 'Deathmatch', kind: 'dm', size: 5, bomb: false, winTo: 1, half: 99, max: 1, freeze: 3, round: 600, buyTime: 600, start: 16000, killsTo: 50, respawn: 2,
+    about: 'Team deathmatch: instant respawns, buy anywhere, first team to 50 kills' },
+  arms: { name: 'Arms Race', kind: 'arms', size: 4, bomb: false, winTo: 1, half: 99, max: 1, freeze: 3, round: 900, buyTime: 0, start: 0, respawn: 1.5,
+    about: 'A new gun every kill: first to a knife kill with the last one wins' },
+  retake: { name: 'Retakes', kind: 'retake', size: 4, bomb: true, winTo: 8, half: 99, max: 15, freeze: 4, round: 60, buyTime: 0, start: 0,
+    about: 'The bomb is already planted: CTs retake the site and defuse, Ts hold it. Loadouts are handed out' },
+  zombies: { name: 'Zombies', kind: 'zombies', size: 4, bomb: false, winTo: 1, half: 99, max: 1, freeze: 12, round: 99999, buyTime: 99999, start: 1200,
+    about: 'Co-op: survive endless waves of the shambling dead. Buy between waves' },
+  kz: { name: 'Climb (KZ)', kind: 'kz', size: 1, bomb: false, winTo: 1, half: 99, max: 1, freeze: 2, round: 99999, buyTime: 0, start: 0, solo: true,
+    about: 'Jump course with a timer: checkpoints, bhop strips and your best time' },
   story: { name: 'Story', size: 4, bomb: false, winTo: 1, half: 99, max: 1, freeze: 3, round: 99999, buyTime: 0, start: 0, hidden: true },   // co-op missions (story_sim.js)
 };
+// Arms Race ladder: one kill moves you up; the last step is the knife
+export const ARMS = ['ak47', 'm4a1s', 'aug', 'awp', 'p90', 'mp7', 'xm1014', 'nova', 'negev', 'ssg08', 'deagle', 'p250', 'tec9', 'glock', 'knife'];
 export const BOMB = { timer: 40, plant: 3.2, defuse: 10, defuseKit: 5, radius: 500 * U, dmg: 500 };
 
 // player physics (classic numbers in metres)
@@ -126,8 +138,13 @@ export const BOT_LEVELS = {
   easy: { name: 'Beginner', react: 1.35, aimErr: 0.2, turn: 2, head: 0, spray: 0.2, burst: 3 },   // slow to react, sloppy aim, never aims for the head
   normal: { name: 'Played CS:GO', react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5 },
   hard: { name: 'Real Shoota', react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },
+  auto: { name: 'Adaptive', adaptive: true, react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5 },   // follows your results vs bots
   expert: { name: 'Real Shoota', hidden: true, react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },   // old saves: same as Real Shoota
 };
+
+// adaptive bots: skill 0 = Beginner .. 1 = Real Shoota, nudged after every bots match by how you did
+export const botLevelAt = (k) => { const a = BOT_LEVELS.easy, b = BOT_LEVELS.hard, t = Math.max(0, Math.min(1, k)), m = (x, y) => x + (y - x) * t;
+  return { name: 'Adaptive', react: m(a.react, b.react), aimErr: m(a.aimErr, b.aimErr), turn: m(a.turn, b.turn), head: m(a.head, b.head), spray: m(a.spray, b.spray), burst: Math.round(m(a.burst, b.burst)) }; };
 
 // ranked: Rank Rating (RR) thresholds, worked out on the server (cs_ranked). First 5 matches are placements.
 export const RANKS = [

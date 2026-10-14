@@ -120,6 +120,10 @@ export const STORY_LOOKS = {
   dancer_b: { body: '#7a4e36', legs: '#7a4e36', head: '#7a4e36', bikini: '#30e0ff', hat: 'bob', hatColor: '#1a1210', bombvest: true },
   dancer_c: { body: '#f0c8a8', legs: '#f0c8a8', head: '#f0c8a8', bikini: '#ffd23a', hat: 'bob', hatColor: '#c8301e', bombvest: true },
   headliner: { body: '#c08a66', legs: '#c08a66', head: '#c08a66', bikini: '#b040ff', hat: 'bob', hatColor: '#f4f4f4', bombvest: true },
+  // Zombies mode: grey-green rot, filthy rags
+  zombie_a: { body: '#4f5a3c', legs: '#3b3328', head: '#8a9a6e', hat: 'none' },
+  zombie_b: { body: '#6a4a3a', legs: '#2e3a2a', head: '#7c8c62', hat: 'none' },
+  zombie_c: { body: '#3a4450', legs: '#4a3c30', head: '#93a07a', hat: 'none', belly: true },
 };
 
 // ---- the campaign: 8 chapters, 27 levels ---------------------------------------------------------------------------------

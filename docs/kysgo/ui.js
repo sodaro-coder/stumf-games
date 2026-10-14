@@ -155,7 +155,7 @@ const MENU_CSS = `
 .cs-panel2 h3{margin:0;padding:10px 14px;font:800 11px system-ui;letter-spacing:.18em;text-transform:uppercase;color:#8d97a5;border-bottom:1px solid #2e343d;background:rgba(255,255,255,.02)}
 .cs-panel2 .bd{padding:12px 14px}
 .cs-sec{font:800 11px system-ui;letter-spacing:.2em;text-transform:uppercase;color:#8d97a5;margin:18px 0 10px}
-.cs-tabs{display:flex;gap:2px;border-bottom:1px solid #2e343d;margin-bottom:16px}.cs-tabs button{border:0;background:transparent;color:#8d97a5;padding:12px 18px;font:800 12px system-ui;letter-spacing:.14em;text-transform:uppercase;border-bottom:3px solid transparent}
+.cs-tabs{display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid #2e343d;margin-bottom:16px}.cs-tabs button{border:0;background:transparent;color:#8d97a5;padding:12px 18px;font:800 12px system-ui;letter-spacing:.14em;text-transform:uppercase;border-bottom:3px solid transparent}
 .cs-tabs button.on{color:#fff;border-bottom-color:#f2a33a}
 .cs-maps{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .cs-map{position:relative;border:1px solid #2e343d;border-radius:3px;overflow:hidden;cursor:pointer;background:#0f1216}
@@ -692,9 +692,11 @@ export class Menu {
   // ---- PLAY: mode tabs, map tiles, bots, then GO ----
   tab_play(B) {
     const s = this.sel;
+    const fits = (m) => !m.story && (m.modes || []).includes(s.mode);
+    if (!MAPS[s.map] || !fits(MAPS[s.map])) { const f = Object.values(MAPS).find(fits); if (f) s.map = f.id; }
     B.innerHTML = `<div class="cs-tabs">${Object.entries(MODES).filter(([, m]) => !m.hidden).map(([k, m]) => `<button data-mode="${k}" class="${s.mode === k ? 'on' : ''}">${esc(m.name)}</button>`).join('')}</div>
-      <div class="cs-small cs-mut" style="margin:-6px 0 14px">${MODES[s.mode].bomb ? 'Bomb defusal' : 'Combat only: no kill when time runs out = draw'} · first to ${MODES[s.mode].winTo} · bots fill empty slots</div>
-      <div class="cs-maps">${Object.values(MAPS).filter((m) => !m.story).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
+      <div class="cs-small cs-mut" style="margin:-6px 0 14px">${MODES[s.mode].about ? esc(MODES[s.mode].about) + (MODES[s.mode].kind === 'kz' ? '' : ' · bots fill empty slots') : `${MODES[s.mode].bomb ? 'Bomb defusal' : 'Combat only: no kill when time runs out = draw'} · first to ${MODES[s.mode].winTo} · bots fill empty slots`}</div>
+      <div class="cs-maps">${Object.values(MAPS).filter(fits).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
       <div style="display:grid;grid-template-columns:1fr 340px;gap:22px;margin-top:20px">
         <div><div class="cs-sec">Lobby</div><div class="cs-seg">${[['bots', 'Offline with bots'], ['pub', 'Host public'], ['priv', 'Host private'], ['ranked', '🏆 Ranked']].map(([k, n]) => `<button data-host="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
           <div class="cs-sec">Bot difficulty</div><div class="cs-seg">${Object.entries(BOT_LEVELS).filter(([k, b]) => !b.hidden && (s.host !== 'ranked' || RANKED_BOTS.includes(k))).map(([k, b]) => `<button data-bot="${k}" class="${s.bot === k ? 'on' : ''}">${b.name}</button>`).join('')}</div>

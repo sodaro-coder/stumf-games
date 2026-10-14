@@ -290,7 +290,7 @@ export default function start({ cfg, E, N, smoke }) {
   };
   let menu = null;
   const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
-  if (smoke) { let m = 'dust'; try { const q = new URLSearchParams(location.search).get('map'); if (MAPS[q]) m = q; } catch (e) { /* no page */ } runMatch({ mode: '5v5', map: m, bot: 'normal', host: true, solo: true, smoke: true }); }
+  if (smoke) { let m = 'dust', md = '5v5'; try { const u = new URLSearchParams(location.search), q = u.get('map'), qm = u.get('mode'); if (MAPS[q]) m = q; if (MODES[qm] && !MODES[qm].hidden) md = qm; } catch (e) { /* no page */ } runMatch({ mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true }); }
   else showMenu();
 
   // ====================================================================================================================
@@ -1015,7 +1015,8 @@ export default function start({ cfg, E, N, smoke }) {
         if (s <= 2 && old && old.wid === it.wid && !it.fresh && !it.picked) { me.inv[s].ammo = old.ammo; me.inv[s].reserve = old.reserve; }
       }
       me.nades = m.nades || []; me.money = m.money; me.armor = m.armor; me.helmet = m.helmet; me.defuser = m.defuser;
-      if (me.respawned || (!me.inv[me.cur] && !(me.cur === 4 && me.nades.length))) { me.cur = me.inv[1] ? 1 : me.inv[2] ? 2 : 3; if (me.inv[me.cur]) me.respawned = false; }
+      if (m.cur && me.inv[m.cur]) { me.cur = m.cur; me.respawned = false; }
+      else if (me.respawned || (!me.inv[me.cur] && !(me.cur === 4 && me.nades.length))) { me.cur = me.inv[1] ? 1 : me.inv[2] ? 2 : 3; if (me.inv[me.cur]) me.respawned = false; }
       if (me.nadeSel >= me.nades.length) me.nadeSel = 0;
       if (hud.panelRender && hud.panel && hud.panel.dataset.k === 'buy') hud.panelRender();
       setViewModel();
@@ -1068,7 +1069,9 @@ export default function start({ cfg, E, N, smoke }) {
     function onEvent({ type, data }) {
       if (type === 'round') {
         st.round = data.n; st.score = data.score;
-        if (data.phase === 'freeze' && mode !== 'story') { hud.banner(`Round ${data.n}`, MODES[mode].bomb ? (me.team === 'T' ? 'Plant the bomb or eliminate the enemy' : 'Defend the bomb sites') : 'Eliminate the enemy', 2500); audio.play('round'); }
+        const K = MODES[mode].kind;
+        if (data.phase === 'freeze' && mode !== 'story' && !K) { hud.banner(`Round ${data.n}`, MODES[mode].bomb ? (me.team === 'T' ? 'Plant the bomb or eliminate the enemy' : 'Defend the bomb sites') : 'Eliminate the enemy', 2500); audio.play('round'); }
+        else if (data.phase === 'freeze' && (K === 'dm' || K === 'arms' || K === 'kz') && data.n === 1) { hud.banner(MODES[mode].name, MODES[mode].about || '', 4000); audio.play('round'); }
         if (data.phase === 'live') { hud.banner('', ''); audio.play('radio'); announce('go'); if (uiOpen === 'buy' && !canBuy()) closeBuy(); }
       }
       if (type === 'roundEnd') {
@@ -1079,6 +1082,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (data.mvp && data.mvp === myName) stats.mvp++;
       }
       if (type === 'banner') hud.banner(data.text, data.sub || '', 3000);
+      if (type === 'kz' && data.id === myId) { try { const k = 'kysgo_kz_' + mapId, old = +localStorage.getItem(k) || 0; if (!old || data.t < old) { localStorage.setItem(k, String(data.t)); toast(`🏁 Personal best on ${MAPS[mapId].short}: ${data.t.toFixed(2)} s`); } } catch (e) { /* private mode */ } }
       if (type === 'kill') {
         hud.feed(data, myId);
         if (cfx && data.weapon !== 'bomb') { const v = data.vid === myId ? me : st.players.get(data.vid); if (v) setTimeout(() => cfx && cfx.pool(v.x, v.y, v.z), 700); }
@@ -1157,6 +1161,7 @@ export default function start({ cfg, E, N, smoke }) {
       buildMap(mapId);
       const margs = { W, mode, mapId, botLevel, send: (t, d, to) => { if (session) session.send(t, d, to); }, onLocal: local };
       match = story ? new StoryMatch(margs, { ...story, runId: camp.runId }) : new Match(margs); match.hostId = myId;
+      try { match.skill = +(localStorage.getItem('kysgo_skill') || 0.4); } catch (e) { match.skill = 0.4; }   // adaptive bots start where you left them
       bots = new Bots(match);
       match.killFx = (by, weapon) => funnyKey(weapon === 'knife' ? (by.knife || {})[by.team] : (Object.values(by.inv).find((i) => i && i.wid === weapon) || {}).skin);
       const mp = match.add(myId, { ...hello, ...(ranked ? { team: 'T' } : {}), loadout: sanitizeLoadout(loadout), agent: sanitizeAgent(hello.agent), knife: sanitizeKnife(hello.knife) });
@@ -1221,7 +1226,7 @@ export default function start({ cfg, E, N, smoke }) {
     function startMatch() {
       if (lobbyPanel) { clearInterval(lobbyPanel.iv); lobbyPanel.remove(); lobbyPanel = null; }
       uiOpen = null; started = true;
-      if (mode !== 'story') match.fillBots(botNames(Math.floor(Math.random() * 18)));
+      if (mode !== 'story' && MODES[mode].kind !== 'kz') match.fillBots(botNames(Math.floor(Math.random() * 18)));
       else { storyUI().transition(camp.mission, ''); setTimeout(() => SC.hideCard(), 2600); saveCamp(camp.mission, match.startObj || 0); }
       match.start(); send('lobby', { mode, map: mapId, bot: botLevel, started: true, ranked });
       if (lobby) lobby.update({ players: [...match.players.values()].filter((q) => !q.bot).length });
@@ -1779,6 +1784,11 @@ export default function start({ cfg, E, N, smoke }) {
       const set = hud.endScreen({ title: draw ? 'DRAW' : won ? 'VICTORY' : 'DEFEAT', score: d.score, me: mine }, quit);
       audio.play(won ? 'win' : 'lose');
       const humans = match ? [...match.players.values()].filter((p) => !p.bot).length : st.roster.size ? [...st.roster.values()].filter((r) => !r.bot).length : 1;
+      if (match && humans <= 1 && botLevel === 'auto' && !smoke) try {   // adaptive bots: a win or a good K/D makes the next match a bit harder
+        const kd = (mine.k || 0) / Math.max(1, mine.d || 0), k0 = +(localStorage.getItem('kysgo_skill') || 0.4);
+        const k1 = Math.max(0, Math.min(1, k0 + (won ? 0.07 : draw ? 0 : -0.07) + (kd > 1.3 ? 0.04 : kd < 0.7 ? -0.04 : 0)));
+        localStorage.setItem('kysgo_skill', k1.toFixed(3)); toast(`Adaptive bots: ${Math.round(k1 * 100)}/100 next match`);
+      } catch (e) { /* private mode */ }
       const res = await profile.matchDone({ ...stats, k: mine.k, d: mine.d, hs: mine.hs, mvp: mine.mvp, win: won ? 1 : 0, draw, rounds: st.round, botsOnly: humans <= 1 });
       const ups = await saveGunXp();
       const lv = ups.filter((u) => u.to > u.from).map((u) => `${W_BY_ID[u.wid].name} → Lv ${u.to}${u.to >= 10 ? ' ★ PRESTIGE (suppressor)' : ''}${unlocksAt(u.wid, u.to).length ? ' (new: ' + unlocksAt(u.wid, u.to).join(', ') + ')' : ''}`);

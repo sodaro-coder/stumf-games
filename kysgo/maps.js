@@ -634,14 +634,193 @@ function outpost() {
   return B;
 }
 
+
+// ---- Spaghettown: the Italian village bomb map's flow (banana lane up to B, apartments over to A, mid splitting
+// them), a village that runs on carbs and grudges. Original layout and jokes.
+function spaghettown() {
+  const B = new MapBuilder(120, 120, 7, 'plaster', 'tile');
+  B.open(8, 96, 40, 116, 0, 'tile');                   // T spawn
+  B.ramp(40, 100, 52, 108, 0, 0.5, 'x', 'tile');       // T ramp to second mid
+  B.open(52, 64, 64, 108, 0.5, 'asphalt');            // Mid street
+  B.open(52, 40, 64, 64, 0.5, 'asphalt');             // Top mid
+  B.ramp(52, 24, 64, 40, 1.5, 0.5, 'z', 'concrete');  // CT mid stairs
+  B.open(52, 8, 100, 24, 1.5, 'concrete');            // CT spawn
+  B.ramp(16, 60, 24, 96, 0, 1.2, '-z', 'dirt');       // Banana: climbs north to B
+  B.open(6, 20, 40, 60, 1.2, 'dirt');                 // B site
+  B.ramp(40, 24, 46, 32, 1.2, 1.5, 'x', 'concrete');  // Construction: B <-> CT
+  B.open(46, 24, 52, 32, 1.5, 'concrete');
+  B.open(64, 48, 76, 56, 0.5, 'tile');                // Arch (mid -> A)
+  B.ramp(76, 48, 84, 56, 0.5, 1.0, 'x', 'tile');
+  B.open(84, 32, 112, 64, 1.0, 'tile');               // A site
+  B.ramp(84, 24, 112, 32, 1.5, 1.0, 'z', 'concrete'); // CT -> A
+  B.open(64, 76, 104, 84, 0.5, 'carpet');             // Apartments (indoors)
+  B.ramp(96, 64, 104, 76, 1.0, 0.5, 'z', 'tile');     // Apartments stairs up to A (south side)
+  B.roof(64, 76, 104, 84, 3.6, 'roof').roof(64, 48, 76, 56, 3.4, 'plaster').roof(40, 24, 52, 32, 4.0, 'plaster');
+  // cover
+  B.stack(10, 24, 16, 30, 1.6, 'brick');              // the church steps
+  B.stack(20, 30, 24, 34, 0.8, 'concrete');           // fountain
+  B.stack(26, 40, 30, 43, 0.9, 'darkwood');           // coffins
+  B.stack(32, 22, 37, 26, 1.1, 'crate');              // dark corner
+  B.stack(8, 50, 12, 54, 1.1, 'crate');               // B entrance box
+  B.stack(17, 74, 20, 79, 1.2, 'cred');               // banana car
+  B.stack(20, 66, 23, 68, 1.0, 'darkwood');           // sandbags
+  B.stack(55, 84, 58, 87, 1.1, 'crate'); B.stack(60, 58, 63, 61, 1.1, 'crate');   // mid boxes
+  B.stack(90, 38, 94, 42, 1.1, 'crate'); B.stack(100, 50, 104, 53, 1.0, 'wood');   // A default, A barrels
+  B.stack(106, 36, 110, 44, 1.6, 'brick');            // pit wall
+  B.stack(86, 56, 89, 60, 1.1, 'crate');              // A truck boxes
+  B.stack(74, 78, 76, 82, 1.1, 'darkwood');           // apartment couch
+  B.stack(16, 104, 20, 108, 1.1, 'crate'); B.stack(30, 100, 33, 103, 1.1, 'crate');  // T spawn boxes
+  B.stack(70, 19, 73, 22, 1.1, 'crate');              // CT boxes
+  B.zone('T Spawn', 8, 96, 40, 116).zone('Second Mid', 40, 98, 52, 110).zone('Mid', 52, 64, 64, 108).zone('Top Mid', 52, 40, 64, 64)
+    .zone('CT Mid', 52, 24, 64, 40).zone('CT Spawn', 52, 8, 100, 24).zone('Banana', 16, 60, 24, 96).zone('B Site', 6, 20, 40, 60)
+    .zone('Church', 8, 22, 18, 32).zone('Construction', 40, 24, 52, 32).zone('Arch', 64, 48, 84, 56).zone('A Site', 84, 32, 112, 64)
+    .zone('Pit', 104, 34, 112, 46).zone('Apartments', 64, 76, 104, 84).zone('Apartment Stairs', 96, 64, 104, 76);
+  B.site('A', 86, 34, 110, 62).site('B', 8, 22, 38, 58);
+  B.buyzone('T', 8, 98, 40, 116).buyzone('CT', 52, 8, 100, 24);
+  for (let k = 0; k < 5; k++) { B.spawn('T', 12 + k * 5, 110, 0); B.spawn('CT', 62 + k * 7, 14, Math.PI); }
+  B.duelSpawn('T', 58, 92, 0).duelSpawn('CT', 58, 46, Math.PI);
+  B.sign(32, 96.05, 2.4, 0, "NONNA'S MEATBALLS\n2 for 1 · 3 for diarrhea", 4, 1.3, '#7a1e14', '#fff3d6');
+  B.sign(16.05, 82, 2.4, Math.PI / 2, 'BANANA LANE\nslippery when wet\n(it is always wet)', 3.4, 1.4, '#e8c838', '#2a2108');
+  B.sign(84.05, 42, 2.8, Math.PI / 2, 'PIZZERIA BOLOGNESE\nnow with 40% less E. coli', 3.8, 1.2, '#1f4a22', '#fff');
+  B.sign(6.05, 44, 2.8, Math.PI / 2, 'CONFESSIONS\n$5 · sins over 3 min\ncharged by the minute', 3.4, 1.5, '#3a2a4a', '#f2e6ff');
+  B.prop('lamp', 58, 70, {}).prop('lamp', 58, 100, {}).prop('palm', 30, 112, {}).prop('barrel', 98, 20, {}).prop('tree', 36, 50, {}).prop('tree', 92, 60, {});
+  B.sky = 0x86a8d8; B.fog = 0xe2cdb0; B.sunColor = 0xffd7a8; B.amb = [0xd6c8e6, 0x8a6a4a]; B.sunDir = [-0.55, 0.55, 0.62]; B.sunI = 2.5; B.ambI = 1.2;
+  B.photo = 'sunset';
+  return B;
+}
+
+// ---- Bazaar Bizarre: the desert market bomb map's flow (palace to A, the long market street to B, a connector
+// and window over mid). Original layout and jokes.
+function bazaar() {
+  const B = new MapBuilder(124, 112, 8, 'sandwall', 'sand');
+  B.open(90, 84, 118, 106, 0, 'sand');                // T spawn (south-east)
+  B.open(70, 88, 90, 100, 0, 'sand');                 // T ramp area -> mid
+  B.open(46, 52, 70, 100, 0, 'sand');                 // Mid (wide, sloped market square)
+  B.open(100, 50, 112, 84, 0.3, 'tile');              // Palace corridor north from T spawn
+  B.ramp(100, 40, 112, 50, 1.0, 0.3, 'z', 'tile');    // Palace stairs up
+  B.open(80, 14, 116, 40, 1.0, 'sand');               // A site
+  B.open(46, 6, 80, 22, 1.0, 'concrete');             // CT spawn (north)
+  B.open(70, 22, 80, 40, 1.0, 'concrete');            // Jungle / connector to A from CT
+  B.ramp(46, 22, 58, 52, 1.0, 0.0, 'z', 'sand');      // Short / mid -> CT
+  B.open(58, 40, 70, 52, 0.0, 'sand');                // Connector (mid <-> jungle)
+  B.ramp(70, 40, 80, 46, 0.0, 1.0, 'x', 'concrete');  // connector stairs to the A side
+  B.open(70, 46, 80, 52, 0.0, 'concrete');
+  B.open(18, 60, 46, 70, 0.2, 'tile');                // Market street (to B)
+  B.open(10, 70, 26, 104, 0.2, 'sand');               // B apartments approach from the south
+  B.open(26, 96, 70, 104, 0.2, 'sand');               // the long way round from T
+  B.open(6, 18, 36, 60, 0.6, 'sand');                 // B site
+  B.ramp(36, 24, 46, 32, 0.6, 1.0, 'x', 'sand');      // B <-> CT (market back door)
+  B.open(10, 60, 18, 70, 0.4, 'tile');
+  B.roof(10, 70, 26, 90, 3.4, 'roof').roof(18, 60, 46, 70, 3.8, 'sandwall').roof(100, 56, 112, 84, 3.9, 'sandwall').roof(58, 40, 70, 52, 3.4, 'sandwall');
+  // cover
+  B.stack(84, 18, 88, 22, 1.1, 'crate'); B.stack(96, 26, 100, 31, 1.2, 'wood'); B.stack(108, 16, 112, 22, 1.6, 'sandwall');   // A: default, triple, ninja
+  B.stack(90, 34, 94, 37, 1.0, 'darkwood');          // sandwich
+  B.stack(12, 24, 18, 30, 1.2, 'cred');              // B car
+  B.stack(26, 40, 30, 44, 1.1, 'crate'); B.stack(20, 50, 24, 52, 1.1, 'crate');   // B boxes
+  B.stack(56, 70, 60, 74, 1.1, 'crate'); B.stack(62, 86, 66, 89, 1.1, 'crate');   // mid boxes
+  B.stack(30, 62, 33, 64, 1.0, 'darkwood');          // market stall
+  B.stack(98, 92, 102, 96, 1.1, 'crate'); B.stack(110, 88, 114, 91, 1.1, 'crate'); // T spawn
+  B.stack(74, 16, 77, 19, 1.1, 'crate');             // CT box
+  B.zone('T Spawn', 90, 84, 118, 106).zone('T Ramp', 70, 88, 90, 100).zone('Mid', 46, 52, 70, 100).zone('Palace', 100, 40, 112, 84)
+    .zone('A Site', 80, 14, 116, 40).zone('Ninja', 106, 14, 116, 24).zone('CT Spawn', 46, 6, 80, 22).zone('Jungle', 70, 22, 80, 40)
+    .zone('Short', 46, 22, 58, 52).zone('Connector', 58, 40, 80, 52).zone('Market', 18, 60, 46, 70).zone('B Apartments', 10, 70, 26, 104)
+    .zone('Underpass', 26, 96, 70, 104).zone('B Site', 6, 18, 36, 60).zone('Back Door', 36, 24, 46, 32);
+  B.site('A', 82, 16, 114, 38).site('B', 8, 20, 34, 58);
+  B.buyzone('T', 90, 86, 118, 106).buyzone('CT', 46, 6, 80, 22);
+  for (let k = 0; k < 5; k++) { B.spawn('T', 96 + k * 4, 100, 0); B.spawn('CT', 52 + k * 5, 12, Math.PI); }
+  B.duelSpawn('T', 58, 92, 0).duelSpawn('CT', 58, 56, Math.PI);
+  B.sign(110, 84.05, 3.2, 0, "GENUINE FAKE ROLEX\nreal fake · fake real\nno refunds, no wrists", 3.8, 1.5, '#2b1f12', '#f6d27a');
+  B.sign(18.05, 64, 2.6, Math.PI / 2, 'CAMEL RIDES $5\nCAMEL TOE PICS $10\n(it is the camel\'s actual toe)', 3.6, 1.5, '#7a2a14', '#fff1d6');
+  B.sign(80.05, 30, 3.0, Math.PI / 2, 'PALACE RULES:\nno shoes · no selfies\nno peeing in the fountain AGAIN', 3.8, 1.5, '#1d2b4a', '#e8eef8');
+  B.prop('palm', 100, 102, {}).prop('palm', 60, 96, {}).prop('palm', 30, 100, {}).prop('goat', 52, 80, {}).prop('barrel', 74, 30, {}).prop('lamp', 50, 60, {});
+  B.sky = 0x7aa8e0; B.fog = 0xe4d4b8; B.sunColor = 0xfff0d4; B.amb = [0xcfdcf0, 0xa0805a]; B.sunDir = [0.5, 0.72, -0.45]; B.sunI = 2.8; B.ambI = 1.15;
+  B.photo = 'noon';
+  return B;
+}
+
+// ---- Overpants: the park-and-canal bomb map's flow (the park and its restrooms toward A, the canal and water to
+// B under the bridge, a long connector between). Original layout and jokes.
+function overpants() {
+  const B = new MapBuilder(120, 120, 7, 'concrete', 'grass');
+  B.open(80, 92, 112, 114, 0, 'asphalt');             // T spawn (south-east)
+  B.open(60, 70, 80, 106, 0, 'grass');                // Fountain / T side park
+  B.open(30, 70, 60, 82, 0, 'grass');                 // Park (west)
+  B.ramp(30, 48, 42, 70, 2.0, 0.0, 'z', 'concrete');  // Park stairs up to A
+  B.open(14, 18, 50, 48, 2.0, 'asphalt');             // A site (raised plaza by the road)
+  B.open(50, 6, 90, 18, 2.0, 'asphalt');              // CT spawn (north, high)
+  B.open(50, 18, 58, 40, 2.0, 'concrete');            // A <-> CT walkway
+  B.open(90, 70, 102, 92, -1.0, 'concrete');          // Canal entrance down from T spawn
+  B.ramp(90, 92, 102, 96, -1.0, 0.0, 'z', 'concrete');
+  B.open(90, 30, 102, 70, -1.0, 'concrete');          // Canal (low)
+  B.open(74, 22, 110, 30, -1.0, 'concrete');          // B site (under the bridge)
+  B.ramp(74, 12, 90, 22, 2.0, -1.0, 'z', 'concrete'); // CT ramp down to B
+  B.open(64, 40, 90, 50, 0.0, 'tile');                // Connector (A park <-> B canal)
+  B.ramp(56, 40, 64, 50, 2.0, 0.0, 'x', 'concrete');  // connector stairs up to the A walkway
+  B.ramp(86, 50, 90, 70, 0.0, -1.0, 'x', 'concrete'); // connector down into the canal  (east side)
+  B.open(40, 82, 60, 92, 0.0, 'tile');                // Restrooms
+  B.roof(40, 82, 60, 92, 3.2, 'tile').roof(62, 40, 86, 50, 3.4, 'concrete').roof(74, 18, 110, 24, 4.6, 'concrete');
+  // cover
+  B.stack(20, 22, 26, 26, 1.1, 'crate'); B.stack(34, 30, 40, 33, 1.3, 'cblue'); B.stack(44, 40, 48, 46, 1.0, 'wood');   // A: van boxes, truck, bench
+  B.stack(16, 40, 22, 44, 1.2, 'corange');           // A barrier
+  B.stack(80, 24, 84, 27, 1.1, 'crate'); B.stack(96, 22, 100, 25, 1.1, 'crate'); B.stack(104, 26, 108, 29, 1.0, 'darkwood');   // B pillars, boxes
+  B.stack(66, 84, 70, 88, 0.8, 'concrete');          // fountain
+  B.stack(44, 74, 48, 77, 1.0, 'wood');              // picnic table
+  B.stack(70, 44, 73, 47, 1.1, 'crate');             // connector box
+  B.stack(94, 60, 98, 63, 1.1, 'crate');             // canal box
+  B.stack(86, 100, 90, 104, 1.1, 'crate'); B.stack(100, 96, 104, 99, 1.1, 'crate');  // T spawn
+  B.stack(64, 10, 68, 13, 1.1, 'crate');             // CT box
+  B.zone('T Spawn', 80, 92, 112, 114).zone('Fountain', 60, 70, 80, 106).zone('Park', 30, 70, 60, 82).zone('Park Stairs', 30, 48, 42, 70)
+    .zone('A Site', 14, 18, 50, 48).zone('CT Spawn', 50, 6, 90, 18).zone('Walkway', 50, 18, 58, 40).zone('Canal', 90, 30, 102, 92)
+    .zone('B Site', 74, 22, 110, 30).zone('Connector', 58, 40, 90, 50).zone('Restrooms', 40, 82, 60, 92).zone('CT Ramp', 74, 12, 90, 22);
+  B.site('A', 16, 20, 48, 46).site('B', 76, 22, 108, 30);
+  B.buyzone('T', 80, 94, 112, 114).buyzone('CT', 50, 6, 90, 18);
+  for (let k = 0; k < 5; k++) { B.spawn('T', 84 + k * 5, 108, 0); B.spawn('CT', 56 + k * 6, 12, Math.PI); }
+  B.duelSpawn('T', 70, 76, 0).duelSpawn('CT', 70, 44, Math.PI);
+  B.sign(50, 92.05, 2.4, 0, 'PUBLIC RESTROOM\nGLORY HOLE PATCHED\n(again) (please stop)', 3.6, 1.5, '#e8e8e8', '#3a3a3a');
+  B.sign(30.05, 76, 2.4, Math.PI / 2, 'PARK RULES:\nno drinking · no dogs\nno doing THAT on the slide', 3.6, 1.5, '#1f4a22', '#fff');
+  B.sign(90.05, 40, 1.4, Math.PI / 2, 'CANAL WATER\n"probably" not sewage', 3.2, 1.0, '#203a5a', '#dfe9f5');
+  B.prop('tree', 34, 76, {}).prop('tree', 56, 72, {}).prop('tree', 64, 100, {}).prop('tree', 76, 74, {}).prop('lamp', 46, 60, {}).prop('duck', 96, 50, {}).prop('barrel', 100, 34, {});
+  B.sky = 0x8eb2d8; B.fog = 0xcdd8e2; B.sunColor = 0xfff2dc; B.amb = [0xd2dfee, 0x6a7a6a]; B.sunDir = [0.45, 0.7, 0.5]; B.sunI = 2.4; B.ambI = 1.25;
+  B.photo = 'day';
+  return B;
+}
+
+// ---- Climb (KZ): a jump course over a pit. Timer starts when you leave the start pad; fall and you go back to your
+// last checkpoint. Gaps get longer, then a bunny-hop strip, then steps up and one long jump.
+function climb() {
+  const B = new MapBuilder(40, 142, 10, 'concrete', 'concrete');
+  B.open(8, 2, 32, 128, -6, 'dirt');                  // the pit under everything
+  B.open(8, 128, 32, 140, 0, 'tile');                 // start
+  B.open(14, 120, 26, 124, 0, 'wood').open(14, 113, 26, 117, 0.5, 'wood').open(14, 106, 26, 110, 1.0, 'wood');
+  B.open(10, 96, 30, 102, 1.5, 'cgreen');             // checkpoint 1
+  for (let k = 0; k < 7; k++) { const x = k % 2 ? 20 : 14; B.open(x, 88 - k * 5, x + 5, 91 - k * 5, 1.5, 'crate'); }   // bunny-hop strip
+  B.open(10, 48, 30, 56, 2.0, 'cgreen');              // checkpoint 2
+  B.open(12, 41, 18, 45, 2.9, 'metal').open(22, 35, 28, 39, 3.8, 'metal').open(12, 29, 18, 33, 4.7, 'metal').open(22, 23, 28, 27, 5.6, 'metal');
+  B.open(10, 12, 30, 19, 5.6, 'cgreen');              // checkpoint 3 (after the long jump from the last step)
+  B.open(14, 2, 26, 8, 5.6, 'corange');               // finish
+  B.zone('Start', 8, 128, 32, 140).zone('Gaps', 8, 104, 32, 128).zone('Checkpoint 1', 10, 96, 30, 102).zone('Bhop Strip', 8, 56, 32, 96)
+    .zone('Checkpoint 2', 10, 48, 30, 56).zone('Steps', 8, 20, 32, 48).zone('Checkpoint 3', 10, 12, 30, 19).zone('Finish', 14, 2, 26, 8);
+  B.kz = { start: [8, 128, 32, 140], cps: [[10, 96, 30, 102], [10, 48, 30, 56], [10, 12, 30, 19]], finish: [14, 2, 26, 8], floor: -2.5, yaw: 0 };
+  B.buyzone('T', 8, 128, 32, 140).buyzone('CT', 8, 128, 32, 140);
+  B.spawn('CT', 20, 134, 0).spawn('T', 12, 136, 0); B.duelSpawn('CT', 20, 134, 0).duelSpawn('T', 12, 136, 0);
+  B.sign(20, 140 - 0.05, 3.2, Math.PI, 'CLIMB\nfall = back to checkpoint\nhold space to bunny hop', 4, 1.5, '#203a5a', '#fff');
+  B.sky = 0x86a8d8; B.fog = 0xcfd8e4; B.sunColor = 0xfff2dc; B.amb = [0xd2dfee, 0x7a7a7a]; B.sunDir = [0.4, 0.75, 0.4]; B.sunI = 2.4; B.ambI = 1.3;
+  B.photo = 'clear';
+  return B;
+}
+
 export const MAPS = {
-  dust: { id: 'dust', name: 'Dust Two: Abbottabad', short: 'Abbottabad', parody: 'the classic desert bomb map', build: dust, modes: ['1v1', '2v2', '3v3', '5v5'] },
-  nuke: { id: 'nuke', name: 'Nuke Town 2069', short: 'Nuke Town', parody: 'the little nuclear test town', build: nuke, modes: ['1v1', '2v2', '3v3', '5v5'] },
-  ship: { id: 'ship', name: 'Shitment', short: 'Shitment', parody: 'the tiny container yard', build: ship, modes: ['1v1', '2v2', '3v3', '5v5'] },
-  town: { id: 'town', name: 'Burnt Town', short: 'Burnt Town', parody: 'the zombie crossroads town', build: town, modes: ['1v1', '2v2', '3v3', '5v5'] },
-  crust: { id: 'crust', name: 'Crust', short: 'Crust', parody: 'the tiny desert oil yard', build: crust, modes: ['1v1', '2v2', '3v3', '5v5'] },
-  yacht: { id: 'yacht', name: 'Hijacked: Yacht Rock', short: 'Yacht Rock', parody: 'the hijacked superyacht', build: yacht, modes: ['1v1', '2v2', '3v3', '5v5'] },
-  range: { id: 'range', name: 'Shooting Strange', short: 'Shooting Strange', parody: 'the army firing range', build: range, modes: ['1v1', '2v2', '3v3', '5v5'] },
+  dust: { id: 'dust', name: 'Dust Two: Abbottabad', short: 'Abbottabad', parody: 'the classic desert bomb map', build: dust, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  nuke: { id: 'nuke', name: 'Nuke Town 2069', short: 'Nuke Town', parody: 'the little nuclear test town', build: nuke, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  ship: { id: 'ship', name: 'Shitment', short: 'Shitment', parody: 'the tiny container yard', build: ship, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  town: { id: 'town', name: 'Burnt Town', short: 'Burnt Town', parody: 'the zombie crossroads town', build: town, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  crust: { id: 'crust', name: 'Crust', short: 'Crust', parody: 'the tiny desert oil yard', build: crust, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  yacht: { id: 'yacht', name: 'Hijacked: Yacht Rock', short: 'Yacht Rock', parody: 'the hijacked superyacht', build: yacht, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  range: { id: 'range', name: 'Shooting Strange', short: 'Shooting Strange', parody: 'the army firing range', build: range, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  spaghettown: { id: 'spaghettown', name: 'Spaghettown', short: 'Spaghettown', parody: 'the Italian village bomb map', build: spaghettown, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  bazaar: { id: 'bazaar', name: 'Bazaar Bizarre', short: 'Bazaar', parody: 'the desert market bomb map', build: bazaar, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  overpants: { id: 'overpants', name: 'Overpants', short: 'Overpants', parody: 'the park and canal bomb map', build: overpants, modes: ['1v1', '2v2', '3v3', '5v5', 'dm', 'arms', 'retake', 'zombies'] },
+  climb: { id: 'climb', name: 'Climb (KZ)', short: 'Climb', parody: 'kreedz climb maps', build: climb, modes: ['kz'] },
   // story mode only (never in the map list, lobbies or bots matches)
   barracks: { id: 'barracks', name: 'Fort Brisket', short: 'Fort Brisket', parody: 'story mode', build: () => barracks(false), modes: [], story: true },
   barracks_night: { id: 'barracks_night', name: 'Fort Brisket (night)', short: 'Fort Brisket', parody: 'story mode', build: () => barracks(true), modes: [], story: true },

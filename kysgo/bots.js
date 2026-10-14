@@ -1,7 +1,7 @@
 // Bots (run on the host). They buy like players do, split between bomb sites, take routes on the nav grid, hold
 // angles, react to what they see and hear, plant, defuse, pick up the bomb and trade. Difficulty (picked by the
 // host) sets reaction time, aim error, turn speed, headshot chance and spray control.
-import { W_BY_ID, BOT_LEVELS, PHYS, BOMB } from './data.js';
+import { W_BY_ID, BOT_LEVELS, PHYS, BOMB, botLevelAt } from './data.js';
 import { moveStep, traceShot, eyeHeight, spreadOf, recoilAt, speedOf, aimDir } from './sim.js';
 const BOT_REC = { up: 0, side: 0 }, BOT_DIR = { x: 0, y: 0, z: 0 };
 
@@ -16,11 +16,12 @@ export class Bots {
     match.onDamaged = (v, by) => { if (!v.bot) return; const b = this.B(v); b.hitBy = { id: by.id, x: by.x, z: by.z, t: 2 }; if (!b.target) { const want = Math.atan2(-(by.x - v.x), -(by.z - v.z)); v.yaw += angDiff(v.yaw, want) * 0.5; } };
   }
   B(p) { let b = this.brain.get(p.id); if (!b) this.brain.set(p.id, (b = { path: null, pi: 0, goal: null, target: null, react: 0, seen: 0, spray: 0, cd: 0, stuck: 0, lx: 0, lz: 0, hold: null, bought: -1, wait: 0, aiming: false, blind: 0, burst: 0, strafe: 1, strafeT: 0, heard: null, lastPath: 0 })); return b; }
-  lvl() { return BOT_LEVELS[this.m.botLevel] || BOT_LEVELS.normal; }
+  lvl() { const L = BOT_LEVELS[this.m.botLevel] || BOT_LEVELS.normal; return L.adaptive ? (this._al || (this._al = botLevelAt(this.m.skill == null ? 0.4 : this.m.skill))) : L; }
 
   // ---- buying ----
   buy(p) {
     const m = this.m, b = this.B(p); if (b.bought === m.round) return; b.bought = m.round;
+    if (p.zombie || ['arms', 'retake', 'kz'].includes(m.kind)) return;
     const T = p.team === 'T', money = () => p.money, try_ = (it) => m.buy(p, it) === '';
     const pistolRound = m.round === 1 || m.round === m.M.half + 1;
     if (pistolRound) { if (money() >= 650 && Math.random() < 0.6) try_('vest'); else if (money() >= 300) try_('p250'); if (money() >= 200 && Math.random() < 0.5) try_('flash'); return; }
@@ -39,9 +40,13 @@ export class Bots {
   }
 
   // ---- plan for the round (shared by the team) ----
+  nearSite(x, z) { for (const [n, r] of Object.entries(this.m.W.B.sites)) if (x > r[0] - 10 && x < r[2] + 10 && z > r[1] - 10 && z < r[3] + 10) return n; return ''; }
   newRound() {
     const sites = Object.keys(this.m.W.B.sites).filter((s) => !this.m.M.bombSite || s === this.m.M.bombSite);
+    this.intel = null; this._al = null;
     this.plan = { site: sites[Math.floor(Math.random() * sites.length)] || 'A', rush: Math.random() < 0.35, ctSplit: {} };
+    const ts = [...this.m.players.values()].filter((q) => q.bot && q.team === 'T');   // one T lurks the other site to catch rotations
+    if (ts.length >= 3 && sites.length > 1) { const lurker = ts[Math.floor(Math.random() * ts.length)]; this.plan.lurk = { id: lurker.id, site: sites.find((s2) => s2 !== this.plan.site) }; }
     let k = 0; for (const p of this.m.players.values()) if (p.bot && p.team === 'CT') this.plan.ctSplit[p.id] = sites[(k++) % sites.length];
     for (const b of this.brain.values()) { b.path = null; b.goal = null; b.target = null; b.hold = null; b.wait = Math.random() * (this.plan.rush ? 1 : 8); }
   }
@@ -83,6 +88,7 @@ export class Bots {
         const fov = off < 1.15 || d < 4 || (b.heard && Math.hypot(b.heard.x - q.x, b.heard.z - q.z) < 6) || (b.hitBy && b.hitBy.id === q.id);
         if (fov && d < (m.sightRange || 90) && d < bd && this.visible(p, q) && !q.spectator && !q.npc) { best = q; bd = d; b.bestOff = off; }
       }
+      if (best && p.team === 'CT' && m.M.bomb) { const site = W.siteAt(best.x, best.z) || this.nearSite(best.x, best.z); if (site) this.intel = { site, t: performance.now() / 1000, x: best.x, z: best.z }; }
       if (best && (!b.target || b.target !== best.id)) {   // reacting takes longer for someone at the edge of your view
         b.target = best.id; b.react = L.react * (0.7 + Math.random() * 0.6) + (b.seen > 0 ? 0 : 0.1) + Math.max(0, (b.bestOff || 0) - 0.4) * 0.35; b.spray = 0; b.settle = 0;
       }
@@ -182,6 +188,9 @@ export class Bots {
         if (!b.goal || b.goalFor !== 'plant') { b.goal = W.randomIn([site[0] + 2, site[1] + 2, site[2] - 2, site[3] - 2]); b.goalFor = 'plant'; }
         return this.walkTo(p, b, b.goal, dt);
       }
+      const lurk = plan.lurk && plan.lurk.id === p.id && !p.inv[5] && !(bomb && bomb.state === 'planted');
+      if (lurk && (!b.goal || b.goalFor !== 'lurk')) { const r = W.B.sites[plan.lurk.site]; b.goal = W.randomIn([r[0] - 6, r[1] - 6, r[2] + 6, r[3] + 6]); b.goalFor = 'lurk'; }
+      if (lurk) { if (Math.hypot(p.x - b.goal[0], p.z - b.goal[1]) < 1.5) { moveStep(W, p, { f: 0, s: 0, crouch: true }, dt, 6); return; } return this.walkTo(p, b, b.goal, dt); }
       if (!b.goal || b.goalFor !== 'site') { b.goal = W.randomIn(site); b.goalFor = 'site'; }
       const sc = [(site[0] + site[2]) / 2, (site[1] + site[3]) / 2], ds = Math.hypot(sc[0] - p.x, sc[1] - p.z);
       if (b.utilRound !== m.round && ds < 24 && ds > 9) { b.utilRound = m.round; for (const t of ['smoke', 'flash', 'molotov']) if (p.nades.includes(t) && Math.random() < 0.7) { this.throwAt(p, t, sc[0] + (Math.random() - 0.5) * 6, sc[1] + (Math.random() - 0.5) * 6); break; } }
@@ -193,7 +202,10 @@ export class Bots {
       if (d < 1.2) { p.defusing = true; p.vx = p.vz = 0; return; }
       return this.walkTo(p, b, [bomb.x, bomb.z], dt);
     }
-    const mySite = (plan.ctSplit || {})[p.id] || 'A', site = W.B.sites[mySite];
+    let mySite = (plan.ctSplit || {})[p.id] || 'A';
+    const intel = this.intel && performance.now() / 1000 - this.intel.t < 12 ? this.intel : null;
+    if (intel && intel.site !== mySite && W.B.sites[intel.site]) mySite = intel.site;   // a push was spotted on the other site: rotate
+    const site = W.B.sites[mySite];
     if (!b.hold || b.holdFor !== mySite) { b.hold = W.randomIn(site); b.holdFor = mySite; }
     if (Math.hypot(p.x - b.hold[0], p.z - b.hold[1]) < 1.2) { // hold the angle towards the T side
       const ts = W.B.spawns.T[0]; const want = Math.atan2(-(ts[0] - p.x), -(ts[1] - p.z));
