@@ -29,7 +29,7 @@ drop policy if exists cs_market on cs_listings; create policy cs_market on cs_li
 drop policy if exists cs_cat on cs_catalog; create policy cs_cat on cs_catalog for select using (true);
 drop policy if exists cs_cr on cs_crates; create policy cs_cr on cs_crates for select using (true);
 
-insert into cs_crates (id, price) values ('sand',250),('toilet',250),('nuke',300),('dust2',250),('neon',275),('farm',300),('ocean',325),('gamer',250),('space',275),('jungle',300),('winter',325),('candy',250),('military',275),('gas',300),('retro',325),('spooky',250),('royal',275),('toxic',300),('office',325),('fastfood',250),('beach',275),('metal',300),('dino',325),('clown',250),('brainrot',275),('agents',350) on conflict (id) do update set price = excluded.price;
+insert into cs_crates (id, price) values ('sand',250),('toilet',250),('nuke',300),('dust2',250),('neon',275),('farm',300),('ocean',325),('gamer',250),('space',275),('jungle',300),('winter',325),('candy',250),('military',275),('gas',300),('retro',325),('spooky',250),('royal',275),('toxic',300),('office',325),('fastfood',250),('beach',275),('metal',300),('dino',325),('clown',250),('brainrot',275),('agents',350),('stickers',150) on conflict (id) do update set price = excluded.price;
 insert into cs_catalog (def, crate, tier, kind) values
 ('sand:bizon:Sand Dune','sand',0,'skin'),
 ('sand:sawedoff:Night Ops','sand',0,'skin'),
@@ -700,6 +700,22 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('agents:e_tbag','agents',4,'emote'),
 ('agents:e_sit','agents',3,'emote'),
 ('agents:e_lmao','agents',4,'emote'),
+('stk:gg','stickers',1,'sticker'),
+('stk:ez','stickers',1,'sticker'),
+('stk:l','stickers',1,'sticker'),
+('stk:poo','stickers',1,'sticker'),
+('stk:noob','stickers',2,'sticker'),
+('stk:skull','stickers',2,'sticker'),
+('stk:nice','stickers',2,'sticker'),
+('stk:clown','stickers',2,'sticker'),
+('stk:crown','stickers',3,'sticker'),
+('stk:cope','stickers',3,'sticker'),
+('stk:gg:holo','stickers',4,'sticker'),
+('stk:ez:holo','stickers',4,'sticker'),
+('stk:l:holo','stickers',4,'sticker'),
+('stk:poo:holo','stickers',4,'sticker'),
+('stk:noob:holo','stickers',4,'sticker'),
+('stk:skull:holo','stickers',4,'sticker'),
 ('pass1:glock:Participation Trophy','pass',0,'skin'),
 ('pass2:usp:Grass Toucher','pass',0,'skin'),
 ('pass3:e_dance','pass',1,'emote'),
@@ -1686,3 +1702,60 @@ begin
 end $$;
 revoke all on function cs_season(), cs_claim_pass2(int) from public, anon;
 grant execute on function cs_season(), cs_claim_pass2(int) to authenticated;
+
+-- ---- trade-up contract: 10 weapon skins of one grade (from cases) -> 1 skin of the next grade, from the cases they came from
+create or replace function cs_tradeup(p_uids text[]) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); n int; t int; tiers int; crates text[]; c text; pick text; fl real; isst boolean; u text; sd int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  if coalesce(array_length(p_uids, 1), 0) <> 10 or (select count(distinct x) from unnest(p_uids) x) <> 10 then raise exception 'Pick exactly 10 different skins'; end if;
+  select count(*), min(k.tier), count(distinct k.tier), array_agg(k.crate), avg(i.float), bool_and(i.st) into n, t, tiers, crates, fl, isst
+    from cs_items i join cs_catalog k on k.def = i.def
+    where i.uid = any(p_uids) and i.owner = me and k.kind = 'skin' and k.crate not in ('pass', 'pass2', 'promo')
+      and not exists (select 1 from cs_listings l where l.uid = i.uid);
+  if n <> 10 then raise exception 'All 10 must be your own case skins, not listed on the market'; end if;
+  if tiers <> 1 then raise exception 'All 10 must be the same grade'; end if;
+  c := crates[1 + floor(random() * 10)::int];   -- each input's case is one ticket
+  select def into pick from cs_catalog where crate = c and tier = t + 1 and kind = 'skin' order by random() limit 1;
+  if pick is null then select def into pick from cs_catalog where crate = any(crates) and tier = t + 1 and kind = 'skin' order by random() limit 1; end if;
+  if pick is null then raise exception 'Nothing higher to trade up into from these cases'; end if;
+  delete from cs_items where uid = any(p_uids) and owner = me;
+  u := md5(random()::text || clock_timestamp()::text || me::text); sd := floor(random() * 1000);
+  insert into cs_items (uid, owner, def, float, st, seed) values (u, me, pick, fl, coalesce(isst, false), sd);
+  insert into cs_log (actor, action, detail) values (me, 'tradeup', json_build_object('in', p_uids, 'out', pick)::jsonb);
+  return json_build_object('uid', u, 'def', pick, 'float', fl, 'st', coalesce(isst, false), 'seed', sd);
+end $$;
+revoke all on function cs_tradeup(text[]) from public, anon;
+grant execute on function cs_tradeup(text[]) to authenticated;
+
+-- ---- stickers on weapon skins: up to 4, scraped down 15% at a time ----------------------------------------------------
+alter table cs_items add column if not exists stk jsonb not null default '[]'::jsonb;
+create or replace function cs_sticker_apply(p_item text, p_sticker text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); sd text; cur jsonb;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  select i.def into sd from cs_items i join cs_catalog k on k.def = i.def where i.uid = p_sticker and i.owner = me and k.kind = 'sticker' and not exists (select 1 from cs_listings l where l.uid = i.uid);
+  if sd is null then raise exception 'That sticker isn''t yours (or it''s on the market)'; end if;
+  select i.stk into cur from cs_items i join cs_catalog k on k.def = i.def where i.uid = p_item and i.owner = me and k.kind = 'skin' for update;
+  if cur is null then raise exception 'Pick one of your weapon skins'; end if;
+  if jsonb_array_length(cur) >= 4 then raise exception 'That skin already has 4 stickers'; end if;
+  cur := cur || jsonb_build_array(jsonb_build_object('d', sd, 'w', 0));
+  update cs_items set stk = cur where uid = p_item; delete from cs_items where uid = p_sticker;
+  return cur;
+end $$;
+create or replace function cs_sticker_scrape(p_item text, p_slot int) returns jsonb language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); cur jsonb; w real;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  select stk into cur from cs_items where uid = p_item and owner = me for update;
+  if cur is null or p_slot < 0 or p_slot >= jsonb_array_length(cur) then raise exception 'No sticker there'; end if;
+  w := coalesce((cur -> p_slot ->> 'w')::real, 0) + 0.15;
+  if w >= 1 then cur := cur - p_slot; else cur := jsonb_set(cur, array[p_slot::text, 'w'], to_jsonb(round(w::numeric, 2))); end if;
+  update cs_items set stk = cur where uid = p_item;
+  return cur;
+end $$;
+create or replace function cs_stickers() returns json language sql security definer set search_path = public as $$
+  select coalesce(json_object_agg(uid, stk), '{}'::json) from cs_items where owner = auth.uid() and jsonb_array_length(stk) > 0;
+$$;
+revoke all on function cs_sticker_apply(text, text), cs_sticker_scrape(text, int), cs_stickers() from public, anon;
+grant execute on function cs_sticker_apply(text, text), cs_sticker_scrape(text, int), cs_stickers() to authenticated;

@@ -45,7 +45,7 @@ export class Match {
     const teamCount = (t) => [...this.players.values()].filter((p) => p.team === t).length;
     const team = (this.kind === 'zombies' || this.kind === 'kz') && !info.bot ? 'CT' : info.team || (teamCount('T') <= teamCount('CT') ? 'T' : 'CT');
     const p = { id, name: info.name || 'Player', bot: !!info.bot, team, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, crouch: 0, onGround: true,
-      hp: 100, armor: 0, helmet: false, defuser: false, alive: false, money: this.M.start || ECON.start, inv: {}, cur: 2, nades: [],
+      hp: 100, armor: 0, helmet: false, defuser: false, alive: false, money: this.M.start || ECON.start, inv: {}, cur: 2, nades: [], kit: typeof info.kit === 'string' ? info.kit.slice(0, 20) : null,
       k: 0, a: 0, d: 0, mvp: 0, score: 0, hs: 0, dmgDealt: new Map(), loadout: info.loadout || {}, agent: info.agent || {}, knife: info.knife || null, lastShot: 0, ping: 0 };
     this.players.set(id, p);
     if (this.phase !== 'warmup' && this.phase !== 'freeze') p.alive = false; else this.spawn(p);
@@ -240,7 +240,7 @@ export class Match {
     if (mvp) { mvp.mvp++; mvp.score += 2; }
     this.history.push({ w: winner || '-', r: reason });
     const texts = { elim: winner === 'T' ? 'Terrorists Win' : 'Counter-Terrorists Win', bomb: 'Terrorists Win', defuse: 'Counter-Terrorists Win', time: winner ? (winner === 'CT' ? 'Counter-Terrorists Win' : 'Terrorists Win') : 'Draw' };
-    this.event('roundEnd', { winner, reason, text: texts[reason] || (winner ? winner + ' win' : 'Draw'), mvp: mvp ? mvp.name : '', score: this.score, history: this.history });
+    this.event('roundEnd', { winner, reason, text: texts[reason] || (winner ? winner + ' win' : 'Draw'), mvp: mvp ? mvp.name : '', kit: mvp && !mvp.bot ? mvp.kit : null, score: this.score, history: this.history });
     for (const p of this.players.values()) this.sendInv(p);
     const W2 = this.M.winTo, total = this.round;
     if (this.score.T >= W2 || this.score.CT >= W2 || total >= (this.M.max || this.M.half * 2)) {

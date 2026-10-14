@@ -75,6 +75,7 @@ export class Profile {
       if (!this.betaTried) { this.betaTried = true; try { if (await this.rpc('cs_claim_beta', {}) === true) this.betaNew = true; } catch (e) { /* older database: run supabase.sql */ } }   // accounts made before Dec 1: the Beta Tester costume
       const p = await this.rpc('cs_profile', { p_name: this.d.name || 'Player' });
       this.rpc('cs_clan_info').then((c) => { this.d.clan = (c && c.tag) || null; }).catch(() => {});   // clan tag shown before your name
+      this.rpc('cs_stickers').then((m) => { if (m) for (const it of this.d.inventory) it.stk = m[it.uid] || []; this.changed(); }).catch(() => {});   // stickers on your skins
       this.rpc('cs_season').then((x) => { if (x) { this.d.sxp = x.sxp | 0; this.d.pass2 = Array.isArray(x.claimed) ? x.claimed : []; this.changed(); } }).catch(() => {});   // Season 2 track
       this.d.coins = p.coins; this.d.xp = p.xp; this.d.equipped = p.equipped || this.d.equipped; this.d.stats = Object.assign(this.d.stats, p.stats || {});
       if (p.name) this.d.name = p.name;
@@ -164,7 +165,7 @@ export class Profile {
       if (k === 'emotes') continue;
       const it = this.d.inventory.find((x) => x.uid === uid); if (!it) continue;
       const d = ITEM_BY_ID[it.def]; if (!d) continue;
-      const s = { def: it.def, float: it.float, seed: it.seed, st: it.st, uid: it.uid, kills: it.kills };
+      const s = { def: it.def, float: it.float, seed: it.seed, st: it.st, uid: it.uid, kills: it.kills, stk: (it.stk || []).slice(0, 4) };
       if (d.kind === 'agent') out.agent = d.weapon; else if (d.kind === 'knife') out.knife = s; else if (d.kind === 'skin') out.skins[d.weapon] = s;
     }
     out.att = {}; for (const [wid, g] of Object.entries(this.d.guns || {})) if (g && g.att && wid !== '_day') { const a = {}; for (const [slot, id] of Object.entries(g.att)) if (attOK(wid, slot, id, g.xp | 0) && id !== DEFAULT_ATT[slot]) a[slot] = id; if (Object.keys(a).length) out.att[wid] = a; }
@@ -258,6 +259,37 @@ export class Profile {
       s.got.push(a.id); out.push({ ...a, paid });
     }
     this.changed(); return out;
+  }
+  // stickers: up to 4 per weapon skin; scraping wears one down 15% at a time and peels it at 100%
+  async applySticker(itemUid, stkUid) {
+    const it = this.d.inventory.find((i) => i.uid === itemUid), st = this.d.inventory.find((i) => i.uid === stkUid);
+    if (!it || !st || (ITEM_BY_ID[st.def] || {}).kind !== 'sticker' || (ITEM_BY_ID[it.def] || {}).kind !== 'skin') throw new Error('Pick one of your weapon skins');
+    if ((it.stk || []).length >= 4) throw new Error('That skin already has 4 stickers');
+    if (this.signedIn) it.stk = await this.rpc('cs_sticker_apply', { p_item: itemUid, p_sticker: stkUid });
+    else it.stk = [...(it.stk || []), { d: st.def, w: 0 }];
+    this.d.inventory = this.d.inventory.filter((i) => i.uid !== stkUid); this.changed(); return it.stk;
+  }
+  async scrapeSticker(itemUid, slot) {
+    const it = this.d.inventory.find((i) => i.uid === itemUid); if (!it || !(it.stk || [])[slot]) throw new Error('No sticker there');
+    if (this.signedIn) it.stk = await this.rpc('cs_sticker_scrape', { p_item: itemUid, p_slot: slot });
+    else { const k = it.stk[slot]; k.w = Math.round(((k.w || 0) + 0.15) * 100) / 100; if (k.w >= 1) it.stk.splice(slot, 1); }
+    this.changed(); return (it.stk || []).length;
+  }
+  // trade-up contract: 10 case skins of one grade -> 1 of the next grade from one of their cases
+  tradeEligible(it) { const d = ITEM_BY_ID[it.def]; return !!d && d.kind === 'skin' && !it.listed && CRATES.some((c) => c.items.includes(d)); }
+  async tradeUp(uids) {
+    const ins = uids.map((u) => this.d.inventory.find((i) => i.uid === u)).filter(Boolean);
+    if (ins.length !== 10 || new Set(uids).size !== 10) throw new Error('Pick exactly 10 different skins');
+    if (!ins.every((i) => this.tradeEligible(i))) throw new Error('Only case weapon skins that are not on the market');
+    const tiers = new Set(ins.map((i) => ITEM_BY_ID[i.def].tier)); if (tiers.size !== 1) throw new Error('All 10 must be the same grade');
+    let item;
+    if (this.signedIn) { const r = await this.rpc('cs_tradeup', { p_uids: uids }); item = { uid: r.uid, def: r.def, float: r.float, st: r.st, seed: r.seed, kills: 0, t: Date.now() }; }
+    else {
+      const t = [...tiers][0], crate = CRATES.find((c) => c.items.includes(ITEM_BY_ID[ins[Math.floor(Math.random() * 10)].def]));
+      const pool = crate.items.filter((d) => d.kind === 'skin' && d.tier === t + 1); if (!pool.length) throw new Error('Nothing higher to trade up into from these cases');
+      const fl = ins.reduce((a, i) => a + (i.float || 0), 0) / 10; item = newItem(pool[Math.floor(Math.random() * pool.length)].id, fl, ins.every((i) => i.st), Math.floor(Math.random() * 1000));
+    }
+    this.d.inventory = this.d.inventory.filter((i) => !uids.includes(i.uid)); this.d.inventory.unshift(item); this.changed(); return item;
   }
   leaderboard(kind) { return this.signedIn ? this.rpc('cs_leaderboard', { p_kind: kind }) : Promise.resolve(null); }
   tournament() { return this.signedIn ? this.rpc('cs_tournament') : Promise.resolve(null); }

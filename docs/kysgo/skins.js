@@ -3,6 +3,7 @@
 // Rarity: Common, Uncommon, Rare, Epic, Legendary, Funny and Mythic (the two rarest, same odds). Mythic finishes and
 // outfits glow and animate, and have their own inspect. Odds are shown on every crate. Crates open with coins earned in-game only.
 import { WEAPONS } from './data.js';
+import { SPRAYS } from './sprays.js';
 
 export const RARITY = [  // index = tier; Funny and Mythic are the rarest
   { key: 'common', name: 'Common', color: '#b0c3d9', odds: 69.8, value: 20 },
@@ -229,6 +230,10 @@ export function skinSound(skin, what) {
   return (SKIN_SOUNDS[k] || {})[what] || null;
 }
 
+// stickers: the spray designs as stickers you put on a weapon skin (up to 4); Holo versions shimmer and are rarer
+const STICKER_CAPSULE = { id: 'stickers', name: 'Sticker Capsule: Wall Art', desc: 'Slap these on your guns. They wear off when you scrape them.', price: 150,
+  items: [...SPRAYS.map((sp, i) => ({ id: 'stk:' + sp.id, kind: 'sticker', weapon: sp.id, finish: sp.name, tier: Math.min(3, 1 + Math.floor(i / 4)) })),
+    ...SPRAYS.slice(0, 6).map((sp) => ({ id: 'stk:' + sp.id + ':holo', kind: 'sticker', weapon: sp.id, finish: sp.name + ' (Holo)', holo: true, tier: 4 }))] };
 const CRATE_LIST = [
   makeCrate('sand', 'Sandstorm Case', 'Serious finishes for serious sweats.', SERIOUS, 7, ['k_bayonet', 'k_karambit', 'k_butterfly'], 250),
   (() => { const c = makeCrate('toilet', 'Toilet Humor Case', 'Crude finishes and the dumbest knives ever made. Some skins have their own sounds.', CRUDE, 13, ['k_hotdog', 'k_dildo', 'k_plunger', 'k_chicken'], 250); c.items.push(FINGER_GUN); return c; })(),
@@ -237,6 +242,7 @@ const CRATE_LIST = [
   { id: 'agents', name: 'Fashion Disaster Case', desc: 'Outfits that smell like they look.', price: 350,
     items: [...AGENTS.filter((a) => a.tier >= 0 && !a.promo).map((a) => ({ id: 'agents:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })),
       ...EMOTES.filter((e) => !DEFAULT_EMOTES.includes(e.id)).map((e) => ({ id: 'agents:' + e.id, kind: 'emote', weapon: e.id, finish: e.name, tier: e.tier }))] },
+  STICKER_CAPSULE,
 ];
 CRATE_LIST.forEach((c, n) => { const f = MYTHIC_FIN[c.id]; if (f) { const gun = MYTHIC_GUNS[n % MYTHIC_GUNS.length]; c.items.push({ id: `${c.id}:${gun}:${f.name}`, kind: 'skin', weapon: gun, finish: f.name, paint: f.paint, tier: MYTHIC }); } });
 export const CRATES = CRATE_LIST;
@@ -321,11 +327,11 @@ const SHOWN = { 'Thicc Boi': 'Gyatt', 'Touch Grass': 'Never Showered', 'Main Cha
 export const shownFinish = (f) => SHOWN[f] || f;
 export function itemInfo(it) {
   const d = ITEM_BY_ID[it.def]; if (!d) return null;
-  const wpn = d.kind === 'skin' ? (WEAPONS.find((w) => w.id === d.weapon) || {}).name : d.kind === 'knife' ? KNIFE_BY_ID[d.weapon].name : d.kind === 'emote' ? 'Emote' : 'Agent';
-  const wear = d.kind === 'agent' || d.kind === 'emote' ? null : wearOf(it.float);
-  const value = Math.round(RARITY[d.tier].value * (wear ? wear.mult : 1) * (it.st ? 2 : 1) * (d.kind === 'agent' ? 1.5 : d.kind === 'emote' ? 0.8 : 1));
+  const wpn = d.kind === 'skin' ? (WEAPONS.find((w) => w.id === d.weapon) || {}).name : d.kind === 'knife' ? KNIFE_BY_ID[d.weapon].name : d.kind === 'emote' ? 'Emote' : d.kind === 'sticker' ? 'Sticker' : 'Agent';
+  const wear = d.kind === 'agent' || d.kind === 'emote' || d.kind === 'sticker' ? null : wearOf(it.float);
+  const value = Math.round(RARITY[d.tier].value * (wear ? wear.mult : 1) * (it.st && d.kind !== 'sticker' ? 2 : 1) * (d.kind === 'agent' ? 1.5 : d.kind === 'emote' ? 0.8 : d.kind === 'sticker' ? 0.5 : 1));
   const finish = shownFinish(d.finish);
-  return { ...d, finish, wpn, wear, value, rarity: RARITY[d.tier], label: (it.st ? 'StatTrak™ ' : '') + `${wpn} | ${finish}` };
+  return { ...d, finish, wpn, wear, value, rarity: RARITY[d.tier], label: (it.st && d.kind !== 'sticker' ? 'StatTrak™ ' : '') + `${wpn} | ${finish}` };
 }
 
 // ---- painting: recipe -> canvas (deterministic by seed), then wear ----

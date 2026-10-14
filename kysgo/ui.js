@@ -6,6 +6,8 @@ import { WEAPONS, W_BY_ID, G_BY_ID, GEAR_BY_ID, BUY_MENU, MODES, BOT_LEVELS, RAD
 import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_ID, ITEM_BY_ID, PASS, PASS2, PASS_TIERS, EMOTE_BY_ID } from './skins.js';
 import { MAPS } from './maps.js';
 import { ACHIEVEMENTS, LOGIN_PAY } from './achievements.js';
+import { SPRAYS, sprayCanvas } from './sprays.js';
+import { KITS, playKit } from './musickits.js';
 import { WEATHER } from './weather.js';
 import { CHAPTERS, MISSIONS, CHARACTERS, SQUAD, STORY_DIFF } from './story.js';
 import { thumb, stage, viewer, caseShot } from './thumbs.js';
@@ -507,6 +509,11 @@ export function drawItem(canvas, item) {
   const info = itemInfo(item); const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
   g.clearRect(0, 0, W, H);
   if (!info) return canvas;
+  if (info.kind === 'sticker') {   // the design, on a dark card; Holo gets a rainbow sheen
+    g.fillStyle = '#1c2533'; g.fillRect(0, 0, W, H); const sz = Math.min(W, H) * 0.9; g.drawImage(sprayCanvas(info.weapon), (W - sz) / 2, (H - sz) / 2, sz, sz);
+    if (info.holo) { const gr = g.createLinearGradient(0, 0, W, H); ['#ff4a4a', '#ffd23a', '#4aff8a', '#4ab0ff', '#d24aff'].forEach((c, i) => gr.addColorStop(i / 4, c)); g.globalCompositeOperation = 'overlay'; g.globalAlpha = 0.55; g.fillStyle = gr; g.fillRect(0, 0, W, H); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
+    return canvas;
+  }
   if (info.kind === 'emote') {
     const e = EMOTE_BY_ID[info.weapon] || {}, cx = W / 2, s = H / 100;
     g.fillStyle = '#1c2533'; g.fillRect(0, 0, W, H); g.strokeStyle = '#f2a33a'; g.lineWidth = 5 * s; g.lineCap = 'round';
@@ -766,10 +773,14 @@ export class Menu {
   tab_inv(B) {
     const P = this.P, f = this.invFilter || 'all', rk = (it) => { const i = itemInfo(it); return i ? i.tier * 1e7 + i.value : -1; };
     const items = P.d.inventory.slice().sort((a, b) => rk(b) - rk(a) || (b.t || 0) - (a.t || 0));   // always highest rarity first, then value, then newest
-    const kinds = { all: 'All', skin: 'Weapons', knife: 'Knives ★', agent: 'Agents', emote: 'Emotes' };
+    const kinds = { all: 'All', skin: 'Weapons', knife: 'Knives ★', agent: 'Agents', emote: 'Emotes', sticker: 'Stickers' };
     const shown = items.filter((i) => f === 'all' || (ITEM_BY_ID[i.def] || {}).kind === f);
     const eq = (uid) => ['T', 'CT'].filter((t) => Object.values(P.d.equipped[t] || {}).includes(uid)).join('+');
-    B.innerHTML = `<div class="cs-row">${Object.entries(kinds).map(([k, n]) => `<button class="cs-btn sm ${f === k ? '' : 'alt'}" data-f="${k}">${n}</button>`).join('')}<span style="flex:1"></span>
+    const tu = this.tu;   // trade-up mode: a Set of picked uids
+    const tuTier = tu && tu.size ? (ITEM_BY_ID[P.d.inventory.find((i) => tu.has(i.uid)).def] || {}).tier : null;
+    B.innerHTML = `${tu ? `<div class="cs-card" style="border-color:#f2a33a;margin-bottom:10px"><div class="cs-row"><b>📜 Trade-up contract · ${tu.size}/10</b><span class="cs-small cs-mut" style="margin-left:8px">10 case weapon skins of the same grade become 1 skin of the next grade from one of their cases (average float; StatTrak if all 10 are)</span><span style="flex:1"></span>
+        <button class="cs-btn sm" id="tuGo" ${tu.size === 10 ? '' : 'disabled'}>Sign contract</button><button class="cs-btn sm alt" id="tuX">Cancel</button></div></div>` : ''}
+      <div class="cs-row">${Object.entries(kinds).map(([k, n]) => `<button class="cs-btn sm ${f === k ? '' : 'alt'}" data-f="${k}">${n}</button>`).join('')}${tu ? '' : '<button class="cs-btn sm alt" id="tuOn">📜 Trade-up</button>'}<span style="flex:1"></span>
       <label class="cs-small cs-mut">CT pistol <select id="iPist"><option value="usp">USP-Shh</option><option value="p2000">P2Grand</option></select></label>
       <label class="cs-small cs-mut">CT rifle <select id="iRif"><option value="m4a4">M4A4 Freedom Stick</option><option value="m4a1s">M4A1-Shh</option></select></label></div>
       <div class="cs-sec">${shown.length} items</div><div class="cs-tiles">${shown.slice().sort((a, b) => ((ITEM_BY_ID[b.def] || {}).tier - (ITEM_BY_ID[a.def] || {}).tier) || (b.t - a.t)).map((i) => itemCard(i, '', eq(i.uid))).join('') || '<div class="cs-mut">Nothing yet. Open cases with coins you earn by playing.</div>'}</div>`;
@@ -777,12 +788,34 @@ export class Menu {
     B.querySelectorAll('[data-f]').forEach((e) => (e.onclick = () => { this.invFilter = e.dataset.f; this.render(); }));
     const ps = $('#iPist', B), rs = $('#iRif', B); ps.value = P.d.settings.ctPistol || 'usp'; rs.value = P.d.settings.ctRifle || 'm4a4';
     ps.onchange = () => { P.d.settings.ctPistol = ps.value; P.changed(); }; rs.onchange = () => { P.d.settings.ctRifle = rs.value; P.changed(); };
-    B.querySelectorAll('[data-uid]').forEach((e) => (e.onclick = () => this.itemModal(e.dataset.uid)));
+    B.querySelectorAll('[data-uid]').forEach((e) => {
+      if (!tu) { e.onclick = () => this.itemModal(e.dataset.uid); return; }
+      const it = P.d.inventory.find((i) => i.uid === e.dataset.uid), ok = it && P.tradeEligible(it) && (tuTier == null || (ITEM_BY_ID[it.def] || {}).tier === tuTier);
+      e.style.opacity = tu.has(e.dataset.uid) ? '1' : ok ? '.85' : '.3'; if (tu.has(e.dataset.uid)) e.style.outline = '3px solid #f2a33a';
+      e.onclick = () => { if (tu.has(e.dataset.uid)) tu.delete(e.dataset.uid); else if (ok && tu.size < 10) tu.add(e.dataset.uid); this.render(); };
+    });
+    const on = $('#tuOn', B); if (on) on.onclick = () => { this.tu = new Set(); this.invFilter = 'skin'; this.render(); };
+    const x = $('#tuX', B); if (x) x.onclick = () => { this.tu = null; this.render(); };
+    const go = $('#tuGo', B); if (go) go.onclick = async () => { go.disabled = true;
+      try { const it = await P.tradeUp([...tu]); this.tu = null; this.h.sound('rare'); this.h.toast('Trade-up: ' + itemInfo(it).label); this.render(); }
+      catch (e) { this.h.toast(e.message || 'Trade-up failed'); go.disabled = false; } };
+  }
+  stickerModal(it, info) {
+    const P = this.P, m = document.createElement('div'); m.className = 'cs cs-modal';
+    const targets = P.d.inventory.filter((x) => (ITEM_BY_ID[x.def] || {}).kind === 'skin' && !x.listed && (x.stk || []).length < 4);
+    m.innerHTML = `<div class="cs-card" style="max-width:640px"><div class="cs-row"><b style="font-size:18px;color:${info.rarity.color}">${esc(info.label)}</b><span style="flex:1"></span><button class="cs-btn alt sm" data-x>✕</button></div>
+      <canvas width="200" height="200" id="stkC" style="display:block;margin:10px auto"></canvas>
+      <div class="cs-small cs-mut">Apply it to one of your weapon skins (up to 4 stickers each). Applying uses the sticker up; scrape it later to wear it down or peel it off.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:8px;max-height:300px;overflow:auto">${targets.map((x) => `<button class="cs-btn sm alt" data-apply="${x.uid}">${esc(itemInfo(x).label)} (${(x.stk || []).length}/4)</button>`).join('') || '<span class="cs-mut cs-small">No weapon skins to put it on.</span>'}</div></div>`;
+    document.body.appendChild(m); drawItem($('#stkC', m), it);
+    const close = () => m.remove(); $('[data-x]', m).onclick = close; m.onclick = (e) => { if (e.target === m) close(); };
+    m.querySelectorAll('[data-apply]').forEach((b) => (b.onclick = async () => { try { await P.applySticker(b.dataset.apply, it.uid); this.h.sound('reveal'); this.h.toast('Sticker applied'); close(); this.render(); } catch (e) { this.h.toast(e.message || 'Could not apply'); } }));
   }
   itemModal(uid) {
     const P = this.P, it = P.d.inventory.find((x) => x.uid === uid); if (!it) return;
     const info = itemInfo(it), m = document.createElement('div'); m.className = 'cs cs-modal';
     if (info.kind === 'emote') return this.emoteModal(it, info);
+    if (info.kind === 'sticker') return this.stickerModal(it, info);
     const slotKey = info.kind === 'agent' ? 'agent' : info.kind === 'knife' ? 'knife' : info.weapon;
     const teams = info.kind === 'agent' ? (AGENT_BY_ID[info.weapon].team === 'any' ? ['T', 'CT'] : [AGENT_BY_ID[info.weapon].team]) : info.kind === 'knife' ? ['T', 'CT'] : ['T', 'CT'].filter((t) => forTeam(info.weapon, t));
     m.innerHTML = `<div class="cs-card"><div class="cs-row"><b style="font-size:18px;color:${info.rarity.color}">${esc(info.label)}</b><span style="flex:1"></span><button class="cs-btn alt sm" data-x>✕</button></div>
@@ -791,6 +824,7 @@ export class Menu {
       <canvas width="560" height="${info.kind === 'agent' ? 420 : 280}" class="cs-view" style="width:100%;height:${info.kind === 'agent' ? 'min(420px,52vh)' : 'min(280px,34vh)'};margin:10px 0;border-radius:10px"></canvas>
       <div class="cs-small cs-mut" style="text-align:center;margin:-6px 0 6px">drag to turn · scroll or pinch to zoom</div>
       <div class="cs-small cs-mut">${esc(info.rarity.name)}${info.wear ? ` · ${esc(info.wear.name)} · float ${it.float.toFixed(5)} · pattern ${it.seed}` : ''}${it.st ? ` · StatTrak™ kills: ${it.kills | 0}` : ''} · worth ~${info.value} coins</div>
+      ${(it.stk || []).length ? `<div class="cs-small cs-mut" style="margin-top:10px">Stickers: ${(it.stk || []).map((k, i) => `${esc((itemInfo({ def: k.d }) || {}).finish || '?')} (${Math.round((1 - (k.w || 0)) * 100)}%) <button class="cs-btn sm alt" data-scrape="${i}">Scrape</button>`).join(' · ')}</div>` : ''}
       <div class="cs-row" style="margin-top:12px">${teams.map((t) => `<button class="cs-btn sm" data-eq="${t}">Equip ${t === 'T' ? 'Terrorist' : 'Counter-Terrorist'}</button>`).join('')}
         ${P.signedIn && (P.nftcfg || {}).on ? (it.nft ? '<span class="cs-chip">◎ NFT · vaulted</span>' : it.mint ? `<span class="cs-chip">◎ NFT ${esc(it.mint)}</span>` : '<button class="cs-btn alt sm" data-mint>◎ Mint as NFT</button>') : ''}
         <button class="cs-btn alt sm" data-sell>Sell instantly (${Math.round(info.value * 0.8)} coins)</button>
@@ -818,6 +852,7 @@ export class Menu {
     $('[data-png]', m).onclick = async () => { const c = await cardImage(it); if (!c) return; const a = document.createElement('a'); a.download = info.label.replace(/[^\w-]+/g, '_') + '.png'; a.href = c.toDataURL('image/png'); a.click(); };
     m.onclick = (e) => { if (e.target === m) close(); };
     $('[data-x]', m).onclick = close;
+    m.querySelectorAll('[data-scrape]').forEach((b) => (b.onclick = async () => { try { const left = await P.scrapeSticker(uid, +b.dataset.scrape); this.h.toast(left ? 'Scraped' : 'Sticker peeled off'); close(); this.itemModal(uid); } catch (e) { this.h.toast(e.message || 'Could not scrape'); } }));
     m.querySelectorAll('[data-eq]').forEach((b) => (b.onclick = () => { P.equip(b.dataset.eq, slotKey, uid); this.h.toast('Equipped'); close(); this.render(); }));
     $('[data-sell]', m).onclick = async () => { if (!confirm('Sell ' + info.label + '?')) return; try { await P.sell(uid); this.h.toast('Sold'); } catch (e) { this.h.toast(e.message); } close(); this.render(); };
     const lb = $('[data-list]', m); if (lb) lb.onclick = async () => { const p = +$('#lp', m).value; if (!(p > 0)) return; try { await P.listItem(uid, p); this.h.toast('Listed'); } catch (e) { this.h.toast(e.message); } close(); this.render(); };
@@ -1165,7 +1200,12 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Colour</div><input type="color" data-k="xColor" value="${S.xColor}" style="width:100%;height:34px"></label>
         <label class="cs-card"><div class="cs-small cs-mut">Style</div><select data-k="xDyn"><option value="0">Static</option><option value="1">Dynamic</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Centre dot</div><select data-k="xDot"><option value="0">Off</option><option value="1">On</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Shape</div><select data-k="xStyle"><option value="classic">Classic +</option><option value="t">T (no top)</option><option value="circle">Circle</option><option value="dot">Dot only</option></select></label>
+        <div class="cs-card"><div class="cs-small cs-mut">Share code</div><div class="cs-row" style="gap:4px"><input id="xCode" style="flex:1;min-width:0;font:11px monospace" value="${xhCode(S)}"><button class="cs-btn sm" id="xLoad">Load</button></div></div>
         <div class="cs-card" style="display:grid;place-items:center;min-height:90px;background:#3a4a3a"><div class="cs-xh" style="position:relative;left:auto;top:auto;width:1px;height:1px" id="xPrev"></div></div></div>
+      <div class="cs-h">Spray (N in game)</div><div class="cs-row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">${SPRAYS.map((sp) => { const ok = this.P.level >= sp.lv; return `<button class="cs-card" data-spray="${sp.id}" ${ok ? '' : 'disabled'} style="width:96px;padding:6px;${(S.spray || 'gg') === sp.id ? 'border-color:#f2a33a' : ''};${ok ? '' : 'opacity:.45'}"><canvas width="80" height="80" data-sprayprev="${sp.id}"></canvas><div class="cs-small">${esc(sp.name)}</div><div class="cs-small cs-mut">${ok ? '' : 'level ' + sp.lv}</div></button>`; }).join('')}</div>
+      <div class="cs-h">Music kit (plays when you're round MVP)</div><div class="cs-row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">${KITS.map((k) => { const ok = this.P.level >= k.lv; return `<div class="cs-card" style="min-width:150px;${(S.kit || 'default') === k.id ? 'border-color:#f2a33a' : ''};${ok ? '' : 'opacity:.45'}"><b>♫ ${esc(k.name)}</b><div class="cs-small cs-mut">${ok ? `${k.bpm} bpm` : 'level ' + k.lv}</div><div class="cs-row" style="gap:4px;margin-top:6px"><button class="cs-btn sm" data-kitplay="${k.id}">▶</button>${ok ? `<button class="cs-btn sm" data-kit="${k.id}">Use</button>` : ''}</div></div>`; }).join('')}</div>
+      <div class="cs-h">Viewmodel</div><div class="cs-grid">${sl('vmX', 'Gun left / right', -0.08, 0.08, 0.005)}${sl('vmY', 'Gun up / down', -0.08, 0.06, 0.005)}${sl('vmZ', 'Gun near / far', -0.06, 0.08, 0.005)}${sl('vmFov', 'Viewmodel FOV', 50, 75, 1)}</div>
       <div class="cs-h">Graphics</div><div class="cs-grid"><label class="cs-card"><div class="cs-small cs-mut">Quality</div><select data-k="quality"><option value="0">Auto (keeps 40+ fps)</option><option value="0.5">Potato (fastest)</option><option value="0.75">Low</option><option value="1">Medium</option><option value="1.5">High</option><option value="2">Ultra (4K, gaming PCs)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Show FPS</div><select data-k="fps"><option value="0">Off</option><option value="1">On</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
@@ -1173,18 +1213,29 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
         <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · same as phones)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
       <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift sprint · Ctrl (or C) crouch · Z prone · Space jump · Mouse1 fire · Mouse2 scope / aim down sights (hold) · Q / E lean while aiming · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · V X C radio · T emotes · F inspect · Esc menu</div>`;
-    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); }; });
+    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' || k === 'xStyle' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); const xc = $('#xCode', B); if (xc) xc.value = xhCode(S); }; });
+    B.querySelectorAll('canvas[data-sprayprev]').forEach((c) => c.getContext('2d').drawImage(sprayCanvas(c.dataset.sprayprev), 0, 0, 80, 80));
+    B.querySelectorAll('[data-kitplay]').forEach((b) => (b.onclick = () => { if (this.h.audio) playKit(this.h.audio, b.dataset.kitplay, 0.4); }));
+    B.querySelectorAll('[data-kit]').forEach((b) => (b.onclick = () => { S.kit = b.dataset.kit; this.h.saveSettings(S); this.render(); }));
+    B.querySelectorAll('[data-spray]').forEach((b) => (b.onclick = () => { S.spray = b.dataset.spray; this.h.saveSettings(S); this.render(); }));
+    const xl = $('#xLoad', B); if (xl) xl.onclick = () => { try { Object.assign(S, xhParse($('#xCode', B).value)); this.h.saveSettings(S); this.render(); this.h.toast('Crosshair loaded'); } catch (e) { this.h.toast('That code isn\'t a crosshair code'); } };
     drawXh($('#xPrev', B), S, 0);
     $('#vTry', B).onclick = (e) => { e.preventDefault(); this.h.announce('planted'); };
   }
 }
 
+const XH_KEYS = ['xSize', 'xGap', 'xThick', 'xOutline', 'xColor', 'xDyn', 'xDot', 'xStyle'];
+export const xhCode = (S) => 'KYSXH-' + btoa(JSON.stringify(XH_KEYS.map((k) => S[k] ?? null))).replace(/=+$/, '');
+const xhParse = (code) => { const a = JSON.parse(atob(String(code).trim().replace(/^KYSXH-/, ''))); const o = {}; XH_KEYS.forEach((k, i) => { if (a[i] != null) o[k] = a[i]; }); return o; };
 export function drawXh(box, S, spread) {
   if (!box) return;
-  const gap = S.xGap + 4 + (S.xDyn ? spread : 0), len = S.xSize, th = S.xThick;
+  const gap = S.xGap + 4 + (S.xDyn ? spread : 0), len = S.xSize, th = S.xThick, st = S.xStyle || 'classic';
   box.style.setProperty('--xc', S.xColor); box.style.setProperty('--xo', S.xOutline);
+  const dot = S.xDot || st === 'dot' ? `<i style="left:${-th / 2}px;top:${-th / 2}px;width:${th}px;height:${th}px"></i>` : '';
+  if (st === 'dot') { box.innerHTML = dot; return; }
+  if (st === 'circle') { const r = gap + len / 2; box.innerHTML = `<i style="left:${-r}px;top:${-r}px;width:${r * 2}px;height:${r * 2}px;background:transparent!important;border:${th}px solid var(--xc);border-radius:50%;box-sizing:border-box"></i>${dot}`; return; }
   box.innerHTML = `<i style="left:${gap}px;top:${-th / 2}px;width:${len}px;height:${th}px"></i><i style="left:${-gap - len}px;top:${-th / 2}px;width:${len}px;height:${th}px"></i>
-    <i style="top:${gap}px;left:${-th / 2}px;width:${th}px;height:${len}px"></i><i style="top:${-gap - len}px;left:${-th / 2}px;width:${th}px;height:${len}px"></i>${S.xDot ? `<i style="left:${-th / 2}px;top:${-th / 2}px;width:${th}px;height:${th}px"></i>` : ''}`;
+    <i style="top:${gap}px;left:${-th / 2}px;width:${th}px;height:${len}px"></i>${st === 't' ? '' : `<i style="top:${-gap - len}px;left:${-th / 2}px;width:${th}px;height:${len}px"></i>`}${dot}`;
 }
 
 // ======================================================================================================================

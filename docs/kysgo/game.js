@@ -6,6 +6,8 @@ import * as THREE from '../sdk/three.module.min.js';
 import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS, BOT_LEVELS, myRegion } from './data.js';
 import { buildWorld, LIGHT } from './world.js';
 import { WEATHER, applyWeather, Precip } from './weather.js';
+import { SPRAY_BY_ID, sprayCanvas } from './sprays.js';
+import { KIT_BY_ID, playKit } from './musickits.js';
 import { GraphicsSettingsManager, DynamicShadows, markCaster } from './graphics.js';
 import { PVSCuller, decodePVS, mapHash } from './pvs.js';
 import { PVS_DATA } from './pvs_data.js';
@@ -48,7 +50,7 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1 };
+const DEF_SET = { vmX: 0, vmY: 0, vmZ: 0, vmFov: 60, xStyle: 'classic', voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -292,7 +294,7 @@ export default function start({ cfg, E, N, smoke }) {
     g.fillStyle = '#ff6a4a'; g.font = 'bold 13px system-ui'; for (const [n, r] of Object.entries(B.sites)) g.fillText(n, ox + (r[0] + r[2]) / 2 * s - 4, oz + (r[1] + r[3]) / 2 * s + 4);
   };
   let menu = null;
-  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
+  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, audio, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
   if (smoke) { let m = 'dust', md = '5v5'; try { const u = new URLSearchParams(location.search), q = u.get('map'), qm = u.get('mode'); if (MAPS[q]) m = q; if (MODES[qm] && !MODES[qm].hidden) md = qm; var wq = u.get('weather'); } catch (e) { /* no page */ } runMatch({ mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true, weather: wq }); }
   else showMenu();
 
@@ -331,7 +333,7 @@ export default function start({ cfg, E, N, smoke }) {
     const rhK = () => (touchPlayer || (typeof pad !== 'undefined' && pad.active) || (S.recoilHelp && profile.admin) ? 0.4 : 1);
     const story = opt.story || null;   // co-op story mission: { mission, diff, host: character }
     if (story) { opt.mode = 'story'; opt.map = (MISSIONS[story.mission] || MISSIONS[0]).map; }
-    const hello = { char: story ? story.host : (() => { try { return localStorage.getItem('cs:story:char') || undefined; } catch (e) { return undefined; } })(), name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
+    const hello = { kit: KIT_BY_ID[S.kit] && profile.level >= KIT_BY_ID[S.kit].lv ? S.kit : 'default', char: story ? story.host : (() => { try { return localStorage.getItem('cs:story:char') || undefined; } catch (e) { return undefined; } })(), name: myName, loadout, agent: { T: loadout.T.agent, CT: loadout.CT.agent }, knife: { T: loadout.T.knife, CT: loadout.CT.knife } };
 
     // ---- renderer & scene ----
     // graphics: one GraphicsSettingsManager decides every switch (graphics.js). A fixed tier, or Auto (setting 0): start
@@ -520,7 +522,7 @@ export default function start({ cfg, E, N, smoke }) {
 
     let culler = null, lobbyPanel = null, sunLight = null, sky = null, parts = null, cfx = null, sunDir = [0.6, 0.7, 0.4];
     let W = null, mode = opt.mode, mapId = opt.map, botLevel = opt.bot || 'normal', match = null, bots = null, ended = false, started = false;
-    let weather = WEATHER[opt.weather] ? opt.weather : 'day', precip = null;
+    let weather = WEATHER[opt.weather] ? opt.weather : 'day', precip = null; const sprays = [];
     // ranked: bots only on Normal or Hard, real players fill one team first, and that team must be all real to start
     let ranked = !!opt.ranked; if (ranked && !RANKED_BOTS.includes(botLevel)) botLevel = 'hard';
     const rankedReady = () => { if (!match) return false; const n = MODES[mode].size; return [...match.players.values()].filter((q) => !q.bot && q.team === 'T').length >= n || [...match.players.values()].filter((q) => !q.bot && q.team === 'CT').length >= n; };
@@ -969,7 +971,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (t === 'hello') {
         if (p) return;
         const info = d && typeof d === 'object' ? d : {};
-        const clean = { char: SQUAD.includes(info.char) ? info.char : undefined, name: String(info.name || 'Player').slice(0, 20), loadout: sanitizeLoadout(info.loadout), agent: sanitizeAgent(info.agent), knife: sanitizeKnife(info.knife) };
+        const clean = { kit: KIT_BY_ID[info.kit] ? info.kit : null, char: SQUAD.includes(info.char) ? info.char : undefined, name: String(info.name || 'Player').slice(0, 20), loadout: sanitizeLoadout(info.loadout), agent: sanitizeAgent(info.agent), knife: sanitizeKnife(info.knife) };
         if (ranked && !started) { const n = MODES[mode].size, onT = [...match.players.values()].filter((q) => !q.bot && q.team === 'T').length; clean.team = onT < n ? 'T' : 'CT'; }
         if (started && mode !== 'story') {  // replace a bot on the team that needs a human most
           const humans = (tm) => [...match.players.values()].filter((q) => q.team === tm && !q.bot).length;
@@ -1035,9 +1037,15 @@ export default function start({ cfg, E, N, smoke }) {
       if (t === 'dropc4' && p.inv[5] && p.alive) { delete p.inv[5]; match.bomb = { state: 'dropped', x: p.x - Math.sin(p.yaw) * 1.2, y: p.y, z: p.z - Math.cos(p.yaw) * 1.2 }; match.bomb.y = W.groundAt(match.bomb.x, match.bomb.z, p.y + 1); send('bomb', match.bomb); onBomb(match.bomb); match.sendInv(p); return; }
       if (t === 'ammo' && d && typeof d === 'object') { for (const s of [1, 2]) if (p.inv[s] && d[s] && p.inv[s].wid === d[s][0]) { p.inv[s].ammo = Math.max(0, Math.min(+d[s][1] || 0, 999)); p.inv[s].reserve = Math.max(0, Math.min(+d[s][2] || 0, 999)); } return; }
       if (t === 'chat' && d && typeof d.text === 'string') { const m = { name: p.name, team: p.team, text: d.text.slice(0, 120), teamOnly: !!d.team, id: peer }; for (const q of match.players.values()) if (!q.bot && (!m.teamOnly || q.team === p.team)) { if (q.local) onChat(m); else send('chat', m, q.id); } return; }
+      if (t === 'spray' && d && typeof d === 'object' && SPRAY_BY_ID[d.id] && p.alive && [d.x, d.y, d.z, d.nx, d.nz].every(Number.isFinite)) {
+        if (Math.hypot(d.x - p.x, d.z - p.z) > 4.5 || (p.sprayRound === match.round && !MODES[mode].kind) || (p.sprayT && performance.now() - p.sprayT < 15000)) return;   // one per round (respawn modes: every 15 s), within reach
+        p.sprayRound = match.round; p.sprayT = performance.now();
+        const ev = { type: 'spray', data: { id: d.id, x: d.x, y: d.y, z: d.z, nx: Math.sign(d.nx), nz: Math.sign(d.nz), by: peer } }; send('ev', ev); onEvent(ev); return;
+      }
       if (t === 'emote' && typeof d === 'string' && EMOTE_BY_ID[d] && p.alive) { const ev = { type: 'emote', data: { id: peer, e: d } }; send('ev', ev); onEvent(ev); return; }
     }
-    const sanitizeSkin = (s) => (s && typeof s === 'object' && ITEM_BY_ID[s.def] ? { def: s.def, float: Math.max(0, Math.min(1, +s.float || 0)), seed: (+s.seed | 0) % 1000, st: !!s.st, uid: String(s.uid || '').slice(0, 40) } : null);
+    const sanitizeSkin = (s) => (s && typeof s === 'object' && ITEM_BY_ID[s.def] ? { def: s.def, float: Math.max(0, Math.min(1, +s.float || 0)), seed: (+s.seed | 0) % 1000, st: !!s.st, uid: String(s.uid || '').slice(0, 40),
+      stk: (Array.isArray(s.stk) ? s.stk : []).slice(0, 4).filter((k) => k && (ITEM_BY_ID[k.d] || {}).kind === 'sticker').map((k) => ({ d: k.d, w: Math.max(0, Math.min(1, +k.w || 0)) })) } : null);
     function sanitizeLoadout(l) { const out = {}; for (const t of ['T', 'CT']) { const x = (l && l[t]) || {}; const skins = {}; for (const [k, v] of Object.entries(x.skins || {}).slice(0, 50)) if (W_BY_ID[k]) { const s = sanitizeSkin(v); if (s && ITEM_BY_ID[s.def].weapon === k) skins[k] = s; } const att = {}; for (const [k, v] of Object.entries(x.att || {}).slice(0, 50)) if (W_BY_ID[k] && v && typeof v === 'object') { const a = {}; for (const slot of ['optic', 'muzzle', 'reticle']) if (ATTACH[v[slot]] && ATTACH[v[slot]].slot === slot) a[slot] = v[slot]; if (Object.keys(a).length) att[k] = a; }
       out[t] = { skins, att, ctPistol: x.ctPistol === 'p2000' ? 'p2000' : 'usp' }; } return out; }
     const agentOk = (id, team) => AGENT_BY_ID[id] && (AGENT_BY_ID[id].team === team || AGENT_BY_ID[id].team === 'any');
@@ -1147,6 +1155,7 @@ export default function start({ cfg, E, N, smoke }) {
     function onEvent({ type, data }) {
       if (type === 'round') {
         st.round = data.n; st.score = data.score;
+        if (data.phase === 'freeze' && !MODES[mode].kind) { for (const o of sprays.splice(0)) { scene.remove(o); o.material.map.dispose(); o.material.dispose(); o.geometry.dispose(); } }   // walls are cleaned between rounds
         if (data.phase === 'freeze' && W && W.breakables) for (const m of W.breakables) { const b = m.userData.breakable; if (!b.broken) continue; b.broken = false; m.visible = true; m.rotation.z = 0; if (m.userData.pane) m.userData.pane.visible = true; }   // fresh props every round
         const K = MODES[mode].kind;
         if (data.phase === 'freeze' && mode !== 'story' && !K) { hud.banner(`Round ${data.n}`, MODES[mode].bomb ? (me.team === 'T' ? 'Plant the bomb or eliminate the enemy' : 'Defend the bomb sites') : 'Eliminate the enemy', 2500); audio.play('round'); }
@@ -1157,12 +1166,20 @@ export default function start({ cfg, E, N, smoke }) {
         st.score = data.score; st.history = data.history || st.history;
         if (data.winner === me.team && me.alive && (stats.roundK || 0) >= 2 && ![...st.players.values()].some((q) => q.id !== myId && q.alive && q.team === me.team)) stats.clutch = (stats.clutch || 0) + 1;
         stats.roundK = 0;
-        hud.banner(data.text, data.mvp ? `MVP: ${data.mvp}` : '', 4500);
+        hud.banner(data.text, data.mvp ? `MVP: ${data.mvp}${data.kit && KIT_BY_ID[data.kit] ? ' · ♫ ' + KIT_BY_ID[data.kit].name : ''}` : '', 4500);
+        if (data.kit && KIT_BY_ID[data.kit]) setTimeout(() => playKit(audio, data.kit, 0.45 * (S.vol ?? 0.6) / 0.6), 900);
         audio.play(data.winner && data.winner === me.team ? 'win' : 'lose'); setTimeout(() => announce(!data.winner ? 'draw' : data.winner === 'T' ? 'twin' : 'ctwin'), 400);
         if (data.winner === me.team) { stats.roundWin++; if (me.lastGun) addXp(me.lastGun, XP_RULES.win); }
         if (data.mvp && data.mvp === myName) stats.mvp++;
       }
       if (type === 'banner') hud.banner(data.text, data.sub || '', 3000);
+      if (type === 'spray' && scene && W) {
+        const tex = new THREE.CanvasTexture(sprayCanvas(data.id)); tex.colorSpace = THREE.SRGBColorSpace;
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.92, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }));
+        m.position.set(data.x + data.nx * 0.02, data.y, data.z + data.nz * 0.02); m.rotation.y = Math.atan2(data.nx, data.nz);
+        scene.add(m); sprays.push(m); if (sprays.length > 30) { const o = sprays.shift(); scene.remove(o); o.material.map.dispose(); o.material.dispose(); o.geometry.dispose(); }
+        audio.at('smoke', data.x, data.y, data.z, cam, 20);
+      }
       if (type === 'kz' && data.id === myId) { stats.kz = (stats.kz || 0) + 1; }
       if (type === 'kz' && data.id === myId) { try { const k = 'kysgo_kz_' + mapId, old = +localStorage.getItem(k) || 0; if (!old || data.t < old) { localStorage.setItem(k, String(data.t)); toast(`🏁 Personal best on ${MAPS[mapId].short}: ${data.t.toFixed(2)} s`); } } catch (e) { /* private mode */ } }
       if (type === 'kill') {
@@ -1563,6 +1580,14 @@ export default function start({ cfg, E, N, smoke }) {
         if (mode !== 'story' && (kp('KeyB') || E.input.touch.tapped.has('buy'))) openBuy();
         if (kp('KeyY')) hud.chatInput(false, (t) => toHost('chat', { text: t, team: false }));
         if (kp('KeyU')) hud.chatInput(true, (t) => toHost('chat', { text: t, team: true }));
+        if (kp('KeyN') && me.alive && W) {   // spray: the wall you're looking at, within 3.5 m
+          const eye = { x: me.x, y: me.y + (me.crouch ? 1.2 : 1.6), z: me.z }, dr = { x: -Math.sin(me.yaw) * Math.cos(me.pitch), y: Math.sin(me.pitch), z: -Math.cos(me.yaw) * Math.cos(me.pitch) };
+          const h = W.ray(eye, dr, 3.5);
+          if (h && h.side) { const px = eye.x + dr.x * h.t, pz = eye.z + dr.z * h.t, py = eye.y + dr.y * h.t;
+            const fx = px - h.x, fz = pz - h.z, n = Math.min(fx, 1 - fx) < Math.min(fz, 1 - fz) ? [fx < 0.5 ? -1 : 1, 0] : [0, fz < 0.5 ? -1 : 1];
+            toHost('spray', { id: SPRAY_BY_ID[S.spray] ? S.spray : 'gg', x: px, y: Math.max(W.groundAt(px, pz, py) + 0.7, py), z: pz, nx: n[0], nz: n[1] }); }
+          else toast('Get closer to a wall to spray');
+        }
         if (kp('KeyT') && me.alive) { radioOpen = 'emote'; hud.emoteWheel(profile.wheel().map((id) => EMOTE_BY_ID[id]).filter(Boolean), (e) => toHost('emote', e.id)); }
         for (const k of S.crouchKey === 'c' ? ['v', 'x'] : ['v', 'x', 'c']) if (kp('Key' + k.toUpperCase()) && !kd('ControlLeft')) { radioOpen = k; hud.radio(k, me.team, (t) => toHost('chat', { text: '📻 ' + t, team: true })); }
       } else if (uiOpen === 'buy') {
@@ -1725,6 +1750,8 @@ export default function start({ cfg, E, N, smoke }) {
         const animReload = !!(vm.userData.leftArm && (vm.userData.magGroup || (w && w.shellReload)));
         const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
         vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4);
+        { const k = 1 - Math.min(1, me.ads); vm.position.x += (S.vmX || 0) * k; vm.position.y += (S.vmY || 0) * k; vm.position.z += (S.vmZ || 0) * k; }   // the player's viewmodel offsets (not while aiming: sights stay centred)
+        if (vmCam.fov !== (S.vmFov || 60)) { vmCam.fov = S.vmFov || 60; vmCam.updateProjectionMatrix(); }
         const breath = Math.sin(now * 1.7) * 0.0018 * (1 - 0.7 * me.ads) * (me.crouch > 0.5 ? 0.6 : 1); vm.position.y += breath; vm.position.x += Math.sin(now * 0.85) * 0.0012 * (1 - 0.7 * me.ads);   // breathing: the gun rises and settles
         vm.rotation.set(breath * 3 + rel * 2 + camKick * 2, (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
         if (me.throwK > 0) {   // a throw: wind up, then release; the grenade leaves the hand at the snap

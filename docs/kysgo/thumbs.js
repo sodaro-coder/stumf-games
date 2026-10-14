@@ -147,7 +147,7 @@ const keyOf = (it) => `${it.def}|${it.seed | 0}|${(+it.float || 0).toFixed(2)}`;
 export function thumb(item, cb) {
   const k = keyOf(item);
   if (cache.has(k)) { cb(cache.get(k)); return true; }
-  if (!ITEM_BY_ID[item.def]) return false;
+  if (!ITEM_BY_ID[item.def] || ITEM_BY_ID[item.def].kind === 'sticker') return false;   // stickers are flat art: drawn in 2D
   if (!init()) return false;
   queue.push([item, k, cb]);
   if (!pumping) { pumping = true; requestAnimationFrame(pump); }

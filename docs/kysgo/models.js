@@ -4,7 +4,8 @@
 // single mesh with vertex colours, so a whole player is ~12 draw calls and a gun 3-5: cheap on weak machines.
 import * as THREE from '../sdk/three.module.min.js';
 import { W_BY_ID } from './data.js';
-import { paintSkin, KNIFE_BY_ID } from './skins.js';
+import { paintSkin, KNIFE_BY_ID, ITEM_BY_ID } from './skins.js';
+import { sprayCanvas } from './sprays.js';
 import { litPatch, loadTx } from './world.js';
 import { surface } from './textures.js';
 
@@ -412,7 +413,7 @@ function gm(key) {
 }
 const skinTexCache = new Map();
 export function skinTexture(item, info) {
-  const k = item ? item.uid : 'none';
+  const k = item ? item.uid + (item.stk && item.stk.length ? JSON.stringify(item.stk) : '') : 'none';
   if (skinTexCache.has(k)) return skinTexCache.get(k);
   let t = null;
   if (item && info && info.paint) {
@@ -421,6 +422,15 @@ export function skinTexture(item, info) {
     const g = big.getContext('2d'), im = g.getImageData(0, 0, big.width, big.height);   // a fine grain on top so the paint reads as a coating
     let s = (item.seed | 0) * 7919 + 1; for (let i = 0; i < im.data.length; i += 4) { s = (s * 1103515245 + 12345) & 0x7fffffff; const n = ((s >> 16) & 15) - 7; im.data[i] += n; im.data[i + 1] += n; im.data[i + 2] += n; }
     g.putImageData(im, 0, 0);
+    (item.stk || []).slice(0, 4).forEach((st, i) => {   // stickers along the receiver; wear eats holes in them (seeded, so everyone sees the same)
+      const sd = ITEM_BY_ID[st.d]; if (!sd) return;
+      const sz = big.width * 0.13, x = big.width * (0.3 + i * 0.12), y = big.height * 0.45, c = document.createElement('canvas'); c.width = c.height = 128;
+      const cg = c.getContext('2d'); cg.drawImage(sprayCanvas(sd.weapon), 0, 0, 128, 128);
+      if (sd.holo) { const gr = cg.createLinearGradient(0, 0, 128, 128); ['#ff4a4a', '#ffd23a', '#4aff8a', '#4ab0ff', '#d24aff'].forEach((col, j) => gr.addColorStop(j / 4, col)); cg.globalCompositeOperation = 'source-atop'; cg.globalAlpha = 0.45; cg.fillStyle = gr; cg.fillRect(0, 0, 128, 128); cg.globalAlpha = 1; }
+      cg.globalCompositeOperation = 'destination-out'; let r = (item.seed | 0) * 131 + i * 977 + 1; const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+      for (let n = 0; n < Math.round((st.w || 0) * 60); n++) { cg.beginPath(); cg.arc(rnd() * 128, rnd() * 128, 4 + rnd() * 10, 0, 7); cg.fill(); }
+      g.save(); g.globalAlpha = 1 - (st.w || 0) * 0.35; g.drawImage(c, x - sz / 2, y - sz / 2, sz, sz); g.restore();
+    });
     t = new THREE.CanvasTexture(big); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
     if (info.paint.glow) t.userData.glow = glowMask(info.paint);
   }
