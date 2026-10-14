@@ -683,7 +683,8 @@ function spaghettown() {
   B.sign(16.05, 82, 2.4, Math.PI / 2, 'BANANA LANE\nslippery when wet\n(it is always wet)', 3.4, 1.4, '#e8c838', '#2a2108');
   B.sign(84.05, 42, 2.8, Math.PI / 2, 'PIZZERIA BOLOGNESE\nnow with 40% less E. coli', 3.8, 1.2, '#1f4a22', '#fff');
   B.sign(6.05, 44, 2.8, Math.PI / 2, 'CONFESSIONS\n$5 · sins over 3 min\ncharged by the minute', 3.4, 1.5, '#3a2a4a', '#f2e6ff');
-  B.prop('lamp', 58, 70, {}).prop('lamp', 58, 100, {}).prop('palm', 30, 112, {}).prop('barrel', 98, 20, {}).prop('tree', 36, 50, {}).prop('tree', 92, 60, {});
+  B.prop('glass', 63.85, 96, { rot: Math.PI / 2, w: 3, h: 1.6, base: 1.4 }).prop('glass', 63.85, 102, { rot: Math.PI / 2, w: 3, h: 1.6, base: 1.4 });   // shop windows on mid
+  B.prop('tv', 70, 81, { rot: Math.PI }).prop('lamp', 58, 70, {}).prop('lamp', 58, 100, {}).prop('palm', 30, 112, {}).prop('barrel', 98, 20, {}).prop('tree', 36, 50, {}).prop('tree', 92, 60, {});
   B.sky = 0x86a8d8; B.fog = 0xe2cdb0; B.sunColor = 0xffd7a8; B.amb = [0xd6c8e6, 0x8a6a4a]; B.sunDir = [-0.55, 0.55, 0.62]; B.sunI = 2.5; B.ambI = 1.2;
   B.photo = 'sunset';
   return B;
@@ -732,6 +733,7 @@ function bazaar() {
   B.sign(110, 84.05, 3.2, 0, "GENUINE FAKE ROLEX\nreal fake · fake real\nno refunds, no wrists", 3.8, 1.5, '#2b1f12', '#f6d27a');
   B.sign(18.05, 64, 2.6, Math.PI / 2, 'CAMEL RIDES $5\nCAMEL TOE PICS $10\n(it is the camel\'s actual toe)', 3.6, 1.5, '#7a2a14', '#fff1d6');
   B.sign(80.05, 30, 3.0, Math.PI / 2, 'PALACE RULES:\nno shoes · no selfies\nno peeing in the fountain AGAIN', 3.8, 1.5, '#1d2b4a', '#e8eef8');
+  B.prop('glass', 38, 69.85, { w: 3, h: 1.4, base: 1.2 }).prop('glass', 42.5, 69.85, { w: 3, h: 1.4, base: 1.2 });   // market stall windows
   B.prop('palm', 100, 102, {}).prop('palm', 60, 96, {}).prop('palm', 30, 100, {}).prop('goat', 52, 80, {}).prop('barrel', 74, 30, {}).prop('lamp', 50, 60, {});
   B.sky = 0x7aa8e0; B.fog = 0xe4d4b8; B.sunColor = 0xfff0d4; B.amb = [0xcfdcf0, 0xa0805a]; B.sunDir = [0.5, 0.72, -0.45]; B.sunI = 2.8; B.ambI = 1.15;
   B.photo = 'noon';
@@ -779,6 +781,7 @@ function overpants() {
   B.sign(50, 92.05, 2.4, 0, 'PUBLIC RESTROOM\nGLORY HOLE PATCHED\n(again) (please stop)', 3.6, 1.5, '#e8e8e8', '#3a3a3a');
   B.sign(30.05, 76, 2.4, Math.PI / 2, 'PARK RULES:\nno drinking · no dogs\nno doing THAT on the slide', 3.6, 1.5, '#1f4a22', '#fff');
   B.sign(90.05, 40, 1.4, Math.PI / 2, 'CANAL WATER\n"probably" not sewage', 3.2, 1.0, '#203a5a', '#dfe9f5');
+  B.prop('glass', 45, 91.85, { w: 3, h: 1.2, base: 1.5 }).prop('glass', 55, 91.85, { w: 3, h: 1.2, base: 1.5 }).prop('tv', 50, 84, {});   // restroom windows, the attendant's TV
   B.prop('tree', 34, 76, {}).prop('tree', 56, 72, {}).prop('tree', 64, 100, {}).prop('tree', 76, 74, {}).prop('lamp', 46, 60, {}).prop('duck', 96, 50, {}).prop('barrel', 100, 34, {});
   B.sky = 0x8eb2d8; B.fog = 0xcdd8e2; B.sunColor = 0xfff2dc; B.amb = [0xd2dfee, 0x6a7a6a]; B.sunDir = [0.45, 0.7, 0.5]; B.sunI = 2.4; B.ambI = 1.25;
   B.photo = 'day';

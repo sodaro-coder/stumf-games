@@ -40,6 +40,20 @@ export function session(gameId, { code, host = false, name = 'Player', strategy 
     on(type, fn) { handlers.set(type, fn); return s; },
     send(type, data, to) { send({ t: type, d: data }, to); },
     toHost(type, data) { if (hostId && hostId !== selfId) send({ t: type, d: data }, hostId); else fire(type, data, selfId); },
+    // voice: your microphone stream goes to everyone on the same peer connections (no relay server)
+    // push-to-talk: asks the browser for the microphone only when the player first holds the talk key (the browser shows its
+    // own permission prompt); returns a talk(on) switch. Games never touch device APIs themselves.
+    async mic() {
+      if (!s._mic) {
+        s._mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        s._mic.getAudioTracks().forEach((t) => (t.enabled = false));
+        try { room.addStream(s._mic); } catch (e) { /* not supported */ }
+      }
+      return (on) => s._mic.getAudioTracks().forEach((t) => (t.enabled = !!on));
+    },
+    micOff() { if (s._mic) s._mic.getTracks().forEach((t) => t.stop()); s._mic = null; },
+    onVoice(fn) { room.onPeerStream = (stream, peer) => fn(stream, peer); },
+    ping(peer) { try { return room.ping(peer); } catch (e) { return Promise.resolve(null); } },
     leave() { room.leave(); },
   };
   const fire = (t, d, peer) => { const h = handlers.get(t); if (h) h(d, peer); };
@@ -49,7 +63,7 @@ export function session(gameId, { code, host = false, name = 'Player', strategy 
     if (m.t === '_hello') { if (!hostId || m.d.host) hostId = m.d.host || hostId; names.set(peer, String(m.d.name || 'Player').slice(0, 20)); fire('_roster', null, peer); return; }
     fire(m.t, m.d, peer);
   };
-  room.onPeerJoin = (peer) => { send({ t: '_hello', d: { host: s.isHost ? selfId : null, name } }, peer); fire('_join', null, peer); };
+  room.onPeerJoin = (peer) => { send({ t: '_hello', d: { host: s.isHost ? selfId : null, name } }, peer); fire('_join', null, peer); if (s._mic) try { room.addStream(s._mic, peer); } catch (e) { /* no voice */ } };
   room.onPeerLeave = (peer) => {
     names.delete(peer);
     if (peer === hostId) {  // host migration: everyone picks the same new host

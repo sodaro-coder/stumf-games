@@ -1156,6 +1156,15 @@ export function makeProp(p) {
     ball.geometry.setAttribute('color', new THREE.BufferAttribute(col, 3)); ball.material.vertexColors = true; ball.position.set(0, 3.3, 0); g.add(ball); g.userData.spin = ball;
   }
   if (p.type === 'lamp') { const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), basic('#ffe9a8')); bulb.position.set(0.55, 3.8, 0); g.add(bulb); }
+  if (p.type === 'glass') {   // a pane that shatters when shot: thin frame + see-through glass
+    const w = p.w || 2, h = p.h || 1.6, y0 = p.base || 1.0;
+    const pane = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.03), new THREE.MeshStandardMaterial({ color: 0xa8c8d8, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.28, depthWrite: false }));
+    pane.position.set(0, y0 + h / 2, 0); g.add(pane); g.userData.pane = pane;
+    for (const [bw, bh, bx, by] of [[w + 0.08, 0.06, 0, y0], [w + 0.08, 0.06, 0, y0 + h], [0.06, h, -w / 2, y0 + h / 2], [0.06, h, w / 2, y0 + h / 2]]) { const f = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.07), new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.6 })); f.position.set(bx, by, 0); g.add(f); }
+  }
+  // what a bullet can break: [height of its centre, radius]
+  const BREAK = { tv: [1.25, 0.55], lamp: [3.85, 0.3], duck: [0.3, 0.35], speaker: [0.8, 0.5], stool: [0.4, 0.4], discoball: [3.3, 0.5], barrel: [0.6, 0.5], glass: [(p.base || 1) + (p.h || 1.6) / 2, Math.max(p.w || 2, p.h || 1.6) / 2] };
+  if (BREAK[p.type]) g.userData.breakable = { cy: BREAK[p.type][0], r: BREAK[p.type][1], kind: p.type, w: p.w || 2 };
   g.position.set(p.x, p.y || 0, p.z); g.rotation.y = p.rot || 0;
   return g;
 }

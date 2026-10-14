@@ -759,7 +759,57 @@ insert into cs_catalog (def, crate, tier, kind) values
 ('pass:e_zombie','pass',2,'emote'),
 ('pass:e_tbag','pass',4,'emote'),
 ('pass:e_sit','pass',3,'emote'),
-('pass:e_lmao','pass',4,'emote')
+('pass:e_lmao','pass',4,'emote'),
+('s2p1:ak47:Sunburnt','pass2',0,'skin'),
+('s2p2:m4a1s:Pool Noodle','pass2',0,'skin'),
+('s2p3:e_dance','pass2',1,'emote'),
+('s2p4:awp:Dumpster Fire','pass2',0,'skin'),
+('s2p5:a_ct_tighty','pass2',3,'agent'),
+('s2p6:e_flex','pass2',2,'emote'),
+('s2p7:deagle:Sweat Stain','pass2',0,'skin'),
+('s2p8:p90:Flip Flop','pass2',0,'skin'),
+('s2p9:e_chicken','pass2',3,'emote'),
+('s2p10:a_t_grandma','pass2',3,'agent'),
+('s2p11:mp7:Mosquito Bite','pass2',1,'skin'),
+('s2p12:e_twerk','pass2',5,'emote'),
+('s2p13:xm1014:Heat Stroke','pass2',1,'skin'),
+('s2p14:negev:Gas Station Sushi','pass2',1,'skin'),
+('s2p15:a_ct_pigeon','pass2',4,'agent'),
+('s2p16:ssg08:Tan Lines','pass2',1,'skin'),
+('s2p17:usp:Hot Garbage','pass2',1,'skin'),
+('s2p18:e_heli','pass2',2,'emote'),
+('s2p19:glock:Sunburnt','pass2',1,'skin'),
+('s2p20:a_t_hotdog','pass2',4,'agent'),
+('s2p21:e_tbag','pass2',4,'emote'),
+('s2p22:aug:Pool Noodle','pass2',2,'skin'),
+('s2p23:sg553:Dumpster Fire','pass2',2,'skin'),
+('s2p24:e_dance','pass2',1,'emote'),
+('s2p25:k_hotdog:Chili Cheese','pass2',5,'knife'),
+('s2p26:famas:Sweat Stain','pass2',2,'skin'),
+('s2p27:e_flex','pass2',2,'emote'),
+('s2p28:galil:Flip Flop','pass2',2,'skin'),
+('s2p29:mag7:Mosquito Bite','pass2',2,'skin'),
+('s2p30:a_ct_poo','pass2',5,'agent'),
+('s2p31:bizon:Heat Stroke','pass2',3,'skin'),
+('s2p32:cz75:Gas Station Sushi','pass2',3,'skin'),
+('s2p33:e_chicken','pass2',3,'emote'),
+('s2p34:r8:Tan Lines','pass2',3,'skin'),
+('s2p35:a_t_banana','pass2',2,'agent'),
+('s2p36:e_twerk','pass2',5,'emote'),
+('s2p37:mp5:Hot Garbage','pass2',3,'skin'),
+('s2p38:ak47:Sunburnt','pass2',3,'skin'),
+('s2p39:e_heli','pass2',2,'emote'),
+('s2p40:a_ct_mime','pass2',2,'agent'),
+('s2p41:m4a1s:Pool Noodle','pass2',4,'skin'),
+('s2p42:e_tbag','pass2',4,'emote'),
+('s2p43:awp:Dumpster Fire','pass2',4,'skin'),
+('s2p44:deagle:Sweat Stain','pass2',4,'skin'),
+('s2p45:a_t_speedo','pass2',3,'agent'),
+('s2p46:p90:Flip Flop','pass2',4,'skin'),
+('s2p47:mp7:Mosquito Bite','pass2',4,'skin'),
+('s2p48:e_dance','pass2',1,'emote'),
+('s2p49:xm1014:Heat Stroke','pass2',4,'skin'),
+('s2p50:k_dildo:Hot Garbage Summer','pass2',5,'knife')
 on conflict (def) do update set crate = excluded.crate, tier = excluded.tier, kind = excluded.kind;
 -- promo rewards (skins.js PROMO): handed out, never in a case
 insert into cs_catalog (def, crate, tier, kind) values ('promo:a_beta','promo',4,'agent') on conflict (def) do update set crate = excluded.crate, tier = excluded.tier, kind = excluded.kind;
@@ -1471,3 +1521,168 @@ begin
 end $$;
 revoke all on function cs_claim_beta() from public, anon;
 grant execute on function cs_claim_beta() to authenticated;
+
+-- ---- login streaks, achievements, leaderboards, clans, weekly tournaments ----------------------------------------------
+alter table cs_profiles add column if not exists streak int not null default 0;
+alter table cs_profiles add column if not exists login_day int not null default 0;
+alter table cs_profiles add column if not exists achievements text[] not null default '{}';
+alter table cs_profiles add column if not exists clan bigint;
+create table if not exists cs_clans (id bigserial primary key, tag text unique not null check (tag ~ '^[A-Z0-9]{2,5}$'), name text not null,
+  owner uuid not null references auth.users on delete cascade, created timestamptz default now());
+create table if not exists cs_tour (week int not null, uid uuid not null references auth.users on delete cascade, pts int not null default 0,
+  claimed boolean not null default false, primary key (week, uid));
+alter table cs_clans enable row level security; alter table cs_tour enable row level security;
+drop policy if exists cs_clans_r on cs_clans; create policy cs_clans_r on cs_clans for select using (true);
+
+-- once a day: 100, 150, 200, 250, 300, 400, then 750 on day 7 of a streak (miss a day and it starts again)
+create or replace function cs_login() returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); d int := floor(extract(epoch from now()) / 86400); r cs_profiles%rowtype; s int; give int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  select * into r from cs_profiles where id = me for update;
+  if r.login_day = d then return json_build_object('granted', 0, 'streak', r.streak, 'coins', r.coins); end if;
+  s := case when r.login_day = d - 1 then (r.streak % 7) + 1 else 1 end;
+  give := (array[100, 150, 200, 250, 300, 400, 750])[s];
+  update cs_profiles set coins = coins + give, streak = s, login_day = d where id = me returning coins into r.coins;
+  return json_build_object('granted', give, 'streak', s, 'coins', r.coins);
+end $$;
+
+-- an achievement pays once per account (the list and the payouts live here, not in the client)
+create or replace function cs_achieve(p_id text) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); pay int; c int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  pay := case p_id when 'first_blood' then 100 when 'ace' then 500 when 'hs_100' then 400 when 'k_500' then 600 when 'k_2000' then 1500
+    when 'win_10' then 300 when 'win_100' then 1200 when 'mvp_25' then 400 when 'zed_10' then 500 when 'arms_win' then 300 when 'dm_win' then 200
+    when 'kz_done' then 300 when 'retake_5' then 250 when 'ranked_5' then 300 when 'clutch' then 400 when 'knife_10' then 400 else 0 end;
+  if pay = 0 then raise exception 'unknown achievement'; end if;
+  update cs_profiles set achievements = array_append(achievements, p_id), coins = coins + pay where id = me and not (p_id = any(achievements)) returning coins into c;
+  return json_build_object('granted', case when c is null then 0 else pay end, 'coins', c);
+end $$;
+
+-- leaderboards: rank rating (placements done), level (xp), this week's tournament points
+create or replace function cs_leaderboard(p_kind text) returns json language sql security definer set search_path = public as $$
+  select coalesce(json_agg(x), '[]'::json) from (
+    select coalesce(p.username, p.name, 'Player') as name, (select tag from cs_clans c where c.id = p.clan) as clan,
+      case p_kind when 'rank' then p.rr when 'xp' then p.xp else coalesce(t.pts, 0) end as v
+    from cs_profiles p left join cs_tour t on t.uid = p.id and t.week = floor(extract(epoch from now()) / 604800)::int
+    where case p_kind when 'rank' then p.ranked_n >= 5 when 'xp' then true else t.pts > 0 end
+    order by 3 desc limit 50) x;
+$$;
+
+-- clans: a tag of 2-5 letters/digits; creating one costs 1000 coins; anyone can join by tag; the owner leaving closes it
+create or replace function cs_clan_create(p_tag text, p_name text) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); t text := upper(trim(p_tag)); cid bigint; c int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  if t !~ '^[A-Z0-9]{2,5}$' then raise exception 'Tag: 2-5 letters or digits'; end if;
+  if exists (select 1 from cs_clans where tag = t) then raise exception 'That tag is taken'; end if;
+  update cs_profiles set coins = coins - 1000 where id = me and coins >= 1000 returning coins into c;
+  if c is null then raise exception 'A clan costs 1000 coins'; end if;
+  insert into cs_clans (tag, name, owner) values (t, left(coalesce(nullif(trim(p_name), ''), t), 30), me) returning id into cid;
+  update cs_profiles set clan = cid where id = me;
+  return json_build_object('tag', t, 'coins', c);
+end $$;
+create or replace function cs_clan_join(p_tag text) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); cid bigint;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  select id into cid from cs_clans where tag = upper(trim(p_tag)); if cid is null then raise exception 'No clan with that tag'; end if;
+  if (select count(*) from cs_profiles where clan = cid) >= 50 then raise exception 'That clan is full (50)'; end if;
+  update cs_profiles set clan = cid where id = me;
+  return json_build_object('tag', upper(trim(p_tag)));
+end $$;
+create or replace function cs_clan_leave() returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); cid bigint;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  select clan into cid from cs_profiles where id = me;
+  if cid is not null and exists (select 1 from cs_clans where id = cid and owner = me) then update cs_profiles set clan = null where clan = cid; delete from cs_clans where id = cid;
+  else update cs_profiles set clan = null where id = me; end if;
+  return json_build_object('ok', true);
+end $$;
+create or replace function cs_clan_info() returns json language sql security definer set search_path = public as $$
+  select json_build_object('tag', c.tag, 'name', c.name, 'owner', c.owner = auth.uid(),
+    'members', (select coalesce(json_agg(json_build_object('name', coalesce(m.username, m.name, 'Player'), 'rr', m.rr, 'xp', m.xp) order by m.xp desc), '[]'::json) from cs_profiles m where m.clan = c.id))
+  from cs_clans c join cs_profiles p on p.clan = c.id where p.id = auth.uid();
+$$;
+create or replace function cs_clan_top() returns json language sql security definer set search_path = public as $$
+  select coalesce(json_agg(x), '[]'::json) from (select c.tag, c.name, count(p.id) as members, coalesce(sum(p.xp), 0) as xp
+    from cs_clans c join cs_profiles p on p.clan = c.id group by c.id order by 4 desc limit 30) x;
+$$;
+
+-- weekly tournament: points from every match (win 3, draw 1, + a point per 5 kills); last week's top 3 claim 2000 / 1000 / 500
+create or replace function cs_tour_add(p_win boolean, p_draw boolean, p_k int) returns int language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); w int := floor(extract(epoch from now()) / 604800)::int; add int; tot int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  add := (case when p_win then 3 when p_draw then 1 else 0 end) + least(greatest(coalesce(p_k, 0), 0), 60) / 5;
+  insert into cs_tour (week, uid, pts) values (w, me, add) on conflict (week, uid) do update set pts = cs_tour.pts + add returning pts into tot;
+  return tot;
+end $$;
+create or replace function cs_tournament() returns json language sql security definer set search_path = public as $$
+  with w as (select floor(extract(epoch from now()) / 604800)::int as now_w)
+  select json_build_object(
+    'ends', to_timestamp(((select now_w from w) + 1) * 604800),
+    'mine', (select pts from cs_tour where uid = auth.uid() and week = (select now_w from w)),
+    'top', (select coalesce(json_agg(x), '[]'::json) from (select coalesce(p.username, p.name, 'Player') as name, t.pts from cs_tour t join cs_profiles p on p.id = t.uid
+             where t.week = (select now_w from w) order by t.pts desc limit 20) x),
+    'last', (select coalesce(json_agg(x), '[]'::json) from (select coalesce(p.username, p.name, 'Player') as name, t.pts, t.uid = auth.uid() as me, t.claimed from cs_tour t join cs_profiles p on p.id = t.uid
+             where t.week = (select now_w from w) - 1 order by t.pts desc limit 3) x));
+$$;
+create or replace function cs_tour_claim() returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); w int := floor(extract(epoch from now()) / 604800)::int - 1; place int; pay int; c int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  select rn into place from (select uid, row_number() over (order by pts desc) rn from cs_tour where week = w) r where uid = me;
+  if place is null or place > 3 then raise exception 'Only last week''s top 3 can claim'; end if;
+  pay := (array[2000, 1000, 500])[place];
+  update cs_tour set claimed = true where week = w and uid = me and not claimed;
+  if not found then raise exception 'Already claimed'; end if;
+  update cs_profiles set coins = coins + pay where id = me returning coins into c;
+  return json_build_object('granted', pay, 'place', place, 'coins', c);
+end $$;
+revoke all on function cs_login(), cs_achieve(text), cs_leaderboard(text), cs_clan_create(text, text), cs_clan_join(text), cs_clan_leave(), cs_clan_info(), cs_clan_top(), cs_tour_add(boolean, boolean, int), cs_tournament(), cs_tour_claim() from public, anon;
+grant execute on function cs_login(), cs_achieve(text), cs_leaderboard(text), cs_clan_create(text, text), cs_clan_join(text), cs_clan_leave(), cs_clan_info(), cs_clan_top(), cs_tour_add(boolean, boolean, int), cs_tournament(), cs_tour_claim() to authenticated;
+
+-- ---- Season 2 of the free pass: its own track, levelled by XP earned during the season ----------------------------------
+alter table cs_profiles add column if not exists season_xp int not null default 0;
+alter table cs_profiles add column if not exists pass2_claimed int[] not null default '{}';
+create table if not exists cs_pass2 (tier int primary key, def text not null references cs_catalog);
+alter table cs_pass2 enable row level security;
+drop policy if exists cs_ps2 on cs_pass2; create policy cs_ps2 on cs_pass2 for select using (true);
+insert into cs_pass2 (tier, def) values (1,'s2p1:ak47:Sunburnt'),(2,'s2p2:m4a1s:Pool Noodle'),(3,'s2p3:e_dance'),(4,'s2p4:awp:Dumpster Fire'),(5,'s2p5:a_ct_tighty'),(6,'s2p6:e_flex'),(7,'s2p7:deagle:Sweat Stain'),(8,'s2p8:p90:Flip Flop'),(9,'s2p9:e_chicken'),(10,'s2p10:a_t_grandma'),(11,'s2p11:mp7:Mosquito Bite'),(12,'s2p12:e_twerk'),(13,'s2p13:xm1014:Heat Stroke'),(14,'s2p14:negev:Gas Station Sushi'),(15,'s2p15:a_ct_pigeon'),(16,'s2p16:ssg08:Tan Lines'),(17,'s2p17:usp:Hot Garbage'),(18,'s2p18:e_heli'),(19,'s2p19:glock:Sunburnt'),(20,'s2p20:a_t_hotdog'),(21,'s2p21:e_tbag'),(22,'s2p22:aug:Pool Noodle'),(23,'s2p23:sg553:Dumpster Fire'),(24,'s2p24:e_dance'),(25,'s2p25:k_hotdog:Chili Cheese'),(26,'s2p26:famas:Sweat Stain'),(27,'s2p27:e_flex'),(28,'s2p28:galil:Flip Flop'),(29,'s2p29:mag7:Mosquito Bite'),(30,'s2p30:a_ct_poo'),(31,'s2p31:bizon:Heat Stroke'),(32,'s2p32:cz75:Gas Station Sushi'),(33,'s2p33:e_chicken'),(34,'s2p34:r8:Tan Lines'),(35,'s2p35:a_t_banana'),(36,'s2p36:e_twerk'),(37,'s2p37:mp5:Hot Garbage'),(38,'s2p38:ak47:Sunburnt'),(39,'s2p39:e_heli'),(40,'s2p40:a_ct_mime'),(41,'s2p41:m4a1s:Pool Noodle'),(42,'s2p42:e_tbag'),(43,'s2p43:awp:Dumpster Fire'),(44,'s2p44:deagle:Sweat Stain'),(45,'s2p45:a_t_speedo'),(46,'s2p46:p90:Flip Flop'),(47,'s2p47:mp7:Mosquito Bite'),(48,'s2p48:e_dance'),(49,'s2p49:xm1014:Heat Stroke'),(50,'s2p50:k_dildo:Hot Garbage Summer') on conflict (tier) do update set def = excluded.def;
+-- every XP grant also counts towards the season (same rules and caps as before)
+create or replace function cs_reward(p_kind text, p_coins int, p_xp int, p_detail jsonb) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); d int := floor(extract(epoch from now()) / 86400); cap int; give int; gx int; lv0 int; lv1 int; r cs_profiles%rowtype;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  cap := case p_kind when 'match' then 600 when 'quest' then 500 when 'daily' then 100 else 0 end;
+  select * into r from cs_profiles where id = me for update;
+  if r.earn_day <> d then r.earned_today := 0; end if;
+  give := greatest(0, least(coalesce(p_coins, 0), cap, 4000 - r.earned_today));
+  gx := greatest(0, least(coalesce(p_xp, 0), 2000));
+  lv0 := floor(sqrt(r.xp / 100.0)) + 1; lv1 := floor(sqrt((r.xp + gx) / 100.0)) + 1;
+  update cs_profiles set coins = coins + give + 200 * (lv1 - lv0), xp = xp + gx, season_xp = season_xp + gx, earn_day = d, earned_today = r.earned_today + give where id = me
+    returning coins, xp into r.coins, r.xp;
+  if p_kind = 'match' then perform cs_daily_stat(me, p_detail); end if;   -- today's prize-pool ranking
+  return json_build_object('coins', r.coins, 'xp', r.xp, 'granted', give);
+end $$;
+create or replace function cs_season() returns json language sql security definer set search_path = public as $$
+  select json_build_object('sxp', season_xp, 'claimed', pass2_claimed) from cs_profiles where id = auth.uid();
+$$;
+create or replace function cs_claim_pass2(p_tier int) returns json language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); r cs_profiles%rowtype; d text; k text; u text; fl real; sd int;
+begin
+  if me is null then raise exception 'sign in first'; end if;
+  select * into r from cs_profiles where id = me for update;
+  if floor(sqrt(r.season_xp / 100.0)) + 1 < p_tier then raise exception 'reach season level % first', p_tier; end if;
+  if p_tier = any(r.pass2_claimed) then raise exception 'already claimed'; end if;
+  select p.def, c.kind into d, k from cs_pass2 p join cs_catalog c on c.def = p.def where p.tier = p_tier; if d is null then raise exception 'no such tier'; end if;
+  u := md5(random()::text || clock_timestamp()::text || me::text); fl := case when k in ('agent', 'emote') then 0 else random() * 0.38 end; sd := floor(random() * 1000);
+  insert into cs_items (uid, owner, def, float, st, seed) values (u, me, d, fl, false, sd);
+  update cs_profiles set pass2_claimed = array_append(pass2_claimed, p_tier) where id = me;
+  return json_build_object('uid', u, 'def', d, 'float', fl, 'st', false, 'seed', sd);
+end $$;
+revoke all on function cs_season(), cs_claim_pass2(int) from public, anon;
+grant execute on function cs_season(), cs_claim_pass2(int) to authenticated;

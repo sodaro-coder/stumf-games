@@ -266,11 +266,34 @@ export const PASS = (() => {
   }
   return { id: 'pass', name: 'Free Battle Pass', price: 0, items, tiers, hidden: true };
 })();
+// Season 2 ("Hot Garbage Summer"): its own track, levelled by XP earned since the season started (season XP)
+const S2_FINISHES = [F('Sunburnt', { t: 'fade', c: ['#ffb08a', '#e0442a', '#7a1a10'] }), F('Pool Noodle', { t: 'stripes', c: ['#2ad0ff', '#ff4ad2', '#ffd23a'] }),
+  F('Dumpster Fire', { t: 'flames', c: ['#2a2a2a', '#ff6a1a', '#ffd23a'] }), F('Sweat Stain', { t: 'smear', c: ['#e8e2c8', '#c8b878'] }),
+  F('Flip Flop', { t: 'checker', c: ['#ffd23a', '#2a6aff'] }), F('Mosquito Bite', { t: 'dots', c: ['#f2c8b0', '#d0302a'] }),
+  F('Heat Stroke', { t: 'wave', c: ['#ff2a2a', '#ff9a2a', '#ffe08a'] }), F('Gas Station Sushi', { t: 'marble', c: ['#f4f0e8', '#ff8a6a', '#2a3a2a'] }),
+  F('Tan Lines', { t: 'stripes', c: ['#c88a5a', '#f2d8b8'] }), F('Hot Garbage', { t: 'camo', c: ['#4a5a2a', '#7a6a3a', '#2a2a1a'] })];
+const S2_GUNS = ['ak47', 'm4a1s', 'awp', 'deagle', 'p90', 'mp7', 'xm1014', 'negev', 'ssg08', 'usp', 'glock', 'aug', 'sg553', 'famas', 'galil', 'mag7', 'bizon', 'cz75', 'r8', 'mp5'];
+export const PASS2 = (() => {
+  const items = [], tiers = [];
+  let g = 0, f = 0, a = 0, e = 0;
+  const emotes = EMOTES.filter((x) => !DEFAULT_EMOTES.includes(x.id));
+  for (let t = 1; t <= PASS_TIERS; t++) {
+    let it;
+    if (t === PASS_TIERS) it = { kind: 'knife', weapon: 'k_dildo', finish: 'Hot Garbage Summer', paint: { t: 'galaxy', c: ['#1a0a2a', '#ff6a1a', '#ffe08a'] }, tier: 5 };
+    else if (t === 25) it = { kind: 'knife', weapon: 'k_hotdog', finish: 'Chili Cheese', paint: { t: 'hotdogs', c: ['#e8a040', '#7a2a10'] }, tier: 5 };
+    else if (t % 5 === 0 && a < PASS_AGENTS.length) { const id = PASS_AGENTS[(a++ + 3) % PASS_AGENTS.length]; it = { kind: 'agent', weapon: id, finish: (AGENTS.find((x) => x.id === id) || {}).name, tier: (AGENTS.find((x) => x.id === id) || {}).tier || 2 }; }
+    else if (t % 3 === 0 && emotes.length) { const em = emotes[(e++ * 3) % emotes.length]; it = { kind: 'emote', weapon: em.id, finish: em.name, tier: em.tier }; }
+    else { const fin = S2_FINISHES[f++ % S2_FINISHES.length], gun = S2_GUNS[g++ % S2_GUNS.length]; it = { kind: 'skin', weapon: gun, finish: fin.name, paint: fin.paint, tier: Math.min(4, Math.floor(t / 10)) }; }
+    it.id = `s2p${t}:${it.weapon}${it.kind === 'skin' || it.kind === 'knife' ? ':' + it.finish : ''}`;
+    items.push(it); tiers.push({ tier: t, def: it.id });
+  }
+  return { id: 'pass2', name: 'Season 2: Hot Garbage Summer', price: 0, items, tiers, hidden: true, season: 2 };
+})();
 for (const em of EMOTES) if (!PASS.items.find((i) => i.weapon === em.id)) PASS.items.push({ id: 'pass:' + em.id, kind: 'emote', weapon: em.id, finish: em.name, tier: em.tier });
 export const CRATE_BY_ID = Object.fromEntries(CRATES.map((c) => [c.id, c]));
 // rewards handed out, never sold in a case
 export const PROMO = { id: 'promo', name: 'Rewards', price: 0, hidden: true, items: AGENTS.filter((a) => a.promo).map((a) => ({ id: 'promo:' + a.id, kind: 'agent', weapon: a.id, finish: a.name, tier: a.tier })) };
-export const ITEM_BY_ID = Object.fromEntries([...CRATES, PASS, PROMO].flatMap((c) => c.items.map((i) => [i.id, i])));
+export const ITEM_BY_ID = Object.fromEntries([...CRATES, PASS, PASS2, PROMO].flatMap((c) => c.items.map((i) => [i.id, i])));
 export const AGENT_BY_ID = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
 
 // the odds a crate actually uses (tiers that exist in it, renormalised): shown before opening

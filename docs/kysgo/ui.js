@@ -2,9 +2,11 @@
 // (health/armor, money, ammo, weapon slots, radar, round timer with team alive icons, kill feed, buy menu,
 // scoreboard, chat, radio, spectating, scope, flash) and the end-of-match screen. Plain DOM, one stylesheet.
 // Anything another player typed (names, chat) only ever goes in through textContent / esc().
-import { WEAPONS, W_BY_ID, G_BY_ID, GEAR_BY_ID, BUY_MENU, MODES, BOT_LEVELS, RADIO, itemName, itemPrice, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS } from './data.js';
-import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_ID, ITEM_BY_ID, PASS, PASS_TIERS, EMOTE_BY_ID } from './skins.js';
+import { WEAPONS, W_BY_ID, G_BY_ID, GEAR_BY_ID, BUY_MENU, MODES, BOT_LEVELS, RADIO, itemName, itemPrice, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS, myRegion } from './data.js';
+import { CRATES, RARITY, crateOdds, itemInfo, paintSkin, AGENT_BY_ID, KNIFE_BY_ID, ITEM_BY_ID, PASS, PASS2, PASS_TIERS, EMOTE_BY_ID } from './skins.js';
 import { MAPS } from './maps.js';
+import { ACHIEVEMENTS, LOGIN_PAY } from './achievements.js';
+import { WEATHER } from './weather.js';
 import { CHAPTERS, MISSIONS, CHARACTERS, SQUAD, STORY_DIFF } from './story.js';
 import { thumb, stage, viewer, caseShot } from './thumbs.js';
 import { cardInto, cardImage, gradeBadge } from './cards.js';
@@ -609,7 +611,7 @@ export class Menu {
     this.root = document.createElement('div'); this.root.className = 'cs cs-menu';
     const title = esc(this.cfg.title || 'KYS:GO').replace(/[:-]/, (m) => `<i>${m}</i>`);
     this.root.innerHTML = `<canvas class="cs-stage"></canvas><div class="cs-vig"></div>
-      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${(this.h.back ? [['inv', 'Inventory'], ['guns', 'Gunsmith'], ['settings', 'Settings']] : [['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['inv', 'Inventory'], ['guns', 'Gunsmith'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])])
+      <div class="cs-topnav"><div class="cs-brand">${title}</div><nav class="cs-nav">${(this.h.back ? [['inv', 'Inventory'], ['guns', 'Gunsmith'], ['settings', 'Settings']] : [['home', 'Home'], ['play', 'Play'], ['story', 'Story'], ['inv', 'Items'], ['guns', 'Guns'], ['crates', 'Cases'], ['pass', 'Pass'], ['market', 'Market'], ['friends', 'Friends'], ['community', 'Social'], ['quests', 'Quests'], ['profile', 'Profile'], ['settings', 'Settings'], ...(this.P.admin ? [['admin', 'Admin']] : [])])
         .map(([k, n]) => `<button data-tab="${k}" title="${n}">${svg(k)}<span>${n}</span></button>`).join('')}</nav>
         <div class="cs-acct"><button class="cs-coinbox" id="mTop" style="cursor:pointer;color:#7ed957">＋<span class="tl"> TOP UP</span></button><span class="cs-coinbox" id="mCoins"></span><div class="cs-rank"><b id="mLvlN">1</b><div><div style="font:700 11px system-ui;color:#c8d0da" id="mName"></div><div class="xp"><i id="mXp"></i></div></div></div>
         ${this.h.back ? '<button class="cs-btn" id="mBack" style="margin-right:8px">◀ BACK TO PARTY</button>' : ''}<button class="cs-ibtn" id="mFull" title="Fullscreen (also makes Ctrl-crouch safe)">⛶</button></div></div>
@@ -623,7 +625,7 @@ export class Menu {
     $('#mTop', this.root).onclick = () => this.topUp();
     if (this.h.back) $('#mBack', this.root).onclick = () => this.h.back();   // opened from a story party: loadouts only, then back
     this.render();
-    this.P.daily().then((n) => n && this.h.toast(`Daily bonus: +${n} coins`));
+    this.P.daily().then((n) => n && this.h.toast(`Login streak day ${this.P.d.streak || 1}: +${n} coins`));
   }
   // top-up (shared SDK): Cash App in person, or SOL to STUMF with the account's deposit code (credited automatically)
   topUp() { sdkTopUp(this.cfg, { who: this.P.tag ? `${this.P.d.name || 'Player'}#${this.P.tag}` : this.P.d.name, code: this.P.signedIn ? this.P.dep : null, game: 'kysgo', coins: 'coins' }); }
@@ -699,27 +701,35 @@ export class Menu {
       <div class="cs-maps">${Object.values(MAPS).filter(fits).map((m) => `<div class="cs-map ${s.map === m.id ? 'on' : ''}" data-map="${m.id}"><canvas width="440" height="260" data-mapprev="${m.id}"></canvas><span class="ck"></span><div class="nm">${esc(m.name)}<small>parody of ${esc(m.parody)}</small></div></div>`).join('')}</div>
       <div style="display:grid;grid-template-columns:1fr 340px;gap:22px;margin-top:20px">
         <div><div class="cs-sec">Lobby</div><div class="cs-seg">${[['bots', 'Offline with bots'], ['pub', 'Host public'], ['priv', 'Host private'], ['ranked', '🏆 Ranked']].map(([k, n]) => `<button data-host="${k}" class="${s.host === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+          <div class="cs-sec">Weather</div><div class="cs-seg">${Object.entries(WEATHER).map(([k, w]) => `<button data-wx="${k}" class="${(s.weather || 'day') === k ? 'on' : ''}">${esc(w.name)}</button>`).join('')}</div>
           <div class="cs-sec">Bot difficulty</div><div class="cs-seg">${Object.entries(BOT_LEVELS).filter(([k, b]) => !b.hidden && (s.host !== 'ranked' || RANKED_BOTS.includes(k))).map(([k, b]) => `<button data-bot="${k}" class="${s.bot === k ? 'on' : ''}">${b.name}</button>`).join('')}</div>
           ${s.host === 'ranked' ? (() => { const rk = this.P.d.rank || { rr: 0, n: 0, w: 0 }, R = RANKS[rankOf(rk.rr)], nx = RANKS[rankOf(rk.rr) + 1];
             return `<div class="cs-panel2" style="margin-top:10px"><h3>Your rank</h3><div class="bd"><b style="color:${R.c};font-size:18px">${rk.n < PLACEMENTS ? 'Unranked' : esc(R.name)}</b>
               <div class="cs-small cs-mut">${rk.n < PLACEMENTS ? `Placement matches: ${rk.n}/${PLACEMENTS} (double rating swings)` : `${rk.rr} RR${nx ? ` · ${nx.rr - rk.rr} to ${esc(nx.name)}` : ' · top rank'}`} · ${rk.w} wins</div>
               <div class="cs-small cs-mut" style="margin-top:6px">Ranked rules: bots only on Normal or Hard, and one team must be all real players before it starts. Wins vs bot opponents count half. First time you reach a rank: 300 coins × its tier.${this.P.cloud && !this.P.signedIn ? ' <b>Sign in to save your rank.</b>' : ''}</div></div></div>`; })() : ''}
-          <div style="margin-top:22px"><button class="cs-go" id="pGo">GO</button></div></div>
+          <div style="margin-top:22px;display:flex;gap:10px;flex-wrap:wrap"><button class="cs-go" id="pGo">GO</button><button class="cs-btn" id="pQuick" title="Joins the open ranked lobby closest to your rating in your region, or hosts one">🏆 Find ranked match</button></div>
+          <div class="cs-small cs-mut" style="margin-top:8px">Voice chat: hold <b>V</b> to talk to your team.</div></div>
         <div><div class="cs-panel2"><h3>Join a friend</h3><div class="bd"><div class="cs-row"><input id="pCode" maxlength="5" placeholder="INVITE CODE" style="flex:1;text-transform:uppercase"><button class="cs-btn" id="pJoin">Join</button></div></div></div>
           <div class="cs-panel2"><h3>Open lobbies</h3><div class="bd" id="pList"><span class="cs-mut cs-small">Looking for lobbies…</span></div></div></div></div>`;
     B.querySelectorAll('[data-mode]').forEach((e) => (e.onclick = () => { s.mode = e.dataset.mode; this.render(); }));
     B.querySelectorAll('[data-map]').forEach((e) => (e.onclick = () => { s.map = e.dataset.map; this.render(); }));
     B.querySelectorAll('[data-bot]').forEach((e) => (e.onclick = () => { s.bot = e.dataset.bot; this.render(); }));
     B.querySelectorAll('[data-host]').forEach((e) => (e.onclick = () => { s.host = e.dataset.host; this.render(); }));
+    B.querySelectorAll('[data-wx]').forEach((e) => (e.onclick = () => { s.weather = e.dataset.wx; this.render(); }));
     B.querySelectorAll('canvas[data-mapprev]').forEach((c) => this.h.mapPreview(c, c.dataset.mapprev));
     $('#pGo', B).onclick = () => { const rkd = s.host === 'ranked'; if (rkd && !RANKED_BOTS.includes(s.bot)) s.bot = 'hard';
-      this.h.play({ mode: s.mode, map: s.map, bot: s.bot, host: true, solo: s.host === 'bots', pub: s.host === 'pub' || rkd, ranked: rkd }); };
+      this.h.play({ mode: s.mode, map: s.map, bot: s.bot, host: true, solo: s.host === 'bots', pub: s.host === 'pub' || rkd, ranked: rkd, weather: rkd ? 'day' : s.weather || 'day' }); };
     const code = $('#pCode', B); const hash = location.hash.slice(1).toUpperCase(); if (/^[A-Z0-9]{5}$/.test(hash)) code.value = hash;
     $('#pJoin', B).onclick = () => { const c = code.value.trim().toUpperCase(); if (c.length === 5) this.h.play({ code: c, host: false }); };
-    if (!this.lb) this.lb = this.h.lobbies((list) => { this.lobbies = list; const el = $('#pList', this.root); if (!el) return;
+    const myRR = ((this.P.d.rank || {}).rr) | 0, reg = myRegion();
+    const fit = (l) => (l.region === reg ? 0 : 1000) + (l.ranked ? Math.abs((l.rr | 0) - myRR) : 500);   // your region first; ranked: the closest rating first
+    const qr = $('#pQuick', B); if (qr) qr.onclick = () => {   // ranked matchmaking: the open ranked lobby nearest your rating in your region, else host one
+      const best = (this.lobbies || []).filter((l) => l.ranked && (l.players | 0) < (l.max | 0) && Math.abs((l.rr | 0) - myRR) <= 400).sort((a, b) => fit(a) - fit(b))[0];
+      if (best) this.h.play({ code: best.code, host: false }); else { s.host = 'ranked'; $('#pGo', B).click(); } };
+    if (!this.lb) this.lb = this.h.lobbies((list) => { list = list.slice().sort((a, b) => fit(a) - fit(b)); this.lobbies = list; const el = $('#pList', this.root); if (!el) return;
       el.innerHTML = list.length ? '' : '<span class="cs-mut cs-small">No open lobbies right now: host one!</span>';
       for (const l of list) { const r = document.createElement('div'); r.className = 'cs-row'; r.style.marginBottom = '8px'; r.innerHTML = '<div style="flex:1;min-width:0"><b class="n" style="display:block;font-size:13px"></b><span class="cs-mut cs-small m"></span></div><button class="cs-btn sm">Join</button>';
-        $('.n', r).textContent = String(l.name || 'Lobby').slice(0, 30); $('.m', r).textContent = `${l.ranked ? '🏆 RANKED · ' : ''}${String(l.mode || '').slice(0, 4)} · ${(MAPS[l.map] || {}).short || ''} · ${l.players | 0}/${l.max | 0}`;
+        $('.n', r).textContent = String(l.name || 'Lobby').slice(0, 30); $('.m', r).textContent = `${l.ranked ? `🏆 RANKED ~${l.rr | 0} RR · ` : ''}${String(l.mode || '').slice(0, 7)} · ${(MAPS[l.map] || {}).short || ''} · ${l.players | 0}/${l.max | 0}${l.region ? ' · ' + String(l.region).slice(0, 2) + (l.region === myRegion() ? ' (near you)' : '') : ''}`;
         $('button', r).onclick = () => this.h.play({ code: l.code, host: false }); el.appendChild(r); } });
   }
   // ---- STORY: "Operation Ballin' Out", co-op missions (story.js / story_sim.js) ----
@@ -830,23 +840,25 @@ export class Menu {
   }
   // ---- FREE BATTLE PASS ----
   tab_pass(B) {
-    const P = this.P, lv = P.level, got = new Set(P.d.pass || []);
+    const P = this.P, s2 = this.season !== 1, SP = s2 ? PASS2 : PASS, lv = s2 ? P.seasonLevel : P.level, xpNow = s2 ? (P.d.sxp || 0) : P.d.xp, got = new Set((s2 ? P.d.pass2 : P.d.pass) || []);
     const prev = (lv - 1) ** 2 * 100, need = lv ** 2 * 100;
-    const fake = PASS.tiers.map((t) => ({ uid: 'p' + t.tier, def: t.def, float: 0.05, seed: t.tier * 37, st: false }));
-    const ready = PASS.tiers.filter((t) => t.tier <= lv && !got.has(t.tier)).length;
-    B.innerHTML = `<div class="cs-card"><div class="cs-row"><b style="font-size:20px">🎖 FREE BATTLE PASS</b><span class="cs-chip">100% free · no premium track · nothing to buy</span><span style="flex:1"></span>
+    const fake = SP.tiers.map((t) => ({ uid: 'p' + t.tier, def: t.def, float: 0.05, seed: t.tier * 37, st: false }));
+    const ready = SP.tiers.filter((t) => t.tier <= lv && !got.has(t.tier)).length;
+    B.innerHTML = `<div class="cs-seg" style="margin-bottom:10px"><button data-season="2" class="${s2 ? 'on' : ''}">Season 2: Hot Garbage Summer</button><button data-season="1" class="${s2 ? '' : 'on'}">Season 1</button></div>
+      <div class="cs-card"><div class="cs-row"><b style="font-size:20px">🎖 ${s2 ? 'SEASON 2 PASS' : 'FREE BATTLE PASS'}</b><span class="cs-chip">100% free · no premium track · nothing to buy</span><span style="flex:1"></span>
         ${ready ? `<button class="cs-btn" id="pAll">CLAIM ALL (${ready})</button>` : ''}</div>
-      <div class="cs-mut cs-small" style="margin:6px 0">Every level you reach with XP unlocks a reward: weapon skins, emotes, outfits, and two knives (level 25 and 50). XP comes from playing: kills, rounds, wins, quests.</div>
-      <div class="cs-row"><b>Level ${lv}</b><div class="cs-bar" style="flex:1"><i style="width:${Math.round((P.d.xp - prev) / (need - prev) * 100)}%"></i></div><span class="cs-mut cs-small">${P.d.xp - prev} / ${need - prev} XP</span></div></div>
-      <div class="cs-grid" style="margin-top:12px">${PASS.tiers.map((t, k) => { const info = itemInfo(fake[k]); const st = got.has(t.tier) ? 'claimed' : t.tier <= lv ? 'ready' : 'locked';
+      <div class="cs-mut cs-small" style="margin:6px 0">${s2 ? 'Season levels come from XP earned this season (it started at 0 for everyone). Season 1 rewards stay claimable. ' : ''}Every level you reach with XP unlocks a reward: weapon skins, emotes, outfits, and two knives (level 25 and 50). XP comes from playing: kills, rounds, wins, quests.</div>
+      <div class="cs-row"><b>${s2 ? 'Season level' : 'Level'} ${lv}</b><div class="cs-bar" style="flex:1"><i style="width:${Math.round((xpNow - prev) / (need - prev) * 100)}%"></i></div><span class="cs-mut cs-small">${xpNow - prev} / ${need - prev} XP</span></div></div>
+      <div class="cs-grid" style="margin-top:12px">${SP.tiers.map((t, k) => { const info = itemInfo(fake[k]); const st = got.has(t.tier) ? 'claimed' : t.tier <= lv ? 'ready' : 'locked';
         return `<div class="cs-card cs-item" style="${st === 'locked' ? 'opacity:.55' : ''}"><span class="cs-tag">LV ${t.tier}</span><canvas width="200" height="80" data-draw="${fake[k].uid}"></canvas>
           <div class="n">${esc(info.wpn)} | ${esc(info.finish)}</div><div class="w">${esc(info.kind === 'skin' ? 'Weapon skin' : info.kind === 'knife' ? '★ Knife' : info.kind === 'agent' ? 'Outfit' : 'Emote')}</div>
           <div class="cs-rar" style="background:${info.rarity.color}"></div>
           <div style="margin-top:6px">${st === 'ready' ? `<button class="cs-btn sm" data-claim="${t.tier}">CLAIM</button>` : `<span class="cs-mut cs-small">${st === 'claimed' ? '✓ claimed' : '🔒 level ' + t.tier}</span>`}</div></div>`; }).join('')}</div>`;
     paintAll(B, fake);
-    const claim = async (t) => { try { const it = await P.claimPass(t); return it; } catch (e) { this.h.toast(e.message); return null; } };
+    B.querySelectorAll('[data-season]').forEach((b) => (b.onclick = () => { this.season = +b.dataset.season; this.render(); }));
+    const claim = async (t) => { try { const it = await (s2 ? P.claimPass2(t) : P.claimPass(t)); return it; } catch (e) { this.h.toast(e.message); return null; } };
     B.querySelectorAll('[data-claim]').forEach((b) => (b.onclick = async () => { b.disabled = true; const it = await claim(+b.dataset.claim); if (it) { this.h.sound('reveal'); this.h.toast('Unlocked: ' + itemInfo(it).label); } this.render(); }));
-    const all = $('#pAll', B); if (all) all.onclick = async () => { all.disabled = true; for (const t of PASS.tiers) if (t.tier <= lv && !(P.d.pass || []).includes(t.tier)) await claim(t.tier); this.h.sound('rare'); this.render(); };
+    const all = $('#pAll', B); if (all) all.onclick = async () => { all.disabled = true; for (const t of SP.tiers) if (t.tier <= lv && !((s2 ? P.d.pass2 : P.d.pass) || []).includes(t.tier)) await claim(t.tier); this.h.sound('rare'); this.render(); };
   }
   // ---- CRATES ----
   tab_crates(B) {
@@ -998,6 +1010,42 @@ export class Menu {
     $('#aFind', B).click();
   }
   // ---- QUESTS ----
+  // ---- COMMUNITY: login streak, achievements, leaderboards, the weekly tournament, clans ----
+  tab_community(B) {
+    const P = this.P, got = ((P.d.ach || {}).got) || [], streak = P.d.streak || 0, signed = P.signedIn;
+    const list = (rows, unit) => rows && rows.length ? rows.map((r, i) => `<div class="cs-row" style="padding:4px 0;border-bottom:1px solid #222a33"><b style="width:28px">${i + 1}</b><span style="flex:1">${r.clan ? `<span class="cs-mut">[${esc(r.clan)}]</span> ` : ''}${esc(r.name)}</span><b>${r.v ?? r.pts ?? r.xp}</b><span class="cs-mut cs-small" style="margin-left:4px">${unit}</span></div>`).join('') : '<span class="cs-mut cs-small">Nobody yet.</span>';
+    B.innerHTML = `<div class="cs-h">Login streak</div>
+      <div class="cs-row" style="gap:6px;flex-wrap:wrap;margin-bottom:6px">${LOGIN_PAY.map((n, i) => `<div class="cs-card" style="text-align:center;min-width:64px;${i < streak ? 'border-color:#f2a33a' : ''}"><div class="cs-small cs-mut">Day ${i + 1}</div><b>${n}</b></div>`).join('')}</div>
+      <div class="cs-small cs-mut" style="margin-bottom:14px">Play on consecutive days: day ${streak || 0} of 7. Miss a day and it starts again.</div>
+      <div class="cs-h">Achievements · ${got.length}/${ACHIEVEMENTS.length}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-bottom:14px">${ACHIEVEMENTS.map((a) => `<div class="cs-card" style="${got.includes(a.id) ? 'border-color:#5fbf5f' : 'opacity:.75'}"><b>${got.includes(a.id) ? '🏅' : '🔒'} ${esc(a.name)}</b><div class="cs-small cs-mut">${esc(a.desc)} · ${a.pay} coins</div></div>`).join('')}</div>
+      ${signed ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+        <div><div class="cs-h">Weekly tournament</div><div id="cTour" class="cs-small cs-mut">Loading…</div></div>
+        <div><div class="cs-h">Leaderboards</div><div class="cs-seg" id="cLbK">${[['rank', 'Rank'], ['xp', 'Level'], ['tour', 'This week']].map(([k, n], i) => `<button data-lb="${k}" class="${i ? '' : 'on'}">${n}</button>`).join('')}</div><div id="cLb" class="cs-small">Loading…</div></div>
+        <div><div class="cs-h">Clan</div><div id="cClan" class="cs-small cs-mut">Loading…</div><div class="cs-h" style="margin-top:12px">Top clans</div><div id="cClans" class="cs-small">Loading…</div></div></div>`
+      : '<div class="cs-card cs-small">Sign in (Profile) for leaderboards, clans and the weekly tournament: they need an account so results can be checked.</div>'}`;
+    if (!signed) return;
+    const lb = (k) => P.leaderboard(k).then((rows) => { const el = $('#cLb', B); if (el) el.innerHTML = list(rows, k === 'rank' ? 'RR' : k === 'xp' ? 'XP' : 'pts'); }).catch(() => { const el = $('#cLb', B); if (el) el.textContent = 'Leaderboards need the latest database update (supabase.sql).'; });
+    lb('rank'); B.querySelectorAll('[data-lb]').forEach((b) => (b.onclick = () => { B.querySelectorAll('[data-lb]').forEach((x) => x.classList.toggle('on', x === b)); lb(b.dataset.lb); }));
+    P.tournament().then((t) => { const el = $('#cTour', B); if (!el || !t) return;
+      const mine = (t.last || []).find((x) => x.me && !x.claimed);
+      el.innerHTML = `<div>Ends ${new Date(t.ends).toLocaleString()} · your points: <b>${t.mine || 0}</b> (win 3, draw 1, +1 per 5 kills; matches with other players)</div>
+        <div style="margin-top:6px">${list((t.top || []).map((x) => ({ name: x.name, v: x.pts })), 'pts')}</div>
+        <div class="cs-mut" style="margin-top:6px">Last week: ${(t.last || []).map((x, i) => `${['🥇', '🥈', '🥉'][i]} ${esc(x.name)} (${x.pts})`).join(' · ') || 'no results'} · prizes 2000 / 1000 / 500 coins</div>
+        ${mine ? '<button class="cs-btn sm" id="cClaim" style="margin-top:6px">Claim your prize</button>' : ''}`;
+      const c = $('#cClaim', B); if (c) c.onclick = async () => { try { const r = await P.tourClaim(); this.h.toast(`+${r.granted} coins (place ${r.place})`); this.render(); } catch (e) { this.h.toast(e.message || 'Could not claim'); } };
+    }).catch(() => { const el = $('#cTour', B); if (el) el.textContent = 'The tournament needs the latest database update (supabase.sql).'; });
+    const clan = () => P.clanInfo().then((c) => { const el = $('#cClan', B); if (!el) return;
+      if (c && c.tag) { el.innerHTML = `<b>[${esc(c.tag)}] ${esc(c.name)}</b> · ${c.members.length} member(s)<div style="margin-top:6px">${list(c.members.map((m) => ({ name: m.name, v: m.xp })), 'XP')}</div><button class="cs-btn sm" id="cLeave" style="margin-top:6px">${c.owner ? 'Disband clan' : 'Leave clan'}</button>`;
+        $('#cLeave', B).onclick = async () => { if (!confirm(c.owner ? 'Disband the clan for everyone?' : 'Leave the clan?')) return; await P.clanLeave(); this.render(); }; }
+      else { el.innerHTML = `<div class="cs-row" style="gap:6px;flex-wrap:wrap"><input id="cTag" maxlength="5" placeholder="TAG" style="width:80px;text-transform:uppercase"><input id="cName" maxlength="30" placeholder="Clan name (to create)" style="flex:1;min-width:120px"></div>
+          <div class="cs-row" style="gap:6px;margin-top:6px"><button class="cs-btn sm" id="cJoin">Join by tag</button><button class="cs-btn sm" id="cMake">Create (1000 coins)</button></div>`;
+        const go = (fn) => async () => { try { await fn(); this.render(); } catch (e) { this.h.toast(e.message || 'Failed'); } };
+        $('#cJoin', B).onclick = go(() => P.clanJoin($('#cTag', B).value)); $('#cMake', B).onclick = go(() => P.clanCreate($('#cTag', B).value, $('#cName', B).value)); }
+    }).catch(() => { const el = $('#cClan', B); if (el) el.textContent = 'Clans need the latest database update (supabase.sql).'; });
+    clan();
+    P.clanTop().then((rows) => { const el = $('#cClans', B); if (el) el.innerHTML = list((rows || []).map((r) => ({ name: `[${r.tag}] ${r.name} (${r.members})`, v: r.xp })), 'XP'); }).catch(() => {});
+  }
   tab_quests(B) {
     const P = this.P; P.ensureQuests();
     const row = (q) => `<div class="cs-card" style="margin-bottom:8px"><div class="cs-row"><b>${esc(q.text)}</b><span class="cs-mut cs-small">${q.weekly ? 'weekly' : 'daily'}</span><span style="flex:1"></span><span class="cs-coin">🪙 ${q.coins}</span>

@@ -122,6 +122,10 @@ export const MODES = {
     about: 'Jump course with a timer: checkpoints, bhop strips and your best time' },
   story: { name: 'Story', size: 4, bomb: false, winTo: 1, half: 99, max: 1, freeze: 3, round: 99999, buyTime: 0, start: 0, hidden: true },   // co-op missions (story_sim.js)
 };
+// the player's rough region (from their time zone): lobbies show it and list your region first
+export const myRegion = () => { let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { tz = ''; }
+  const k = tz.split('/')[0]; return { America: /Argentina|Sao_Paulo|Santiago|Bogota|Lima|Caracas|Montevideo/.test(tz) ? 'SA' : 'NA', Europe: 'EU', Africa: 'AF', Asia: 'AS', Australia: 'OC', Pacific: 'OC', Atlantic: 'EU' }[k] || 'NA'; };
+
 // Arms Race ladder: one kill moves you up; the last step is the knife
 export const ARMS = ['ak47', 'm4a1s', 'aug', 'awp', 'p90', 'mp7', 'xm1014', 'nova', 'negev', 'ssg08', 'deagle', 'p250', 'tec9', 'glock', 'knife'];
 export const BOMB = { timer: 40, plant: 3.2, defuse: 10, defuseKit: 5, radius: 500 * U, dmg: 500 };

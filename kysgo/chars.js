@@ -236,13 +236,16 @@ export function makeSoldier(look, team, hq = true) {
   return r;
 }
 // swap the looping base animation with a short cross-fade
+const LOCO = new Set(['walk', 'walkBack', 'walkLeft', 'walkRight', 'run', 'runBack', 'runLeft', 'runRight']);
 function base(r, name, scale = 1) {
   const a = r.act[name]; if (!a) return;
   a.timeScale = name === 'crouch' ? 0 : scale;   // the crouch clip stands all the way up and back down every 3 s: hold its crouched frame
   if (name === 'crouch') a.time = 0;
   if (r.base === name) return;
   const prev = r.act[r.base];
-  a.reset().setEffectiveWeight(1).play(); if (prev) prev.crossFadeTo(a, 0.22, false);
+  a.reset().setEffectiveWeight(1).play();
+  if (prev && LOCO.has(r.base) && LOCO.has(name)) a.time = (prev.time / prev.getClip().duration) % 1 * a.getClip().duration;   // same foot forward: no pop between gaits
+  if (prev) prev.crossFadeTo(a, LOCO.has(r.base) && LOCO.has(name) ? 0.3 : 0.22, false);
   r.base = name;
 }
 export function soldierEvent(r, kind) {   // one-shot upper-body moves: 'fire' | 'reload' | 'throw' | 'hit'
@@ -451,9 +454,9 @@ function legs(r, rt, rest, crouched, moving) {
 export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
   r.t += dt;
   if (dead) {
-    if (!r.dead) { r.dead = true; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
+    if (!r.dead) { r.dead = true; r.rag = r.rag || { t: 0, force: 1, head: false }; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
   } else {
-    if (r.dead) { r.dead = false; r.act.die.stop(); r.base = ''; base(r, 'idle'); }
+    if (r.dead) { r.dead = false; r.rag = null; r.act.die.stop(); r.base = ''; base(r, 'idle'); }
     const sp = Math.hypot(vx, vz), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const f = -(vx * sy) - vz * cy, side = vx * cy - vz * sy;   // speed along where they face, and to their right
     if (r.rootS) r.root.scale.copy(r.rootS); else r.rootS = r.root.scale.clone();   // emotes may squash the whole body: reset first
@@ -466,7 +469,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     else if (crouch > 0.5) { if (sp > 0.3) base(r, 'crouchWalk', Math.min(1.6, sp / SPEED.crouchWalk)); else base(r, 'crouchWalk', 0); }   // still: the squat held
     else if (sp < 0.35) base(r, 'idle');
     else {
-      const run = sp > 3.4, ax = Math.abs(f) >= Math.abs(side) * 0.8;
+      const run = sp > (String(r.base).startsWith('run') ? 3.0 : 3.7), ax = Math.abs(f) >= Math.abs(side) * 0.8;
       const name = ax ? (f >= 0 ? (run ? 'run' : 'walk') : (run ? 'runBack' : 'walkBack')) : (side > 0 ? (run ? 'runRight' : 'walkRight') : (run ? 'runLeft' : 'walkLeft'));
       base(r, name, Math.max(0.6, Math.min(1.7, sp / SPEED[name])));
     }
@@ -474,6 +477,19 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
   r.mixer.update(dt);
   r.g.updateMatrixWorld(true);
   const B = r.bones;
+  if (r.dead && r.rag) {   // ragdoll-style reaction on top of the fall: limbs whip with the hit, then settle (damped)
+    const g = r.rag; g.t += dt;
+    const k = Math.exp(-g.t * 3.2) * g.force, w = Math.sin(g.t * 13), w2 = Math.sin(g.t * 9 + 1.3);
+    _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
+    if (B.Head) turnWorld(B.Head, _v, (g.head ? 0.9 : 0.35) * k * w);
+    if (B.Spine2) turnWorld(B.Spine2, _v, 0.25 * k * w2);
+    _t1.set(0, 0, 1).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
+    if (B.RightArm) turnWorld(B.RightArm, _t1, 0.7 * k * w2);
+    if (B.LeftArm) turnWorld(B.LeftArm, _t1, -0.7 * k * w);
+    if (B.RightUpLeg) turnWorld(B.RightUpLeg, _v, 0.3 * k * w2);
+    if (B.LeftUpLeg) turnWorld(B.LeftUpLeg, _v, -0.25 * k * w);
+    r.g.updateMatrixWorld(true);
+  }
   if (!r.dead) {
     // aim: bend the spine and head with the pitch; procedural emotes on top of the idle pose
     _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));   // the character's right

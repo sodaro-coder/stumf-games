@@ -4,7 +4,8 @@
 // apply), so a player can't just edit their way to a knife. The public key in the config is meant to be public.
 import { DEFAULT_ATT, gunLevel, attOK } from './guns.js';
 import { rankOf as RANKS_T } from './data.js';
-import { CRATE_BY_ID, CRATES, rollCrate, itemInfo, newItem, ITEM_BY_ID, PASS, DEFAULT_EMOTES, EMOTE_BY_ID } from './skins.js';
+import { ACHIEVEMENTS, LOGIN_PAY } from './achievements.js';
+import { CRATE_BY_ID, CRATES, rollCrate, itemInfo, newItem, ITEM_BY_ID, PASS, PASS2, DEFAULT_EMOTES, EMOTE_BY_ID } from './skins.js';
 
 const LS = 'cs:profile:v1', TOK = 'cs:session:v1';
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
@@ -73,6 +74,8 @@ export class Profile {
     try {
       if (!this.betaTried) { this.betaTried = true; try { if (await this.rpc('cs_claim_beta', {}) === true) this.betaNew = true; } catch (e) { /* older database: run supabase.sql */ } }   // accounts made before Dec 1: the Beta Tester costume
       const p = await this.rpc('cs_profile', { p_name: this.d.name || 'Player' });
+      this.rpc('cs_clan_info').then((c) => { this.d.clan = (c && c.tag) || null; }).catch(() => {});   // clan tag shown before your name
+      this.rpc('cs_season').then((x) => { if (x) { this.d.sxp = x.sxp | 0; this.d.pass2 = Array.isArray(x.claimed) ? x.claimed : []; this.changed(); } }).catch(() => {});   // Season 2 track
       this.d.coins = p.coins; this.d.xp = p.xp; this.d.equipped = p.equipped || this.d.equipped; this.d.stats = Object.assign(this.d.stats, p.stats || {});
       if (p.name) this.d.name = p.name;
       if (p.rank) this.d.rank = { rr: p.rank.rr | 0, n: p.rank.n | 0, w: p.rank.w | 0, best: p.rank.best | 0 };
@@ -85,8 +88,8 @@ export class Profile {
   }
   // ---- coins & items ----
   async reward(kind, coins, xp, detail = {}) {
-    if (this.signedIn) { try { const r = await this.rpc('cs_reward', { p_kind: kind, p_coins: Math.round(coins), p_xp: Math.round(xp), p_detail: detail }); this.d.coins = r.coins; this.d.xp = r.xp; this.changed(); return r.granted; } catch (e) { this.err = String(e.message || e); return 0; } }
-    const lvl = this.level; this.d.coins += Math.round(coins); this.d.xp += Math.round(xp);
+    if (this.signedIn) { try { const r = await this.rpc('cs_reward', { p_kind: kind, p_coins: Math.round(coins), p_xp: Math.round(xp), p_detail: detail }); this.d.coins = r.coins; if (r.xp > this.d.xp) this.d.sxp = (this.d.sxp || 0) + (r.xp - this.d.xp); this.d.xp = r.xp; this.changed(); return r.granted; } catch (e) { this.err = String(e.message || e); return 0; } }
+    const lvl = this.level; this.d.coins += Math.round(coins); this.d.xp += Math.round(xp); this.d.sxp = (this.d.sxp || 0) + Math.round(xp);
     if (this.level > lvl) this.d.coins += 200 * (this.level - lvl);
     this.changed(); return Math.round(coins);
   }
@@ -186,6 +189,16 @@ export class Profile {
   }
   // ---- the free battle pass (a reward per level; claimed once) ----
   passTier(t) { return PASS.tiers[t - 1]; }
+  get seasonLevel() { return levelOf(this.d.sxp || 0); }
+  async claimPass2(t) {
+    if (this.seasonLevel < t) throw new Error(`Reach season level ${t} first`);
+    if ((this.d.pass2 || []).includes(t)) throw new Error('Already claimed');
+    const tier = PASS2.tiers[t - 1]; if (!tier) throw new Error('No such tier');
+    let item;
+    if (this.signedIn) { const it = await this.rpc('cs_claim_pass2', { p_tier: t }); item = { uid: it.uid, def: it.def, float: it.float, st: false, seed: it.seed, kills: 0, t: Date.now() }; }
+    else { const k = ITEM_BY_ID[tier.def].kind; item = newItem(tier.def, k === 'agent' || k === 'emote' ? 0 : Math.random() * 0.38, false, Math.floor(Math.random() * 1000)); }
+    this.d.pass2 = [...(this.d.pass2 || []), t]; this.d.inventory.unshift(item); this.changed(); return item;
+  }
   async claimPass(t) {
     if (this.level < t) throw new Error(`Reach level ${t} first`);
     if ((this.d.pass || []).includes(t)) throw new Error('Already claimed');
@@ -224,7 +237,37 @@ export class Profile {
     return { rr: k.rr, delta: dl, tier: t, up, pay: 0, n: k.n };
   }
   async claimQuest(id) { const q = this.d.quests.find((x) => x.id === id); if (!q || q.claimed || q.prog < q.goal) return 0; q.claimed = true; const got = await this.reward('quest', q.coins, q.coins / 2, { q: id }); this.changed(); return got; }
-  async daily() { if (this.d.lastDaily === dayKey()) return 0; this.d.lastDaily = dayKey(); return this.reward('daily', 100, 50, {}); }
+  async daily() {   // the login streak: 100 .. 750 coins over 7 days in a row (server-checked once a day when signed in)
+    if (this.signedIn) { try { const r = await this.rpc('cs_login'); this.d.coins = r.coins; this.d.streak = r.streak; this.d.lastDaily = dayKey(); this.changed(); return r.granted; } catch (e) { /* older database: the old flat bonus */ } }
+    if (this.d.lastDaily === dayKey()) return 0;
+    const y = dayKey() - 1; this.d.streak = this.d.lastDaily === y ? ((this.d.streak || 0) % 7) + 1 : 1; this.d.lastDaily = dayKey();
+    if (this.signedIn) return this.reward('daily', 100, 50, {});
+    const n = LOGIN_PAY[this.d.streak - 1]; this.d.coins += n; this.changed(); return n;
+  }
+  // lifetime stats for achievements; newly unlocked ones are paid (server: once per account)
+  async achievements(r) {
+    const s = this.d.ach || (this.d.ach = { got: [] }), st = this.d.stats;
+    for (const k of ['knife', 'ace', 'clutch', 'armsWin', 'dmWin', 'kz', 'retakeWins', 'ranked']) s[k] = (s[k] || 0) + (r[k] || 0);
+    s.zedWave = Math.max(s.zedWave || 0, r.zedWave || 0);
+    const all = { ...st, ...s }, fresh = ACHIEVEMENTS.filter((a) => !s.got.includes(a.id) && a.test(all));
+    const out = [];
+    for (const a of fresh) {
+      let paid = 0;
+      if (this.signedIn) { try { const x = await this.rpc('cs_achieve', { p_id: a.id }); paid = x.granted; if (x.coins != null) this.d.coins = x.coins; } catch (e) { paid = 0; } }
+      else { paid = a.pay; this.d.coins += a.pay; }
+      s.got.push(a.id); out.push({ ...a, paid });
+    }
+    this.changed(); return out;
+  }
+  leaderboard(kind) { return this.signedIn ? this.rpc('cs_leaderboard', { p_kind: kind }) : Promise.resolve(null); }
+  tournament() { return this.signedIn ? this.rpc('cs_tournament') : Promise.resolve(null); }
+  tourAdd(r) { if (this.signedIn) this.rpc('cs_tour_add', { p_win: !!r.win, p_draw: !!r.draw, p_k: r.k | 0 }).catch(() => {}); }
+  async tourClaim() { const r = await this.rpc('cs_tour_claim'); this.d.coins = r.coins; this.changed(); return r; }
+  clanInfo() { return this.signedIn ? this.rpc('cs_clan_info') : Promise.resolve(null); }
+  clanTop() { return this.signedIn ? this.rpc('cs_clan_top') : Promise.resolve(null); }
+  async clanCreate(tag, name) { const r = await this.rpc('cs_clan_create', { p_tag: tag, p_name: name }); this.d.coins = r.coins; this.d.clan = r.tag; this.changed(); return r; }
+  async clanJoin(tag) { const r = await this.rpc('cs_clan_join', { p_tag: tag }); this.d.clan = r.tag; this.changed(); return r; }
+  async clanLeave() { await this.rpc('cs_clan_leave'); this.d.clan = null; this.changed(); }
   give(def) { this.d.inventory.unshift(newItem(def, Math.random() * 0.5, false, Math.floor(Math.random() * 1000))); this.changed(); }
 }
 export { CRATES };
