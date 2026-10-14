@@ -1211,8 +1211,10 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Crouch key (Ctrl+W can close the tab outside fullscreen)</div><select data-k="crouchKey"><option value="ctrl">Ctrl</option><option value="c">C (radio C off)</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer voice</div><select data-k="voice"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Announcer</div><select data-k="voicePack">${Object.entries(VOICE_PACKS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select> <button class="cs-btn alt sm" id="vTry" style="margin-top:6px">Hear it</button></label>
-        <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · same as phones)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
-      <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · Shift sprint · Ctrl (or C) crouch · Z prone · Space jump · Mouse1 fire · Mouse2 scope / aim down sights (hold) · Q / E lean while aiming · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · V X C radio · T emotes · F inspect · Esc menu</div>`;
+        <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Killcam (see how you died)</div><select data-k="killcam"><option value="1">On</option><option value="0">Off</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Instant replay: F9 saves the last 20-40 s as a video (uses more power)</div><select data-k="replay"><option value="0">Off</option><option value="1">On</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · same as phones)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
+      <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · F9 save clip · Shift sprint · Ctrl (or C) crouch · Z prone · Space jump · Mouse1 fire · Mouse2 scope / aim down sights (hold) · Q / E lean while aiming · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · V X C radio · T emotes · F inspect · Esc menu</div>`;
     B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' || k === 'xStyle' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); const xc = $('#xCode', B); if (xc) xc.value = xhCode(S); }; });
     B.querySelectorAll('canvas[data-sprayprev]').forEach((c) => c.getContext('2d').drawImage(sprayCanvas(c.dataset.sprayprev), 0, 0, 80, 80));
     B.querySelectorAll('[data-kitplay]').forEach((b) => (b.onclick = () => { if (this.h.audio) playKit(this.h.audio, b.dataset.kitplay, 0.4); }));
@@ -1380,12 +1382,14 @@ export class Hud {
     p.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;min-width:260px"><b style="font-size:18px">PAUSED</b><div class="cs-mut cs-small">${esc(h.info)}</div>
       <button class="cs-btn" data-r>RESUME</button>${h.invite ? `<button class="cs-btn alt" data-inv>COPY INVITE LINK</button>` : ''}
       <label class="cs-small cs-mut">Sensitivity <input type="range" min="0.2" max="6" step="0.05" value="${h.S.sens}" data-sens style="width:100%"></label>
+      ${h.clip ? `<button class="cs-btn alt" data-clip>SAVE CLIP (F9)</button>` : ''}
       ${h.admin ? `<button class="cs-btn alt" data-rh>RECOIL HELP: ${h.S.recoilHelp ? 'ON' : 'OFF'}</button>` : ''}
       <button class="cs-btn alt" data-q>LEAVE MATCH</button></div>`;
     document.body.appendChild(p);
     $('[data-r]', p).onclick = h.resume; $('[data-q]', p).onclick = h.quit;
     const inv = $('[data-inv]', p); if (inv) inv.onclick = () => { const t = document.createElement('textarea'); t.value = h.invite; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) { /* old browsers */ } t.remove(); inv.textContent = 'COPIED: ' + h.code; };
     $('[data-sens]', p).oninput = (e) => h.setSens(+e.target.value);
+    const cl = $('[data-clip]', p); if (cl) cl.onclick = () => { h.clip(); cl.disabled = true; };
     const rh = $('[data-rh]', p); if (rh) rh.onclick = () => { h.setRecoilHelp(!h.S.recoilHelp); rh.textContent = 'RECOIL HELP: ' + (h.S.recoilHelp ? 'ON' : 'OFF'); };
   }
   endScreen(d, onDone) {

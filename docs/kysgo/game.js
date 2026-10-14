@@ -50,7 +50,7 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { vmX: 0, vmY: 0, vmZ: 0, vmFov: 60, xStyle: 'classic', voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1 };
+const DEF_SET = { vmX: 0, vmY: 0, vmZ: 0, vmFov: 60, xStyle: 'classic', voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, killcam: 1, replay: 0 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -1085,7 +1085,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (p.acN >= 12 && !p.kicked) { p.kicked = true; send('toast', 'Removed by anti-cheat: ' + why, peer); toast(`${p.name} was removed by anti-cheat (${why})`); match.remove(p.id); }
     }
     function onTp(m) { if (!m || ![m.x, m.y, m.z].every(Number.isFinite)) return; me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vy = me.vz = 0; me.walkTo = null; if (Number.isFinite(m.yaw)) { me.yaw = m.yaw; me.pitch = 0; } }   // a story scene puts this player somewhere
-    function onSpawn(m) { dmgFrom.clear(); dmgTo.clear(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
+    function onSpawn(m) { kc = null; dmgFrom.clear(); dmgTo.clear(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
     function onHurt(m) {
       me.hp = m.hp; me.armor = m.armor; audio.play('hurt'); if (m.by) dmgFrom.set(m.by, (dmgFrom.get(m.by) || 0) + (m.dmg | 0));
       const ang = m.from ? angDiff(me.yaw, Math.atan2(-(m.from[0] - me.x), -(m.from[1] - me.z))) : null;
@@ -1136,6 +1136,75 @@ export default function start({ cfg, E, N, smoke }) {
     let mkN = 0, mkT = 0, mkR = -1, flashSaid = 0, firstDone = -1;
     function announceEv(key) { if (!S.voice || !hasLine(S.voicePack, key)) return; announce(key); }
     let specTarget = null, specNext = false;
+    // killcam: the last few seconds are kept (everyone's position, aim and gun, 20 times a second) and, a moment after
+    // you die, played back through your killer's eyes, slowing down for the shot. Rendering only: the match runs on.
+    const KC_F = ['x', 'y', 'z', 'yaw', 'pitch', 'crouch', 'alive', 'wid', 'lean', 'prone'], kcBuf = [];
+    let kc = null, kcSaved = null, kcRecT = 0;
+    function kcRecord(t) {
+      if (t - kcRecT < 0.05) return; kcRecT = t; const ps = {};
+      for (const p of st.players.values()) ps[p.id] = KC_F.map((k) => p[k]);
+      kcBuf.push({ t, ps, me: [me.x, me.y, me.z, me.yaw, me.pitch, me.crouch || 0, me.alive, (curWeapon() || {}).id || 'knife', me.lean || 0, me.prone || 0] });
+      while (kcBuf.length && t - kcBuf[0].t > 6) kcBuf.shift();
+    }
+    function kcLerp(a, b, k) {
+      return a.map((v, j) => typeof v !== 'number' || typeof b[j] !== 'number' ? (k < 0.5 ? v : b[j]) : j === 3 ? v + Math.atan2(Math.sin(b[j] - v), Math.cos(b[j] - v)) * k : v + (b[j] - v) * k);
+    }
+    function kcApply(t) {
+      if (!kc || t < kc.start) return null;
+      const el = t - kc.start, tp = el < 2.2 ? kc.t0 + el : kc.t0 + 2.2 + (el - 2.2) * 0.4;   // real time, then slow motion into the kill
+      if (tp > kc.tEnd || (specNext && el > 0.3) || me.alive) { kc = null; specNext = false; return null; }
+      let i = 1; while (i < kcBuf.length - 1 && kcBuf[i].t < tp) i++;
+      const a = kcBuf[i - 1], b = kcBuf[i]; if (!a || !b) { kc = null; return null; }
+      const k = Math.max(0, Math.min(1, (tp - a.t) / Math.max(1e-3, b.t - a.t))), fr = { me: kcLerp(a.me, b.me, k), tp };
+      kcSaved = [];
+      for (const p of st.players.values()) {
+        const fa = a.ps[p.id], fb = b.ps[p.id] || fa; if (!fa) continue;
+        const r = rigs.get(p.id); kcSaved.push([p, KC_F.map((x) => p[x]), r, r ? r.dieT : null]);
+        kcLerp(fa, fb, k).forEach((v, j) => { p[KC_F[j]] = v; });
+      }
+      if (tp >= kc.tDeath && !kc.shot) { kc.shot = true; specFlashT = 0.07; specKick = 0.03; }
+      return fr;
+    }
+    function kcStart(kid, name) {
+      if (!st.players.has(kid) || kcBuf.length < 20) return false;
+      const t = performance.now() / 1000; kc = { kid, name: name || '', start: t + 1.3, t0: Math.max(kcBuf[0].t, t - 3.4), tDeath: t, tEnd: t + 0.5 }; return true;
+    }
+    function kcRestore() {   // the live match's values go back after the frame is drawn (and dying players keep their fall)
+      if (!kcSaved) return;
+      for (const [p, v, r, dieT] of kcSaved) { KC_F.forEach((x, j) => { p[x] = v[j]; }); if (r) { r.dieT = dieT; r.x = p.x; r.z = p.z; r.y = p.y; } }
+      kcSaved = null;
+    }
+    // clips: instant replay (opt-in: video encoding costs power). Two recorders take turns so one always holds 20-40 s.
+    let recs = [];
+    function replayOn(on) {
+      for (const r of recs) { try { r.m.onstop = null; r.m.stop(); } catch (e) { /* already stopped */ } clearTimeout(r.to); }
+      recs = [];
+      if (!on || typeof MediaRecorder === 'undefined' || !renderer.domElement.captureStream) return;
+      const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find((m) => MediaRecorder.isTypeSupported(m));
+      if (!mime) return;
+      const mk = (slot, delay) => {
+        const r = recs[slot] = recs[slot] || { slot };
+        r.to = setTimeout(() => {
+          try {
+            const stream = renderer.domElement.captureStream(30); r.m = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5e6 }); r.parts = []; r.t0 = performance.now();
+            r.m.ondataavailable = (e) => { if (e.data.size) r.parts.push(e.data); };
+            r.m.onstop = () => { if (r.save) r.save(new Blob(r.parts, { type: mime })); r.save = null; mk(slot, 0); };
+            r.m.start(1000); r.to = setTimeout(() => { try { r.m.stop(); } catch (e) { /* gone */ } }, 40000);
+          } catch (e) { recs = []; }
+        }, delay);
+      };
+      mk(0, 0); mk(1, 20000);
+    }
+    function saveClip() {
+      const r = recs.filter((x) => x.m && x.m.state === 'recording').sort((a, b) => a.t0 - b.t0)[0];
+      if (!r) return toast(S.replay ? 'Replay is warming up: try again in a few seconds' : 'Turn on Instant replay in Settings to save clips');
+      const secs = Math.round((performance.now() - r.t0) / 1000);
+      r.save = (blob) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `kysgo-${mapId}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.${blob.type.includes('mp4') ? 'mp4' : 'webm'}`;
+        document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000); };
+      clearTimeout(r.to); try { r.m.stop(); } catch (e) { /* gone */ }
+      toast(`🎬 Clip saved: the last ${secs} seconds`);
+    }
+    if (S.replay) setTimeout(() => replayOn(true), 3000);
     // spectating: you see through their eyes like a player would, their gun in their hands (attachments too), their
     // aim smoothed the way a person's view moves, flashes and kick when they fire
     let svm = null, svmKey = '', specYaw = 0, specPitch = 0, specKick = 0, specFlashT = 0, specBob = 0, specId = null;
@@ -1196,6 +1265,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (data.kid === myId && data.vteam !== me.team) { if (hud.hitmark) hud.hitmark('kill'); addXp(data.weapon, XP_RULES.kill + (data.head ? XP_RULES.head : 0)); stats.k++; if (data.head) stats.hs++; const w = W_BY_ID[data.weapon]; if (w && w.cat === 'pistol') stats.pistol++; if (w && w.cat === 'smg') stats.smg++; if (data.weapon === 'knife') stats.knife++; if (G_BY_ID[data.weapon]) stats.nade++; bumpStatTrak(data.weapon); }
         if (data.vid === myId) {
           stats.d++; me.alive = false; firstDone = st.round; setTimeout(() => announceEv('died'), 300);
+          if (S.killcam && data.kid && data.kid !== myId && mode !== 'story') kcStart(data.kid, data.killer);
           const k = data.kid ? st.players.get(data.kid) : null, took = data.kid ? (dmgFrom.get(data.kid) || 0) : 0, gave = data.kid ? (dmgTo.get(data.kid) || 0) : 0;
           hud.banner('You died', data.killer ? `${data.killer} · ${itemName(data.weapon)}${data.head ? ' · headshot' : ''}${k ? ` · they had ${Math.max(0, k.hp | 0)} HP` : ''} · you dealt ${gave}, took ${took}` : '', 4000);
         }
@@ -1348,7 +1418,7 @@ export default function start({ cfg, E, N, smoke }) {
     function openPause() {
       if (ended) return; uiOpen = 'pause';
       hud.pauseMenu(true, { info: `${MODES[mode].name} · ${MAPS[mapId].name}${session ? ' · code ' + session.code : ''}`, S, invite: session ? location.origin + location.pathname + '#' + session.code : '', code: session ? session.code : '',
-        resume: () => { hud.pauseMenu(false); uiOpen = null; lock(); }, quit, setSens: (v) => { S.sens = v; saveSet(S); }, admin: !!profile.admin && !touchPlayer, setRecoilHelp: (on) => { S.recoilHelp = on ? 1 : 0; saveSet(S); } });
+        resume: () => { hud.pauseMenu(false); uiOpen = null; lock(); }, quit, setSens: (v) => { S.sens = v; saveSet(S); }, admin: !!profile.admin && !touchPlayer, setRecoilHelp: (on) => { S.recoilHelp = on ? 1 : 0; saveSet(S); }, clip: S.replay ? saveClip : null });
     }
     // who a shot can hit: the live players, gathered into one reused array (no per-shot allocation)
     const SHOT_LIST = [], SHOT_DIR = { x: 0, y: 0, z: 0 }, REC_A = { up: 0, side: 0 }, REC_B = { up: 0, side: 0 };
@@ -1595,6 +1665,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (!canBuy()) closeBuy();
       }
       showSb = kd('Tab') || E.input.touch.buttons.has('score');
+      if (kp('F9')) saveClip();   // F9: save the instant replay
       if (mob) { const sh = !uiOpen && !ended; if (sh !== mobShown) { mobShown = sh; mob.show(sh); } mob.setAiming(me.ads > 0.5); }
       // movement (frozen in freeze time)
       { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || me.adsToggle); if (!wantAds && !mouseBtn[2] && (me.reload > 0 || !adsOptic || !me.alive)) me.adsToggle = false; me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0;
@@ -1646,6 +1717,8 @@ export default function start({ cfg, E, N, smoke }) {
     }, (alpha, dt) => {
       if (!W) return;
       gov(dt); fpsM(dt); autoCheck(dt);
+      const kcNow = performance.now() / 1000; if (!kc || kcNow < kc.start) kcRecord(kcNow);
+      const kcFr = kcApply(kcNow);
       // ---- camera: own eyes, or spectate a teammate ----
       const lo = leanOff(me); let viewYaw = me.yaw, viewPitch = me.pitch + me.punch * 0.35 + camKick, ex = me.x + lo.x, ey = me.y + eyeHeight(me) * (mineStory().scale || 1) - Math.abs(me.lean) * 0.05, ez = me.z + lo.z, viewRoll = -me.lean * 0.2;
       let spectating = null;
@@ -1658,6 +1731,13 @@ export default function start({ cfg, E, N, smoke }) {
           const lo2 = leanOff({ yaw: specYaw, lean: p.lean || 0 }); ex = p.x + lo2.x; ey = p.y + eyeHeight({ crouch: p.crouch || 0, prone: p.prone || 0 }); ez = p.z + lo2.z;
           viewYaw = specYaw; viewPitch = specPitch + specKick; viewRoll = -(p.lean || 0) * 0.2; }
         else { viewPitch = -0.5; ey = me.y + 3.5; }
+      }
+      const kcP = kcFr && st.players.get(kc.kid);
+      if (kcP) {   // killcam: your killer's eyes, exactly where they were looking
+        spectating = kcP; if (specId !== kcP.id) { specId = kcP.id; svmKey = ''; }
+        specYaw = kcP.yaw || 0; specPitch = kcP.pitch || 0; specKick = Math.max(0, specKick - dt * 0.35);
+        const lo3 = leanOff({ yaw: specYaw, lean: kcP.lean || 0 }); ex = kcP.x + lo3.x; ey = kcP.y + eyeHeight({ crouch: kcP.crouch || 0, prone: kcP.prone || 0 }); ez = kcP.z + lo3.z;
+        viewYaw = specYaw; viewPitch = specPitch + specKick; viewRoll = -(kcP.lean || 0) * 0.2;
       }
       viewY += (ey - viewY) * Math.min(1, dt * 18); if (Math.abs(ey - viewY) > 1.5) viewY = ey;
       const shake = camShake > 0 ? (Math.random() - 0.5) * camShake * 0.05 : 0; camShake = Math.max(0, camShake - dt * 2);
@@ -1724,6 +1804,13 @@ export default function start({ cfg, E, N, smoke }) {
           const hit = W.ray(o, d, dist); if (hit) dist = Math.max(0.3, hit.t - 0.3);
           cam.position.set(o.x + d.x * dist, o.y + d.y * dist, o.z + d.z * dist); cam.lookAt(me.x, me.y + 1.2, me.z);
         }
+      }
+      if (kcP) {   // you, as they saw you
+        const sr = rigFor(myId), f = kcFr.me; sr.t += dt * 0.6; sr.g.visible = true; if (sr.blob) sr.blob.visible = false;
+        sr.g.position.set(f[0], f[1], f[2]); sr.g.rotation.y = f[3]; setTpGun(sr, f[7] || 'knife', null);
+        const dead = kcFr.tp >= kc.tDeath ? 1 : 0;
+        if (sr.soldier) { setGear(sr, me.armor || 0, me.helmet); poseSoldier(sr, { dt: dt * 0.6, vx: 0, vz: 0, vy: 0, yaw: f[3], crouch: f[5] || 0, pitch: f[4] || 0, dead, lean: f[8] || 0, prone: f[9] || 0 }); }
+        else posePlayer(sr, { speed: 0, t: sr.t, crouch: f[5] || 0, pitch: f[4] || 0, dead });
       }
       if (povShot) {   // through your own eyes: a child in a hallway, a man on the ground
         const sc2 = mineStory().scale || 1, h = cine.down ? 0.28 : eyeHeight(me) * sc2, sh = cine.shake || 0;
@@ -1879,6 +1966,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (match && !started && session) hint = 'Lobby: start the match from the panel';
         hud.hint(hint);
         hud.spec(spectating ? `Spectating ${(st.roster.get(spectating.id) || {}).name || ''} · ${itemName(spectating.wid) || ''} · ${mob ? 'tap' : 'click'} for next` : !me.alive && st.phase !== 'warmup' ? 'You are dead' : '');
+        if (kcP) hud.spec(`▶ KILLCAM · ${kc.name} · ${itemName(kcP.wid) || ''} · ${mob ? 'tap' : 'click'} to skip`);
       }
       if (radarT > 0.1) {
         radarT = 0;
@@ -1892,6 +1980,7 @@ export default function start({ cfg, E, N, smoke }) {
         const rows = match ? match.scoreboard() : [...st.roster.values()].map((r) => { const p = st.players.get(r.id) || {}; return { id: r.id, name: r.name, team: r.team, bot: r.bot, k: r.k || 0, a: 0, d: 0, mvp: 0, score: 0, money: p.money || 0, alive: r.id === myId ? me.alive : p.alive }; });
         hud.scoreboard(true, { players: rows, me: myId, myTeam: me.team, score: st.score, round: st.round, history: st.history, title: `${MODES[mode].name} · ${MAPS[mapId].name}` });
       } else if (!showSb) hud.scoreboard(false);
+      kcRestore();
     });
 
     // ---- the end ----
@@ -1938,11 +2027,11 @@ export default function start({ cfg, E, N, smoke }) {
       if (session) session.leave(); if (lobby) lobby.close();
       if (lobbyPanel) { clearInterval(lobbyPanel.iv); lobbyPanel.remove(); }
       if (SC) { SC.dispose(); SC = null; }
-      hud.destroy(); renderer.dispose(); renderer.domElement.remove();
+      replayOn(false); hud.destroy(); renderer.dispose(); renderer.domElement.remove();
       document.querySelectorAll('.bd-stick,.bd-btns,.bd-look').forEach((e) => e.remove());
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }
