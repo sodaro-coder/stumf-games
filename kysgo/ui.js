@@ -12,6 +12,7 @@ import { WEATHER } from './weather.js';
 import { CHAPTERS, MISSIONS, CHARACTERS, SQUAD, STORY_DIFF } from './story.js';
 import { thumb, stage, viewer, caseShot } from './thumbs.js';
 import { cardInto, cardImage, gradeBadge } from './cards.js';
+import { PAD_LAYOUTS } from './gamepad.js';
 import * as WAL from './wallet.js';
 import { VOICE_PACKS } from './voices.js';
 import { ATTACH, slotsFor, optionsFor, gunLevel, xpForLevel, GUN_MAX } from './guns.js';
@@ -1214,8 +1215,20 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Gun hand</div><select data-k="hand"><option value="1">Right</option><option value="-1">Left</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Killcam (see how you died)</div><select data-k="killcam"><option value="1">On</option><option value="0">Off</option></select></label>
         <label class="cs-card"><div class="cs-small cs-mut">Instant replay: F9 saves the last 20-40 s as a video (uses more power)</div><select data-k="replay"><option value="0">Off</option><option value="1">On</option></select></label>${this.P.admin ? '<label class="cs-card"><div class="cs-small cs-mut">Recoil help (admin only · same as phones)</div><select data-k="recoilHelp"><option value="0">Off</option><option value="1">On</option></select></label>' : ''}</div>
+      <div class="cs-h">Controller & touch</div><div class="cs-grid">
+        <label class="cs-card"><div class="cs-small cs-mut">Controller layout</div><select data-k="padLayout">${Object.entries(PAD_LAYOUTS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select><div class="cs-small cs-mut" id="padHelp" style="margin-top:4px">${esc((PAD_LAYOUTS[S.padLayout] || PAD_LAYOUTS.default).help)}</div></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Controller look up / down</div><select data-k="padInvert"><option value="0">Normal</option><option value="1">Inverted</option></select></label>
+        ${sl('padDead', 'Stick deadzone', 0.05, 0.35, 0.01)}
+        <label class="cs-card"><div class="cs-small cs-mut">Gyro aiming (phones: turn the phone to aim)</div><select data-k="gyro"><option value="0">Off</option><option value="1">Always</option><option value="2">Only while aiming</option></select></label>
+        ${sl('gyroSens', 'Gyro speed', 0.3, 3, 0.05)}
+        <label class="cs-card"><div class="cs-small cs-mut">Gyro direction</div><select data-k="gyroInv"><option value="0">Normal</option><option value="1">Inverted</option></select></label>
+        ${sl('tSize', 'Touch button size', 0.75, 1.3, 0.05)}${sl('tAlpha', 'Touch button opacity', 0.25, 1, 0.05)}
+        <label class="cs-card"><div class="cs-small cs-mut">Touch layout</div><select data-k="tLefty"><option value="0">Right-handed (fire on the right)</option><option value="1">Left-handed (mirrored)</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Vibration (phones)</div><select data-k="haptics"><option value="1">On</option><option value="0">Off</option></select></label></div>
       <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · F9 save clip · Shift sprint · Ctrl (or C) crouch · Z prone · Space jump · Mouse1 fire · Mouse2 scope / aim down sights (hold) · Q / E lean while aiming · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · V X C radio · T emotes · F inspect · Esc menu</div>`;
-    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' || k === 'xStyle' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); const xc = $('#xCode', B); if (xc) xc.value = xhCode(S); }; });
+    B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' || k === 'xStyle' || k === 'padLayout' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); const xc = $('#xCode', B); if (xc) xc.value = xhCode(S);
+      if (k === 'padLayout') { const ph = $('#padHelp', B); if (ph) ph.textContent = (PAD_LAYOUTS[S.padLayout] || PAD_LAYOUTS.default).help; }
+      if (k === 'gyro' && S.gyro && typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission) DeviceMotionEvent.requestPermission().then((r) => { if (r !== 'granted') this.h.toast('Motion access was blocked: allow it in Safari settings to use gyro aiming'); }).catch(() => {}); }; });
     B.querySelectorAll('canvas[data-sprayprev]').forEach((c) => c.getContext('2d').drawImage(sprayCanvas(c.dataset.sprayprev), 0, 0, 80, 80));
     B.querySelectorAll('[data-kitplay]').forEach((b) => (b.onclick = () => { if (this.h.audio) playKit(this.h.audio, b.dataset.kitplay, 0.4); }));
     B.querySelectorAll('[data-kit]').forEach((b) => (b.onclick = () => { S.kit = b.dataset.kit; this.h.saveSettings(S); this.render(); }));

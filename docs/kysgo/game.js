@@ -50,7 +50,7 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
-const DEF_SET = { vmX: 0, vmY: 0, vmZ: 0, vmFov: 60, xStyle: 'classic', voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, killcam: 1, replay: 0 };
+const DEF_SET = { vmX: 0, vmY: 0, vmZ: 0, vmFov: 60, xStyle: 'classic', voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, killcam: 1, replay: 0, padLayout: 'default', padInvert: 0, padDead: 0.16, gyro: 0, gyroSens: 1, gyroInv: 0, tSize: 1, tAlpha: 1, tLefty: 0, haptics: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -953,10 +953,23 @@ export default function start({ cfg, E, N, smoke }) {
     document.addEventListener('pointerlockchange', onLock);
     // raw mouse where the browser supports it (no OS acceleration, lower latency), else the plain lock
     const lock = () => { try { let r = null; try { r = renderer.domElement.requestPointerLock({ unadjustedMovement: true }); } catch (e1) { r = null; } if (r && r.catch) r = r.catch(() => renderer.domElement.requestPointerLock()); else if (!r && !document.pointerLockElement) r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not allowed yet */ } if (navigator.keyboard && navigator.keyboard.lock && document.fullscreenElement) navigator.keyboard.lock(['ControlLeft', 'KeyW', 'Tab']).catch(() => {}); };
-    let mob = null; try { if (matchMedia('(pointer: coarse)').matches) mob = mobileControls(E.input); } catch (e) { /* no touch */ }
+    let mob = null; try { if (matchMedia('(pointer: coarse)').matches) mob = mobileControls(E.input, { lefty: () => S.tLefty, haptics: () => S.haptics }); } catch (e) { /* no touch */ }
+    if (mob) mob.style(S.tSize, S.tAlpha, S.tLefty);
+    // gyro aiming (phones): turning the phone turns the view, 1:1 at gyro speed 1; always, or only while aiming
+    const onMotion = (e) => {
+      const r = e.rotationRate; if (!r || !S.gyro || !mob || !started || uiOpen || ended || !me.alive) return;
+      if (S.gyro === 2 && me.ads < 0.5 && !me.scoped) return;
+      const iv = e.interval > 1 ? e.interval / 1000 : e.interval || 0.016, ang = ((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) % 360;
+      let dx, dy;   // degrees turned this sample, in screen terms (right, down)
+      if (ang === 90) { dx = -(r.beta || 0); dy = (r.gamma || 0); } else if (ang === 270 || ang === -90) { dx = (r.beta || 0); dy = -(r.gamma || 0); } else { dx = -(r.gamma || 0); dy = -(r.beta || 0); }
+      const k = iv * (S.gyroSens || 1) / Math.max(0.05, S.sens * 0.022) * (S.gyroInv ? -1 : 1);
+      if (Math.abs(dx) > 0.6) E.input.touch.look.dx += dx * k; if (Math.abs(dy) > 0.6) E.input.touch.look.dy += dy * k;   // a still hand doesn't drift
+    };
+    if (mob) addEventListener('devicemotion', onMotion);
     if (mob && story) document.querySelectorAll('.kc-t b').forEach((b) => { if (b.textContent === 'BUY') b.textContent = 'SKILL'; });   // nothing to buy in a mission: that button is the ability
     // controllers (consoles, TVs, PCs with a pad): drive the match while playing, the menus otherwise
-    const pad = gamepadControls(E.input, { playing: () => started && !uiOpen && !ended && !hud.chatIn && !campHold && !loadMenu, sens: () => S.touchSens || 1 });
+    const pad = gamepadControls(E.input, { playing: () => started && !uiOpen && !ended && !hud.chatIn && !campHold && !loadMenu, sens: () => S.touchSens || 1,
+      layout: () => S.padLayout || 'default', invert: () => !!S.padInvert, dead: () => S.padDead || 0.16 });
     if (mob) { hud.el.classList.add('touch'); mob.setSens(S.touchSens || 1); }
     let mobShown = true;
     const kd = (c) => keys.has(c), kp = (c) => pressed.has(c);
@@ -1087,7 +1100,7 @@ export default function start({ cfg, E, N, smoke }) {
     function onTp(m) { if (!m || ![m.x, m.y, m.z].every(Number.isFinite)) return; me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vy = me.vz = 0; me.walkTo = null; if (Number.isFinite(m.yaw)) { me.yaw = m.yaw; me.pitch = 0; } }   // a story scene puts this player somewhere
     function onSpawn(m) { kc = null; dmgFrom.clear(); dmgTo.clear(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
     function onHurt(m) {
-      me.hp = m.hp; me.armor = m.armor; audio.play('hurt'); if (m.by) dmgFrom.set(m.by, (dmgFrom.get(m.by) || 0) + (m.dmg | 0));
+      me.hp = m.hp; me.armor = m.armor; audio.play('hurt'); if (mob) mob.buzz(Math.min(60, 12 + (m.dmg | 0))); if (m.by) dmgFrom.set(m.by, (dmgFrom.get(m.by) || 0) + (m.dmg | 0));
       const ang = m.from ? angDiff(me.yaw, Math.atan2(-(m.from[0] - me.x), -(m.from[1] - me.z))) : null;
       hud.hurt(ang != null ? -ang : null); me.punch += 0.03;
       if (m.hp <= 0) me.alive = false;
@@ -1289,7 +1302,7 @@ export default function start({ cfg, E, N, smoke }) {
           firstDone = st.round; if (ev) announceEv(ev); if (ev === 'ace' && MODES[mode].bomb !== undefined && !MODES[mode].kind) stats.ace = (stats.ace || 0) + 1;
           stats.roundK = (stats.roundK || 0) + 1;
         }
-        if (data.kid === myId && data.vteam !== me.team) { if (hud.hitmark) hud.hitmark('kill'); addXp(data.weapon, XP_RULES.kill + (data.head ? XP_RULES.head : 0)); stats.k++; if (data.head) stats.hs++; const w = W_BY_ID[data.weapon]; if (w && w.cat === 'pistol') stats.pistol++; if (w && w.cat === 'smg') stats.smg++; if (data.weapon === 'knife') stats.knife++; if (G_BY_ID[data.weapon]) stats.nade++; bumpStatTrak(data.weapon); }
+        if (data.kid === myId && data.vteam !== me.team) { if (hud.hitmark) hud.hitmark('kill'); if (mob) mob.buzz([18, 40, 18]); addXp(data.weapon, XP_RULES.kill + (data.head ? XP_RULES.head : 0)); stats.k++; if (data.head) stats.hs++; const w = W_BY_ID[data.weapon]; if (w && w.cat === 'pistol') stats.pistol++; if (w && w.cat === 'smg') stats.smg++; if (data.weapon === 'knife') stats.knife++; if (G_BY_ID[data.weapon]) stats.nade++; bumpStatTrak(data.weapon); }
         if (data.vid === myId) {
           stats.d++; me.alive = false; firstDone = st.round; setTimeout(() => announceEv('died'), 300);
           if (S.killcam && data.kid && data.kid !== myId && mode !== 'story') kcStart(data.kid, data.killer);
@@ -2071,7 +2084,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (session) session.leave(); if (lobby) lobby.close();
       if (lobbyPanel) { clearInterval(lobbyPanel.iv); lobbyPanel.remove(); }
       if (SC) { SC.dispose(); SC = null; }
-      replayOn(false); hud.replayBar(false); hud.destroy(); renderer.dispose(); renderer.domElement.remove();
+      replayOn(false); hud.replayBar(false); removeEventListener('devicemotion', onMotion); hud.destroy(); renderer.dispose(); renderer.domElement.remove();
       document.querySelectorAll('.bd-stick,.bd-btns,.bd-look').forEach((e) => e.remove());
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();

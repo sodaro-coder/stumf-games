@@ -9,11 +9,18 @@
 const B = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, L3: 10, R3: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 const HOLD = { [B.RT]: 'fire', [B.A]: 'jump', [B.B]: 'crouch', [B.RB]: 'use', [B.L3]: 'sprint', [B.BACK]: 'score' };
 const TAP = { [B.X]: 'reload', [B.Y]: 'swap', [B.LB]: 'nade', [B.R3]: 'inspect', [B.UP]: 'buy', [B.DOWN]: 'prone', [B.LEFT]: 'leanL', [B.RIGHT]: 'leanR', [B.START]: 'menu' };
-const DEAD = 0.16;
+// button layouts (Settings → Controller): each one moves a few actions; 'southpaw' also swaps the sticks
+const swapIn = (m, a, b) => { const o = { ...m }; const va = o[a], vb = o[b]; delete o[a]; delete o[b]; if (vb) o[a] = vb; if (va) o[b] = va; return o; };
+export const PAD_LAYOUTS = {
+  default: { name: 'Default', hold: HOLD, tap: TAP, help: 'A jump · B crouch · X reload · Y swap · LB grenade · RB use · L3 sprint · R3 inspect' },
+  bumper: { name: 'Bumper jumper', hold: { ...swapIn(HOLD, B.A, B.LB), [B.LB]: 'jump' }, tap: { ...swapIn(TAP, B.LB, B.A), [B.A]: 'nade' }, help: 'LB jump (thumbs stay on the sticks) · A grenade' },
+  tactical: { name: 'Tactical', hold: { ...swapIn(HOLD, B.B, B.R3), [B.R3]: 'crouch' }, tap: { ...swapIn(TAP, B.R3, B.B), [B.B]: 'inspect' }, help: 'R3 crouch (crouch-shoot without letting go of the right stick) · B inspect' },
+  southpaw: { name: 'Southpaw', hold: HOLD, tap: TAP, swap: true, help: 'Left stick looks, right stick moves' },
+};
 // radial deadzone, rescaled so the stick still reaches 1 at the edge
-function stick(x, y) {
-  const m = Math.hypot(x, y); if (m < DEAD) return [0, 0];
-  const k = Math.min(1, (m - DEAD) / (1 - DEAD)) / m; return [x * k, y * k];
+function stick(x, y, dead = 0.16) {
+  const m = Math.hypot(x, y); if (m < dead) return [0, 0];
+  const k = Math.min(1, (m - dead) / (1 - dead)) / m; return [x * k, y * k];
 }
 export const isConsole = () => /Xbox|PlayStation|Nintendo|SMART-TV|SmartTV|Tizen|Web0S|webOS|CrKey|AFT[A-Z]|Valve Steam/i.test(navigator.userAgent || '');
 
@@ -65,13 +72,15 @@ export function gamepadControls(input, opt = {}) {
     if (inGame) {
       if (focusEl) setFocus(null);
       t.active = true;
-      const [mx, my] = stick(p.axes[0] || 0, p.axes[1] || 0); t.move.x = mx; t.move.y = -my;
+      const L = PAD_LAYOUTS[opt.layout ? opt.layout() : 'default'] || PAD_LAYOUTS.default, dz = opt.dead ? opt.dead() : 0.16;
+      const ax = L.swap ? [2, 3, 0, 1] : [0, 1, 2, 3];
+      const [mx, my] = stick(p.axes[ax[0]] || 0, p.axes[ax[1]] || 0, dz); t.move.x = mx; t.move.y = -my;
       // look: a response curve (fine aim near the centre, fast turns at the edge), scaled by the touch sensitivity
-      const [lx, ly] = stick(p.axes[2] || 0, p.axes[3] || 0), sens = (opt.sens ? opt.sens() : 1) * 1050 * dt;
+      const [lx, ly] = stick(p.axes[ax[2]] || 0, p.axes[ax[3]] || 0, dz), sens = (opt.sens ? opt.sens() : 1) * 1050 * dt;
       const curve = (v) => Math.sign(v) * Math.pow(Math.abs(v), 1.7);
-      t.look.dx += curve(lx) * sens; t.look.dy += curve(ly) * sens * 0.8;
-      for (const [i, n] of Object.entries(HOLD)) { if (b[i]) t.buttons.add(n); else if (prev[i]) t.buttons.delete(n); }
-      for (const [i, n] of Object.entries(TAP)) if (edge(+i)) t.tapped.add(n);
+      t.look.dx += curve(lx) * sens; t.look.dy += curve(ly) * sens * 0.8 * (opt.invert && opt.invert() ? -1 : 1);
+      for (const [i, n] of Object.entries(L.hold)) { if (b[i]) t.buttons.add(n); else if (prev[i]) t.buttons.delete(n); }
+      for (const [i, n] of Object.entries(L.tap)) if (edge(+i)) t.tapped.add(n);
       // aim down sights while LT is held (the game's aim is a toggle: tap on press and on release)
       const lt = b[B.LT] || (p.buttons[B.LT] && p.buttons[B.LT].value > 0.35);
       if (lt !== aimHeld) { aimHeld = lt; t.tapped.add('alt'); }

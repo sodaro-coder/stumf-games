@@ -3,8 +3,9 @@
 // on the left, and every action a PC player has a key for (aim, lean, crouch, jump, reload, grenade, swap, use, buy,
 // scoreboard, menu). Writes into the engine's touch input, so the game reads phones and PCs the same way.
 // Buttons: held ones go in touch.buttons while pressed; taps go in touch.tapped for one frame.
-export function mobileControls(input) {
+export function mobileControls(input, o = {}) {
   const t = input.touch; t.active = true;
+  const lefty = () => !!(o.lefty && o.lefty()), buzz = (ms) => { if ((!o.haptics || o.haptics()) && navigator.vibrate) try { navigator.vibrate(ms); } catch (x) { /* fine */ } };
   const css = document.createElement('style');
   css.textContent = `.kc-t{position:fixed;inset:0;z-index:45;pointer-events:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   .kc-t .zone{position:absolute;top:0;bottom:0;pointer-events:auto;touch-action:none}
@@ -32,6 +33,7 @@ export function mobileControls(input) {
   .kc-rot{position:fixed;inset:0;z-index:200;background:#101317;color:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;font:600 15px system-ui;text-align:center}
   .kc-rot div{font-size:56px}.kc-rot span{color:#8d97a5;font-size:13px}
   @media (orientation:portrait){.kc-rot{display:flex}}
+  .kc-t b{transform:scale(var(--ks,1))}.kc-t.lefty{transform:scaleX(-1)}.kc-t.lefty .row{right:auto;left:calc(env(safe-area-inset-right,0px) + 8px);flex-direction:row-reverse}.kc-t.lefty b{transform:scaleX(-1) scale(var(--ks,1))}
   @media (max-height:340px){.kc-t b.fire{width:76px;height:76px;bottom:44px}.kc-t b.jump{bottom:130px}.kc-t b.reload{bottom:142px}.kc-t b.aim{bottom:80px}.kc-t b.leanL,.kc-t b.leanR{bottom:148px}}`;
   document.head.appendChild(css);
   const root = document.createElement('div'); root.className = 'kc-t'; document.body.appendChild(root);
@@ -48,13 +50,13 @@ export function mobileControls(input) {
   const knob = stick.firstChild;
   // left thumb: the stick appears where you touch; push past the rim and it follows your thumb
   let sid = null, cx = 0, cy = 0;
-  zl.addEventListener('pointerdown', (e) => { if (sid != null) return; sid = e.pointerId; cx = e.clientX; cy = e.clientY; stick.className = 'stick on'; stick.style.left = cx + 'px'; stick.style.top = cy + 'px'; try { zl.setPointerCapture(sid); } catch (x) { /* fine */ } e.preventDefault(); });
+  zl.addEventListener('pointerdown', (e) => { if (sid != null) return; sid = e.pointerId; cx = e.clientX; cy = e.clientY; stick.className = 'stick on'; stick.style.left = (lefty() ? innerWidth - cx : cx) + 'px'; stick.style.top = cy + 'px'; try { zl.setPointerCapture(sid); } catch (x) { /* fine */ } e.preventDefault(); });
   zl.addEventListener('pointermove', (e) => {
     if (e.pointerId !== sid) return;
     let x = (e.clientX - cx) / 46, y = (e.clientY - cy) / 46; const l = Math.hypot(x, y);
-    if (l > 1.25) { cx += (x / l) * (l - 1.25) * 46; cy += (y / l) * (l - 1.25) * 46; stick.style.left = cx + 'px'; stick.style.top = cy + 'px'; }
+    if (l > 1.25) { cx += (x / l) * (l - 1.25) * 46; cy += (y / l) * (l - 1.25) * 46; stick.style.left = (lefty() ? innerWidth - cx : cx) + 'px'; stick.style.top = cy + 'px'; }
     if (l > 1) { x /= l; y /= l; }
-    t.move.x = Math.abs(x) < 0.12 ? 0 : x; t.move.y = Math.abs(y) < 0.12 ? 0 : -y; knob.style.transform = `translate(${x * 36}px,${y * 36}px)`;
+    t.move.x = Math.abs(x) < 0.12 ? 0 : x; t.move.y = Math.abs(y) < 0.12 ? 0 : -y; knob.style.transform = `translate(${(lefty() ? -x : x) * 36}px,${y * 36}px)`;   // the mirrored layout draws the knob mirrored back
   });
   const endStick = (e) => { if (e.pointerId !== sid) return; sid = null; t.move.x = t.move.y = 0; knob.style.transform = ''; stick.className = 'stick ghost'; stick.style.left = stick.style.top = ''; };
   zl.addEventListener('pointerup', endStick); zl.addEventListener('pointercancel', endStick); zl.addEventListener('lostpointercapture', endStick);
@@ -83,7 +85,7 @@ export function mobileControls(input) {
       if (kind === 'toggle') { const on = !t.buttons.has(name); if (on) t.buttons.add(name); else t.buttons.delete(name); el.classList.toggle('tog', on); }
       else { el.classList.add('dn'); t.tapped.add(name); if (kind === 'hold') t.buttons.add(name); }
       if (drag) lookStart(e);
-      if (navigator.vibrate) try { navigator.vibrate(8); } catch (x) { /* fine */ }
+      buzz(8);
     });
     if (drag) el.addEventListener('pointermove', lookMove);
     const up = (e) => { el.classList.remove('dn'); if (kind === 'hold') t.buttons.delete(name); if (drag) lookEnd(e); };
@@ -107,6 +109,8 @@ export function mobileControls(input) {
     setAiming(on) { if (on !== aiming) { aiming = on; root.classList.toggle('aiming', on); } },
     setCrouch(on) { if (!on && t.buttons.has('crouch')) { t.buttons.delete('crouch'); crouchB.classList.remove('tog'); } },
     setSens(k) { sens.k = k; },
+    style(size, alpha, left) { root.style.setProperty('--ks', String(size || 1)); root.style.opacity = String(alpha || 1); root.classList.toggle('lefty', !!left); },
+    buzz,
     show(on) { root.style.display = on ? '' : 'none'; resetTouches(); if (!on) { t.buttons.clear(); crouchB.classList.remove('tog'); } },
     destroy() { root.remove(); rot.remove(); css.remove(); t.buttons.clear(); t.active = false; document.removeEventListener('visibilitychange', onHide); removeEventListener('blur', resetTouches); removeEventListener('orientationchange', resetTouches); },
   };
