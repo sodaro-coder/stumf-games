@@ -312,7 +312,8 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   // --- meshes: greedy-merged tops + side faces, one mesh per material; ramps as slopes; stone coping along wall tops ---
   // geometry is bucketed per material AND per 16 m tile (the PVS tile, pvs.js): tiles off screen or behind walls are
   // skipped, and near chunks draw first so hidden surfaces behind them are rejected cheaply
-  const T = PVS_TILE, tileOf = (x, z) => Math.max(0, Math.floor(x / T)) + Math.max(0, Math.floor(z / T)) * 64;
+  // (merged in 2×2 PVS tiles: a quarter of the draw calls; a chunk shows when any of its tiles is visible)
+  const T = PVS_TILE * (opt.chunkTiles || 2), tileOf = (x, z) => Math.max(0, Math.floor(x / T)) + Math.max(0, Math.floor(z / T)) * 64;
   const geo = new Map();
   const quad = (m, a, b, c, dd, uvs) => {
     const key = m * 10000 + tileOf((a[0] + c[0]) / 2, (a[2] + c[2]) / 2);
