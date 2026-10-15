@@ -788,13 +788,60 @@ R('nova', (G) => shotgun(G, { recv: [-0.06, 0.19, -0.034, 0.03], w: 0.046, blen:
 R('xm1014', (G) => shotgun(G, { recv: [-0.09, 0.19, -0.034, 0.03], w: 0.046, blen: 0.4, mlen: 0.3, fore: [0.19, 0.4], foreType: 'm4', stock: 'm4', rail: true }));   // Benelli M4 Super 90
 R('sawedoff', (G) => shotgun(G, { recv: [-0.06, 0.16, -0.032, 0.03], w: 0.046, furn: 'wood', blen: 0.17, mlen: 0.15, br: 0.0125, fore: [0.18, 0.31], foreType: 'wood', pump: true, stock: 'birdshead', clamp: false }));   // sawn-off pump
 R('mag7', (G) => shotgun(G, { recv: [-0.1, 0.16, -0.04, 0.032], w: 0.056, blen: 0.2, br: 0.013, boxMag: true, fore: [0.17, 0.33], foreType: 'slab', pump: true, stock: 'mag7' }));   // Techno Arms MAG-7
-R('mac10', (G) => { pistol(G, { slide: [-0.1, 0.1], sh: 0.06, w: 0.045, bl: 0.03, mag: 0.14 }); return { grip: [-0.06, -0.06], fore: null, mount: [-0.03, 0.06] }; });
-R('mp9', (G) => { const r = rifle(G, { recv: [-0.06, 0.16, -0.025, 0.03], w: 0.042, rail: true, hgType: 'none', hg: [0.16, 0.16], blen: 0.04, muzzle: 'none', mag: 'straight', mag0: -0.045, stock: 'fold' }); r.fore = [0.13, -0.03]; return r; });
-R('mp7', (G) => { const r = rifle(G, { recv: [-0.08, 0.18, -0.028, 0.03], w: 0.045, rail: true, hgType: 'slab', hg: [0.18, 0.24], blen: 0.05, muzzle: 'none', mag: 'straight', mag0: -0.045, stock: 'fold' }); r.fore = [0.2, -0.03]; return r; });
+// MAC-10: a stamped steel box with the magazine in the grip, a stubby threaded barrel, the cocking knob on top and a
+// wire stock collapsed along its sides
+R('mac10', (G) => {
+  const w = 0.046;
+  G('body', ext([[-0.085, -0.03], [0.115, -0.03], [0.115, 0.044], [0.105, 0.052], [-0.075, 0.052], [-0.085, 0.042]], w, 0.003));
+  G('dark', blk(-0.075, 0.1, 0.047, 0.054, w * 0.5));                                                         // top channel the cocking knob runs in
+  G('metal', place(CYL(0.009, 0.009, 0.012, 14), [0, 0.06, -0.07])); G('dark', blk(0.065, 0.075, 0.064, 0.067, 0.003));   // cocking knob (slotted)
+  G('f~dark', soft([[-0.022, -0.028], [0.03, -0.028], [0.028, -0.16], [-0.024, -0.16]], w * 0.86, 0.22));     // grip = magazine well
+  G('mag|dark', blk(-0.02, 0.026, -0.19, -0.155, w * 0.7)); G('mag|metal', blk(-0.024, 0.03, -0.198, -0.188, w * 0.78));   // magazine base sticking out
+  for (let k = 0; k < 5; k++) G('dark', blk(-0.024, 0.032, -0.05 - k * 0.022, -0.044 - k * 0.022, w * 0.88));  // grip ribs
+  G('metal', guard(0.032, 0.095, -0.075, -0.026, 0.012)); G('metal', blk(0.05, 0.057, -0.058, -0.028, 0.006));  // guard + trigger
+  G('metal', tube(0.0085, 0.115, 0.17, 0.012, 0, 12)); for (let u = 0.125; u < 0.165; u += 0.008) G('dark', tube(0.0092, u, u + 0.003, 0.012, 0, 12));   // threaded barrel
+  G('dark', blk(0.095, 0.108, 0.052, 0.07, 0.006)); for (const x of [-0.008, 0.008]) G('dark', blk(0.094, 0.11, 0.052, 0.066, 0.003, x));   // front post + ears
+  G('dark', blk(-0.078, -0.066, 0.052, 0.068, 0.016)); G('metal', place(new THREE.TorusGeometry(0.004, 0.0015, 6, 10), [0, 0.063, 0.072], [0, Math.PI / 2, 0]));   // rear aperture
+  for (const x of [-(w / 2 + 0.004), w / 2 + 0.004]) G('metal', tube(0.0035, -0.13, 0.08, -0.004, x, 8));    // collapsed wire stock rods
+  G('metal', blk(-0.138, -0.128, -0.04, 0.03, w + 0.016));                                                      // its butt plate
+  G('metal', place(new THREE.TorusGeometry(0.007, 0.0018, 6, 10), [0, 0.0, -0.118], [0, Math.PI / 2, 0]));     // sling loop
+  for (const u of [-0.05, 0.06]) G('dark', xpin(u, 0.0, w + 0.004, 0.003));
+  return { iron: [0.101, 0.07], grip: [0.004, -0.085], fore: null, mount: [-0.01, 0.054], charge: [-0.07, 0.06, 0] };
+});
+// MP9 / MP7: compact polymer guns with the magazine in the pistol grip and a vertical foregrip that folds down
+const pdwGrip = (G, u, v0, len) => { G('f~dark', soft([[u - 0.016, v0], [u + 0.016, v0], [u + 0.012, v0 - len], [u - 0.014, v0 - len]], 0.03, 0.4)); G('dark', xpin(u, v0 - 0.006, 0.034, 0.003)); };
+R('mp9', (G) => { const r = rifle(G, { recv: [-0.06, 0.16, -0.025, 0.03], w: 0.042, rail: true, hgType: 'none', hg: [0.16, 0.16], blen: 0.04, muzzle: 'none', mag: 'straight', mag0: -0.045, stock: 'fold', fsight: false, rear: false });
+  pdwGrip(G, 0.125, -0.025, 0.075); G('dark', blk(0.1, 0.16, -0.03, -0.02, 0.036));   // folding foregrip on its mount
+  G('dark', blk(0.13, 0.14, 0.04, 0.054, 0.012)); G('dark', blk(-0.05, -0.04, 0.04, 0.054, 0.016));   // flip-up sights on the rail
+  r.fore = [0.125, -0.07]; r.iron = [0.135, 0.054]; return r; });
+R('mp7', (G) => { const r = rifle(G, { recv: [-0.08, 0.18, -0.028, 0.03], w: 0.045, rail: true, hgType: 'slab', hg: [0.18, 0.24], blen: 0.05, muzzle: 'none', mag: 'straight', mag0: -0.045, stock: 'fold', fsight: false, rear: false });
+  pdwGrip(G, 0.2, -0.032, 0.07);
+  G('dark', blk(0.2, 0.212, 0.042, 0.058, 0.012)); G('dark', blk(-0.07, -0.058, 0.042, 0.058, 0.016));
+  for (const x of [-0.026, 0.026]) G('dark', tube(0.004, -0.2, -0.08, 0.0, x, 6)); G('dark', blk(-0.21, -0.195, -0.04, 0.03, 0.06));   // retracted stock rods + butt
+  r.fore = [0.2, -0.065]; r.iron = [0.206, 0.058]; return r; });
 R('mp5', (G) => rifle(G, { recv: [-0.1, 0.2, -0.028, 0.03], w: 0.045, hgType: 'round', hgR: 0.025, hg: [0.2, 0.32], blen: 0.02, muzzle: 'sil', mag: 'curve', mag0: 0.08, stock: 'm4' }));
-R('ump', (G) => rifle(G, { recv: [-0.1, 0.22, -0.035, 0.035], w: 0.05, rail: true, hgType: 'slab', hg: [0.22, 0.32], blen: 0.05, muzzle: 'none', mag: 'straight', mag0: 0.08, stock: 'skel' }));
+R('ump', (G) => { const r = rifle(G, { recv: [-0.1, 0.22, -0.035, 0.035], w: 0.05, rail: true, hgType: 'slab', hg: [0.22, 0.32], blen: 0.05, muzzle: 'none', mag: 'straight', mag0: 0.08, stock: 'skel', fsight: false });
+  G('dark', ext([[0.29, 0.035], [0.315, 0.035], [0.31, 0.07], [0.296, 0.07]], 0.02, 0.002)); G('dark', blk(0.3, 0.306, 0.07, 0.082, 0.003));   // hooded front post on the rail
+  r.iron = [0.303, 0.08]; return r; });
 R('bizon', (G) => { const r = rifle(G, { recv: [-0.1, 0.2, -0.028, 0.03], w: 0.045, top: 'ak', hgType: 'none', hg: [0.2, 0.2], blen: 0.12, muzzle: 'bird', mag: 'none', stock: 'skel' }); G('dark', tube(0.034, 0.05, 0.36, -0.06, 0, 12)); r.fore = [0.28, -0.1]; return r; });
-R('p90', (G) => { G('body', ext([[-0.2, -0.06], [0.18, -0.03], [0.2, 0.02], [0.12, 0.05], [-0.18, 0.05], [-0.22, 0.0]], 0.06, 0.008, [[[-0.08, -0.04], [0.0, -0.035], [0.0, -0.01], [-0.08, -0.01]]])); G('mag|dark', blk(-0.16, 0.12, 0.05, 0.065, 0.04)); G('dark', tube(0.009, 0.18, 0.24, 0.0)); if (G.att && G.att.muzzle && G.att.muzzle !== 'standard') muzzle(G, G.att.muzzle, 0.24, 0.0); return { grip: [-0.05, -0.04], fore: [0.1, -0.03], mount: [-0.02, 0.065] }; });
+// P90: a bullpup whose rounded body is the stock, with a thumbhole grip, a hand stop below the muzzle, the
+// translucent 50-round magazine lying flat along the top and a ring sight over it
+R('p90', (G) => {
+  const w = 0.058;
+  G('body', soft([[-0.25, -0.02], ['q', -0.255, -0.1, -0.2, -0.105], [-0.09, -0.1], ['q', -0.06, -0.1, -0.05, -0.13], [0.04, -0.13], ['q', 0.07, -0.12, 0.08, -0.07],
+    [0.13, -0.065], [0.15, -0.115], [0.172, -0.112], [0.165, -0.04], [0.215, -0.02], [0.225, 0.02], [0.16, 0.04], [-0.22, 0.04], ['q', -0.25, 0.035, -0.25, -0.02]], w, 0.38,
+    [[[-0.03, -0.1], [0.045, -0.1], [0.06, -0.065], [-0.02, -0.06]]]));                                   // thumbhole
+  G('mag|glass', blk(-0.2, 0.13, 0.04, 0.066, w * 0.86)); G('mag|dark', blk(-0.2, 0.13, 0.04, 0.046, w * 0.88));   // magazine: clear polymer over a dark follower
+  G('mag|dark', blk(0.1, 0.135, 0.04, 0.07, w * 0.9));                                                    // its catch at the front
+  G('dark', blk(-0.06, 0.06, 0.066, 0.078, 0.03)); G('dark', place(new THREE.TorusGeometry(0.018, 0.004, 8, 20), [0, 0.098, -0.02]));   // ring sight
+  G('glass', place(CYL(0.016, 0.016, 0.003, 16), [0, 0.098, -0.02], [Math.PI / 2, 0, 0]));
+  G('metal', tube(0.0085, 0.215, 0.255, 0.0, 0, 12));
+  G('metal', blk(0.025, 0.033, -0.095, -0.07, 0.006));                                                   // trigger in the thumbhole
+  G('dark', blk(-0.245, -0.225, -0.1, 0.035, w * 1.02));                                                  // butt pad
+  for (const x of [-(w / 2 + 0.002), w / 2 + 0.002]) G('dark', blk(-0.02, 0.0, -0.03, -0.02, 0.004, x));   // ambidextrous charging handles
+  if (G.att && G.att.muzzle && G.att.muzzle !== 'standard') muzzle(G, G.att.muzzle, 0.255, 0.0);
+  return { iron: [-0.02, 0.098], grip: [-0.04, -0.08], fore: [0.12, -0.075], mount: [0.0, 0.078] };
+});
 R('glock', (G) => pistol(G, { slide: [-0.08, 0.1] }));
 R('usp', (G) => pistol(G, { slide: [-0.08, 0.1], sil: true }));
 R('p2000', (G) => pistol(G, { slide: [-0.08, 0.1] }));
@@ -802,9 +849,36 @@ R('p250', (G) => pistol(G, { slide: [-0.08, 0.095] }));
 R('fiveseven', (G) => pistol(G, { slide: [-0.08, 0.11], sh: 0.036 }));
 R('cz75', (G) => pistol(G, { slide: [-0.08, 0.1], mag: 0.03 }));
 R('dualies', (G) => pistol(G, { slide: [-0.085, 0.1], frame: 'steel' }));
-R('tec9', (G) => { pistol(G, { slide: [-0.09, 0.14], sh: 0.04, w: 0.035, bl: 0.05 }); G('mag|dark', ext([[0.07, -0.01], [0.1, -0.01], [0.105, -0.18], [0.075, -0.18]], 0.03)); return { grip: [-0.06, -0.06], fore: null, mount: [-0.04, 0.04] }; });
-R('deagle', (G) => pistol(G, { slide: [-0.1, 0.13], sh: 0.045, w: 0.036, frame: 'steel' }));
-R('r8', (G) => { pistol(G, { slide: [-0.08, -0.01], sh: 0.04 }); G('steel', tube(0.024, -0.01, 0.04, 0.02, 0, 10)); G('steel', tube(0.009, 0.04, 0.2, 0.03)); G('steel', blk(0.04, 0.2, 0.034, 0.046, 0.012)); return { grip: [-0.05, -0.06], fore: null, mount: [-0.05, 0.04] }; });
+R('tec9', (G) => { pistol(G, { slide: [-0.09, 0.14], sh: 0.04, w: 0.035, bl: 0.02 }); G('mag|dark', ext([[0.07, -0.01], [0.1, -0.01], [0.105, -0.18], [0.075, -0.18]], 0.03));
+  G('dark', tube(0.015, 0.13, 0.215, 0.018, 0, 12)); for (let u = 0.142; u < 0.205; u += 0.013) for (const a of [0, 1.2, -1.2, 2.4, -2.4]) G('metal', place(CYL(0.0034, 0.0034, 0.004, 8), [Math.sin(a) * 0.0145, 0.018 + Math.cos(a) * 0.0145, -u], [Math.cos(a) * 0 + Math.PI / 2 - Math.PI / 2, 0, -a]));   // perforated barrel shroud
+  G('metal', tube(0.007, 0.21, 0.225, 0.018, 0, 10));
+  return { grip: [-0.06, -0.06], fore: null, mount: [-0.04, 0.04], iron: [0.13, 0.048] }; });
+// Desert Eagle: the fixed barrel runs the full length on top of the slide, with its own rail and a big square muzzle
+R('deagle', (G) => { const r = pistol(G, { slide: [-0.1, 0.13], sh: 0.045, w: 0.036, frame: 'steel' });
+  G('body', ext([[-0.02, 0.04], [0.135, 0.04], [0.135, 0.06], [0.125, 0.066], [-0.005, 0.066], [-0.02, 0.058]], 0.03, 0.002));   // barrel block
+  for (let u = -0.01; u < 0.12; u += 0.012) G('dark', blk(u, u + 0.006, 0.066, 0.071, 0.02));             // its rail
+  G('dark', place(CYL(0.0065, 0.0065, 0.003, 12), [0, 0.052, -0.1365], [Math.PI / 2, 0, 0]));               // bore
+  G('dark', blk(0.135, 0.1365, 0.042, 0.064, 0.026));                                                      // flat muzzle face
+  G('dark', blk(0.115, 0.125, 0.071, 0.08, 0.004)); r.iron = [0.12, 0.08]; return r; });
+// R8 revolver: a solid frame round a fluted six-shot cylinder, a heavy barrel with a full underlug and top rib, a
+// hammer at the back and a round-butt grip raked behind the trigger
+R('r8', (G) => {
+  const w = 0.034;
+  G('body', ext([[-0.06, -0.012], [0.062, -0.012], [0.062, 0.05], [-0.04, 0.05], ['q', -0.06, 0.05, -0.062, 0.03]], w, 0.003, [[[-0.032, -0.006], [0.04, -0.006], [0.04, 0.044], [-0.032, 0.044]]]));   // frame with the cylinder window
+  G('steel', tube(0.024, -0.03, 0.038, 0.019, 0, 18));                                                   // cylinder
+  for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; G('dark', blk(-0.024, 0.032, -0.003, 0.003, 0.006).applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0.019, 0).multiply(new THREE.Matrix4().makeRotationZ(a)).multiply(new THREE.Matrix4().makeTranslation(0, 0.023, 0)))); }   // flutes
+  G('dark', tube(0.006, 0.038, 0.06, 0.019, 0, 10));                                                     // crane / ejector rod housing
+  G('steel', tube(0.0105, 0.06, 0.2, 0.032, 0, 14)); G('steel', blk(0.062, 0.2, 0.008, 0.032, 0.02));      // barrel + full underlug
+  G('steel', blk(0.062, 0.2, 0.04, 0.047, 0.012)); for (let u = 0.07; u < 0.19; u += 0.012) G('dark', blk(u, u + 0.004, 0.044, 0.048, 0.013));   // vent rib
+  G('dark', place(CYL(0.0045, 0.0045, 0.002, 10), [0, 0.032, -0.2005], [Math.PI / 2, 0, 0]));               // bore
+  G('dark', ext([[0.18, 0.046], [0.196, 0.046], [0.196, 0.058], [0.186, 0.058]], 0.004, 0));               // front ramp
+  G('dark', blk(-0.05, -0.04, 0.05, 0.058, 0.012));                                                       // rear sight notch
+  G('metal', ext([[-0.068, 0.042], [-0.05, 0.036], [-0.046, 0.05], [-0.078, 0.062], [-0.082, 0.056]], 0.01, 0.0015));   // hammer spur
+  G('f~wood', soft([[-0.062, -0.006], [-0.02, -0.012], ['q', -0.03, -0.06, -0.05, -0.11], ['q', -0.08, -0.125, -0.1, -0.108], ['q', -0.09, -0.05, -0.072, 0.012]], w * 1.05, 0.42));   // round-butt grip
+  G('metal', guard(-0.012, 0.045, -0.055, -0.01, 0.01)); G('metal', blk(0.0, 0.008, -0.04, -0.012, 0.006));
+  G('metal', place(CYL(0.0045, 0.0045, w + 0.004, 10), [0, 0.035, 0.04], [0, 0, Math.PI / 2]));          // cylinder release
+  return { iron: [0.19, 0.058], grip: [-0.065, -0.06], fore: null, mount: [-0.045, 0.05], charge: [-0.06, 0.05, 0] };
+});
 R('zeus', (G) => { G('body', ext([[-0.06, -0.02], [0.1, -0.02], [0.12, 0.02], [-0.05, 0.03]], 0.035, 0.006)); G('dark', ext([[-0.05, -0.02], [-0.02, -0.02], [-0.03, -0.1], [-0.07, -0.1]], 0.03)); G('metal', blk(0.1, 0.13, -0.01, 0.015, 0.025)); return { grip: [-0.045, -0.06], fore: null }; });
 const DEFAULT_BODY = { ak47: 'metal', galil: 'dark', awp: 'green', aug: 'olive', famas: 'dark', deagle: 'steel', dualies: 'steel', fiveseven: 'dark', zeus: 'yellow', sawedoff: 'metal', p90: 'dark', r8: 'steel', ssg08: 'dark', mag7: 'dark' };
 
