@@ -246,7 +246,7 @@ export class StoryMatch extends Match {
     p.guard = opts.guard || null; this.enemies.add(id);
     return p;
   }
-  wave(n, at) { const k = Math.max(1, Math.round(n * this.diff.enemyCount)); for (let i = 0; i < k; i++) { const pt = at || this.farFrom(null); this.enemy(this.reach(this.W.randomIn([pt[0] - 2.5, pt[1] - 2.5, pt[0] + 2.5, pt[1] + 2.5]))); } }
+  spawnWave(n, at) { const k = Math.max(1, Math.round(n * this.diff.enemyCount)); for (let i = 0; i < k; i++) { const pt = at || this.farFrom(null); this.enemy(this.reach(this.W.randomIn([pt[0] - 2.5, pt[1] - 2.5, pt[0] + 2.5, pt[1] + 2.5]))); } }
   // bots: enemies with a guard post hold it until they spot someone; squad AI stays with the humans or the NPC goal
   botGoal(p) {
     if (p === this.npc) { const lead = this.nearestHuman(p); return lead ? [lead.x, lead.z] : null; }
@@ -293,19 +293,19 @@ export class StoryMatch extends Match {
       case 'collect': {
         st.need = o.count || 3;
         for (let k = 0; k < st.need; k++) { const z = this.W.B.zones[(hash(o.item + k + this.mi) % Math.max(1, this.W.B.zones.length))]; const q = z ? this.reach(this.W.randomIn([z[1], z[2], z[3], z[4]])) : this.zonePt(o.item, k); this.markers.push({ id: 'c' + k, x: q[0], z: q[1], kind: 'item', label: o.item }); }
-        this.wave(3); break;
+        this.spawnWave(3); break;
       }
       case 'interact': {
         st.need = o.targets || 1; st.prog = 0;
         // the puzzle: the terminals carry shuffled numbers and must be worked in order; a wrong one sets off an alarm
         const order = Array.from({ length: st.need }, (_, k) => k + 1).sort(() => this.rng() - 0.5);
         for (let k = 0; k < st.need; k++) { const q = this.zonePt(place, i * 10 + k); this.markers.push({ id: 't' + k, x: q[0], z: q[1], kind: 'terminal', label: o.puzzle ? String(order[k]) : 'USE', n: o.puzzle ? order[k] : 0, prog: 0 }); }
-        st.next = 1; st.puzzle = !!o.puzzle; this.wave(2); break;
+        st.next = 1; st.puzzle = !!o.puzzle; this.spawnWave(2); break;
       }
       case 'defuse': { const q = this.zonePt('bomb' + this.mi, i); this.markers.push({ id: 'bomb', x: q[0], z: q[1], kind: 'bomb', label: 'Defuse', prog: 0 }); st.need = 7; this.waveT = 6; break; }
       case 'escort': {
         const s = this.humans()[0] || [...this.players.values()].find((p) => p.squad);
-        this.npc = this.add('npc', { name: o.npc === 'chef' ? 'The Chili Chef' : 'The Captain', bot: true, team: 'CT' });
+        this.npc = this.add('npc', { name: o.npcName || (o.npc === 'chef' ? 'The Chili Chef' : 'The Captain'), bot: true, team: 'CT' });
         this.npc.squad = false; this.npc.passive = true; this.npc.maxHp = 200; this.npc.spawnAt = null; this.npc.x = s.x + 1; this.npc.z = s.z + 1; this.npc.y = s.y; this.npc.alive = true; this.npc.hp = 200; this.npc.inv = { 3: { wid: 'knife' } }; this.npc.cur = 3;
         const pt = this.zonePt(place, i); this.markers.push({ id: 'goal', x: pt[0], z: pt[1], kind: 'goal', label: 'Extraction' }); this.waveT = 5; break;
       }
@@ -412,7 +412,7 @@ export class StoryMatch extends Match {
     this.push(true);
   }
   // stealth blown: every guard wakes up and a few more come running (the objective carries on)
-  alarm2() { const st = this.state; if (!st || st.spotted) return; st.spotted = true; this.event('banner', { text: 'SPOTTED', sub: 'they know you\'re here' }); for (const id of st.guards || []) { const e = this.players.get(id); if (e) { e.passive = false; e.guard = null; } } this.wave(2); this.push(true); }
+  alarm2() { const st = this.state; if (!st || st.spotted) return; st.spotted = true; this.event('banner', { text: 'SPOTTED', sub: 'they know you\'re here' }); for (const id of st.guards || []) { const e = this.players.get(id); if (e) { e.passive = false; e.guard = null; } } this.spawnWave(2); this.push(true); }
   bark(p, what) { const l = (BARKS[p.char] || {})[what]; if (l && l.length) this.event('bark', { who: p.char, name: CHARACTERS[p.char].short, text: l[Math.floor(this.rng() * l.length)] }); }
   detonate(n) {
     if (n.poison) {   // Captain Cancer's canister: a green cloud that hurts and slows the Brotherhood only
@@ -493,7 +493,7 @@ export class StoryMatch extends Match {
       b.yaw = Math.atan2(-(far.x - b.x), -(far.z - b.z));
       this.event('bark', { who: 'boss', name: 'Ballin', text: 'Feel the GOY-BEAM!' }); this.push(true); return;
     }
-    if (ph.attacks.includes('minions') && b.cd.minions <= 0) { b.cd.minions = A.minions.cd; this.wave(Math.round(A.minions.count * this.diff.minions)); this.event('bark', { who: 'boss', name: 'Ballin', text: 'Get off the bench, boys!' }); }
+    if (ph.attacks.includes('minions') && b.cd.minions <= 0) { b.cd.minions = A.minions.cd; this.spawnWave(Math.round(A.minions.count * this.diff.minions)); this.event('bark', { who: 'boss', name: 'Ballin', text: 'Get off the bench, boys!' }); }
     if (ph.attacks.includes('dunk') && b.cd.dunk <= 0) {   // leap at the furthest player: a shockwave ring (jump it)
       b.cd.dunk = A.dunk.cd; const tx = far.x, tz = far.z; b.x = tx + 1.5; b.z = tz + 1.5; b.y = this.W.groundAt(b.x, b.z, 20);
       for (const p of this.players.values()) if (p.alive && p.team !== 'T' && Math.hypot(p.x - b.x, p.z - b.z) < A.dunk.radius && p.onGround !== false && p.vy <= 0.5) this.damage(p, b, A.dunk.dmg, 'dunk', 'legs', false);
@@ -660,7 +660,7 @@ export class StoryMatch extends Match {
       case 'defend': case 'survive': {
         const holding = o.kind === 'survive' || !!near({ x: st.pt[0], z: st.pt[1] }, 7);
         if (holding) st.have = Math.min(st.need, st.have + dt);
-        this.waveT -= dt; if (this.waveT <= 0) { this.waveT = Math.max(9, 18 - this.mission.tier); if (this.enemies.size < 14) this.wave(3 + (this.mission.tier >> 1)); }
+        this.waveT -= dt; if (this.waveT <= 0) { this.waveT = Math.max(9, 18 - this.mission.tier); if (this.enemies.size < 14) this.spawnWave(3 + (this.mission.tier >> 1)); }
         done = st.have >= st.need; break;
       }
       case 'collect': for (const m of this.markers) if (!m.done && near(m, 1.6)) { m.done = true; st.have++; this.event('sound', { s: 'pickup', x: m.x, z: m.z }); this.push(true); } done = st.have >= st.need; break;
@@ -670,7 +670,7 @@ export class StoryMatch extends Match {
           const user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 1.8);
           if (!user) { if (m.prog) { m.prog = Math.max(0, m.prog - dt); } continue; }
           if (st.puzzle && m.n !== st.next) {   // wrong one: an alarm and a few guards come running
-            if (this.alarm <= 0) { this.alarm = 6; this.event('banner', { text: 'WRONG ORDER', sub: `start with ${st.next}` }); this.wave(2); for (const q of this.markers) q.prog = 0; this.push(true); }
+            if (this.alarm <= 0) { this.alarm = 6; this.event('banner', { text: 'WRONG ORDER', sub: `start with ${st.next}` }); this.spawnWave(2); for (const q of this.markers) q.prog = 0; this.push(true); }
             continue;
           }
           m.prog = Math.min(1, m.prog + dt / 1.6); if (m.prog >= 1) { m.done = true; st.have++; st.next++; this.event('sound', { s: 'pickup', x: m.x, z: m.z }); if (o.zone === 'Armory' && st.have >= st.need && !st.kit) { st.kit = true; for (const q of this.players.values()) if (q.squad && q.alive && !q.spectator) { this.give2(q, 'ak47'); this.give2(q, q.char === 'ricky' ? 'glock_sw' : 'p2000'); q.nades = ['he', 'flash']; q.armor = 100; q.helmet = true; this.sendInv(q); } this.event('banner', { text: 'ARMORY KIT ISSUED', sub: 'Rifle, sidearm, grenades and armor acquired' }); } }
@@ -681,10 +681,10 @@ export class StoryMatch extends Match {
       case 'defuse': {
         const m = this.markers[0], user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 1.8);
         if (user) m.prog = Math.min(1, m.prog + dt / st.need); else m.prog = Math.max(Math.floor(m.prog * 4) / 4, m.prog - dt * 0.05);   // progress sticks at each quarter
-        this.waveT -= dt; if (this.waveT <= 0) { this.waveT = 14; if (this.enemies.size < 10) this.wave(2 + (this.mission.tier >> 2)); }
+        this.waveT -= dt; if (this.waveT <= 0) { this.waveT = 14; if (this.enemies.size < 10) this.spawnWave(2 + (this.mission.tier >> 2)); }
         this.push(); done = m.prog >= 1; break;
       }
-      case 'escort': { this.waveT -= dt; if (this.waveT <= 0) { this.waveT = 16; if (this.enemies.size < 10) this.wave(2); } done = !!this.npc && this.npc.alive && Math.hypot(this.npc.x - this.markers[0].x, this.npc.z - this.markers[0].z) < 4.5; if (done) { this.players.delete(this.npc.id); this.npc = null; this.broadcastRoster(); } break; }
+      case 'escort': { this.waveT -= dt; if (this.waveT <= 0) { this.waveT = 16; if (this.enemies.size < 10) this.spawnWave(2); } done = !!this.npc && this.npc.alive && Math.hypot(this.npc.x - this.markers[0].x, this.npc.z - this.markers[0].z) < 4.5; if (done) { this.players.delete(this.npc.id); this.npc = null; this.broadcastRoster(); } break; }
       case 'boss': this.bossTick(dt); this.ballTick(dt); done = !this.boss && st.have > 0; break;
       case 'rescue': {
         const m = this.markers[0], user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 2);
@@ -739,7 +739,7 @@ export class StoryMatch extends Match {
         const user = H.find((h) => h !== v && h.defusing && Math.hypot(h.x - v.x, h.z - v.z) < 2), medic = [...this.players.values()].find((q) => q.squad && q.bot && q.alive && q !== v && Math.hypot(q.x - v.x, q.z - v.z) < 2);
         if (user || medic) st.have = Math.min(st.need, st.have + dt * (user ? 1 : 0.5)); else st.have = Math.max(0, st.have - dt * 0.3);
         m.prog = st.have / st.need;
-        this.waveT -= dt; if (this.waveT <= 0) { this.waveT = 10; if (this.enemies.size < 12) this.wave(3); }
+        this.waveT -= dt; if (this.waveT <= 0) { this.waveT = 10; if (this.enemies.size < 12) this.spawnWave(3); }
         this.push(); done = st.have >= st.need; if (done) { v.downed = false; v.passive = false; v.hp = Math.max(v.hp, 60); }
         break;
       }
@@ -747,7 +747,7 @@ export class StoryMatch extends Match {
         const c = this.players.get(st.who), m = this.markers[1];
         if (!c || !c.alive) break;   // kill() sends everyone back to the checkpoint
         m.x = c.x; m.z = c.z;
-        this.waveT -= dt; if (this.waveT <= 0) { this.waveT = Math.max(8, 14 - this.mission.tier); if (this.enemies.size < 14) this.wave(3); }
+        this.waveT -= dt; if (this.waveT <= 0) { this.waveT = Math.max(8, 14 - this.mission.tier); if (this.enemies.size < 14) this.spawnWave(3); }
         this.push(); done = Math.hypot(c.x - st.pt[0], c.z - st.pt[1]) < 4;
         if (done) { c.carrying = false; c.passive = false; }
         break;

@@ -505,6 +505,76 @@ export const CHAPTERS = [
       cut: { in: [['wiener', 'New recruit arrives today. Ricky, you\'re on welcome duty.'], ['ricky', 'Yes, Sergeant.']],
         out: [['credits', 'TAPES FROM MY POPS'], ['credits', 'for Dale']] } },
   ] },
+  // ---- SIDE B: after the tapes. Two months later Brisket walks out of a prison convoy, and the squad (Wiener, Igor,
+  // Corporal Ricky and the recruit who wanted an expresso: Private Pudding) goes to get him back. Whoever played
+  // Cancer plays Pudding (absent: ['cancer']).
+  { id: 'c10', map: 'spaghettown', name: 'Side B', tease: 'Two months later. Colonel Brisket never made it to his trial.', hub: 'Two months. One escaped colonel. One recruit who still can\'t say espresso.', missions: [
+    { id: 's1', name: 'Transfer', tier: 6, absent: ['cancer'], intro: 'Spaghettown. A prison convoy, a narrow street, and a colonel who planned this a long time ago.',
+      objectives: [
+        { kind: 'reach', zone: 'Mid', hint: 'Get to the convoy', say: [['ricky', 'Pudding. Rule one. Stay behind me.'], ['recruit', 'What\'s rule two?'], ['ricky', 'I\'m still working on rule two.'], ['wiener', 'He\'s been working on rule two for three weeks.']] },
+        { kind: 'clear', zone: 'Second Mid', count: 14, hint: 'Clear the ambush', say: [['igor', 'Brotherhood. Same jerseys. Worse shooting.'], ['recruit', 'Is it always like this?'], ['wiener', 'No. Usually it\'s worse.'], ['ricky', 'Pudding, aim small, miss small. Somebody told me that once. He also told me I was holding it upside down.']] },
+        { kind: 'collect', item: 'cuff key', count: 3, hint: 'Find the cuff keys Brisket dropped', say: [['recruit', 'He dropped his keys? Lucky.'], ['igor', 'Is not luck. Is message.'], ['wiener', 'He WANTS us following him. Good. I want that too.']] },
+        { kind: 'interact', targets: 1, zone: 'Church', hint: 'Answer the radio in the church',
+          scene: [['command', '(radio) Sergeant! So good to hear your voice. I\'d say I miss the squad, but I see you\'re one short.', { cam: 'wide', music: 'dread' }], ['ricky', 'You don\'t get to talk about him.'], ['command', 'Corporal Ricky! A promotion! He\'d be proud. Well. He\'d be gas, but proud gas.'], ['wiener', 'Brisket. Wherever you are, stay there. I want the walk to be long.']] },
+      ],
+      cut: { in: [['wiener', 'Convoy left at six. Colonel Brisket in the back, two guards, one route. What could go wrong.', { cam: 'wide' }], ['igor', 'Everything. Is Brisket.'], ['recruit', 'Sergeant, is there anywhere to get an expresso on the way?'], ['ricky', 'Espresso. There is no X. Get in the truck.']],
+        out: [['igor', 'Radio was routed through Bazaar. The market.'], ['ricky', 'What does a fake colonel want in a market?'], ['wiener', 'To sell something he stole from us.'], ['recruit', 'The gas recipe.'], ['wiener', '...the gas recipe.']] } },
+    { id: 's2', name: 'Uncle Meatball\'s Wedding', tier: 6, absent: ['cancer'], intro: 'The Brotherhood\'s accountant is getting married in the church. Brisket\'s money goes through him.',
+      objectives: [
+        { kind: 'stealth', zone: 'Church', guards: 6, hint: 'Get into the church without being spotted', say: [['ricky', 'Okay. We\'re wedding guests. Act natural.'], ['igor', 'I am wearing a ushanka and carrying a sniper rifle.'], ['ricky', 'Natural for YOU.']] },
+        { kind: 'intel', zone: 'Apartments', answer: 'Ledger: "Catering"', options: ['Ledger: "Flowers"', 'Ledger: "Catering"', 'Ledger: "Open Bar"'], guards: 3, hint: 'Find the ledger with Brisket\'s payments', say: [['wiener', 'Three ledgers. One has the money. Clue says "the most expensive thing at any wedding".'], ['recruit', 'The open bar.'], ['ricky', 'Nah. Catering. You ever seen what they charge for a chicken? Those birds went to college.']] },
+        { kind: 'defend', zone: 'A Site', time: 60, hint: 'Hold the courtyard until the ledger is copied', say: [['wiener', 'Nobody touches that phone until it says a hundred percent!'], ['recruit', 'It says four percent.'], ['ricky', 'Then we hold it ninety-six more percent.']] },
+      ],
+      cut: { in: [['recruit', 'I\'ve never been to a wedding.'], ['ricky', 'You\'re not going to one now. You\'re going to a crime scene with cake.']],
+        out: [['wiener', 'Every payment goes to one stall in the Bazaar. "Spice Merchant".'], ['igor', 'Spice. Is code for gas.'], ['ricky', 'Or it\'s actual spice and we\'re about to shoot a guy over paprika.'], ['wiener', 'Either way, we\'re going.']] } },
+  ] },
+  { id: 'c11', map: 'bazaar', name: 'Spice Market', tease: 'A market, a merchant, and a recipe that should have died in the arena.', hub: 'Everything in the Bazaar is for sale. Including the worst idea anybody ever had.', missions: [
+    { id: 's3', name: 'Haggling', tier: 6, absent: ['cancer'], intro: 'The Bazaar. Somewhere in here, somebody is selling the gas recipe by the gram.',
+      objectives: [
+        { kind: 'explore', hint: 'Ask around the market', points: [
+          { zone: 'Market', label: 'Rug seller', say: [['ricky', 'Excuse me. I\'m looking for a guy selling a recipe. Smells like a war crime.'], ['ricky', '...he pointed at the chili stand. Wrong recipe. Close though.']] },
+          { zone: 'Short', label: 'Fruit stand', say: [['recruit', 'He says a man in a colonel\'s hat bought forty empty canisters. Paid in cash. Tipped badly.'], ['wiener', 'That\'s him. Brisket never tipped. Not once in eleven years.']] },
+          { zone: 'Underpass', label: 'Tea seller', say: [['igor', 'Tea seller says the Spice Merchant moves tonight. Palace roof.'], ['igor', 'Also he gave me tea. Is very good tea. I will come back here when we are not shooting.']] },
+        ] },
+        { kind: 'collect', item: 'gas canister', count: 4, hint: 'Take the canisters before they ship', say: [['wiener', 'Every canister we take is one less crime scene.'], ['ricky', 'They\'re so heavy. Why are they so heavy?'], ['igor', 'Is gas, comrade. Is from chili. Chili is heavy.']] },
+        { kind: 'survive', time: 45, hint: 'They know you\'re here: hold on', say: [['recruit', 'There\'s so many of them!'], ['ricky', 'Pudding! Breathe! Two taps, like I showed you!'], ['wiener', 'You heard the Corporal!']] },
+      ],
+      cut: { in: [['wiener', 'Pudding, you\'re with Ricky. Igor, overwatch. Nobody buys anything.'], ['ricky', 'Can I buy one thing?'], ['wiener', 'No.']],
+        out: [['ricky', 'He\'s on the palace roof tonight. Selling the recipe to whoever brings the most money.'], ['igor', 'Then we bring the most bullets.'], ['recruit', 'Is that a plan?'], ['wiener', 'That\'s the whole plan.']] } },
+    { id: 's4', name: 'The Palace Roof', tier: 6, absent: ['cancer'], intro: 'Night. The palace. An auction for the worst recipe in the world.',
+      objectives: [
+        { kind: 'reach', zone: 'Palace', hint: 'Get under the palace', say: [['igor', 'I go high. You go loud. Like old times.']] },
+        { kind: 'rescue', who: 'igor', zone: 'Palace', guards: 6, hint: 'They grabbed Igor: get him back', say: [['ricky', 'IGOR! Hold on!'], ['igor', '(radio) Is fine. They tie very bad knots. But please hurry, the one with the beard is singing.']] },
+        { kind: 'clear', zone: 'A Site', count: 16, hint: 'Break up the auction' },
+        { kind: 'interact', targets: 3, puzzle: true, zone: 'B Site', hint: 'Wipe the recipe drives (the numbers say in which order)', done: [['recruit', 'All three wiped.'], ['wiener', 'Good. Now where\'s the man who wrote it?'], ['command', '(radio) In the park, Sergeant. By the canal. Come say goodbye. Bring the boy.']] },
+      ],
+      cut: { in: [['ricky', 'Pudding. If it goes bad, you stay with Wiener.'], ['recruit', 'What if it goes really bad?'], ['ricky', 'Then you stay with Wiener faster.']],
+        out: [['wiener', 'He\'s got one canister left. The original. The one from the arena.'], ['ricky', 'The one Dad carried.'], ['wiener', '...yeah.'], ['ricky', 'Then I\'m carrying it out.']] } },
+  ] },
+  { id: 'c12', map: 'overpants', name: 'The Canal', tease: 'A park, a canal, and the last canister. Ricky finishes it.', hub: 'The last canister. The last colonel. The last tape.', missions: [
+    { id: 's5', name: 'Overpants Park', tier: 6, absent: ['cancer'], intro: 'Overpants Park. Brisket rigged the last canister to the canal pumps.',
+      objectives: [
+        { kind: 'reach', zone: 'Park', hint: 'Get into the park', say: [['recruit', 'Why is it called Overpants?'], ['ricky', 'Nobody knows. It\'s like expresso. You just stop asking.']] },
+        { kind: 'clear', zone: 'Walkway', count: 16, hint: 'Clear the walkway' },
+        { kind: 'defuse', hint: 'Defuse the pump charge before it floods the canal with gas', say: [['wiener', 'Pudding! You\'re on the wire. Ricky, cover him.'], ['recruit', 'Which wire?!'], ['ricky', 'Not the funny-colored one. It\'s always the funny-colored one.']] },
+        { kind: 'carry', who: 'ricky', zone: 'Canal', hint: 'Get Ricky and the canister to the canal lock', say: [['ricky', 'He carried this through a whole arena. I can carry it through a park.'], ['wiener', 'You can. Go. We\'ve got you.'], ['igor', 'Every step, comrade. I am watching every step.']] },
+      ],
+      cut: { in: [['command', '(radio) Corporal. Your father had the same look on his face. Right before he made a very stupid, very brave choice.'], ['ricky', 'Different family business, Colonel. We finish things.']],
+        out: [['ricky', 'Lock\'s sealed. Canister\'s in. It\'s done.'], ['wiener', 'Not quite. One colonel left.']] } },
+    { id: 's6', name: 'Benched', tier: 6, absent: ['cancer'], intro: 'The fountain. A colonel with nowhere left to go.',
+      objectives: [
+        { kind: 'clear', zone: 'Fountain', count: 20, hint: 'Clear Brisket\'s last guards', say: [['wiener', 'Last stand. Make it short.'], ['igor', 'Short like my patience.']] },
+        { kind: 'reach', zone: 'Fountain', hint: 'Corner Brisket',
+          scene: [['command', 'Corporal. You know your father lied to you for thirty years.', { cam: 'wide', music: '' }], ['ricky', 'He left me four tapes and a fifth one. You know what you left anybody?'], ['command', '...'], ['ricky', 'A bad recipe and a bad tip.'], ['ricky', 'Colonel Brisket. You\'re under arrest. Forty-one counts.'], ['wiener', 'Forty-two.'], ['ricky', 'Forty-two.'], ['igor', '(lowers his rifle. Does not fire. Puts the bullet back in his pocket.)']] },
+        { kind: 'explore', hint: 'Walk the park with your squad', points: [
+          { zone: 'Restrooms', label: 'Pudding', say: [['recruit', 'Corporal? Was he really your dad? Captain Cancer?'], ['ricky', 'Yeah. Took us thirty years to figure out how to talk. Then we only had a week.'], ['recruit', 'Was it enough?'], ['ricky', 'No. It was the best week of my life, though.']] },
+          { zone: 'Park Stairs', label: 'Igor', say: [['igor', 'You did not need my bullet today.'], ['ricky', 'Nah. Keep it. Maybe someday you\'ll need it for something good.'], ['igor', 'He said the same thing. Your father. Exactly the same.']] },
+          { zone: 'CT Spawn', label: 'Wiener', say: [['wiener', 'Forty-two push-ups tonight. One for him.'], ['ricky', 'Can I do them with you?'], ['wiener', 'You can do forty-two of your own, Corporal.'], ['ricky', '...I\'ll do four.'], ['wiener', 'Thirty.'], ['ricky', 'Ten.'], ['wiener', 'Deal.']] },
+        ] },
+      ],
+      cut: { in: [['wiener', 'Squad. One more time.'], ['ricky', 'Wieners protect their own.'], ['wiener', '...that\'s my line.'], ['ricky', 'I know. I\'m borrowing it.']],
+        out: [['recruit', 'Corporal? Is there anywhere to get an espresso around here?'], ['ricky', '...you said it right.'], ['recruit', 'I practiced.'], ['ricky', '(laughing, tapping his chest twice) Come on. My treat.'], ['credits', 'SIDE B'], ['credits', 'still ticking']] } },
+  ] },
 ];
 export const MISSIONS = CHAPTERS.flatMap((c, ci) => c.missions.map((m, mi) => ({ ...m, chapter: c.id, chapterIndex: ci, chapterName: c.name, map: m.map || c.map, last: mi === c.missions.length - 1, first: mi === 0 }))).map((m, i) => ({ ...m, index: i }));
 
