@@ -331,6 +331,14 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     get melee() { return !!(S && S.melee); },
     get mine() { return S && S.chars ? S.chars.find((c) => c.id === myId) : null; },
     get focus() { return focusT > 0; },
+    // the terminal / bomb / squadmate you're standing at, if this objective is worked by holding USE (for the prompt)
+    useAt(x, z) {
+      if (!S || cutQ.length) return null;
+      const R = { interact: 2.2, intel: 1.6, defuse: 2.2, rescue: 2.4, revive: 2 }[S.kind]; if (!R) return null;
+      let best = null, bd = R;
+      for (const m of S.markers || []) { if (m.done || !['terminal', 'bomb', 'revive'].includes(m.kind)) continue; const d = Math.hypot(m.x - x, m.z - z); if (d < bd) { bd = d; best = m; } }
+      return best;
+    },
     skip: askSkip,
     shot,
     // between levels: a black card with where you are going while the next level loads behind it

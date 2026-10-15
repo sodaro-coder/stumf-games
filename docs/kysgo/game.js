@@ -1676,7 +1676,7 @@ export default function start({ cfg, E, N, smoke }) {
           if (kp('KeyF') || E.input.touch.tapped.has('inspect')) { me.inspect = 2.2; const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)) || (isMythic(held) ? 'mythic' : null); if (me.inspectStyle === 'mythic') { flareGlow(1); me.inspectGlow = ((itemInfo(held) || {}).paint || {}).glow || '#ff2e4c'; } if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
           if (mode === 'story' && (kp('KeyG') || E.input.touch.tapped.has('ability') || E.input.touch.tapped.has('buy'))) toHost('ability', 1);
           else if (kp('KeyG')) { if (me.cur === 5 && me.inv[5]) { toHost('dropc4', 1); } else if (me.cur === 1 || me.cur === 2) { sendAmmo(); toHost('drop', me.cur); } }
-          if (!leaning && (kp('KeyE') || E.input.touch.tapped.has('use'))) { const d = nearestDrop(); if (d && !(st.bomb && st.bomb.s === 'planted' && me.team === 'CT' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2)) { sendAmmo(); toHost('pickup', d.id); } }
+          if (!leaning && (kp('KeyE') || E.input.touch.tapped.has('use')) && !(mode === 'story' && SC && SC.useAt(me.x, me.z))) { const d = nearestDrop(); if (d && !(st.bomb && st.bomb.s === 'planted' && me.team === 'CT' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2)) { sendAmmo(); toHost('pickup', d.id); } }
           const w = curWeapon();
           if (kp('M2') || E.input.touch.tapped.has('alt')) {
             if (w && w.zoom) { me.scoped = (me.scoped + 1) % (w.zoom.length + 1); audio.play('tick'); }
@@ -2018,10 +2018,13 @@ export default function start({ cfg, E, N, smoke }) {
         if (planting > 0) hud.progress('Planting the bomb…', planting);
         else if (st.bomb && st.bomb.s === 'planted' && st.bomb.d > 0) hud.progress(me.team === 'CT' ? 'Defusing…' : 'The bomb is being defused!', st.bomb.d);
         else hud.progress(null);
+        const useM = mode === 'story' && SC && me.alive && SC.useAt(me.x, me.z), useWord = pad.active ? 'RB' : mob ? 'USE' : 'E';
+        if (useM && useM.prog > 0) hud.progress(useM.kind === 'revive' ? 'Freeing…' : useM.kind === 'bomb' ? 'Defusing…' : 'Working…', useM.prog);
         let hint = '';
         if (st.phase === 'freeze' && mode !== 'story') hint = `Buy time · ${Math.ceil(st.timer)}s · ${mob ? 'tap BUY' : 'press B'}`;
         else if (me.alive && me.inv[5] && W.siteAt(me.x, me.z) && (!MODES[mode].bombSite || MODES[mode].bombSite === W.siteAt(me.x, me.z))) hint = me.cur === 5 ? 'Hold fire or E to plant' : 'Press 5 to take out the bomb';
         else if (me.alive && me.team === 'CT' && st.bomb && st.bomb.s === 'planted' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 1.8) hint = `Hold E to defuse${me.defuser ? ' (kit: 5s)' : ' (10s)'}`;
+        else if (useM) hint = `Hold ${useWord}: ${useM.kind === 'revive' ? useM.label === 'Hold USE' ? 'revive' : 'free ' + useM.label : useM.kind === 'bomb' ? 'defuse' : /^\d+$/.test(useM.label) ? 'terminal #' + useM.label : useM.label === 'USE' ? 'use the terminal' : useM.label}`;
         else { const d = me.alive && nearestDrop(); if (d) hint = `E: pick up ${itemName(d.wid)}`; }
         if (match && !started && session) hint = 'Lobby: start the match from the panel';
         hud.hint(hint);

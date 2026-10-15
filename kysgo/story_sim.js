@@ -299,7 +299,13 @@ export class StoryMatch extends Match {
         st.need = o.targets || 1; st.prog = 0;
         // the puzzle: the terminals carry shuffled numbers and must be worked in order; a wrong one sets off an alarm
         const order = Array.from({ length: st.need }, (_, k) => k + 1).sort(() => this.rng() - 0.5);
-        for (let k = 0; k < st.need; k++) { const q = this.zonePt(place, i * 10 + k); this.markers.push({ id: 't' + k, x: q[0], z: q[1], kind: 'terminal', label: o.puzzle ? String(order[k]) : 'USE', n: o.puzzle ? order[k] : 0, prog: 0 }); }
+        // each terminal at least a few metres from the others: two in reach at once would both take the one hold
+        for (let k = 0; k < st.need; k++) {
+          const far = (c) => !this.markers.some((m) => m.kind === 'terminal' && Math.hypot(m.x - c[0], m.z - c[1]) < 3.5);
+          let q = this.zonePt(place, i * 10 + k);
+          for (let j = 1; j < 14 && !far(q); j++) { const c = j < 6 ? this.zonePt(place, i * 10 + k + j * 100) : this.reach(this.W.randomIn([q[0] - 8, q[1] - 8, q[0] + 8, q[1] + 8])); if (far(c)) q = c; }
+          this.markers.push({ id: 't' + k, x: q[0], z: q[1], kind: 'terminal', label: o.puzzle ? String(order[k]) : 'USE', n: o.puzzle ? order[k] : 0, prog: 0 });
+        }
         st.next = 1; st.puzzle = !!o.puzzle; this.spawnWave(2); break;
       }
       case 'defuse': { const q = this.zonePt('bomb' + this.mi, i); this.markers.push({ id: 'bomb', x: q[0], z: q[1], kind: 'bomb', label: 'Defuse', prog: 0 }); st.need = 7; this.waveT = 6; break; }
@@ -644,6 +650,8 @@ export class StoryMatch extends Match {
     const st = this.state, o = this.mission.objectives[this.obj]; if (!st || !o) return;
     st.t += dt;
     const H = this.humans(), near = (m, r) => H.find((h) => Math.hypot(h.x - m.x, h.z - m.z) < r);
+    // holding USE works the one terminal nearest you (never two at once: a neighbour would set off the wrong-order alarm)
+    const using = (r) => { const on = new Set(); for (const h of H) { if (!h.defusing) continue; let best = null, bd = r; for (const m of this.markers) { if (m.done || m.kind !== 'terminal') continue; const d = Math.hypot(h.x - m.x, h.z - m.z); if (d < bd) { bd = d; best = m; } } if (best) on.add(best); } return on; };
     let done = false;
     switch (o.kind) {
       case 'reach': done = !!near(this.markers[0], 4); break;
@@ -665,10 +673,10 @@ export class StoryMatch extends Match {
       }
       case 'collect': for (const m of this.markers) if (!m.done && near(m, 1.6)) { m.done = true; st.have++; this.event('sound', { s: 'pickup', x: m.x, z: m.z }); this.push(true); } done = st.have >= st.need; break;
       case 'interact': {
+        const on = using(2.2);
         for (const m of this.markers) {
           if (m.done) continue;
-          const user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 1.8);
-          if (!user) { if (m.prog) { m.prog = Math.max(0, m.prog - dt); } continue; }
+          if (!on.has(m)) { if (m.prog) { m.prog = Math.max(0, m.prog - dt * 0.4); } continue; }
           if (st.puzzle && m.n !== st.next) {   // wrong one: an alarm and a few guards come running
             if (this.alarm <= 0) { this.alarm = 6; this.event('banner', { text: 'WRONG ORDER', sub: `start with ${st.next}` }); this.spawnWave(2); for (const q of this.markers) q.prog = 0; this.push(true); }
             continue;
@@ -679,7 +687,7 @@ export class StoryMatch extends Match {
         this.alarm -= dt; done = st.have >= st.need; break;
       }
       case 'defuse': {
-        const m = this.markers[0], user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 1.8);
+        const m = this.markers[0], user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 2.2);
         if (user) m.prog = Math.min(1, m.prog + dt / st.need); else m.prog = Math.max(Math.floor(m.prog * 4) / 4, m.prog - dt * 0.05);   // progress sticks at each quarter
         this.waveT -= dt; if (this.waveT <= 0) { this.waveT = 14; if (this.enemies.size < 10) this.spawnWave(2 + (this.mission.tier >> 2)); }
         this.push(); done = m.prog >= 1; break;
@@ -687,7 +695,7 @@ export class StoryMatch extends Match {
       case 'escort': { this.waveT -= dt; if (this.waveT <= 0) { this.waveT = 16; if (this.enemies.size < 10) this.spawnWave(2); } done = !!this.npc && this.npc.alive && Math.hypot(this.npc.x - this.markers[0].x, this.npc.z - this.markers[0].z) < 4.5; if (done) { this.players.delete(this.npc.id); this.npc = null; this.broadcastRoster(); } break; }
       case 'boss': this.bossTick(dt); this.ballTick(dt); done = !this.boss && st.have > 0; break;
       case 'rescue': {
-        const m = this.markers[0], user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 2);
+        const m = this.markers[0], user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 2.4);
         if (user) st.have = Math.min(st.need, st.have + dt); else st.have = Math.max(0, st.have - dt * 0.5);
         m.prog = st.have / st.need; if (st.limit && st.t > st.limit && !this.failT) { this.event('banner', { text: 'TOO LATE', sub: 'back to the last checkpoint…' }); this.failT = 3; }
         this.push(); done = st.have >= st.need;
@@ -705,10 +713,10 @@ export class StoryMatch extends Match {
             e.yaw += Math.sin((this.clock || 0) * 0.5 + (hash(id) % 9)) * 0.1;   // they turn their heads in the wind
           }
         }
+        const on = using(1.6);
         for (const m of this.markers) {
           if (m.done) continue;
-          const user = H.find((h) => h.defusing && Math.hypot(h.x - m.x, h.z - m.z) < 1.4);
-          if (!user) { m.prog = Math.max(0, m.prog - dt); continue; }
+          if (!on.has(m)) { m.prog = Math.max(0, m.prog - dt); continue; }
           m.prog = Math.min(1, m.prog + dt / 1.8);
           if (m.prog >= 1) {
             if (m.opt === st.answer) { m.done = true; st.have = 1; this.event('sound', { s: 'pickup', x: m.x, z: m.z }); }
