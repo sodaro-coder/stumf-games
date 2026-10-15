@@ -36,7 +36,7 @@ export function mobileControls(input, o = {}) {
   .kc-t b{transform:scale(var(--ks,1))}.kc-t.lefty{transform:scaleX(-1)}.kc-t.lefty .row{right:auto;left:calc(env(safe-area-inset-right,0px) + 8px);flex-direction:row-reverse}.kc-t.lefty b{transform:scaleX(-1) scale(var(--ks,1))}
   @media (max-height:340px){.kc-t b.fire{width:76px;height:76px;bottom:44px}.kc-t b.jump{bottom:130px}.kc-t b.reload{bottom:142px}.kc-t b.aim{bottom:80px}.kc-t b.leanL,.kc-t b.leanR{bottom:148px}}`;
   document.head.appendChild(css);
-  const root = document.createElement('div'); root.className = 'kc-t'; document.body.appendChild(root);
+  const root = document.createElement('div'); root.className = 'kc-t'; document.body.appendChild(root); document.body.classList.add('kc-touch');
   const rot = document.createElement('div'); rot.className = 'kc-rot'; rot.innerHTML = '<div>📱↻</div><b>Turn your phone sideways</b><span>The game plays in landscape</span>'; document.body.appendChild(rot);
   const I = {   // tiny line icons
     aim: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg>',
@@ -56,7 +56,9 @@ export function mobileControls(input, o = {}) {
     let x = (e.clientX - cx) / 46, y = (e.clientY - cy) / 46; const l = Math.hypot(x, y);
     if (l > 1.25) { cx += (x / l) * (l - 1.25) * 46; cy += (y / l) * (l - 1.25) * 46; stick.style.left = (lefty() ? innerWidth - cx : cx) + 'px'; stick.style.top = cy + 'px'; }
     if (l > 1) { x /= l; y /= l; }
-    t.move.x = Math.abs(x) < 0.12 ? 0 : x; t.move.y = Math.abs(y) < 0.12 ? 0 : -y; knob.style.transform = `translate(${(lefty() ? -x : x) * 36}px,${y * 36}px)`;   // the mirrored layout draws the knob mirrored back
+    // round deadzone, rescaled so a push just past it starts slow and smooth (a per-axis one made diagonals stick)
+    const m = Math.min(1, l), DZ = 0.1, out = m < DZ ? 0 : Math.min(1, ((m - DZ) / (1 - DZ)) * 1.06), s = m > 0 ? out / m : 0;
+    t.move.x = x * s; t.move.y = -y * s; knob.style.transform = `translate(${(lefty() ? -x : x) * 36}px,${y * 36}px)`;   // the mirrored layout draws the knob mirrored back
   });
   const endStick = (e) => { if (e.pointerId !== sid) return; sid = null; t.move.x = t.move.y = 0; knob.style.transform = ''; stick.className = 'stick ghost'; stick.style.left = stick.style.top = ''; };
   zl.addEventListener('pointerup', endStick); zl.addEventListener('pointercancel', endStick); zl.addEventListener('lostpointercapture', endStick);
@@ -71,7 +73,7 @@ export function mobileControls(input, o = {}) {
   // right thumb: look. Several fingers can look at once (each moves the view by its own drag)
   const looks = new Map(), sens = { k: 1 };
   const lookStart = (e) => looks.set(e.pointerId, [e.clientX, e.clientY]);
-  const lookMove = (e) => { const p = looks.get(e.pointerId); if (!p) return; t.look.dx += (e.clientX - p[0]) * 1.25 * sens.k; t.look.dy += (e.clientY - p[1]) * 1.25 * sens.k; p[0] = e.clientX; p[1] = e.clientY; };
+  const lookMove = (e) => { const p = looks.get(e.pointerId); if (!p) return; t.look.px = (t.look.px || 0) + (e.clientX - p[0]) * sens.k; t.look.py = (t.look.py || 0) + (e.clientY - p[1]) * sens.k; p[0] = e.clientX; p[1] = e.clientY; };   // raw finger pixels: the game turns them into degrees
   const lookEnd = (e) => looks.delete(e.pointerId);
   zr.addEventListener('pointerdown', (e) => { lookStart(e); try { zr.setPointerCapture(e.pointerId); } catch (x) { /* fine */ } e.preventDefault(); });
   zr.addEventListener('pointermove', lookMove); zr.addEventListener('pointerup', lookEnd); zr.addEventListener('pointercancel', lookEnd); zr.addEventListener('lostpointercapture', lookEnd);
@@ -112,6 +114,6 @@ export function mobileControls(input, o = {}) {
     style(size, alpha, left) { root.style.setProperty('--ks', String(size || 1)); root.style.opacity = String(alpha || 1); root.classList.toggle('lefty', !!left); },
     buzz,
     show(on) { root.style.display = on ? '' : 'none'; resetTouches(); if (!on) { t.buttons.clear(); crouchB.classList.remove('tog'); } },
-    destroy() { root.remove(); rot.remove(); css.remove(); t.buttons.clear(); t.active = false; document.removeEventListener('visibilitychange', onHide); removeEventListener('blur', resetTouches); removeEventListener('orientationchange', resetTouches); },
+    destroy() { document.body.classList.remove('kc-touch'); root.remove(); rot.remove(); css.remove(); t.buttons.clear(); t.active = false; document.removeEventListener('visibilitychange', onHide); removeEventListener('blur', resetTouches); removeEventListener('orientationchange', resetTouches); },
   };
 }

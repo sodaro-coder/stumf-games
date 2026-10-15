@@ -51,6 +51,7 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   const sky = skyDome(sc, fog, B.sky || 0x6f9fd8, d, B.sunColor || 0xffffff, clouds, B.photo ? { name: B.photo, size: skySize, tint: B.photoTint } : null);
   return { sun, sky, dir: d };
 }
+const TOUCH_DEG = 0.15;   // phone look speed at sensitivity 1 (degrees per pixel of finger travel)
 const DEF_SET = { vmX: 0, vmY: 0, vmZ: 0, vmFov: 60, xStyle: 'classic', voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, killcam: 1, replay: 0, padLayout: 'default', padInvert: 0, padDead: 0.16, gyro: 0, gyroSens: 1, gyroInv: 0, tSize: 1, tAlpha: 1, tLefty: 0, haptics: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
@@ -725,6 +726,8 @@ export default function start({ cfg, E, N, smoke }) {
       if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier) }); else cfx.setWorld(W);   // holes, blood, sparks, smoke that fills rooms, fire, ripples
       hud.radarBase(W);
       if (SC) SC.setWorld(W);
+      // shaders for the new map built now (behind the loading card), not on the first frames of play: phones hitched there
+      try { renderer.compile(scene, cam); } catch (e) { /* warmed on first draw instead */ }
     }
 
     // ---- remote players (rigs) ----
@@ -1635,6 +1638,10 @@ export default function start({ cfg, E, N, smoke }) {
       const frozen = st.phase === 'freeze' || storyHold();
       let lk = { dx: mdx, dy: mdy }; mdx = mdy = 0;
       lk.dx += E.input.touch.look.dx; lk.dy += E.input.touch.look.dy; E.input.touch.look.dx = E.input.touch.look.dy = 0;
+      { // a thumb on glass: ~0.15° per pixel (a mouse's counts-per-degree made phones turn 5x too slowly), a little faster on quick flicks
+        const L = E.input.touch.look, px = L.px || 0, py = L.py || 0; L.px = L.py = 0;
+        if (px || py) { const k = TOUCH_DEG / (S.sens * 0.022), acc = (v) => v * (1 + Math.min(0.7, Math.abs(v) / 50)); lk.dx += acc(px) * k; lk.dy += acc(py) * k * 0.85; }
+      }
       const adsOptic = vm && vm.userData && curWeapon() && !curWeapon().zoom ? (vm.userData.optic && vm.userData.sight ? vm.userData.optic : vm.userData.iron ? 'iron' : null) : null;   // every gun aims down sights: its optic, or its iron sights
       const adsZoom = 1 + ((ATTACH[adsOptic] || {}).zoom - 1 || 0) * me.ads;
       const zoomK = (me.scoped ? (curWeapon() && curWeapon().zoom ? curWeapon().zoom[me.scoped - 1] / S.fov : 1) : 1) / adsZoom;
@@ -1711,7 +1718,7 @@ export default function start({ cfg, E, N, smoke }) {
       }
       showSb = kd('Tab') || E.input.touch.buttons.has('score');
       if (kp('F9')) saveClip();   // F9: save the instant replay
-      if (mob) { const sh = !uiOpen && !ended; if (sh !== mobShown) { mobShown = sh; mob.show(sh); } mob.setAiming(me.ads > 0.5); }
+      if (mob) { const sh = !uiOpen && !ended && !storyHold(); if (sh !== mobShown) { mobShown = sh; mob.show(sh); } mob.setAiming(me.ads > 0.5); }
       // movement (frozen in freeze time)
       { const wantAds = !!adsOptic && me.alive && !uiOpen && me.reload <= 0 && me.deploy <= 0 && !me.emote && (mouseBtn[2] || me.adsToggle); if (!wantAds && !mouseBtn[2] && (me.reload > 0 || !adsOptic || !me.alive)) me.adsToggle = false; me.ads += ((wantAds ? 1 : 0) - me.ads) * Math.min(1, dt * 12); if (!adsOptic) me.ads = 0;
         // lean: only while aimed in; never through a wall (the eye stops short of whatever is beside you)

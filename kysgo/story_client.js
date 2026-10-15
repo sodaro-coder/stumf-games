@@ -47,7 +47,13 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   .sc-boss em{display:block;font-style:normal;font-weight:900;color:#7ed957;font-size:12px;letter-spacing:.2em;height:14px}
   body.sc-cutting .kc-t,body.sc-cutting .cs-hud,body.sc-cutting .sc-squad,body.sc-cutting .sc-obj,body.sc-cutting .sc-boss{visibility:hidden}
   @media (max-height:520px){.sc-obj{top:44px;padding:4px 10px 4px 20px}.sc-obj span{font-size:13px}.sc-squad{bottom:auto;top:96px;left:auto;right:calc(env(safe-area-inset-right,0px) + 12px);gap:2px}.sc-m{min-width:118px;font-size:10px;padding:1px 6px}.sc-m .bar{width:40px}
-    .sc-line p{font-size:16px}.sc-title{font-size:18px;top:13vh}.sc-line{bottom:13vh}.sc-talk{bottom:96px;font-size:13px}.sc-card h1{font-size:26px}.sc-card p{font-size:15px}}`;
+    .sc-line p{font-size:16px}.sc-title{font-size:18px;top:13vh}.sc-line{bottom:13vh}.sc-talk{bottom:96px;font-size:13px}.sc-card h1{font-size:26px}.sc-card p{font-size:15px}}
+  /* phones: the touch buttons own the bottom and the top-right corner, so dialogue sits up top between the panels and the
+     objective drops under the SKILL / TAB / pause row */
+  .kc-touch .sc-obj{top:calc(env(safe-area-inset-top,0px) + 54px)}
+  .kc-touch .sc-talk,.kc-touch .sc-bark{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 112px);width:min(520px,50vw);font-size:14px}
+  .kc-touch .sc-bark{top:calc(env(safe-area-inset-top,0px) + 150px);width:auto;max-width:50vw}
+  @media (max-height:520px){.kc-touch .sc-squad{top:calc(env(safe-area-inset-top,0px) + 108px)}.kc-touch .sc-talk{top:calc(env(safe-area-inset-top,0px) + 106px);font-size:13px}.kc-touch .sc-bark{top:calc(env(safe-area-inset-top,0px) + 146px)}}`;
 
   /* Viewport-aware cinematic UI: clamp text, respect notches, and keep every overlay usable in short windows. */
   css.textContent += `
@@ -352,7 +358,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     hub(st) {
       const h = $('.sc-hub'); if (!st) { h.style.display = 'none'; h.innerHTML = ''; return; }
       const done = st.chapter >= CHAPTERS.length, c = CHAPTERS[st.chapter] || {}, me = (st.party || []).find((p) => p.id === myId) || {}, taken = new Set((st.party || []).filter((p) => p.id !== myId).map((p) => p.char));
-      const all = (st.party || []).every((p) => p.ready);
+      const all = (st.party || []).length <= 1 || (st.party || []).every((p) => p.ready);   // solo: nobody to wait for
       h.innerHTML = `<div><small style="color:#f2a33a;letter-spacing:.2em">${done ? 'CAMPAIGN COMPLETE' : 'NEXT: CHAPTER ' + (st.chapter + 1)}</small><h2>${esc(done ? 'Operation Ballin\' Out' : c.name)}</h2>
         <div style="color:#8d97a5;margin-bottom:10px">${esc(done ? 'Replay any chapter from the Story tab.' : c.tease || c.hub || '')}</div>
         ${(st.party || []).map((p) => `<div class="p" style="--c:${COLORS[p.char] || '#fff'}"><b>${esc(p.name)}</b><span>${esc((CHARACTERS[p.char] || {}).short || '')}</span>${p.ready ? '<span class="ok">READY</span>' : '<span>not ready</span>'}</div>`).join('')}
