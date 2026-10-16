@@ -97,7 +97,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
     };
   }
   const holes = { concrete: ring(70, decalMat(T.concrete)), wood: ring(40, decalMat(T.wood)), metal: ring(40, decalMat(T.metal)), soft: ring(40, decalMat(T.soft, 0xffffff, 0.8)) };
-  const splats = ring(40, decalMat(T.splat, 0x6a0505), 70), pools = ring(12, decalMat(T.pool, 0x4a0303, 0.92), 90), scorches = ring(10, decalMat(T.scorch), 120), gouges = ring(24, decalMat(T.gouge), 120);
+  const splats = ring(96, decalMat(T.splat, 0x6a0505), 70), pools = ring(24, decalMat(T.pool, 0x4a0303, 0.92), 90), scorches = ring(10, decalMat(T.scorch), 120), gouges = ring(24, decalMat(T.gouge), 120);
 
   // ---- glowing sparks: additive, gravity, bounce off the floor, cool from white-yellow to orange and die ----
   const SPK = hq ? 260 : 120, spGeo = new THREE.BufferGeometry(), spPos = new Float32Array(SPK * 6), spCol = new Float32Array(SPK * 6);
@@ -133,6 +133,58 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
   // ---- blood mist: soft red sprites that puff out along the shot and sink ----
   const mistMat = new THREE.SpriteMaterial({ map: T.soft2, color: 0x7a0606, transparent: true, depthWrite: false, opacity: 0 });
   const mist = Array.from({ length: 24 }, () => { const s = new THREE.Sprite(mistMat.clone()); s.visible = false; root.add(s); return { s, t: 1, life: 1, v: new THREE.Vector3() }; }); let mi = 0;
+
+  // ---- gore (settings: 0 low, 1 heavy, 2 max): flying chunks that bounce, roll and leave splats; fountains from wounds ----
+  let gore = 2;
+  const GK = () => [0.6, 1.6, 3][gore] || 1;   // how much more blood everything throws
+  const gibGeo = [new THREE.IcosahedronGeometry(0.07, 0), new THREE.DodecahedronGeometry(0.05, 0), new THREE.BoxGeometry(0.11, 0.05, 0.06), new THREE.CylinderGeometry(0.025, 0.03, 0.16, 5)];
+  const gibMat = [new THREE.MeshStandardMaterial({ color: 0x7a1410, roughness: 0.35, metalness: 0.05 }), new THREE.MeshStandardMaterial({ color: 0x3f0505, roughness: 0.3 }),
+    new THREE.MeshStandardMaterial({ color: 0xa8443a, roughness: 0.5 }), new THREE.MeshStandardMaterial({ color: 0xded3c2, roughness: 0.6 })];   // flesh, dark, meat, bone
+  const gibs = Array.from({ length: hq ? 60 : 32 }, (_, i) => { const m = new THREE.Mesh(gibGeo[i % 4], gibMat[(i * 7) % 4]); m.visible = false; m.castShadow = false; root.add(m); return { m, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 0, landed: 0 }; });
+  let gi = 0;
+  const fountains = [];
+  function gibBurst(x, y, z, n, dir = null, force = 1) {
+    for (let k = 0; k < n; k++) {
+      const g = gibs[gi = (gi + 1) % gibs.length], sc = rnd(0.6, 1.6);
+      g.m.position.set(x + rnd(-0.15, 0.15), y + rnd(-0.2, 0.2), z + rnd(-0.15, 0.15)); g.m.scale.setScalar(sc); g.m.visible = true; g.t = 0; g.life = rnd(18, 30); g.landed = 0;
+      const sp = rnd(2, 5.5) * force;
+      g.v.set((dir ? dir.x * sp * 0.8 : 0) + rnd(-1, 1) * sp * 0.6, rnd(1.5, 4.5) * force, (dir ? dir.z * sp * 0.8 : 0) + rnd(-1, 1) * sp * 0.6);
+      g.w.set(rnd(-12, 12), rnd(-12, 12), rnd(-12, 12));
+    }
+  }
+  function tickGibs(dt) {
+    for (const g of gibs) {
+      if (!g.m.visible) continue; g.t += dt;
+      if (g.t > g.life) { g.m.visible = false; continue; }
+      if (g.landed > 3) continue;
+      g.v.y -= 9.8 * dt; g.m.position.addScaledVector(g.v, dt); g.m.rotation.x += g.w.x * dt; g.m.rotation.y += g.w.y * dt; g.m.rotation.z += g.w.z * dt;
+      if (W) {
+        const p = g.m.position;
+        if (W.ray && (g.v.x || g.v.z)) { /* walls: a chunk that hits one drops straight down */ const L = Math.hypot(g.v.x, g.v.z); if (L > 0.3) { const h = W.ray({ x: p.x, y: p.y, z: p.z }, { x: g.v.x / L, y: 0, z: g.v.z / L }, L * dt + 0.06); if (h) { if (gore > 0) splats.add({ x: h.x, y: h.y, z: h.z }, normalOf(h, { x: g.v.x / L, y: 0, z: g.v.z / L }).clone(), rnd(0.12, 0.25), Math.random() * 6.28, 1, { own: true, color: 0x6a0505, dry: 40, life: 70 }); g.v.x *= -0.2; g.v.z *= -0.2; } } }
+        const gy = W.groundAt(p.x, p.z, p.y + 0.3);
+        if (p.y < gy + 0.03) {
+          p.y = gy + 0.03; if (!g.landed && gore > 0) splats.add({ x: p.x, y: gy, z: p.z }, { x: 0, y: 1, z: 0 }, rnd(0.18, 0.34), Math.random() * 6.28, rnd(1, 1.8), { own: true, color: 0x5a0404, dry: 40, life: 80 });
+          g.landed++; g.v.y *= -0.3; g.v.x *= 0.45; g.v.z *= 0.45; g.w.multiplyScalar(0.4);
+          if (g.landed === 1 && audio && Math.random() < 0.4) audio.at('shell', p.x, p.y, p.z, cam, 8);
+        }
+      }
+    }
+  }
+  function tickFountains(dt) {
+    for (let i = fountains.length - 1; i >= 0; i--) {
+      const f = fountains[i]; f.t += dt; f.acc += dt;
+      if (f.t > f.dur) { fountains.splice(i, 1); continue; }
+      const p = f.pos(); if (!p) { fountains.splice(i, 1); continue; }
+      const k = 1 - f.t / f.dur;   // pumps hard, then weakens (with a pulse, like a heartbeat)
+      const pulse = 0.55 + 0.45 * Math.max(0, Math.sin(f.t * 9));
+      while (f.acc > 0.04) {
+        f.acc -= 0.04;
+        if (parts) parts.emit(p.x, p.y, p.z, { n: Math.round(4 * k * pulse * GK()) + 1, colors: ['#8a0808', '#b01212', '#4a0303'], speed: 2.8 * k * pulse + 0.4, up: 2.6 * k + 0.4, size: 0.026, life: 0.9, dir: f.dir, spread: 0.45 });
+        if (Math.random() < 0.5 * k) { const m = mist[mi = (mi + 1) % mist.length]; m.s.position.set(p.x, p.y, p.z); m.s.visible = true; m.t = 0; m.life = 0.5; m.v.set(f.dir.x * 1.2 + rnd(-0.4, 0.4), 1.6 * k + 0.3, f.dir.z * 1.2 + rnd(-0.4, 0.4)); m.s.scale.setScalar(rnd(0.12, 0.22)); }
+        if (W && Math.random() < 0.25 * k) { const gx = p.x + f.dir.x * rnd(0.3, 1.2) + rnd(-0.3, 0.3), gz = p.z + f.dir.z * rnd(0.3, 1.2) + rnd(-0.3, 0.3); splats.add({ x: gx, y: W.groundAt(gx, gz, p.y), z: gz }, { x: 0, y: 1, z: 0 }, rnd(0.15, 0.3), Math.random() * 6.28, 1.3, { own: true, color: 0x6a0505, dry: 40, life: 80 }); }
+      }
+    }
+  }
 
   // ---- dropped magazines and gun smoke ----
   const magGeo = new THREE.BoxGeometry(0.03, 0.12, 0.06), magMat = new THREE.MeshLambertMaterial({ color: 0x23252a }), mags = [];
@@ -240,12 +292,19 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
     gouge(hit, d, swing = 0) { const n = normalOf(hit, d).clone(); gouges.add(hit, n, rnd(0.18, 0.26), swing ? 0.1 * swing : Math.PI / 2, 1, { life: 120 }); sparks(hit.x + n.x * 0.03, hit.y, hit.z + n.z * 0.03, 5, { dir: n, speed: 3, life: 0.2, cone: 1 }); },
     // a hit on a body: a burst of mist and droplets along the shot, and a splat on whatever is behind them
     blood(x, y, z, d, heavy = false) {
-      for (let k = 0; k < (heavy ? 5 : 3); k++) {
+      const G = GK();
+      for (let k = 0; k < Math.round((heavy ? 5 : 3) * G); k++) {
         const m = mist[mi = (mi + 1) % mist.length]; m.s.position.set(x, y, z); m.s.visible = true; m.t = 0; m.life = rnd(0.35, 0.6);
         m.v.set(d.x * rnd(1.5, 3) + rnd(-0.6, 0.6), d.y * 2 + rnd(-0.2, 0.6), d.z * rnd(1.5, 3) + rnd(-0.6, 0.6)); m.s.scale.setScalar(rnd(0.15, 0.28));
       }
-      if (parts) parts.emit(x, y, z, { n: heavy ? 12 : 7, colors: ['#7a0606', '#a01010', '#4a0303'], speed: 2.4, up: 0.4, size: 0.022, life: 0.6, dir: d, spread: 0.5 });
+      if (parts) parts.emit(x, y, z, { n: Math.round((heavy ? 12 : 7) * G), colors: ['#7a0606', '#a01010', '#4a0303'], speed: 2.4 + (gore > 1 ? 1.2 : 0), up: 0.4, size: 0.022, life: 0.6 + (gore > 1 ? 0.3 : 0), dir: d, spread: 0.5 + (gore > 1 ? 0.2 : 0) });
       if (!W) return;
+      if (gore > 1) for (let k = 0; k < (heavy ? 3 : 2); k++) {   // max: a spray, not a drop: more splats fanned out behind and on the floor
+        const a = rnd(-0.35, 0.35), dd = { x: d.x * Math.cos(a) - d.z * Math.sin(a), y: d.y + rnd(-0.2, 0.15), z: d.x * Math.sin(a) + d.z * Math.cos(a) };
+        const h2 = W.ray({ x, y, z }, dd, 4.5);
+        if (h2) splats.add({ x: h2.x, y: h2.y, z: h2.z }, normalOf(h2, dd).clone(), rnd(0.3, 0.7), Math.random() * 6.28, rnd(1, 2.2), { own: true, color: 0x700606, dry: 45, life: 90 });
+        else { const gx = x + dd.x * rnd(1, 2.4), gz = z + dd.z * rnd(1, 2.4); splats.add({ x: gx, y: W.groundAt(gx, gz, y), z: gz }, { x: 0, y: 1, z: 0 }, rnd(0.25, 0.5), Math.atan2(dd.z, dd.x), rnd(1.4, 2.4), { own: true, color: 0x6a0505, dry: 45, life: 90 }); }
+      }
       const o = { x, y, z }, hit = W.ray(o, { x: d.x, y: d.y - 0.15, z: d.z }, 3.2);
       if (hit) {   // the splat stretches with the angle it lands at (a long streak when it skims a wall or the floor)
         const n = normalOf(hit, d).clone(), along = Math.abs(d.x * n.x + d.y * n.y + d.z * n.z);
@@ -256,7 +315,12 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
       }
     },
     // the dead: a pool that spreads out underneath and darkens
-    pool(x, y, z) { const gy = W ? W.groundAt(x, z, y + 1) : y; pools.add({ x: x + rnd(-0.2, 0.2), y: gy, z: z + rnd(-0.2, 0.2) }, { x: 0, y: 1, z: 0 }, 0.15, Math.random() * 6.28, 1, { own: true, color: 0x5a0404, grow: 0.25, max: rnd(1.1, 1.6), dry: 60, life: 90, opacity: 0.92 }); },
+    pool(x, y, z) { const gy = W ? W.groundAt(x, z, y + 1) : y, big = [0.7, 1.3, 2][gore] || 1; pools.add({ x: x + rnd(-0.2, 0.2), y: gy, z: z + rnd(-0.2, 0.2) }, { x: 0, y: 1, z: 0 }, 0.15, Math.random() * 6.28, 1, { own: true, color: 0x5a0404, grow: 0.25 * big, max: rnd(1.1, 1.6) * big, dry: 60, life: 120, opacity: 0.95 }); },
+    // gore: chunks flying from a body (explosions, a head that came off), and a wound that pumps (pos() follows the body)
+    gibs(x, y, z, n, dir = null, force = 1) { if (gore > 0) gibBurst(x, y, z, Math.round(n * (gore > 1 ? 1 : 0.5)), dir, force); },
+    fountain(pos, dur = 2.2, dir = { x: 0, y: 1, z: 0 }) { if (gore > 0) fountains.push({ pos, dur: dur * (gore > 1 ? 1 : 0.5), dir, t: 0, acc: 0 }); },
+    setGore(n) { gore = Math.max(0, Math.min(2, n | 0)); },
+    get gore() { return gore; },
     // an HE grenade: shrapnel sparks bouncing everywhere, a flash that lights the room, a scorch mark, the smoke blown back
     he(x, y, z) {
       sparks(x, y + 0.2, z, hq ? 160 : 80, { speed: 11, up: 3, life: 0.7 });
@@ -293,13 +357,14 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
         if (m.o.position.y < gy + 0.03) { m.o.position.y = gy + 0.03; m.v.y *= -0.25; m.v.x *= 0.4; m.v.z *= 0.4; m.spin *= 0.3; m.b++; m.o.rotation.x = Math.PI / 2 * (m.b > 1 ? 1 : 0.8); if (m.b === 1 && audio) audio.at('shell', m.o.position.x, m.o.position.y, m.o.position.z, cam, 10); }
       }
       for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, pools, scorches, gouges]) r.tick(dt);
-      smokeTick(dt); fireTick(dt);
+      smokeTick(dt); fireTick(dt); tickGibs(dt); tickFountains(dt);
     },
     setWorld(w) { W = w; api.clear(); },
     clear() {
       for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, pools, scorches, gouges]) r.clear();
       for (const k of [...smokes.keys()]) api.smoke.remove(k); for (const k of [...fires.keys()]) api.fire.remove(k);
       for (const m of mags) m.o.visible = false; mags.length = 0;
+      for (const g of gibs) g.m.visible = false; fountains.length = 0;
     },
   };
   return api;

@@ -265,7 +265,7 @@ export function viewer(canvas, item, opt = {}) {
     r3.setClearColor(0x000000, 0); r3.clear(); studioRender(r3, sc, vc);
   };
   raf = requestAnimationFrame(tick);
-  return { stop() { stopped = true; cancelAnimationFrame(raf); env.dispose(); bgc.remove(); r3.dispose(); try { r3.forceContextLoss(); } catch (e) { /* gone */ } } };
+  return { stop() { stopped = true; cancelAnimationFrame(raf); try { env.dispose(); r3.dispose(); r3.forceContextLoss(); } catch (e) { /* gone */ } } };
 }
 
 // ---- the main-menu stage: your equipped agent and gun, in a warm desert courtyard, slowly breathing ----

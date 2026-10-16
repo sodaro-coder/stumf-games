@@ -52,7 +52,7 @@ function dressScene(sc, B, shadows, clouds = true, skySize = 2048) {
   return { sun, sky, dir: d };
 }
 const TOUCH_DEG = 0.15;   // phone look speed at sensitivity 1 (degrees per pixel of finger travel)
-const DEF_SET = { vmX: 0, vmY: 0, vmZ: 0, vmFov: 60, xStyle: 'classic', voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, killcam: 1, replay: 0, padLayout: 'default', padInvert: 0, padDead: 0.16, gyro: 0, gyroSens: 1, gyroInv: 0, tSize: 1, tAlpha: 1, tLefty: 0, haptics: 1 };
+const DEF_SET = { gore: 2,  vmX: 0, vmY: 0, vmZ: 0, vmFov: 60, xStyle: 'classic', voicePack: 'classic', crouchKey: 'ctrl', voice: 1, sens: 1.6, fov: 90, vol: 0.6, xSize: 5, xGap: 0, xThick: 2, xOutline: 0.6, xColor: '#55ff55', xDyn: 0, xDot: 0, quality: 0, fps: 0, hand: 1, recoilHelp: 0, touchSens: 1, bright: 1, killcam: 1, replay: 0, padLayout: 'default', padInvert: 0, padDead: 0.16, gyro: 0, gyroSens: 1, gyroInv: 0, tSize: 1, tAlpha: 1, tLefty: 0, haptics: 1 };
 const loadSet = () => { try { return Object.assign({}, DEF_SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { return { ...DEF_SET }; } };
 const saveSet = (s) => { try { localStorage.setItem(SET_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } };
 // which sound a shot makes: a joke skin's own sound, else the gun's (knives: hit or miss)
@@ -298,7 +298,7 @@ export default function start({ cfg, E, N, smoke }) {
   const cmapOf = (id) => (MAPS[id] && MAPS[id].custom ? MAPS[id].def : undefined);
   try { registerLocal(); } catch (e) { /* no saved maps */ }
   let menu = null;
-  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, audio, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
+  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, audio, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); if (cfx) cfx.setGore(S.gore ?? 2); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
   if (smoke) { let m = 'dust', md = '5v5'; try { const u = new URLSearchParams(location.search), q = u.get('map'), qm = u.get('mode'); if (MAPS[q]) m = q; if (MODES[qm] && !MODES[qm].hidden) md = qm; var wq = u.get('weather'); } catch (e) { /* no page */ } runMatch({ mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true, weather: wq }); }
   else showMenu();
 
@@ -723,7 +723,8 @@ export default function start({ cfg, E, N, smoke }) {
       }
       W.spinners = []; W.breakables = []; for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); if (m.userData.spin) W.spinners.push(m.userData.spin); if (m.userData.breakable) W.breakables.push(m); }
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
-      if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier) }); else cfx.setWorld(W);   // holes, blood, sparks, smoke that fills rooms, fire, ripples
+      if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier) }); else cfx.setWorld(W);
+      cfx.setGore(S.gore ?? 2);   // holes, blood, sparks, smoke that fills rooms, fire, ripples
       hud.radarBase(W);
       if (SC) SC.setWorld(W);
       // shaders for the new map built now (behind the loading card), not on the first frames of play: phones hitched there
@@ -734,6 +735,29 @@ export default function start({ cfg, E, N, smoke }) {
     const rigs = new Map();
     // a soft dark patch under each player (contact shadow), cheap on every setting
     const blobGeo = new THREE.PlaneGeometry(1, 1), blobMat = new THREE.MeshBasicMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(0,0,0,.55)'); gr.addColorStop(0.55, 'rgba(0,0,0,.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+    // gore on a kill. Max: a headshot takes the head off (a neck that pumps, skull and meat flying), a close shotgun blast
+    // takes an arm, explosives blow the body apart. Heavy: explosions only. Low: blood only.
+    const EXPLOSIVE = /^(he|c4|molotov|incgrenade|rocket|rocket_ball|triple_ball|dunk|explosion|bomb|vest)$/;
+    function goreKill(r, vp, data, W2, dir, dist) {
+      const g = S.gore ?? 2, at = (bone, fy) => { const b = r.bones && r.bones[bone]; if (b) { const v = new THREE.Vector3(); b.getWorldPosition(v); return v; } return new THREE.Vector3(vp.x, vp.y + fy, vp.z); };
+      if (g <= 0) return;
+      if (EXPLOSIVE.test(String(data.weapon || ''))) {
+        cfx.gibs(vp.x, vp.y + 1.0, vp.z, 26, dir, 1.5); cfx.pool(vp.x, vp.y, vp.z); cfx.pool(vp.x + dir.x * 1.2, vp.y, vp.z + dir.z * 1.2);
+        cfx.blood(vp.x, vp.y + 1.1, vp.z, { x: dir.x, y: 0.3, z: dir.z }, true); r.gibbed = true; return;
+      }
+      if (g < 2) return;
+      const knife = W2.cat === 'knife' || data.weapon === 'knife';
+      if (data.head && !knife) {
+        const h = at('Head', 1.7); r.lost = ['Head'];
+        cfx.gibs(h.x, h.y, h.z, 9, dir, 0.9); cfx.blood(h.x, h.y, h.z, { x: dir.x, y: 0.2, z: dir.z }, true);
+        cfx.fountain(() => (r.g.visible ? at('Neck', 1.55) : null), 2.8, { x: -dir.x * 0.3, y: 1, z: -dir.z * 0.3 });
+      } else if (W2.pellets > 1 && dist < 7) {
+        const side = Math.random() < 0.5 ? 'Left' : 'Right', sh = at(side + 'Arm', 1.4); r.lost = [side + 'Arm'];
+        cfx.gibs(sh.x, sh.y, sh.z, 6, dir, 1.1); cfx.fountain(() => (r.g.visible ? at(side + 'Shoulder', 1.4) : null), 1.8, { x: dir.x, y: 0.6, z: dir.z });
+      } else if (knife) {
+        const c = at('Spine2', 1.3); cfx.fountain(() => (r.g.visible ? at('Spine2', 1.3) : null), 1.4, { x: dir.x, y: 0.4, z: dir.z }); cfx.blood(c.x, c.y, c.z, dir, true);
+      }
+    }
     function rigFor(id) {
       const r0 = rigs.get(id), info = st.roster.get(id) || {}, team = info.team || 'T';
       const agentId = (info.agent || {})[team] || (team === 'T' ? 'a_t_default' : 'a_ct_default');
@@ -1106,7 +1130,7 @@ export default function start({ cfg, E, N, smoke }) {
     function onTp(m) { if (!m || ![m.x, m.y, m.z].every(Number.isFinite)) return; me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vy = me.vz = 0; me.walkTo = null; if (Number.isFinite(m.yaw)) { me.yaw = m.yaw; me.pitch = 0; } }   // a story scene puts this player somewhere
     function onSpawn(m) { kc = null; dmgFrom.clear(); dmgTo.clear(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
     function onHurt(m) {
-      me.hp = m.hp; me.armor = m.armor; audio.play('hurt'); if (mob) mob.buzz(Math.min(60, 12 + (m.dmg | 0))); if (m.by) dmgFrom.set(m.by, (dmgFrom.get(m.by) || 0) + (m.dmg | 0));
+      me.hp = m.hp; me.armor = m.armor; audio.play('hurt'); hud.bloodScreen(m.dmg, S.gore ?? 2); if (mob) mob.buzz(Math.min(60, 12 + (m.dmg | 0))); if (m.by) dmgFrom.set(m.by, (dmgFrom.get(m.by) || 0) + (m.dmg | 0));
       const ang = m.from ? angDiff(me.yaw, Math.atan2(-(m.from[0] - me.x), -(m.from[1] - me.z))) : null;
       hud.hurt(ang != null ? -ang : null); me.punch += 0.03;
       if (m.hp <= 0) me.alive = false;
@@ -1317,7 +1341,8 @@ export default function start({ cfg, E, N, smoke }) {
         }
         if (data.assist === myName) stats.a++;
         const r = rigs.get(data.vid); if (r) { r.dieT = 0.001; const kp2 = data.kid === myId ? me : st.players.get(data.kid), vp = st.players.get(data.vid); if (kp2 && vp) { const dx = vp.x - kp2.x, dz = vp.z - kp2.z, L = Math.hypot(dx, dz) || 1; r.fall = { x: dx / L, z: dz / L, side: Math.random() < 0.5 ? -1 : 1, close: L < 6 };
-          const W2 = W_BY_ID[data.weapon] || {}; r.rag = { t: 0, head: !!data.head, force: Math.min(1.6, 0.7 + (W2.dmg || 30) / 60 + (W2.pellets > 1 && L < 8 ? 0.5 : 0) + (data.weapon === 'he' ? 0.6 : 0)) }; } }
+          const W2 = W_BY_ID[data.weapon] || {}; r.rag = { t: 0, head: !!data.head, force: Math.min(1.6, 0.7 + (W2.dmg || 30) / 60 + (W2.pellets > 1 && L < 8 ? 0.5 : 0) + (data.weapon === 'he' ? 0.6 : 0)) };
+          if (cfx) goreKill(r, vp, data, W2, { x: dx / L, y: 0, z: dz / L }, L); } }
         const fxd = data.fx && KILL_FX[data.fx], vp2 = data.vid === myId ? me : st.players.get(data.vid);
         if (fxd && vp2) { if (parts) parts.emit(vp2.x, vp2.y + 1.2, vp2.z, { n: fxd.n, colors: fxd.colors, speed: fxd.speed, up: 1, size: 0.06, life: 1.4, g: fxd.g ?? 1 }); if (fxd.text) textPop(scene, vp2.x, vp2.y + 2.2, vp2.z, fxd.text, fxd.textColor); audio.at(fxd.sound, vp2.x, vp2.y, vp2.z, cam, 40); }
       }
@@ -1827,7 +1852,8 @@ export default function start({ cfg, E, N, smoke }) {
       let newRigs = 0;   // at most 3 new character models a frame: a 20-man wave used to build all at once and hitch the frame a fight started on
       for (const p of st.players.values()) {
         if (!rigs.has(p.id) && p.id !== myId && ++newRigs > 3) continue;
-        const r = rigFor(p.id); r.g.visible = p.alive || (r.dieT != null && r.dieT < 6);
+        const r = rigFor(p.id); r.g.visible = (p.alive || (r.dieT != null && r.dieT < 6)) && !(r.gibbed && !p.alive);
+        if (p.alive && (r.lost || r.gibbed)) { if (r.lost && r.bones) for (const b of r.lost) if (r.bones[b]) r.bones[b].scale.setScalar(1); r.lost = null; r.gibbed = false; }   // back in one piece on respawn
         if (!p.alive && r.dieT == null) r.dieT = 0.001;
         if (p.alive) r.dieT = null; else r.dieT += dt;
         const sp = Math.hypot(p.x - r.x, p.z - r.z) / Math.max(dt, 1e-3), kv = Math.min(1, dt * 10);
@@ -1842,6 +1868,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (r.soldier && p.rl && !r.wasRl) { soldierEvent(r, 'reload'); if (cfx) setTimeout(() => cfx && cfx.dropMag(p.x, p.y + 1.0, p.z, p.yaw || 0), 300); } r.wasRl = !!p.rl;
         if (r.soldier) setGear(r, p.armor || 0, p.helmet);
         if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0, prone: p.prone || 0 });
+        if (r.lost && r.bones) for (const b of r.lost) if (r.bones[b]) r.bones[b].scale.setScalar(0.001);   // gore: what came off stays off
         else posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
         if (!r.soldier && r.torso && p.lean) r.torso.rotation.z -= p.lean * 0.35;
         if (r.blob) { r.blob.visible = r.g.visible; const gy = W.groundAt(p.x, p.z, p.y + 0.1); r.blob.position.set(p.x, gy + 0.02, p.z); const k = Math.max(0.2, 1 - (p.y - gy) * 0.8); r.blob.scale.setScalar(0.95 * k); }

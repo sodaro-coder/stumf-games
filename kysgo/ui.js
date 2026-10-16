@@ -874,7 +874,8 @@ export class Menu {
         ${P.signedIn ? (it.listed ? '<button class="cs-btn alt sm" data-unlist>Remove listing</button>' : '<input type="number" min="1" id="lp" placeholder="price" style="width:100px"><button class="cs-btn alt sm" data-list>List on market</button>') : ''}</div></div>`;
     document.body.appendChild(m);
     const v = viewer($('canvas', m), it); if (!v) drawItem($('canvas', m), it);
-    const close = () => { if (v) v.stop(); m.remove(); };
+    const close = () => { m.remove(); removeEventListener('keydown', esc1); try { if (v) v.stop(); } catch (e) { /* the viewer's clean-up can never keep the window open */ } };
+    const esc1 = (e) => { if (e.key === 'Escape') close(); }; addEventListener('keydown', esc1);
     // 3D model or collector's card
     m.querySelectorAll('[data-vw]').forEach((b) => (b.onclick = () => {
       const card = b.dataset.vw === 'card';
@@ -911,7 +912,7 @@ export class Menu {
     document.body.appendChild(m);
     const lo = P.loadoutFor('T'), perf = AGENT_BY_ID[lo.agent] || AGENT_BY_ID.a_t_default;   // performed by your own outfit
     const v = viewer($('canvas', m), it, { performer: { look: perf.look, team: perf.team } }); if (!v) drawItem($('canvas', m), it);
-    const rm0 = m.remove.bind(m); m.remove = () => { if (v) v.stop(); rm0(); };
+    const rm0 = m.remove.bind(m); m.remove = () => { rm0(); try { if (v) v.stop(); } catch (e) { /* never keeps the window open */ } };
     $('[data-x]', m).onclick = () => m.remove(); m.onclick = (e) => { if (e.target === m) m.remove(); };
     m.querySelectorAll('[data-slot]').forEach((b) => (b.onclick = () => { P.setWheel(+b.dataset.slot, info.weapon); this.h.toast('On your emote wheel'); m.remove(); }));
     $('[data-sell]', m).onclick = async () => { if (!confirm('Sell ' + info.finish + '?')) return; try { await P.sell(it.uid); } catch (e) { this.h.toast(e.message); } m.remove(); this.render(); };
@@ -1266,7 +1267,8 @@ export class Menu {
         <label class="cs-card"><div class="cs-small cs-mut">Gyro direction</div><select data-k="gyroInv"><option value="0">Normal</option><option value="1">Inverted</option></select></label>
         ${sl('tSize', 'Touch button size', 0.75, 1.3, 0.05)}${sl('tAlpha', 'Touch button opacity', 0.25, 1, 0.05)}
         <label class="cs-card"><div class="cs-small cs-mut">Touch layout</div><select data-k="tLefty"><option value="0">Right-handed (fire on the right)</option><option value="1">Left-handed (mirrored)</option></select></label>
-        <label class="cs-card"><div class="cs-small cs-mut">Vibration (phones)</div><select data-k="haptics"><option value="1">On</option><option value="0">Off</option></select></label></div>
+        <label class="cs-card"><div class="cs-small cs-mut">Vibration (phones)</div><select data-k="haptics"><option value="1">On</option><option value="0">Off</option></select></label>
+        <label class="cs-card"><div class="cs-small cs-mut">Gore</div><select data-k="gore"><option value="2">Max: heads and limbs come off, bodies blow apart, blood everywhere</option><option value="1">Heavy: lots of blood, explosions gib</option><option value="0">Low: a little blood</option></select></label></div>
       <div class="cs-h">Keys</div><div class="cs-card cs-small cs-mut">WASD move · F9 save clip · Shift sprint · Ctrl (or C) crouch · Z prone · Space jump · Mouse1 fire · Mouse2 scope / aim down sights (hold) · Q / E lean while aiming · R reload · E use / plant / defuse / pick up · G drop · B buy menu · 1-5 weapons · Q last weapon · Tab scoreboard · Y chat · U team chat · V X C radio · T emotes · F inspect · Esc menu</div>`;
     B.querySelectorAll('[data-k]').forEach((e) => { if (e.tagName === 'SELECT') e.value = String(S[e.dataset.k]); e.oninput = e.onchange = () => { const k = e.dataset.k; S[k] = e.type === 'color' || k === 'crouchKey' || k === 'voicePack' || k === 'xStyle' || k === 'padLayout' ? e.value : +e.value; const v = $('#v_' + k, B); if (v) v.textContent = S[k]; this.h.saveSettings(S); drawXh($('#xPrev', B), S, 0); const xc = $('#xCode', B); if (xc) xc.value = xhCode(S);
       if (k === 'padLayout') { const ph = $('#padHelp', B); if (ph) ph.textContent = (PAD_LAYOUTS[S.padLayout] || PAD_LAYOUTS.default).help; }
@@ -1361,6 +1363,18 @@ export class Hud {
   hint(t) { const h = this.q('.hint'); h.style.display = t ? '' : 'none'; if (t) h.textContent = t; }
   spec(t) { const h = this.q('.spec'); h.style.display = t ? '' : 'none'; if (t) h.textContent = t; }
   chat(name, team, text, teamOnly) { const box = this.q('.chat'), d = document.createElement('div'); const n = document.createElement('b'); n.textContent = (teamOnly ? '(Team) ' : '') + name + ': '; n.style.color = team === 'CT' ? 'var(--ct)' : 'var(--tt)'; d.appendChild(n); d.appendChild(document.createTextNode(text)); box.appendChild(d); while (box.children.length > 6) box.firstChild.remove(); setTimeout(() => d.remove(), 9000); }
+  bloodScreen(dmg, gore) {   // gore: splats on the screen that run and fade (more of them the harder the hit)
+    if (!gore) return;
+    const n = Math.min(gore > 1 ? 4 : 2, 1 + Math.floor((dmg || 10) / 25));
+    for (let k = 0; k < n; k++) {
+      const d = document.createElement('div'), sz = 90 + Math.random() * 160 * (gore > 1 ? 1.4 : 1), x = Math.random() < 0.5 ? Math.random() * 30 : 70 + Math.random() * 30;
+      d.style.cssText = `position:fixed;left:calc(${x}vw - ${sz / 2}px);top:calc(${10 + Math.random() * 75}vh - ${sz / 2}px);width:${sz}px;height:${sz * 1.15}px;z-index:19;pointer-events:none;border-radius:46% 54% 42% 58%/55% 45% 60% 40%;`
+        + `background:radial-gradient(circle at 45% 40%,rgba(150,0,0,.85),rgba(110,0,0,.7) 45%,rgba(70,0,0,0) 70%);filter:blur(1px);opacity:.95;transition:opacity 2.6s ease-in,transform 2.6s ease-in;transform:translateY(0) rotate(${Math.random() * 360}deg)`;
+      document.body.appendChild(d);
+      requestAnimationFrame(() => { d.style.opacity = '0'; d.style.transform += ' translateY(40px)'; });
+      setTimeout(() => d.remove(), 2800);
+    }
+  }
   hurt(angle) { this.hurtEl.style.opacity = 1; setTimeout(() => (this.hurtEl.style.opacity = 0), 200); if (angle != null) { const d = this.q('.dmgdir'); d.style.transform = `rotate(${angle}rad)`; d.style.opacity = 1; clearTimeout(this.dt); this.dt = setTimeout(() => (d.style.opacity = 0), 700); } }
   flashAmt(a) { this.flash.style.opacity = Math.max(0, Math.min(1, a)); }
   // ---- radar ----
