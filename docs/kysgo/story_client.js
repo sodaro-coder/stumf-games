@@ -278,7 +278,9 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     const l = cutQ[0]; if (!l) { cam.init = false; return null; }
     const chars = (S && S.chars) || [], squad = chars.map((c) => posOf(c.id)).filter(Boolean);
     const avg = (k) => (squad.length ? squad.reduce((s, p) => s + p[k], 0) / squad.length : 0), cx = avg('x'), cy = avg('y'), cz = avg('z');
-    const who = l.who === 'boss' ? (S && S.boss ? posOf(S.boss.id) : null) : (() => { const c = chars.find((q) => q.char === l.who && q.alive); return c ? posOf(c.id) : null; })();
+    const LISTENER = { tape: 'ricky' };   // a voice with no body here: the shot goes to whoever it's for
+    const lis = LISTENER[l.who] ? chars.find((q) => q.char === LISTENER[l.who] && q.alive) : null;
+    const who = l.who === 'boss' ? (S && S.boss ? posOf(S.boss.id) : null) : (() => { const c = chars.find((q) => q.char === l.who && q.alive) || lis; return c ? posOf(c.id) : null; })();
     const title = !!$('.sc-title').textContent && lineIdx <= 1;   // cleared after the first line
     const cam1 = l.o && l.o.cam, me = posOf(myId);
     if (cam1 === 'pov' || cam1 === 'pov_down') {   // through the eyes (a child in a hallway; a man on the ground)
@@ -292,9 +294,11 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     if (cam1 === 'grave') {   // the headstone, low and still
       const g = zoneAt('Grave'); if (!g) return null;
       p = new THREE.Vector3(g.x + 1.6, g.y + 0.9, g.z + 3.4); look = new THREE.Vector3(g.x, g.y + 0.6, g.z - 0.2);
-    } else if (cam1 === 'boss' && bossP) {   // looking up at them
-      const s2 = bossP.scale || 1, fx = -Math.sin(bossP.yaw || 0), fz = -Math.cos(bossP.yaw || 0);
-      p = new THREE.Vector3(bossP.x + fx * 3.2 * s2, bossP.y + 0.9, bossP.z + fz * 3.2 * s2); look = new THREE.Vector3(bossP.x, bossP.y + 1.5 * s2, bossP.z);
+    } else if (cam1 === 'boss' && bossP) {   // looking up at them, from just behind the hero's shoulder (works in any room: the hero is standing there)
+      const s2 = bossP.scale || 1, from = me || who2 || { x: cx, y: cy, z: cz };
+      let dx = from.x - bossP.x, dz = from.z - bossP.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+      const back = Math.min(0.9, Math.max(0.3, 4.2 * s2 - L)), eye = from.y + 1.0 * ((from.scale || 1));
+      p = new THREE.Vector3(from.x + dx * back + dz * 0.35, eye, from.z + dz * back - dx * 0.35); look = new THREE.Vector3(bossP.x, bossP.y + 1.55 * s2, bossP.z);
     } else if (cam1 === 'pull' && who2) {   // behind and above, pulling away as they walk off
       const k = Math.min(1, shotT / 6), back = 3 + k * 9, up = 1.8 + k * 5, fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0);
       p = new THREE.Vector3(who2.x - fx * back, who2.y + up, who2.z - fz * back); look = new THREE.Vector3(who2.x + fx * 2, who2.y + 1.2, who2.z + fz * 2);
@@ -322,13 +326,13 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   const card = (small, h1, p, em, rw) => { const c = $('.sc-card'); $('.sc-card small').textContent = small || ''; $('.sc-card h1').textContent = h1 || ''; $('.sc-card p').textContent = p || ''; $('.sc-card em').textContent = em || ''; $('.sc-card .rw').textContent = rw || ''; c.style.display = 'grid'; c.style.opacity = 1; };
   return {
     onEvent(type, data) {
-      if (type === 'cut') { $('.sc-unlock').style.display = 'none'; cutAll = (data.lines || []).slice(); cutQ = cutAll.slice(); cutT0 = performance.now(); lineIdx = 0; $('.sc-title').textContent = data.title || ''; $('.sc-skip').textContent = 'tap / Space / A: skip'; talkQ = []; talkT = 0; $('.sc-talk').style.opacity = 0; showLine(); }
+      if (type === 'cut') { barkT = 0; $('.sc-bark').style.opacity = 0; $('.sc-unlock').style.display = 'none'; cutAll = (data.lines || []).slice(); cutQ = cutAll.slice(); cutT0 = performance.now(); lineIdx = 0; $('.sc-title').textContent = data.title || ''; $('.sc-skip').textContent = 'tap / Space / A: skip'; talkQ = []; talkT = 0; $('.sc-talk').style.opacity = 0; showLine(); }
       if (type === 'cutSkip') { flushCut(); endCut(); }
       if (type === 'skipVotes') $('.sc-skip').textContent = `skip: ${data.n} of ${data.need} want to skip`;
       if (type === 'talk') { talkQ.push(...(data.lines || [])); if (talkT <= 0) nextTalk(); }
       if (type === 'story') { S = data; render(); }
       if (type === 'obj' && audio) audio.play('radio');
-      if (type === 'bark' && !talkT) { const el = $('.sc-bark'); el.style.setProperty('--c', COLORS[data.who] || '#fff'); el.innerHTML = `<b>${esc(data.name)}:</b> ${esc(data.text)}`; el.style.opacity = 1; barkT = 3.2; }
+      if (type === 'bark' && !talkT && !cutQ.length) { const el = $('.sc-bark'); el.style.setProperty('--c', COLORS[data.who] || '#fff'); el.innerHTML = `<b>${esc(data.name)}:</b> ${esc(data.text)}`; el.style.opacity = 1; barkT = 3.2; }
       if (type === 'focus') { focusT = data.dur || 15; $('.sc-focus').style.display = 'block'; }
       if (type === 'heal') { const m = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.6, 40), new THREE.MeshBasicMaterial({ color: 0x7ed957, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set(data.x, data.y + 0.08, data.z); grp.add(m); rings.push({ m, t: 0, r: data.r || 10 }); if (audio) audio.play('heal', 0.9); }
       if (type === 'unlock') { const C = CHARACTERS[data.char] || {}, A = C.ability || {}, el = $('.sc-unlock'); el.innerHTML = `<b>ABILITY UNLOCKED</b><h2>${esc(A.name || '')}</h2><p>${esc(A.desc || '')}</p><p style="margin-top:8px"><kbd>G</kbd> keyboard · <kbd>SKILL</kbd> phone · <kbd>D-pad ↑</kbd> controller</p>`; el.style.display = 'block'; if (audio) audio.play('unlock', 0.9); setTimeout(() => { el.style.display = 'none'; }, 7000); }
@@ -352,8 +356,9 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     status(t) { $('.sc-card em').textContent = t; },
     reward(t) { $('.sc-card .rw').textContent = t || ''; },
     hideCard() { const c = $('.sc-card'); c.style.opacity = 0; setTimeout(() => { if (c.style.opacity === '0') c.style.display = 'none'; }, 650); },
-    chapterCard(ci, reward) { const c = CHAPTERS[ci]; if (!c) return; card(`Chapter ${ci + 1} complete`, c.name, c.hub || '', '', reward || ''); },
-    finalCard(reward) { card('Operation Ballin\' Out', 'Tapes From My Pops', 'for Dale', 'thanks for playing', reward || ''); },
+    chapterCard(ci, reward) { const c = CHAPTERS[ci]; if (!c) return; if (c.id === 'c9') return card('Operation Ballin\' Out', 'Tapes From My Pops', 'for Dale', 'thanks for playing · Side B unlocked', reward || '');   // the main story's ending
+      card(`Chapter ${ci + 1} complete`, c.name, c.hub || '', '', reward || ''); },
+    finalCard(reward, chapter) { if (chapter && CHAPTERS.findIndex((c) => c.id === chapter) > CHAPTERS.findIndex((c) => c.id === 'c9')) card('Side B', 'Still Ticking', 'for Dale', 'thanks for playing', reward || ''); else card('Operation Ballin\' Out', 'Tapes From My Pops', 'for Dale', 'thanks for playing', reward || ''); },
     // the chapter hub: the same party between chapters. Pick a character, change your loadout, ready up.
     hub(st) {
       const h = $('.sc-hub'); if (!st) { h.style.display = 'none'; h.innerHTML = ''; return; }

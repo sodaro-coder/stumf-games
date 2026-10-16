@@ -135,6 +135,12 @@ export class StoryMatch extends Match {
   // a scene everyone watches together (the host keeps the clock; the clients pace the lines the same way)
   scene(raw, title = '', which = 'scene') {
     this.flushDirs();   // whatever the last scene still had to do happens before this one starts
+    const H0 = this.humans();   // AI squadmates who fell behind catch up for it (the wide shots frame the squad, not an empty yard)
+    if (H0.length) for (const q of this.players.values()) {
+      if (!q.squad || !q.bot || !q.alive || q.downed || q.carrying || q.scripted) continue;
+      const h = H0.reduce((a, b) => (Math.hypot(b.x - q.x, b.z - q.z) < Math.hypot(a.x - q.x, a.z - q.z) ? b : a));
+      if (Math.hypot(h.x - q.x, h.z - q.z) > 12) { const k = hash(q.id) % 4, pt = this.reach([h.x + [1.6, -1.6, 0.9, -0.9][k], h.z + [1.2, 1.2, -1.6, -1.6][k]]); q.x = pt[0]; q.z = pt[1]; q.y = this.W.groundAt(pt[0], pt[1], h.y + 1); q.vx = q.vz = 0; q.walkTo = null; }
+    }
     const lines = this.lines(raw); this.skipVotes.clear();
     this.event('cut', { lines, title, which });
     let acc = 0; this.dirs = lines.map((l) => { const d = { t: acc, o: l.o, who: l.who }; acc += 1.6 + l.text.length * 0.045 + ((l.o && l.o.hold) || 0); return d; }).filter((d) => d.o); this.sceneClock = 0;

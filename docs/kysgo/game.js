@@ -572,7 +572,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (camp.ended === d.mission) return; camp.ended = d.mission;
       campHold = true; try { document.exitPointerLock && document.exitPointerLock(); } catch (e) { /* not locked */ }
       const m = MISSIONS[d.mission] || {}, nxt = MISSIONS[d.mission + 1];
-      if (!d.chapterEnd && nxt) storyUI().transition(d.mission + 1, 'saving…'); else if (nxt) storyUI().chapterCard(m.chapterIndex); else storyUI().finalCard();
+      if (!d.chapterEnd && nxt) storyUI().transition(d.mission + 1, 'saving…'); else if (nxt) storyUI().chapterCard(m.chapterIndex); else storyUI().finalCard('', m.chapter);
       audio.play('win');
       const rw = await bankLevel(d); SC.reward(rw);
       if (!isHost) return;   // the host moves everyone on
@@ -1824,7 +1824,9 @@ export default function start({ cfg, E, N, smoke }) {
       if (Math.abs(cam.fov - vfov) > 0.01) { cam.fov = vfov; cam.updateProjectionMatrix(); }
       // ---- players ----
       const now = performance.now() / 1000;
+      let newRigs = 0;   // at most 3 new character models a frame: a 20-man wave used to build all at once and hitch the frame a fight started on
       for (const p of st.players.values()) {
+        if (!rigs.has(p.id) && p.id !== myId && ++newRigs > 3) continue;
         const r = rigFor(p.id); r.g.visible = p.alive || (r.dieT != null && r.dieT < 6);
         if (!p.alive && r.dieT == null) r.dieT = 0.001;
         if (p.alive) r.dieT = null; else r.dieT += dt;
@@ -1856,7 +1858,8 @@ export default function start({ cfg, E, N, smoke }) {
       }
       // own body while emoting: camera swings out in front, you see yourself
       // story cutscenes: the director's camera, and your own body in the shot like everyone else's
-      const cine = SC && SC.cutscene && W ? SC.shot(now, (id) => { if (id === myId) return me.alive ? { x: me.x, y: me.y, z: me.z, yaw: me.yaw } : null; const p = st.players.get(id); return p && p.alive ? { x: p.x, y: p.y, z: p.z, yaw: p.yaw, scale: p.scale || 1 } : null; }) : null;
+      const scaleOf = (id, p) => { const info = st.roster.get(id) || {}; return (p && p.scale) || info.scale || (info.boss === 'ballin' || info.boss === true ? BOSS.model.scale : 1); };   // the same size the model is drawn at (a giant boss, a child)
+      const cine = SC && SC.cutscene && W ? SC.shot(now, (id) => { if (id === myId) return me.alive ? { x: me.x, y: me.y, z: me.z, yaw: me.yaw, scale: scaleOf(id) } : null; const p = st.players.get(id); return p && p.alive ? { x: p.x, y: p.y, z: p.z, yaw: p.yaw, scale: scaleOf(id, p) } : null; }) : null;
       const povShot = cine && cine.pov;
       const selfRig = me.emote || (cine && !povShot) || rigs.has(myId) ? rigFor(myId) : null;
       if (selfRig) {
