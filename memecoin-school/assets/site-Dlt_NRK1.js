@@ -1,0 +1,1 @@
+import"./styles-Bz1aXGtq.js";var e=document.getElementById(`releases-link`);e&&e.replaceWith(document.createTextNode(`releases page (coming with the first release)`));
