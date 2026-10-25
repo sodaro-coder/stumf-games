@@ -1,0 +1,1 @@
+function e(e,t,n,r,i,a,o,s,c={}){let[l,u,d,f,p,m,h,g]=o;return{id:e,title:t,minutes:n,level:r,topics:i,summary:a,sections:{do:l,why:u,evidence:d,evaluate:f,warnings:p,uncertainty:m,practice:h,mastery:g},quiz:s.map(([e,t,n,r])=>({q:e,options:t,answer:n,explain:r})),...c}}export{e as t};

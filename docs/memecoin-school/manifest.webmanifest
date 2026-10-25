@@ -1,0 +1,16 @@
+{
+  "name": "S.T.U.M.F’s MemeCoin Trading School",
+  "short_name": "STUMF School",
+  "description": "Solana memecoin trading terminal, realistic paper trading and a personalized trading academy.",
+  "start_url": "./app.html#/terminal",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#16211e",
+  "theme_color": "#16211e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
