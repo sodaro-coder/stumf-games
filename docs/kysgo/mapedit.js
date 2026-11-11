@@ -135,7 +135,7 @@ export class MapEditor {
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:auto"><button class="cs-btn sm" data-a="undo">Undo</button><button class="cs-btn sm" data-a="save">Save</button>
           <button class="cs-btn sm" data-a="test">▶ Test with bots</button><button class="cs-btn sm" data-a="publish">🌍 Publish</button><button class="cs-btn alt sm" data-a="close">Close</button></div>
       </div>
-      <div style="position:relative;display:grid;place-items:center;min-height:60vh;background:#0b0e13;border-radius:6px;touch-action:none"><canvas data-c style="max-width:100%;max-height:78vh;cursor:crosshair"></canvas></div></div>`;
+      <div style="position:relative;display:grid;place-items:center;min-height:60vh;background:#0b0e13;border-radius:6px;touch-action:none"><canvas data-c data-padcanvas style="max-width:100%;max-height:78vh;cursor:crosshair"></canvas></div></div>`;
     document.body.appendChild(this.el);
     this.c = this.el.querySelector('[data-c]'); this.g = this.c.getContext('2d');
     const f = (k) => this.el.querySelector(`[data-f="${k}"]`);

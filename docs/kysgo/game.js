@@ -212,6 +212,7 @@ function makeAudio(getVol) {
     speechSynthesis.speak(u);
   } catch (e) { /* no voices */ } };
   return {
+    wake: () => ensure(),   // the first controller press starts the sound (browsers only allow audio after an input)
     play(name, vol = 1, pan = 0, extra) { if (!ensure()) return; far = 0; try { if (GUN_SND[name]) gun(GUN_SND[name], vol, pan); else if (SND[name]) SND[name](vol, Math.max(-1, Math.min(1, pan)), extra); } catch (e) { /* audio busy */ } },
     at(name, x, y, z, cam, range = 60, extra) {  // positional: volume by distance, pan by angle, muffled when far
       if (!ensure()) return;
@@ -299,7 +300,7 @@ export default function start({ cfg, E, N, smoke }) {
   const cmapOf = (id) => (MAPS[id] && MAPS[id].custom ? MAPS[id].def : undefined);
   try { registerLocal(); } catch (e) { /* no saved maps */ }
   let menu = null;
-  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, audio, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); if (cfx) cfx.setGore(S.gore ?? 2); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false }); };
+  const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, audio, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); const fx = window.__cs && window.__cs.cfx; if (fx) fx.setGore(S.gore ?? 2); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false, onActive: () => audio.wake() }); };
   if (smoke) { let m = 'dust', md = '5v5'; try { const u = new URLSearchParams(location.search), q = u.get('map'), qm = u.get('mode'); if (MAPS[q]) m = q; if (MODES[qm] && !MODES[qm].hidden) md = qm; var wq = u.get('weather'); } catch (e) { /* no page */ } runMatch({ mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true, weather: wq }); }
   else showMenu();
 
@@ -1087,7 +1088,7 @@ export default function start({ cfg, E, N, smoke }) {
     if (mob) addEventListener('devicemotion', onMotion);
     if (mob && story) document.querySelectorAll('.kc-t b').forEach((b) => { if (b.textContent === 'BUY') b.textContent = 'SKILL'; });   // nothing to buy in a mission: that button is the ability
     // controllers (consoles, TVs, PCs with a pad): drive the match while playing, the menus otherwise
-    const pad = gamepadControls(E.input, { playing: () => started && !uiOpen && !ended && !hud.chatIn && !campHold && !loadMenu, sens: () => S.touchSens || 1,
+    const pad = gamepadControls(E.input, { onActive: () => audio.wake(), playing: () => started && !uiOpen && !ended && !hud.chatIn && !campHold && !loadMenu, sens: () => S.touchSens || 1,
       layout: () => S.padLayout || 'default', invert: () => !!S.padInvert, dead: () => S.padDead || 0.16 });
     if (mob) { hud.el.classList.add('touch'); mob.setSens(S.touchSens || 1); }
     let mobShown = true;
@@ -1827,6 +1828,8 @@ export default function start({ cfg, E, N, smoke }) {
         }
         if (kp('KeyT') && me.alive) { radioOpen = 'emote'; hud.emoteWheel(profile.wheel().map((id) => EMOTE_BY_ID[id]).filter(Boolean), (e) => toHost('emote', e.id)); }
         for (const k of S.crouchKey === 'c' ? ['v', 'x'] : ['v', 'x', 'c']) if (kp('Key' + k.toUpperCase()) && !kd('ControlLeft')) { radioOpen = k; hud.radio(k, me.team, (t) => toHost('chat', { text: '📻 ' + t, team: true })); }
+      } else if (uiOpen === 'pause' && pad.active && kp('Escape')) {   // a controller's B leaves the pause menu (a mouse player clicks Resume to lock the pointer again)
+        hud.pauseMenu(false); uiOpen = null; lock();
       } else if (uiOpen === 'buy') {
         if (kp('KeyB') || kp('Escape')) closeBuy();
         if (!canBuy()) closeBuy();
