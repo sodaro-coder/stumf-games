@@ -4,7 +4,7 @@
 // box-built players, so it holds 60 fps on weak integrated graphics.
 import * as THREE from '../sdk/three.module.min.js';
 import { WEAPONS, W_BY_ID, G_BY_ID, MODES, PHYS, BOMB, U, slotOf, itemName, forTeam, RANKS, rankOf, RANKED_BOTS, PLACEMENTS, BOT_LEVELS, myRegion } from './data.js';
-import { buildWorld, LIGHT } from './world.js';
+import { buildWorld, LIGHT, pruneTx } from './world.js';
 import { WEATHER, applyWeather, Precip } from './weather.js';
 import { SPRAY_BY_ID, sprayCanvas } from './sprays.js';
 import { KIT_BY_ID, playKit } from './musickits.js';
@@ -32,9 +32,9 @@ import { createCombatFx } from './fx2.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
-import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD, cutPiece } from './chars.js';
-import { setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
-import { setModelTexTier, placeModels } from './glb.js';
+import { releaseSoldiers, loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD, cutPiece } from './chars.js';
+import { releaseRealGuns, setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
+import { setModelTexTier, placeModels, releaseLoaded } from './glb.js';
 let pmT = 0;
 
 const SET_KEY = 'cs:settings:v1';
@@ -364,8 +364,11 @@ export default function start({ cfg, E, N, smoke }) {
     const cam = new THREE.PerspectiveCamera(74, 1, 0.05, 400); cam.rotation.order = 'YXZ'; scene.add(cam);
     const vmCam = new THREE.PerspectiveCamera(60, 1, 0.01, 10), vmScene = new THREE.Scene();
     const vmHemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2), vmSun = new THREE.DirectionalLight(0xffffff, 1.6); vmSun.position.set(1, 2, 1);
-    const vmFill = new THREE.DirectionalLight(0xfff2e0, 0.5); vmFill.position.set(-0.3, 0.6, 1);   // soft fill from the viewer's side: the gun always reads, like any shooter's viewmodel
-    vmScene.add(vmHemi, vmSun, vmFill);
+    const vmFill = new THREE.DirectionalLight(0xfff2e0, 0.5); vmFill.position.set(-1, 0.9, 0.25);   // soft fill from the left and above: the gun always reads (not from the eye: faces turned to the camera, like the AK's receiver end, flared white in its highlight)
+    // a kick light from above and behind the gun: edges, rails and worn steel catch a line of light (the sky behind a
+    // gun held at the hip), so a black rifle still shows its shape in the sun instead of a flat silhouette
+    const vmRim = new THREE.DirectionalLight(0xfff6ea, 1.2); vmRim.position.set(0.5, 1.4, -1.6);
+    vmScene.add(vmHemi, vmSun, vmFill, vmRim);
     // a knife slash leaves a quick bright arc across the view (a stab: a short streak straight ahead)
     const slashMesh = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.47, 28, 1, Math.PI * 0.18, Math.PI * 0.64), new THREE.MeshBasicMaterial({ color: 0xdfe8f0, transparent: true, opacity: 0, depthTest: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
     slashMesh.position.set(0, -0.08, -0.55); slashMesh.renderOrder = 9; vmScene.add(slashMesh); let slashT = 0;
@@ -488,6 +491,7 @@ export default function start({ cfg, E, N, smoke }) {
           c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);                                   // contrast
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = mix(vec3(l), c, 1.08);   // a touch more colour
           c = c * (vec3(1.0) + (1.0 - l) * vec3(-0.06, 0.0, 0.07)) + l * vec3(0.016, 0.006, -0.012);   // cool shadows (scaled: black stays black; an added blue lifted dark red blood to purple and dark guns to navy), warm highlights
+          c += pow(1.0 - l, 8.0) * vec3(0.0048, 0.006, 0.0092);   // a faint, slightly cool floor under the deepest shadows: night maps stay readable (the old blue lift did that, but tinted blood and dark guns purple; this one is 4x weaker in blue and lifts every channel)
           vec2 q = vUv - 0.5; c *= 1.0 - 0.32 * pow(length(q * vec2(1.25, 1.0)) * 1.3, 2.4);   // vignette
           c += (fract(sin(dot(vUv * res + time * 61.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.007 * min(1.0, 0.2 + l * 8.0);   // grain (faint in near-black: linear noise there is a visible speckle after sRGB)
           #endif
@@ -539,6 +543,9 @@ export default function start({ cfg, E, N, smoke }) {
     let dsh = null;
     const applyTier = () => {
       Q = gfx.q; P = gfx.p; setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra');
+      if (applyTier.done) { releaseSoldiers(); releaseRealGuns(); releaseLoaded(); }   // a step down: every real model's textures leave the GPU; what is still drawn uploads its own again
+      applyTier.done = true;
+      if (P.chars) loadChars(P.hqModels ? true : undefined);   // a step down from Ultra swaps the 2K soldiers for the 1K ones
       post.mat.defines = gfx.postDefines(); post.mat.needsUpdate = true; post.w = 0;
       if (dsh) { dsh.dispose(); dsh = null; }
       if (P.shadows && renderer.capabilities.isWebGL2) dsh = new DynamicShadows(P.shadows);
@@ -783,9 +790,10 @@ export default function start({ cfg, E, N, smoke }) {
       es.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
     }
     function buildMap(id) {
-      if (W) { scene.remove(W.group); W.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+      if (W) { scene.remove(W.group); W.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh && o.material) for (const k of ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap']) if (o.material[k]) o.material[k].dispose(); }); }   // the placed models' textures too (a tier step down may not use those files again; a rebuild that does re-uploads them)
       mapId = id; const wx = weather && WEATHER[weather] && weather !== 'day' ? weather : null;
       W = buildWorld(E, wx ? { ...MAPS[id], build: () => applyWeather(MAPS[id].build(), wx) } : MAPS[id], scene, Q, { ...gfx.worldOpts(), dynShadows: dsh ? P.shadows.cascades.length : 0, prebaked: BAKE[id] });
+      if (W.txUsed) pruneTx(W.txUsed);   // photos only the previous map or tier used leave the GPU
       if (precip) { precip.dispose(); precip = null; }
       audio.occlude((x, y, z, L) => W.los({ x: L.x, y: L.y, z: L.z }, { x, y: y + 1.0, z }));
       if (W.B.precip && gfx.tier !== 'potato') precip = new Precip(scene, W.B.precip, gfx.tier === 'low' ? 1200 : 2600);
@@ -803,7 +811,7 @@ export default function start({ cfg, E, N, smoke }) {
         for (const c of W.chunks) { const bb = c.geometry.boundingBox; culler.addBox(c, bb.min.x, bb.min.z, bb.max.x, bb.max.z); }
       }
       W.spinners = []; W.breakables = []; for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); if (m.userData.spin) W.spinners.push(m.userData.spin); if (m.userData.breakable) W.breakables.push(m); }
-      if (W.placements && W.placements.length) { W.models = placeModels(W.placements, { hq: P.hqModels }); W.group.add(W.models); }   // real crates, barrels, windows, shutters and litter (glb.js), instanced
+      if (W.placements && W.placements.length) { W.models = placeModels(W.placements, { hq: P.hqModels && P.props.hq, far: P.props.near, max: P.props.max }); W.group.add(W.models); }   // real crates, barrels, windows, shutters and litter (glb.js), instanced
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier), ultra: gfx.tier === 'ultra' }); else cfx.setWorld(W);
       cfx.setGore(S.gore ?? 2);   // holes, blood, sparks, smoke that fills rooms, fire, ripples
@@ -843,12 +851,13 @@ export default function start({ cfg, E, N, smoke }) {
         const side = Math.random() < 0.5 ? 'Left' : 'Right', sh = at(side + 'Arm', 1.4); r.lost = [side + 'Arm']; cap(side + 'Shoulder', side + 'Arm', 5.5);
         cfx.gibs(sh.x, sh.y, sh.z, 8, dir, 1.1); if (r.soldier) cfx.limb('arm', sh.x, sh.y, sh.z, dir, r.armCol, 1.1, cutPiece(r, 'arm' + side));
         cfx.fountain(() => (r.g.visible ? at(side + 'Shoulder', 1.4) : null), 1.8, { x: dir.x, y: 0.6, z: dir.z });
-        const c = at('Spine1', 1.15); cfx.gibs(c.x, c.y, c.z, 6, dir, 0.8);   // and the torso opens up
+        const c = at('Spine1', 1.15); cfx.gibs(c.x, c.y, c.z, 6, dir, 0.8); if (cfx.heart && dist < 4) cfx.heart(c.x, c.y + 0.1, c.z, dir, 0.9);   // and the torso opens up (point blank: the heart with it)
       } else if (knife) {   // the blade: the throat or the gut, pumping out sideways
         const c = at(data.head ? 'Neck' : 'Spine2', 1.3); cfx.fountain(() => (r.g.visible ? at(data.head ? 'Neck' : 'Spine2', 1.3) : null), 2.2, { x: dir.z * 0.8, y: 0.5, z: -dir.x * 0.8 }); cfx.blood(c.x, c.y, c.z, dir, true);
         if (!data.head) cfx.gibs(c.x, c.y - 0.2, c.z, 4, dir, 0.4);
       } else if ((W2.dmg || 0) >= 80) {   // a rifle round that size: an exit wound, out the back, with what it took along
         const c = at('Spine2', 1.3); cfx.gibs(c.x + dir.x * 0.2, c.y, c.z + dir.z * 0.2, 7, dir, 1.0); cfx.blood(c.x, c.y, c.z, dir, true);
+        if (cfx.heart && Math.random() < ((W2.dmg || 0) >= 100 || dist < 4 ? 1 : 0.4)) cfx.heart(c.x + dir.x * 0.25, c.y, c.z + dir.z * 0.25, dir, 1.1);   // max gore: the chest blown open throws the heart out with the rest
       }
     }
     function rigFor(id) {
@@ -857,7 +866,7 @@ export default function start({ cfg, E, N, smoke }) {
       const useS = charsReady();   // the realistic animated soldier on every quality (11k triangles); the simple rig only while it loads
       const role = info.look && STORY_LOOKS[info.look] ? 'look:' + info.look : info.boss === 'ballin' || info.boss === true ? 'boss' : info.char && CHARACTERS[info.char] ? info.char : '';   // story mode: squad characters, story people, the boss
       const rs = info.scale || (role === 'boss' ? BOSS.model.scale : 1);
-      const key = agentId + team + (useS ? 'S' + soldierModelsV() : '') + role + rs;   // rebuilt once the real soldier model arrives
+      const key = agentId + team + (useS ? 'S' + soldierModelsV() + (P.hqModels ? 'h' : '') : '') + role + rs;   // rebuilt once the real soldier model arrives
       if (r0 && r0.key === key) return r0;
       if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
@@ -1741,7 +1750,7 @@ export default function start({ cfg, E, N, smoke }) {
         for (const p of match.players.values()) {
           if (p.id === myId) { me.hp = p.hp; me.alive = p.alive; me.money = p.money; me.armor = p.armor; me.helmet = p.helmet; me.planting = p.planting ? p.planting / BOMB.plant : 0; if (p.team !== me.team) { me.team = p.team; vmKey = ''; setViewModel(); } continue; }
           let q = st.players.get(p.id); if (!q) st.players.set(p.id, (q = { id: p.id }));
-          Object.assign(q, { x: p.x, y: p.y, z: p.z, tx: p.x, ty: p.y, tz: p.z, yaw: p.yaw, pitch: p.pitch, crouch: p.crouch, hp: p.hp, alive: p.alive, wid: (p.inv[p.cur] || {}).wid || 'knife', c4: !!p.inv[5], planting: p.planting ? p.planting / BOMB.plant : 0, team: p.team, money: p.money, scale: p.scale || 1, armor: p.armor, helmet: !!p.helmet });
+          Object.assign(q, { x: p.x, y: p.y, z: p.z, tx: p.x, ty: p.y, tz: p.z, yaw: p.yaw, pitch: p.pitch, crouch: p.crouch, hp: p.hp, alive: p.alive, wid: (p.cur === 4 ? p.holdNade || p.nades[p.nadeSel || 0] : (p.inv[p.cur] || {}).wid) || 'knife', c4: !!p.inv[5], planting: p.planting ? p.planting / BOMB.plant : 0, team: p.team, money: p.money, scale: p.scale || 1, armor: p.armor, helmet: !!p.helmet });
         }
         for (const id of [...st.players.keys()]) if (!match.players.has(id)) st.players.delete(id);
         if (st.roster.size !== match.players.size || (match.rosterVer || 0) !== hostRosterVer || [...match.players.values()].some((p) => (st.roster.get(p.id) || {}).team !== p.team)) { hostRosterVer = match.rosterVer || 0; setRoster([...match.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, bot: p.bot, agent: p.agent, knife: p.knife, att: ((p.loadout || {})[p.team] || {}).att || null, char: p.squad ? p.char : null, boss: p.boss ? p.bossKey || 'ballin' : null, look: p.lookAs || null, scale: p.scale || 1 }))); }
@@ -1995,7 +2004,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (r.soldier && p.rl && !r.wasRl) { soldierEvent(r, 'reload'); if (cfx) setTimeout(() => cfx && cfx.dropMag(p.x, p.y + 1.0, p.z, p.yaw || 0), 300); } r.wasRl = !!p.rl;
         if (r.soldier) setGear(r, p.armor || 0, p.helmet);
         if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0, prone: p.prone || 0 });
-        if (r.model) soldierLOD(r, Math.hypot(p.x - cam.position.x, p.z - cam.position.z));   // far away: the light mesh
+        if (r.model) soldierLOD(r, Math.hypot(p.x - cam.position.x, p.z - cam.position.z), P.charLod);   // far away: the light mesh
         if (r.lost && r.bones) for (const b of r.lost) if (r.bones[b]) r.bones[b].scale.setScalar(0.001);   // gore: what came off stays off
         else posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
         if (!r.soldier && r.torso && p.lean) r.torso.rotation.z -= p.lean * 0.35;
@@ -2144,13 +2153,17 @@ export default function start({ cfg, E, N, smoke }) {
       if (W) {   // first-person arms catch the sun only when you stand in it (from the same baked shadows as the map)
         const sv = W.sunAt(cam.position.x, cam.position.y - 0.25, cam.position.z); vmSunK += (sv - vmSunK) * Math.min(1, dt * 8);
         W.probeAt(cam.position.x, cam.position.z, vmProbe); vmProbeK += ((vmProbe[0] + vmProbe[1] + vmProbe[2]) / 3 - vmProbeK) * Math.min(1, dt * 6);   // the light probes: arms darken deep indoors
-        vmSun.intensity = (W.B.sunI || 2.4) * 0.75 * vmSunK; vmHemi.intensity = (W.B.ambI || 1.1) * 1.4 * vmProbeK; vmFill.intensity = (W.B.ambI || 1.1) * (0.35 + 0.3 * (1 - vmSunK)) + (W.B.sunI || 2.4) * 0.12 * vmSunK;
+        vmSun.intensity = (W.B.sunI || 2.4) * vmSunK; vmRim.intensity = (W.B.sunI || 2.4) * 0.55 * (0.35 + 0.65 * vmSunK); vmHemi.intensity = (W.B.ambI || 1.1) * 1.4 * vmProbeK; vmFill.intensity = (W.B.ambI || 1.1) * (0.35 + 0.3 * (1 - vmSunK)) + (W.B.sunI || 2.4) * 0.12 * vmSunK;
         const yw = cam.rotation.y, lx = sunDir[0], lz = sunDir[2], c = Math.cos(-yw), s2 = Math.sin(-yw); vmSun.position.set(lx * c + lz * s2, sunDir[1], -lx * s2 + lz * c);
       }
       if (W) W.sortChunks(cam);
       if (culler) culler.update(cam.position, (x, z) => W.groundAt(x, z, cam.position.y));
       if (W.models && (pmT -= dt) <= 0) { pmT = 0.25; W.models.userData.update(cam.position.x, cam.position.z); }   // real props: full detail near, light far
-      if (dsh && W) dsh.update(renderer, scene, cam, LIGHT.sunDir.value);
+      if (dsh && W) {   // the player shadow map: on High and below every soldier casts with his light mesh
+        if (P.shadowLo) for (const r of rigs.values()) if (r.model && r.body && r.geoLo) { r.shG = r.body.geometry; r.body.geometry = r.geoLo; }
+        dsh.update(renderer, scene, cam, LIGHT.sunDir.value);
+        if (P.shadowLo) for (const r of rigs.values()) if (r.shG) { r.body.geometry = r.shG; r.shG = null; }
+      }
       if (sky) { sky.position.set(cam.position.x, 0, cam.position.z); if (sky.userData.drift) sky.userData.drift.x += dt * 0.0015; }
       // ---- draw ----
       for (const sp of W.spinners || []) sp.rotation.y += dt * 0.5;   // mirror balls
@@ -2273,6 +2286,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, vmScene, rigs, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip, startReplay, get rp() { return rp; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, vmScene, rigs, switchTo, fire: (alt) => fire(!!alt), post, vmCam, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip, startReplay, get rp() { return rp; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

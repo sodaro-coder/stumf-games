@@ -8,7 +8,7 @@ import { paintSkin, KNIFE_BY_ID, ITEM_BY_ID } from './skins.js';
 import { sprayCanvas } from './sprays.js';
 import { litPatch, loadTx } from './world.js';
 import { surface } from './textures.js';
-import { model, loadGLB, modelManifest, modelFile, canonGun, gunParts } from './glb.js';
+import { model, loadGLB, modelManifest, modelFile, canonGun, gunParts, texTierKey } from './glb.js';
 
 const matCache = new Map();
 export const lam = (color) => { const k = 'l' + color; if (!matCache.has(k)) matCache.set(k, new THREE.MeshLambertMaterial({ color })); return matCache.get(k); };
@@ -278,14 +278,16 @@ function poseEmote(r, anim, t) {
 // ---- weapon surfaces (Medium and up): a real finish on every part, tiled in the gun's own space so a 5 cm patch of
 // steel looks the same on a pistol pin as on a rifle receiver: bead-blasted steel, stippled polymer, checkered grips,
 // walnut, Cerakote paint. Edges that get handled wear through to bright metal (found from how fast the surface curves).
-const SURF = { gsteel: null, gpoly: null, ggrip: null, gwood: null, gpaint: null, grubber: null };
+const SURF = { gsteel: null, gpoly: null, ggrip: null, gwood: null, gpaint: null, grubber: null, gcloth: null };
+const SURF_FILE = { gcloth: ['cloth_cordura.jpg', 'cloth_cordura.jpg'] };   // the sleeves: a photographed nylon weave (its height stands in for the normal set's)
 const neutral = (() => { let c = null, n = null; return () => { if (!c) { c = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1); n = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1); c.needsUpdate = n.needsUpdate = true; } return [c, n]; }; })();
 function surfTex(set) {
   if (!SURF[set]) {
     const [c, n] = neutral(), u = { c: { value: c }, n: { value: n } };
     SURF[set] = u;
-    loadTx(`tx_${set}_512.jpg`, false, 4).then((t) => { if (t) u.c.value = t; });
-    loadTx(`tx_${set}_512n.jpg`, false, 4).then((t) => { if (t) u.n.value = t; });
+    const [fc, fn] = SURF_FILE[set] || [`tx_${set}_512.jpg`, `tx_${set}_512n.jpg`];
+    loadTx(fc, false, 4).then((t) => { if (t) u.c.value = t; });
+    loadTx(fn, false, 4).then((t) => { if (t) u.n.value = t; });
   }
   return SURF[set];
 }
@@ -978,7 +980,6 @@ if (typeof fetch === 'function') fetch('vmhand.json').then((r) => (r.ok ? r.json
     return g;
   });
 }).catch(() => {});
-const SKIN_VM = '#c08c6a';
 const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _az = new THREE.Vector3(), _am = new THREE.Matrix4();
 function vmArm(parts, hand, dir, sleeve, glove, len = 0.55, two = false) {
   const d = new THREE.Vector3(...dir).normalize(), h = new THREE.Vector3(...hand);
@@ -992,7 +993,7 @@ function vmArm(parts, hand, dir, sleeve, glove, len = 0.55, two = false) {
     VMH.forEach((g0, k) => {
       const g = g0.clone().applyMatrix4(_am);
       if (left) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; } g.computeVertexNormals(); }
-      parts.push([g, k === 0 ? glove : k === 1 ? SKIN_VM : sleeve]);
+      parts.push([g, k === 0 ? glove : sleeve]);   // long sleeves to the glove: a bare painted forearm read as a toy's
     });
     parts.push([span(CYL(0.058, 0.066, len, 10), at(0.36), at(0.36 + len)), sleeve]);   // the shirt sleeve on up the arm, out of view
     return;
@@ -1082,10 +1083,11 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
 // -> the pistol slide, bolt carrier -> a new bolt group that cycles on every shot. Third-person guns use the light,
 // merged file. A skin is painted over the model's own finish (its scratches and shading show through).
 export const REAL_GUN = { ak47: 'ak_tactical', galil: 'aks', m4a4: 'm4a1', m4a1s: 'ar15', mp5: 'mp5', deagle: 'deagle', xm1014: 'shotgun_m4', nova: 'shotgun_870', awp: 'sniper', ssg08: 'sniper' };
-const REAL_FIT = { ar15: { dy: -0.004 }, m4a1: {}, ak_tactical: {}, aks: {}, mp5: {}, deagle: {}, shotgun_m4: {}, shotgun_870: {}, sniper: {} };   // per-model nudges (metres) after the automatic fit
+const REAL_FIT = { ar15: { dy: -0.004 }, m4a1: {}, ak_tactical: { parts: { '^stock_ak': { k: 0.32, metal: 0, rough: 0.75 }, '^ak body': { rear: 0.3 } } }, aks: {}, mp5: {}, deagle: {}, shotgun_m4: {}, shotgun_870: {}, sniper: {} };   // per-model nudges (metres) after the automatic fit
 const realCache = new Map();
+export function releaseRealGuns() { for (const p of realCache.values()) p.then((R) => R && R.m && R.m.scene.traverse((o) => { if (o.material) for (const k of ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap']) if (o.material[k]) o.material[k].dispose(); })); }
 export function realGunFile(mid, tier) {
-  const k = mid + tier;
+  const k = mid + texTierKey(tier);
   if (!realCache.has(k)) realCache.set(k, modelManifest().then((man) => (man[mid] ? loadGLB(modelFile(man[mid], tier), { lit: false }).then((m) => ({ m, auto: man[mid].auto })) : null)).catch(() => null));
   return realCache.get(k);
 }
@@ -1102,6 +1104,18 @@ function realGun(g, mid, id, cg, hands, tex, cbox = null) {
     for (const c of g.children) if (!keep.has(c)) hide(c);
     if (ud.leftArm && ud.leftArm.userData.shell) ud.leftArm.userData.shell.visible = false;
     src.traverse((o) => { if (o.isMesh) { o.castShadow = !hands; o.frustumCulled = false; } });
+    // per-part fixes (REAL_FIT parts): the AK's butt pad is mapped onto a pale, fully metallic patch of the atlas and read
+    // as a white block; it is black rubber
+    if (hands) src.traverse((o) => { if (o.isMesh) o.material = vmGunMat(o.material); });
+    for (const [re, f] of Object.entries(tw.parts || {})) src.traverse((o) => { if (o.isMesh && new RegExp(re).test(o.name) && f.rear && !o.geometry.userData.rear) {
+      // the AK's receiver end (rear trunnion and dust cover lip) is painted pale grey in the file: the faces at the back of
+      // the receiver that look back down the gun take the receiver's own dark steel (a vertex tint, once per shared mesh)
+      F.updateMatrixWorld(true); const ge = o.geometry, P = ge.attributes.position, N = ge.attributes.normal, M = new THREE.Matrix4().copy(F.matrixWorld).invert().multiply(o.matrixWorld), nm = new THREE.Matrix3().getNormalMatrix(M);
+      const v = new THREE.Vector3(), zs = []; for (let i = 0; i < P.count; i++) zs.push(v.fromBufferAttribute(P, i).applyMatrix4(M).z);
+      const z1 = Math.max(...zs), z0 = Math.min(...zs), cut = z1 - (z1 - z0) * 0.12, col = new Float32Array(P.count * 3).fill(1);
+      for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(N, i).applyMatrix3(nm).normalize(); if (zs[i] > cut && v.z > 0.35) col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = f.rear; }
+      ge.setAttribute('color', new THREE.BufferAttribute(col, 3)); ge.userData.rear = true; } });
+    for (const [re, f] of Object.entries(tw.parts || {})) src.traverse((o) => { if (o.isMesh && new RegExp(re).test(o.name) && f.rear) o.material.vertexColors = true; if (o.isMesh && new RegExp(re).test(o.name) && !f.rear) { const m = o.material.clone(); m.color.multiplyScalar(f.k ?? 1); if (f.metal !== undefined) { m.metalness = f.metal; m.metalnessMap = null; } if (f.rough !== undefined) { m.roughness = f.rough; m.roughnessMap = null; } m.onBeforeCompile = o.material.onBeforeCompile; m.customProgramCacheKey = o.material.customProgramCacheKey; o.material = m; } });
     g.add(F); g.updateMatrixWorld(true);
     if (hands) {
       const P = gunParts(src);
@@ -1127,8 +1141,21 @@ function realGun(g, mid, id, cg, hands, tex, cbox = null) {
     ud.real = mid;
   });
 }
+// first person: the gun sits 40 cm from the eye with the sun often behind you, so any flat face turned to the camera
+// mirrors the sun at full strength (the AK's receiver end read as a white block). The gun's own sun highlight is kept
+// below white and its finish never polished below roughness 0.45; reflections of the sky and the fill are untouched
+const vmMats = new WeakMap();
+function vmGunMat(m) {
+  if (vmMats.has(m)) return vmMats.get(m);
+  const c = m.clone(), prev = m.onBeforeCompile, key = m.customProgramCacheKey;
+  c.onBeforeCompile = (sh, r) => { if (prev) prev.call(c, sh, r);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = max(roughnessFactor, 0.45);')
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.directSpecular = min(reflectedLight.directSpecular, vec3(0.45));'); };
+  c.customProgramCacheKey = () => (key ? key.call(m) : '') + '-vmgun';
+  vmMats.set(m, c); return c;
+}
 let armMatC = null;
-const armMat = () => armMatC || (armMatC = HQ ? gunSurface(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.92, envMapIntensity: 0.5 }), 'gpoly', { tile: 34, normal: 1.4, albedo: 1.2, rough: 0.2 }) : new THREE.MeshMatcapMaterial({ vertexColors: true, matcap: matcapTex('satin') }));   // woven sleeve / glove fabric
+const armMat = () => armMatC || (armMatC = HQ ? gunSurface(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.9, envMapIntensity: 0.4 }), 'gcloth', { tile: 22, normal: 1.6, albedo: 1.0, rough: 0.1 }) : new THREE.MeshMatcapMaterial({ vertexColors: true, matcap: matcapTex('satin') }));   // woven sleeve / glove fabric
 let flashTex = null;
 function muzzleFlash(z, k = 1) {
   if (!flashTex) {

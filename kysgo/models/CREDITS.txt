@@ -16,6 +16,8 @@ sniper: "Awp Sniper Rifle - Custom Scope" by M37_R, CC BY 4.0, https://sketchfab
 kabar: "Fighting Ka-Bar knifes" by vitvitskyi, CC BY 4.0, https://sketchfab.com/3d-models/fighting-ka-bar-knifes-b3c3a8c7c28349268f6631567cf01d8a
 frag: "M69 Frag Grenade" by Riley Lewand, CC BY 4.0, https://sketchfab.com/3d-models/m69-frag-grenade-e94d90f68bdb4fd68d7a0aac6d9c5dd0
 heart: "human_heart__photo" by multispets, CC BY 4.0, https://sketchfab.com/3d-models/human-heart--photo-fe9ccbc64ea046c99e02f7018e373ed8
+meat: "Meat piece raw" by Phoenix_Connor (odin.takoy1989), CC BY 4.0, https://sketchfab.com/3d-models/meat-piece-raw-2671d0544656444c8703d2318d228eef
+meat2: "CC0 - Raw Meat 4" by plaggy, CC BY 4.0, https://sketchfab.com/3d-models/cc0-raw-meat-4-f49758b8fde1451fa401edb8b86cd6f1
 barrel2: "Barrel 02" by Jorge Camacho, CC0, https://polyhaven.com/a/Barrel_02
 barrel3: "Barrel 03" by Serhii Khromov, CC0, https://polyhaven.com/a/barrel_03
 tyre: "Old Tyre" by MP, CC0, https://polyhaven.com/a/old_tyre

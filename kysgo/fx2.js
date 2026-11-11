@@ -10,7 +10,7 @@
 //   that runs over the ground and down slopes; ripples in water; barrel smoke after a burst; dropped magazines; knife
 //   gouges on walls.
 import * as THREE from '../sdk/three.module.min.js';
-import { litPatch } from './world.js';
+import { litPatch, LIGHT } from './world.js';
 import { loadGLB, modelManifest } from './glb.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -123,7 +123,19 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
   const bloodMat = (map, color, opacity = 1) => {
     if (!hq) return new THREE.MeshBasicMaterial({ color: 0x3a0303, alphaMap: map, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     const m = new THREE.MeshStandardMaterial({ color: FRESH, alphaMap: map, bumpMap: map, bumpScale: 1.6, transparent: true, opacity, roughness: 0.12, metalness: 0, envMapIntensity: 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-    return litPatch(m, 'dyn');
+    litPatch(m, 'dyn');
+    // blood, not oil: where the film is thin (the spreading edge, the spray's droplets) the red shows through bright and
+    // saturated; the deep middle is near-black red; a thin darker rim where it has started to dry (the coffee-ring edge);
+    // the sky in its reflection is only a sheen, never a blue mirror
+    const lp = m.onBeforeCompile;
+    m.onBeforeCompile = (sh, r) => { lp.call(m, sh, r);
+      sh.fragmentShader = sh.fragmentShader.replace('#include <alphamap_fragment>', `#include <alphamap_fragment>
+	{ float th = texture2D(alphaMap, vAlphaMapUv).r; float rim = smoothstep(0.02, 0.09, th) * (1.0 - smoothstep(0.09, 0.22, th));
+	  diffuseColor.rgb *= mix(3.2, 0.85, smoothstep(0.04, 0.5, th)) * (1.0 - 0.55 * rim); }`)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+	{ float sl = dot(reflectedLight.indirectSpecular, vec3(0.2126, 0.7152, 0.0722)); reflectedLight.indirectSpecular = mix(vec3(sl), reflectedLight.indirectSpecular, 0.25); }`); };
+    m.customProgramCacheKey = () => 'lit-dyn-blood';
+    return m;
   };
 
   const FRESH = new THREE.Color().setRGB(0.05, 0.0025, 0.002, THREE.LinearSRGBColorSpace), DRY = new THREE.Color().setRGB(0.022, 0.007, 0.0045, THREE.LinearSRGBColorSpace), SOAK = new THREE.Color().setRGB(0.03, 0.006, 0.004, THREE.LinearSRGBColorSpace);
@@ -137,7 +149,8 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
         if (!d) { const m = new THREE.Mesh(plane, opts.own ? mat.clone() : mat); m.renderOrder = 2; d = { m }; root.add(m); ms.push(m); }
         const m = d.m; m.position.set(p.x + nrm.x * 0.012, p.y + nrm.y * 0.012, p.z + nrm.z * 0.012);
         if (opts.along && nrm.y > 0.9) m.rotation.set(-Math.PI / 2, 0, Math.atan2(-opts.along.z, opts.along.x));   // on the floor: the streaks point the way the blood flew
-        else { m.lookAt(p.x + nrm.x, p.y + nrm.y, p.z + nrm.z); m.rotateZ(opts.along ? Math.atan2(opts.along.y, opts.along.x * nrm.z - opts.along.z * nrm.x) : spin); }   // on a wall: along the shot's path across it m.scale.set(size * stretch, size, 1); m.visible = true;
+        else { m.lookAt(p.x + nrm.x, p.y + nrm.y, p.z + nrm.z); m.rotateZ(opts.along ? Math.atan2(opts.along.y, opts.along.x * nrm.z - opts.along.z * nrm.x) : spin); }   // on a wall: along the shot's path across it
+        m.scale.set(size * stretch, size, 1); m.visible = true;   // (was swallowed by the comment above: every decal came out 1 m square, and a reused one kept its old size)
         d.t = 0; d.life = opts.life ?? life; d.grow = opts.grow || 0; d.size = size; d.max = opts.max || size; d.dry = opts.dry || 0; d.op = opts.opacity ?? 1; d.stretch = stretch;
         d.r0 = opts.soak ? 0.75 : 0.12; d.r1 = opts.soak ? 0.95 : 0.7; d.c0 = opts.soak ? SOAK : FRESH; d.drip = opts.drip || 0; d.len = 0.02;
         if (d.drip) { d.top = d.top || new THREE.Vector3(); d.top.set(p.x + nrm.x * 0.013, p.y, p.z + nrm.z * 0.013); d.floor = opts.floor ?? -1e9; m.scale.set(size, d.len, 1); }
@@ -193,24 +206,92 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
   root.add(muzzle); root.add(blast); let muzzleT = 0, blastT = 0;
 
   // ---- blood mist: soft red sprites that puff out along the shot and sink ----
-  const mistMat = new THREE.SpriteMaterial({ map: T.soft2, color: 0x7a0606, transparent: true, depthWrite: false, opacity: 0 });
-  const mist = Array.from({ length: 24 }, () => { const s = new THREE.Sprite(mistMat.clone()); s.visible = false; root.add(s); return { s, t: 1, life: 1, v: new THREE.Vector3() }; }); let mi = 0;
+  const mistMat = new THREE.SpriteMaterial({ map: T.soft2, color: 0x4a0404, transparent: true, depthWrite: false, opacity: 0 });
+  const mist = Array.from({ length: hq ? 40 : 24 }, () => { const s = new THREE.Sprite(mistMat.clone()); s.visible = false; root.add(s); return { s, t: 1, life: 1, v: new THREE.Vector3() }; }); let mi = 0;
+
+  // ---- blood droplets: one instanced draw for every drop in the air. Each is a round, soft-edged bead with a wet
+  // highlight, stretched along its own motion on screen (a fast drop reads as a streak, a slow one as a bead), dark red
+  // and lit by the map's sun and sky. They fall, and the ones that land leave a small spot.
+  const DN = ultra ? 900 : hq ? 600 : 260, dGeo = new THREE.InstancedBufferGeometry();
+  dGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]), 3)); dGeo.setIndex([0, 1, 2, 0, 2, 3]);
+  const dP = new Float32Array(DN * 3), dV = new Float32Array(DN * 3), dSA = new Float32Array(DN * 2), dT = new Float32Array(DN);
+  dGeo.setAttribute('iP', new THREE.InstancedBufferAttribute(dP, 3)); dGeo.setAttribute('iV', new THREE.InstancedBufferAttribute(dV, 3)); dGeo.setAttribute('iSA', new THREE.InstancedBufferAttribute(dSA, 2));
+  dGeo.instanceCount = DN;
+  const dMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { sunCol: LIGHT.sunCol, skyCol: LIGHT.skyCol },
+    vertexShader: `attribute vec3 iP; attribute vec3 iV; attribute vec2 iSA; varying vec2 vC; varying float vA;
+      void main() { vec4 c = viewMatrix * vec4(iP, 1.0); vec2 d = (viewMatrix * vec4(iV, 0.0)).xy; float sp = length(d);
+        vec2 ax = sp > 1e-4 ? d / sp : vec2(0.0, 1.0), ay = vec2(-ax.y, ax.x); float L = iSA.x + sp * 0.012;
+        c.xy += ax * position.y * L + ay * position.x * iSA.x; vC = position.xy; vA = iSA.y; gl_Position = projectionMatrix * c; }`,
+    fragmentShader: `uniform vec3 sunCol; uniform vec3 skyCol; varying vec2 vC; varying float vA;
+      void main() { float r = length(vC); if (r > 1.0 || vA <= 0.0) discard;
+        vec3 lit = sunCol * 2.2 + skyCol * 1.2;
+        vec3 col = mix(vec3(0.16, 0.008, 0.005), vec3(0.055, 0.002, 0.0015), r * r) * lit;                // thick in the middle, darker at the rim
+        col += lit * 0.35 * smoothstep(0.42, 0.0, length(vC - vec2(-0.32, 0.38)));                        // the wet highlight
+        gl_FragColor = vec4(col, vA * smoothstep(1.0, 0.72, r));
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }` });
+  const drops = new THREE.Mesh(dGeo, dMat); drops.frustumCulled = false; drops.renderOrder = 3; root.add(drops); let dI = 0;
+  function dropEmit(x, y, z, { n = 8, speed = 2.5, up = 0.4, size = 0.012, life = 1.2, dir = null, spread = 0.5 } = {}) {
+    for (let k = 0; k < n; k++) {
+      const i = dI = (dI + 1) % DN, a = Math.random() * 6.28, sv = speed * rnd(0.35, 1.25);
+      let vx = Math.cos(a) * spread, vz = Math.sin(a) * spread, vy = rnd(-0.3, 1) * up; if (dir) { vx += dir.x; vy += dir.y; vz += dir.z; }
+      dP[i * 3] = x + rnd(-0.03, 0.03); dP[i * 3 + 1] = y + rnd(-0.03, 0.03); dP[i * 3 + 2] = z + rnd(-0.03, 0.03);
+      dV[i * 3] = vx * sv; dV[i * 3 + 1] = vy * sv + up * rnd(0.2, 1.4); dV[i * 3 + 2] = vz * sv;
+      dSA[i * 2] = size * rnd(0.45, 1.6); dSA[i * 2 + 1] = 1; dT[i] = life * rnd(0.6, 1.3);
+    }
+  }
+  function tickDrops(dt) {
+    let any = false;
+    for (let i = 0; i < DN; i++) {
+      if (dSA[i * 2 + 1] <= 0) continue; any = true; dT[i] -= dt;
+      const o = i * 3; dV[o + 1] -= 9.8 * dt; const dr = 1 - Math.min(0.5, dt * 0.6); dV[o] *= dr; dV[o + 2] *= dr;   // a little air drag on the small ones
+      dP[o] += dV[o] * dt; dP[o + 1] += dV[o + 1] * dt; dP[o + 2] += dV[o + 2] * dt;
+      const gy = W ? W.groundAt(dP[o], dP[o + 2], dP[o + 1] + 0.3) : -1e9;
+      if (dP[o + 1] <= gy || dT[i] <= 0) {
+        if (dP[o + 1] <= gy && gore > 0 && Math.random() < 0.18) splats.add({ x: dP[o], y: gy, z: dP[o + 2] }, _up, rnd(0.03, 0.07) * (dSA[i * 2] / 0.012), Math.random() * 6.28, 1, { own: true, dry: 40, life: 70 });
+        dSA[i * 2 + 1] = 0;
+      }
+    }
+    if (any) { dGeo.attributes.iP.needsUpdate = true; dGeo.attributes.iV.needsUpdate = true; dGeo.attributes.iSA.needsUpdate = true; }
+    drops.visible = any;
+  }
 
   // ---- gore (settings: 0 low, 1 heavy, 2 max): flying chunks that bounce, roll and leave splats; fountains from wounds ----
   let gore = 2;
   const GK = () => [0.6, 1.6, 3][gore] || 1;   // how much more blood everything throws
-  // the pieces: torn, lumpy flesh (a noise-displaced ball, flattened), a loop of gut, a bone shard with a marrow end,
-  // a strip of skin and fat; wet flesh is glossy, bone is matte. Shapes are built once and shared by the whole pool.
-  const lumpy = (r, sq, seed) => { const g = new THREE.IcosahedronGeometry(r, hq ? 1 : 0), p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), n = 0.7 + 0.45 * Math.abs(Math.sin(x * 61 + seed) * Math.cos(y * 47 - seed) + Math.sin(z * 53 + seed * 2)) * 0.6; p.setXYZ(i, x * n, y * n * sq, z * n); }
+  // the pieces: two photo-scanned raw meat cuts (CC BY, models/meat*.glb, the light files), torn flesh and clotted
+  // tissue (lumps wearing a painted wet-meat texture with a bump map), a bone splinter stained with blood and a strip of
+  // skin with its yellow fat underneath. Everything is wet (glossy, darkened with blood) and lit by the map's baked light.
+  const lumpy = (r, sq, seed) => { const g = new THREE.IcosahedronGeometry(r, hq ? 2 : 1), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), n = 0.72 + 0.4 * Math.abs(Math.sin(x * 61 + seed) * Math.cos(y * 47 - seed) + Math.sin(z * 53 + seed * 2)) * 0.6 + 0.08 * Math.sin(x * 190 + z * 170 + seed); p.setXYZ(i, x * n, y * n * sq, z * n); }
     g.computeVertexNormals(); return g; };
-  const gut = (() => { const pts = []; for (let k = 0; k < 7; k++) pts.push(new THREE.Vector3(Math.sin(k * 1.3) * 0.06, Math.cos(k * 0.9) * 0.03, k * 0.035 - 0.1)); return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), hq ? 24 : 10, 0.016, hq ? 7 : 4, false); })();
-  const shard = (() => { const g = new THREE.CylinderGeometry(0.008, 0.02, 0.15, 5, 1), p = g.attributes.position; for (let i = 0; i < p.count; i++) if (p.getY(i) > 0) p.setX(i, p.getX(i) + 0.006); g.computeVertexNormals(); return g; })();
-  const gibGeo = [lumpy(0.06, 0.75, 1), lumpy(0.045, 0.6, 2), gut, shard, lumpy(0.07, 0.35, 3)];
-  const gibMat = [new THREE.MeshStandardMaterial({ color: 0x6a0e0b, roughness: 0.22, metalness: 0, envMapIntensity: 1.2 }), new THREE.MeshStandardMaterial({ color: 0x3a0404, roughness: 0.2, envMapIntensity: 1.2 }),
-    new THREE.MeshStandardMaterial({ color: 0x9a4a46, roughness: 0.25, envMapIntensity: 1.2 }), new THREE.MeshStandardMaterial({ color: 0xd8ccb4, roughness: 0.65 }), new THREE.MeshStandardMaterial({ color: 0xb06a58, roughness: 0.35 })];   // flesh, dark, gut, bone, skin + fat
+  const shard = (() => { const g = new THREE.CylinderGeometry(0.006, 0.016, 0.13, 6, 3), p = g.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) * (1 + 0.35 * Math.sin(i * 2.7)) + (y > 0 ? 0.005 : 0)); } g.computeVertexNormals(); return g; })();
+  const flap = (() => { const g = new THREE.PlaneGeometry(0.11, 0.07, 6, 4), p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, 0.012 * Math.sin(p.getX(i) * 40) + 0.008 * Math.cos(p.getY(i) * 55)); g.computeVertexNormals(); return g; })();
+  const meatTex = canvasTex(256, (g, sz) => {   // wet torn muscle: dark red fibres, clotted near-black patches, a few strands of fat
+    g.fillStyle = '#4a0606'; g.fillRect(0, 0, sz, sz);
+    for (let k = 0; k < 900; k++) { const y = rnd(0, sz), x = rnd(0, sz), L = rnd(8, 40); g.strokeStyle = `rgba(${rnd(90, 150) | 0},${rnd(8, 22) | 0},${rnd(8, 18) | 0},${rnd(0.25, 0.6)})`; g.lineWidth = rnd(0.6, 2.2); g.beginPath(); g.moveTo(x, y); g.lineTo(x + L, y + rnd(-3, 3)); g.stroke(); }   // muscle fibres
+    for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(${rnd(15, 35) | 0},2,2,${rnd(0.4, 0.8)})`; blob(g, rnd(0, sz), rnd(0, sz), rnd(4, 18), 0.4, 5); }   // clots
+    for (let k = 0; k < 10; k++) { g.strokeStyle = `rgba(${rnd(200, 235) | 0},${rnd(170, 200) | 0},${rnd(120, 150) | 0},${rnd(0.3, 0.6)})`; g.lineWidth = rnd(1, 3); g.beginPath(); const x = rnd(0, sz), y = rnd(0, sz); g.moveTo(x, y); g.bezierCurveTo(x + rnd(-30, 30), y + rnd(-30, 30), x + rnd(-30, 30), y + rnd(-30, 30), x + rnd(-50, 50), y + rnd(-50, 50)); g.stroke(); }   // fat / fascia
+  });
+  meatTex.wrapS = meatTex.wrapT = THREE.RepeatWrapping;
+  const skinTex = canvasTex(128, (g, sz) => { g.fillStyle = '#b07a5e'; g.fillRect(0, 0, sz, sz / 2); g.fillStyle = '#d8b46a'; g.fillRect(0, sz / 2, sz, sz / 2);   // skin over yellow fat
+    for (let k = 0; k < 120; k++) { g.fillStyle = `rgba(${rnd(60, 120) | 0},6,6,${rnd(0.2, 0.7)})`; blob(g, rnd(0, sz), rnd(0, sz), rnd(2, 9), 0.4, 5); } });
+  const boneTex = canvasTex(64, (g, sz) => { g.fillStyle = '#cdbf9f'; g.fillRect(0, 0, sz, sz); for (let k = 0; k < 30; k++) { g.fillStyle = `rgba(${rnd(70, 120) | 0},8,6,${rnd(0.3, 0.8)})`; blob(g, rnd(0, sz), rnd(0, sz), rnd(2, 8), 0.4, 5); } });
+  const wet = (o) => litPatch(new THREE.MeshStandardMaterial({ roughness: 0.28, metalness: 0, envMapIntensity: 0.55, ...o }), 'dyn');
+  const gibGeo = [lumpy(0.05, 0.7, 1), lumpy(0.045, 0.6, 2), lumpy(0.055, 0.45, 4), shard, flap];
+  const gibMat = [wet({ map: meatTex, bumpMap: meatTex, bumpScale: 2 }), wet({ map: meatTex, bumpMap: meatTex, bumpScale: 2 }), wet({ map: meatTex, bumpMap: meatTex, bumpScale: 2.5, color: 0x8a6060 }),
+    wet({ map: boneTex, roughness: 0.55 }), wet({ map: skinTex, roughness: 0.4, side: THREE.DoubleSide })];
   const GIB_MAT = [0, 1, 2, 3, 4];
-  const gibs = Array.from({ length: ultra ? 96 : hq ? 60 : 32 }, (_, i) => { const t = i % 5, m = new THREE.Mesh(gibGeo[t], gibMat[GIB_MAT[t]]); m.visible = false; m.castShadow = false; root.add(m); return { m, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 0, landed: 0 }; });
+  const gibs = Array.from({ length: ultra ? 96 : hq ? 60 : 32 }, (_, i) => { const t = i % 5, m = new THREE.Mesh(gibGeo[t], gibMat[GIB_MAT[t]]); m.visible = false; m.castShadow = false; root.add(m); return { m, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 0, landed: 0, kind: t }; });
+  // the scanned meat replaces the first two kinds as soon as it has loaded (Medium and up; the light files)
+  if (hq) for (const [k, id] of [[0, 'meat'], [1, 'meat2']]) modelManifest().then((m) => (m[id] ? loadGLB(m[id].files.lo) : null)).then((h) => {
+    if (!h) return; let src = null; h.scene.updateMatrixWorld(true); h.scene.traverse((o) => { if (o.isMesh && !src) src = o; }); if (!src) return;
+    const g = src.geometry.clone().applyMatrix4(src.matrixWorld); g.computeBoundingBox(); const b = g.boundingBox, sz = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3());
+    g.translate(-c.x, -c.y, -c.z); g.scale(0.11 / Math.max(sz.x, sz.y, sz.z), 0.11 / Math.max(sz.x, sz.y, sz.z), 0.11 / Math.max(sz.x, sz.y, sz.z)); g.computeBoundingSphere();
+    const mt = src.material.clone(); mt.color.multiplyScalar(0.42).multiply(new THREE.Color(1, 0.55, 0.55)); mt.roughness = 0.3; mt.metalness = 0; mt.metalnessMap = null; mt.envMapIntensity = 0.55;   // blood-soaked and wet
+    for (const q of gibs) if (q.kind === k) { q.m.geometry = g; q.m.material = mt; }
+  }).catch(() => {});
   let gi = 0;
   const fountains = [];
   // ---- what comes off (gore max): a head or an arm as a physical piece, and the stump cap left on the body ----
@@ -244,7 +325,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       if (L.landed > 4) continue;
       const px = L.g.position.x, pz = L.g.position.z; L.v.y -= 9.8 * dt; L.g.position.addScaledVector(L.v, dt); L.g.rotation.x += L.w.x * dt; L.g.rotation.y += L.w.y * dt; L.g.rotation.z += L.w.z * dt;
       if (!W) continue; const p = L.g.position, rad = L.kind === 'head' ? 0.11 : 0.06;
-      if (W.ray && (L.v.x || L.v.z)) { const s = Math.hypot(L.v.x, L.v.z); if (s > 0.3) { const h = W.ray({ x: p.x, y: p.y, z: p.z }, { x: L.v.x / s, y: 0, z: L.v.z / s }, s * dt + rad); if (h) { splats.add({ x: h.x, y: h.y, z: h.z }, normalOf(h, { x: L.v.x / s, y: 0, z: L.v.z / s }).clone(), rnd(0.35, 0.55), Math.random() * 6.28, 1.2, { own: true, color: 0x5a0505, dry: 40, life: 90 }); L.v.x *= -0.25; L.v.z *= -0.25; } } }
+      if (W.ray && (L.v.x || L.v.z)) { const s = Math.hypot(L.v.x, L.v.z); if (s > 0.3) { const h = rayAt({ x: p.x, y: p.y, z: p.z }, { x: L.v.x / s, y: 0, z: L.v.z / s }, s * dt + rad); if (h) { splats.add({ x: h.x, y: h.y, z: h.z }, normalOf(h, { x: L.v.x / s, y: 0, z: L.v.z / s }).clone(), rnd(0.35, 0.55), Math.random() * 6.28, 1.2, { own: true, color: 0x5a0505, dry: 40, life: 90 }); L.v.x *= -0.25; L.v.z *= -0.25; } } }
       if (W.topAt && W.topAt(p.x, p.z) > p.y + rad) { p.x = px; p.z = pz; L.v.x *= -0.25; L.v.z *= -0.25; }   // flew into a wall between two frames (a slow frame): back out and bounce, never fall inside it
       const gy = W.groundAt(p.x, p.z, p.y + 0.3);
       if (p.y < gy + rad) {
@@ -258,13 +339,18 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
   // organs (gore max): a real scanned heart thrown out of a body that was blown open. Two in the pool, loaded on first use
   const organs = []; let organSrc = null, oi = 0;
   function organ(x, y, z, dir, force = 1) {
-    if (!organSrc) organSrc = modelManifest().then((m) => (m.heart ? loadGLB(m.heart.files.lo) : null)).then((h) => {
+    if (!organSrc) loadOrgans();
+    organSrc.then((ok) => { if (!ok || !organs.length) return; const o = organs[oi = (oi + 1) % organs.length]; o.m.position.set(x, y, z); o.m.visible = true; o.t = 0; o.landed = 0; o.m.name = 'heart';
+      const sp = rnd(2.5, 4.5) * force; o.v.set((dir ? dir.x : 0) * sp + rnd(-0.8, 0.8), rnd(2, 4) * force, (dir ? dir.z : 0) * sp + rnd(-0.8, 0.8)); o.w.set(rnd(-8, 8), rnd(-8, 8), rnd(-8, 8)); });
+  }
+  function loadOrgans() {
+    if (!organSrc) organSrc = modelManifest().then((m) => (m.heart ? loadGLB(m.heart.files[hq ? 'hi' : 'lo']) : null)).then((h) => {
       if (!h) return null; const b = new THREE.Box3().setFromObject(h.scene), sz = b.getSize(new THREE.Vector3()), k = 0.12 / Math.max(sz.x, sz.y, sz.z);   // an adult heart: about 12 cm
       for (let i = 0; i < 2; i++) { const g = new THREE.Group(), m = h.scene.clone(true); m.scale.setScalar(k); m.position.copy(b.getCenter(new THREE.Vector3())).multiplyScalar(-k); g.add(m); g.visible = false; root.add(g); organs.push({ m: g, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 30, landed: 0 }); }
       return true; }).catch(() => null);
-    organSrc.then((ok) => { if (!ok || !organs.length) return; const o = organs[oi = (oi + 1) % organs.length]; o.m.position.set(x, y, z); o.m.visible = true; o.t = 0; o.landed = 0;
-      const sp = rnd(2.5, 4.5) * force; o.v.set((dir ? dir.x : 0) * sp + rnd(-0.8, 0.8), rnd(2, 4) * force, (dir ? dir.z : 0) * sp + rnd(-0.8, 0.8)); o.w.set(rnd(-8, 8), rnd(-8, 8), rnd(-8, 8)); });
+    return organSrc;
   }
+  if (hq) setTimeout(() => { if (gore > 1) loadOrgans(); }, 4000);   // ready before the first kill that throws one
   function gibBurst(x, y, z, n, dir = null, force = 1) {
     for (let k = 0; k < n; k++) {
       const g = gibs[gi = (gi + 1) % gibs.length], sc = rnd(0.6, 1.6);
@@ -283,7 +369,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       const px = g.m.position.x, pz = g.m.position.z; g.v.y -= 9.8 * dt; g.m.position.addScaledVector(g.v, dt); g.m.rotation.x += g.w.x * dt; g.m.rotation.y += g.w.y * dt; g.m.rotation.z += g.w.z * dt;
       if (W) {
         const p = g.m.position;
-        if (W.ray && (g.v.x || g.v.z)) { /* walls: a chunk that hits one drops straight down */ const L = Math.hypot(g.v.x, g.v.z); if (L > 0.3) { const h = W.ray({ x: p.x, y: p.y, z: p.z }, { x: g.v.x / L, y: 0, z: g.v.z / L }, L * dt + 0.06); if (h) { if (gore > 0) splats.add({ x: h.x, y: h.y, z: h.z }, normalOf(h, { x: g.v.x / L, y: 0, z: g.v.z / L }).clone(), rnd(0.12, 0.25), Math.random() * 6.28, 1, { own: true, color: 0x6a0505, dry: 40, life: 70 }); g.v.x *= -0.2; g.v.z *= -0.2; } } }
+        if (W.ray && (g.v.x || g.v.z)) { /* walls: a chunk that hits one drops straight down */ const L = Math.hypot(g.v.x, g.v.z); if (L > 0.3) { const h = rayAt({ x: p.x, y: p.y, z: p.z }, { x: g.v.x / L, y: 0, z: g.v.z / L }, L * dt + 0.06); if (h) { if (gore > 0) splats.add({ x: h.x, y: h.y, z: h.z }, normalOf(h, { x: g.v.x / L, y: 0, z: g.v.z / L }).clone(), rnd(0.12, 0.25), Math.random() * 6.28, 1, { own: true, color: 0x6a0505, dry: 40, life: 70 }); g.v.x *= -0.2; g.v.z *= -0.2; } } }
         if (W.topAt && W.topAt(p.x, p.z) > p.y + 0.03) { p.x = px; p.z = pz; g.v.x *= -0.2; g.v.z *= -0.2; }   // inside a wall after a long frame: back out
         const gy = W.groundAt(p.x, p.z, p.y + 0.3);
         if (p.y < gy + 0.03) {
@@ -301,7 +387,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       if (f.t > f.dur + dripT) { fountains.splice(i, 1); continue; }
       const p = f.pos(); if (!p) { fountains.splice(i, 1); continue; }
       if (f.t > f.dur) {
-        if (f.acc > 0.22) { f.acc = 0; if (parts) parts.emit(p.x, p.y - 0.02, p.z, { n: 1, colors: ['#5a0606'], speed: 0.1, up: -0.5, size: 0.02, life: 0.9 });
+        if (f.acc > 0.22) { f.acc = 0; dropEmit(p.x, p.y - 0.02, p.z, { n: 1, speed: 0.1, up: -0.5, size: 0.01, life: 0.9, spread: 0.1 });
           if (W && Math.random() < 0.35) splats.add({ x: p.x + rnd(-0.05, 0.05), y: W.groundAt(p.x, p.z, p.y), z: p.z + rnd(-0.05, 0.05) }, { x: 0, y: 1, z: 0 }, rnd(0.05, 0.1), Math.random() * 6.28, 1, { own: true, color: 0x5a0505, dry: 40, life: 80 }); }
         continue;
       }
@@ -309,7 +395,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       const pulse = 0.55 + 0.45 * Math.max(0, Math.sin(f.t * 9));
       while (f.acc > 0.04) {
         f.acc -= 0.04;
-        if (parts) parts.emit(p.x, p.y, p.z, { n: Math.round(4 * k * pulse * GK()) + 1, colors: ['#8a0808', '#b01212', '#4a0303'], speed: 2.8 * k * pulse + 0.4, up: 2.6 * k + 0.4, size: 0.026, life: 0.9, dir: f.dir, spread: 0.45 });
+        dropEmit(p.x, p.y, p.z, { n: Math.round(6 * k * pulse * GK()) + 1, speed: 2.8 * k * pulse + 0.4, up: 2.6 * k + 0.4, size: 0.011, life: 1.1, dir: f.dir, spread: 0.4 });
         if (Math.random() < 0.5 * k) { const m = mist[mi = (mi + 1) % mist.length]; m.s.position.set(p.x, p.y, p.z); m.s.visible = true; m.t = 0; m.life = 0.5; m.v.set(f.dir.x * 1.2 + rnd(-0.4, 0.4), 1.6 * k + 0.3, f.dir.z * 1.2 + rnd(-0.4, 0.4)); m.s.scale.setScalar(rnd(0.12, 0.22)); }
         if (W && Math.random() < 0.25 * k) { const gx = p.x + f.dir.x * rnd(0.3, 1.2) + rnd(-0.3, 0.3), gz = p.z + f.dir.z * rnd(0.3, 1.2) + rnd(-0.3, 0.3); splats.add({ x: gx, y: W.groundAt(gx, gz, p.y), z: gz }, { x: 0, y: 1, z: 0 }, rnd(0.15, 0.3), Math.random() * 6.28, 1.3, { own: true, color: 0x6a0505, dry: 40, life: 80 }); }
       }
@@ -320,6 +406,9 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
   const magGeo = new THREE.BoxGeometry(0.03, 0.12, 0.06), magMat = new THREE.MeshLambertMaterial({ color: 0x23252a }), mags = [];
   const _n = new THREE.Vector3(), _d = new THREE.Vector3();
 
+  // W.ray answers with the CELL it hit (integer x, z) and the distance t, not the point: every blood and gib test used
+  // the cell corner and no height (y undefined: the spray on a wall had no position and never showed). The point:
+  function rayAt(o, d, L) { const h = W.ray(o, d, L); return h ? { x: o.x + d.x * h.t, y: o.y + d.y * h.t, z: o.z + d.z * h.t, t: h.t, side: h.side, m: h.m } : null; }
   // a surface normal from a grid hit: walls face back along the shot (axis-aligned), floors face up
   function normalOf(hit, d) {
     if (!hit.side) return _n.set(0, 1, 0);
@@ -423,17 +512,18 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     // a hit on a body: a burst of mist and droplets along the shot, and a splat on whatever is behind them
     blood(x, y, z, d, heavy = false) {
       const G = GK();
-      for (let k = 0; k < Math.round((heavy ? 5 : 3) * G); k++) {
+      for (let k = 0; k < Math.round((heavy ? 8 : 4) * G); k++) {
         const m = mist[mi = (mi + 1) % mist.length]; m.s.position.set(x, y, z); m.s.visible = true; m.t = 0; m.life = rnd(0.35, 0.6);
         m.v.set(d.x * rnd(1.5, 3) + rnd(-0.6, 0.6), d.y * 2 + rnd(-0.2, 0.6), d.z * rnd(1.5, 3) + rnd(-0.6, 0.6)); m.s.scale.setScalar(rnd(0.15, 0.28));
       }
-      if (parts) parts.emit(x, y, z, { n: Math.round((heavy ? 12 : 7) * G), colors: ['#7a0606', '#a01010', '#4a0303'], speed: 2.4 + (gore > 1 ? 1.2 : 0), up: 0.4, size: 0.022, life: 0.6 + (gore > 1 ? 0.3 : 0), dir: d, spread: 0.5 + (gore > 1 ? 0.2 : 0) });
+      dropEmit(x, y, z, { n: Math.round((heavy ? 26 : 14) * G), speed: 2.6 + (gore > 1 ? 1.4 : 0), up: 0.6, size: 0.01, life: 1.0, dir: d, spread: 0.45 + (gore > 1 ? 0.2 : 0) });   // the spray: beads and streaks along the shot
+      if (gore > 0) dropEmit(x, y, z, { n: Math.round(10 * G), speed: 0.8, up: 0.3, size: 0.006, life: 0.5, dir: { x: -d.x * 0.6, y: 0.1, z: -d.z * 0.6 }, spread: 0.8 });   // back spatter toward the shooter
       if (!W) return;
       // the spray follows the shot: streaked droplets fanned out behind the victim, on the wall (running down it) or the floor
       const fan = gore > 1 ? (heavy ? 4 : 3) : gore > 0 ? 2 : 1;
       for (let k = 0; k < fan; k++) {
         const a = k ? rnd(-0.35, 0.35) : rnd(-0.08, 0.08), dd = _sd.set(d.x * Math.cos(a) - d.z * Math.sin(a), d.y - 0.12 + (k ? rnd(-0.2, 0.15) : 0), d.x * Math.sin(a) + d.z * Math.cos(a));
-        const h2 = W.ray({ x, y, z }, dd, k ? 4.5 : 3.2);
+        const h2 = rayAt({ x, y, z }, dd, k ? 4.5 : 3.2);
         if (h2) {
           const n = normalOf(h2, dd).clone(), along = Math.abs(dd.x * n.x + dd.y * n.y + dd.z * n.z), big = (heavy ? 1.3 : 1) * (1 - Math.min(0.5, Math.hypot(h2.x - x, h2.z - z) / 9));
           sprays.add({ x: h2.x, y: h2.y, z: h2.z }, n, rnd(0.45, 0.8) * big, 0, 1 + (1 - along) * 1.4, { own: true, dry: 45, life: 100, along: dd });
@@ -464,6 +554,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     },
     // gore: chunks flying from a body (explosions, a head that came off), and a wound that pumps (pos() follows the body)
     gibs(x, y, z, n, dir = null, force = 1) { if (gore > 0) gibBurst(x, y, z, Math.round(n * (gore > 1 ? 1 : 0.5)), dir, force); if (gore > 1 && n >= 20) organ(x, y, z, dir, force); },
+    heart(x, y, z, dir, force = 1) { if (gore > 1) organ(x, y, z, dir, force); },   // a torso blown open (max gore)
     fountain(pos, dur = 2.2, dir = { x: 0, y: 1, z: 0 }) { if (gore > 0) fountains.push({ pos, dur: dur * (gore > 1 ? 1 : 0.5), dir, t: 0, acc: 0 }); },
     // a severed head or arm flying off with the shot (gore max), and the cap for the stump left behind (on a bone)
     limb(kind, x, y, z, dir, color, force = 1, piece = null) { if (gore > 1) limb(kind, x, y, z, dir, color, force, piece); },
@@ -510,14 +601,14 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       }
       for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, sprays, drips, pools, scorches, gouges]) r.tick(dt);
       for (let i = pending.length - 1; i >= 0; i--) { const q = pending[i]; q.t -= dt; if (q.t > 0) continue; pending.splice(i, 1); if (!W) continue; const gy = W.groundAt(q.x, q.z, 50); pools.add({ x: q.x, y: gy, z: q.z }, _up, 0.1, Math.random() * 6.28, 1.4, { own: true, grow: 0.06 * q.big, max: rnd(0.6, 0.9) * q.big, dry: q.soft ? 35 : 70, life: 130, opacity: 0.95 }); }
-      smokeTick(dt); fireTick(dt); tickGibs(dt); tickLimbs(dt); tickFountains(dt);
+      smokeTick(dt); fireTick(dt); tickDrops(dt); tickGibs(dt); tickLimbs(dt); tickFountains(dt);
     },
     setWorld(w) { W = w; api.clear(); },
     clear() {
       for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, sprays, drips, pools, scorches, gouges]) r.clear();
       for (const k of [...smokes.keys()]) api.smoke.remove(k); for (const k of [...fires.keys()]) api.fire.remove(k);
       for (const m of mags) m.o.visible = false; mags.length = 0;
-      for (const g of gibs) g.m.visible = false; for (const o of organs) o.m.visible = false; fountains.length = 0; pending.length = 0; for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
+      for (const g of gibs) g.m.visible = false; for (const o of organs) o.m.visible = false; dSA.fill(0); fountains.length = 0; pending.length = 0; for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
     },
   };
   return api;

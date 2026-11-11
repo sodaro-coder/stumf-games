@@ -150,13 +150,19 @@ function coatPatch(mat) {
   const prev = mat.onBeforeCompile, key = mat.customProgramCacheKey;
   mat.onBeforeCompile = (sh, r) => {
     if (prev) prev.call(mat, sh, r);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor *= smoothstep(0.015, 0.12, dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));')
+    // no real finish is darker than ~3% albedo (black paint, parkerising, polymer): files that paint 1-2% read as a hole
+    sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n\tdiffuseColor.rgb = max(diffuseColor.rgb, diffuseColor.rgb * 0.6 + 0.022);')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor *= smoothstep(0.015, 0.12, dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));')
       // the sky probe is the only light in the shade and it is blue: a dark gun took it as navy. Its reflection keeps
-      // 40% of the sky's colour (enough to read outdoors) and is lifted a little so steel edges catch it
-      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\t{ float sl = dot(reflectedLight.indirectSpecular, vec3(0.2126, 0.7152, 0.0722)); reflectedLight.indirectSpecular = mix(vec3(sl), reflectedLight.indirectSpecular, 0.4) * 1.3; }');
+      // 20% of the sky's colour (more read as a navy gun) and is lifted a little so steel edges catch it
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\t{ float sl = dot(reflectedLight.indirectSpecular, vec3(0.2126, 0.7152, 0.0722)); reflectedLight.indirectSpecular = mix(vec3(sl), reflectedLight.indirectSpecular, 0.2) * 1.3; }');
   };
   mat.customProgramCacheKey = () => (key ? key.call(mat) : '') + '-coat';
 }
+// free the GPU copies of a loaded model's textures (a tier step down). Anything still drawn with them uploads them again
+const TEXK = ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'alphaMap', 'bumpMap'];
+export function releaseTextures(root) { if (root) root.traverse((o) => { const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : []; for (const m of ms) for (const k of TEXK) if (m[k]) m[k].dispose(); }); }
+export function releaseLoaded() { for (const p of loaded.values()) p.then((x) => x && releaseTextures(x.scene)); }
 export async function loadGLB(url, opts) {
   const r = await fetch(url); if (!r.ok) throw new Error(url + ' ' + r.status);
   return buildGLB(parseGLB(await r.arrayBuffer()), opts);
@@ -169,10 +175,12 @@ const loaded = new Map();
 // <id>.glb; Performance and phones the light 512 px one. game.js sets it from the graphics profile.
 let UHD = false;
 export function setModelTexTier(ultra) { UHD = !!ultra; }
+// part of every cache key for a full file: a session stepped down from Ultra loads the 1K files, not the cached 2K ones
+export const texTierKey = (tier) => (tier === 'hi' && UHD ? 'hi+uhd' : tier);
 export function modelFile(entry, tier) { const f = entry.files; return (tier === 'hi' && UHD && f.uhd) || f[tier] || f.hi; }
 export function modelManifest() { return manifest || (manifest = fetch('models/manifest.json').then((r) => (r.ok ? r.json() : {})).catch(() => ({}))); }
 function file(id, tier) {
-  const k = id + '|' + tier;
+  const k = id + '|' + texTierKey(tier);
   if (!loaded.has(k)) loaded.set(k, modelManifest().then((m) => (m[id] ? loadGLB(modelFile(m[id], tier)) : null)).catch((e) => { console.warn('model', id, e.message); return null; }));
   return loaded.get(k);
 }
@@ -203,7 +211,7 @@ function propMat(m, tint = 1) {   // the model's material, lit as a placed prop 
   if (!propMats.has(m)) { const c = m.clone(); c.color.multiplyScalar(tint); litPatch(c, 'prop'); if (c.metalnessMap || c.metalness > 0.3) coatPatch(c); propMats.set(m, c); }
   return propMats.get(m);
 }
-export function placeModels(list, { hq = true, far = 10 } = {}) {
+export function placeModels(list, { hq = true, far = 10, max = 1e9 } = {}) {
   const root = new THREE.Group(); root.name = 'models'; const blocks = []; root.userData.blocks = blocks;
   const byId = new Map(); for (const p of list) { if (!byId.has(p.id)) byId.set(p.id, []); byId.get(p.id).push(p); }
   modelManifest().then((man) => { for (const [id, ps] of byId) {
@@ -228,7 +236,7 @@ export function placeModels(list, { hq = true, far = 10 } = {}) {
       for (const qs of groups.values()) {
         let cx = 0, cz = 0; for (const q of qs) { cx += q.x; cz += q.z; } cx /= qs.length; cz /= qs.length;
         let r = 0; for (const q of qs) r = Math.max(r, Math.hypot(q.x - cx, q.z - cz));
-        const b = { hi: level(H, qs), lo: level(L, qs) || [], cx, cz, r, px: Float32Array.from(qs, (q) => q.x), pz: Float32Array.from(qs, (q) => q.z), cull: Float32Array.from(qs, (q) => q.cull || 1e9) };
+        const b = { hi: level(H, qs), lo: level(L, qs) || [], cx, cz, r, px: Float32Array.from(qs, (q) => q.x), pz: Float32Array.from(qs, (q) => q.z), cull: Float32Array.from(qs, (q) => Math.min(q.cull || 1e9, max)) };
         b.hasHi = !!b.hi;
         if (b.hi) for (const im of b.hi) { im.count = 0; im.visible = false; }
         blocks.push(b);

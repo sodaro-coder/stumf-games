@@ -932,5 +932,53 @@
     0.12008586525917053
    ]
   }
+ },
+ "meat": {
+  "kind": "fx",
+  "sig": "075937375498",
+  "files": {
+   "hi": "models/meat.glb",
+   "lo": "models/meat_lo.glb"
+  },
+  "tris": {
+   "hi": 1106,
+   "lo": 1058
+  },
+  "bytes": {
+   "hi": 435888,
+   "lo": 69840
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Meat piece raw",
+   "author": "Phoenix_Connor (odin.takoy1989)",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/meat-piece-raw-2671d0544656444c8703d2318d228eef"
+  }
+ },
+ "meat2": {
+  "kind": "fx",
+  "sig": "df1a5533ab5d",
+  "files": {
+   "hi": "models/meat2.glb",
+   "lo": "models/meat2_lo.glb"
+  },
+  "tris": {
+   "hi": 2252,
+   "lo": 2223
+  },
+  "bytes": {
+   "hi": 708464,
+   "lo": 102080
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "CC0 - Raw Meat 4",
+   "author": "plaggy",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/cc0-raw-meat-4-f49758b8fde1451fa401edb8b86cd6f1"
+  }
  }
 }

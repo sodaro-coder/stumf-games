@@ -6,7 +6,7 @@
 import * as THREE from '../sdk/three.module.min.js';
 import { litPatch } from './world.js';
 import { glowMask, glowify, gunSurface } from './models.js';
-import { loadGLB, modelManifest, modelFile } from './glb.js';
+import { loadGLB, modelManifest, modelFile, texTierKey } from './glb.js';
 
 let D = null, P = null;
 // the real soldiers (models/, assetbuild.py): photographed-texture operators on a Mixamo skeleton, so the game's own
@@ -18,11 +18,14 @@ const MODELS = { hi: {}, lo: {} }, MP = {};
 let MV = 0;
 export const soldierModelsV = () => MV;   // goes up when a soldier model arrives (the game rebuilds its rigs with it)
 function loadSoldierModels(tier) {
-  return MP[tier] || (MP[tier] = modelManifest().then((man) => Promise.all(Object.entries(SOLDIER_MODEL).map(([team, id]) => (man[id]
-    ? loadGLB(modelFile(man[id], tier)).then((m) => { m.scene.traverse((o) => { if (o.material && o.material.isMeshStandardMaterial) { o.material.envMapIntensity = 1.8; o.material.aoMapIntensity = 0.6; } }); MODELS[tier][team] = m; MV++; }).catch((e) => console.warn('soldier model', id, e.message)) : null)))));
+  const key = texTierKey(tier);   // Ultra's 2K files and High's 1K ones are separate loads (Auto can step Ultra down)
+  return MP[key] || (MP[key] = modelManifest().then((man) => Promise.all(Object.entries(SOLDIER_MODEL).map(([team, id]) => (man[id]
+    ? loadGLB(modelFile(man[id], tier)).then((m) => { if (texTierKey(tier) !== key) return; m.scene.traverse((o) => { if (o.material && o.material.isMeshStandardMaterial) { o.material.envMapIntensity = 1.8; o.material.aoMapIntensity = 0.6; } }); const old = MODELS[tier][team]; MODELS[tier][team] = m; MV++; if (old && old !== m) setTimeout(() => old.scene.traverse((o) => { if (o.material) for (const k of ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap', 'emissiveMap']) if (o.material[k]) o.material[k].dispose(); }), 3000); }).catch((e) => console.warn('soldier model', id, e.message)) : null)))));
 }
 // hq: true / false = also fetch the real soldier models for that tier (the game does); left out = the built soldier only
 // (menu pictures never trigger the big download)
+// a step down: the real soldiers' textures leave the GPU (they upload again if a soldier still wears them)
+export function releaseSoldiers() { for (const t of ['hi', 'lo']) for (const m of Object.values(MODELS[t])) if (m) m.scene.traverse((o) => { if (o.material) for (const k of ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap']) if (o.material[k]) o.material[k].dispose(); }); }
 export function loadChars(hq) {
   if (!P) P = Promise.all([fetch('chars.json').then((r) => (r.ok ? r.json() : null)), fetch('chars.bin').then((r) => (r.ok ? r.arrayBuffer() : null))])
     .then(([j, b]) => { D = j && b ? build(j, b) : null; return D; }).catch(() => null);
@@ -462,12 +465,12 @@ export function cutPiece(r, kind) {
   g.boundingBox = bb; g.boundingSphere = bb.getBoundingSphere(new THREE.Sphere()); const c = bb.getCenter(new THREE.Vector3());
   return (cache[kind] = { geometry: g, material: r.body.material, center: c });
 }
-// distance detail: beyond 9 m the soldier swaps to the light mesh (same skeleton and atlas layout, about a sixth of the
+// distance detail: beyond the tier's charLod (graphics.js; 9 m by default) the soldier swaps to the light mesh (same skeleton and atlas layout, about a sixth of the
 // triangles). A frame's work: one comparison
-export function soldierLOD(r, dist) {
+export function soldierLOD(r, dist, near = 9) {
   if (!r.model || !r.body) return;
   if (!r.geoLo) { const far = MODELS.lo[r.team]; if (far) far.scene.traverse((o) => { if (o.isSkinnedMesh && !r.geoLo && o.geometry !== r.geoHi) r.geoLo = o.geometry; }); if (!r.geoLo) return; }
-  const g = dist > 9 ? r.geoLo : r.geoHi; if (r.body.geometry !== g) r.body.geometry = g;
+  const g = dist > near ? r.geoLo : r.geoHi; if (r.body.geometry !== g) r.body.geometry = g;
 }
 // swap the looping base animation with a short cross-fade
 const LOCO = new Set(['walk', 'walkBack', 'walkLeft', 'walkRight', 'run', 'runBack', 'runLeft', 'runRight']);

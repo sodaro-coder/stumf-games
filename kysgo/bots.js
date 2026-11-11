@@ -52,6 +52,9 @@ export class Bots {
   }
 
   tick(dt) {
+    if (this.pend && this.pend.length) for (let i = this.pend.length - 1; i >= 0; i--) { const q = this.pend[i]; q.t -= dt; if (q.t > 0) continue; this.pend.splice(i, 1); const p = q.p;
+      if (p.alive && p.nades.includes(q.type)) this.m.throwNade(p, q.type, { x: p.x + q.dx * 0.4, y: p.y + 1.5, z: p.z + q.dz * 0.4 }, { x: q.dx * q.h, y: q.h, z: q.dz * q.h });
+      p.holdNade = null; if (p.cur === 4) p.cur = p.curPrev && p.inv[p.curPrev] ? p.curPrev : p.inv[1] ? 1 : p.inv[2] ? 2 : 3; }
     const m = this.m; if (m.phase === 'warmup' || m.phase === 'done') return;
     if (m.paused) { for (const p of m.players.values()) if (p.bot) { p.vx = p.vz = 0; p.plant = p.defusing = false; } return; }   // story scenes: everyone stands still
     if (m.phase === 'freeze' && this.plannedRound !== m.round) { this.plannedRound = m.round; this.newRound(); }
@@ -76,7 +79,7 @@ export class Bots {
     if (m.phase === 'freeze') { this.buy(p); p.vx = p.vz = 0; return; }
     if (m.phase === 'end' || m.phase === 'over') { this.walkTo(p, b, null, dt); return; }
     b.blind = Math.max(0, b.blind - dt); b.cd -= dt;
-    const wSlot = p.inv[1] ? 1 : p.inv[2] ? 2 : 3; if (p.cur !== wSlot && !(p.cur === 5 && p.plant && !b.target)) p.cur = wSlot;
+    const wSlot = p.inv[1] ? 1 : p.inv[2] ? 2 : 3; if (p.cur !== wSlot && !p.holdNade && !(p.cur === 5 && p.plant && !b.target)) p.cur = wSlot;
     const it = p.inv[p.cur], w = W_BY_ID[(it || {}).wid] || W_BY_ID.knife;
     // ---- perception ----
     if (think) {
@@ -239,8 +242,9 @@ export class Bots {
   throwAt(p, type, tx, tz) {
     const i = p.nades.indexOf(type); if (i < 0) return false;
     const dx = tx - p.x, dz = tz - p.z, D = Math.max(2, Math.hypot(dx, dz)), g = 20.3, v = Math.min(19, Math.sqrt(g * D * 0.9)), h = v / Math.SQRT2;
-    const ex = { x: p.x + dx / D * 0.4, y: p.y + 1.5, z: p.z + dz / D * 0.4 };
-    this.m.throwNade(p, type, ex, { x: dx / D * h, y: h, z: dz / D * h });
+    // the grenade is in his hand for half a second first (pin pulled, arm back), so other players see it coming
+    if (p.cur !== 4) p.curPrev = p.cur; p.cur = 4; p.holdNade = type;
+    (this.pend || (this.pend = [])).push({ p, type, t: 0.55, dx: dx / D, dz: dz / D, h });
     return true;
   }
   heard(x, z, by, range = 30) { for (const p of this.m.players.values()) if (p.bot && p.alive && by && by.team !== p.team && Math.hypot(p.x - x, p.z - z) < range) { const b = this.B(p); b.heard = { x, z }; if (!b.target) { const want = Math.atan2(-(x - p.x), -(z - p.z)); p.yaw += angDiff(p.yaw, want) * 0.6; } } }

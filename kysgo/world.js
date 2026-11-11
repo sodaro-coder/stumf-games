@@ -234,9 +234,10 @@ export function fastMat({ map = null, color = 0xffffff, bump = null, nmap = null
   return m;
 }
 // the shipped surface photos, loaded once per file (and per filter quality) for every map that uses them
-const txCache = new Map();
-export function loadTx(file, srgb, aniso = 4, quality = 1) {
+const txCache = new Map(), worldTx = new Set();
+export function loadTx(file, srgb, aniso = 4, quality = 1, used = null) {
   const key = file + '|' + aniso + '|' + (quality < 0.75 ? 0 : 1);
+  if (used) { used.add(key); worldTx.add(key); }
   if (!txCache.has(key)) {
     txCache.set(key, new Promise((res) => {
       new THREE.TextureLoader().load(file, (t) => {
@@ -247,6 +248,11 @@ export function loadTx(file, srgb, aniso = 4, quality = 1) {
     }));
   }
   return txCache.get(key);
+}
+// after a map is built: free the world photos the new map (or a new graphics tier) no longer uses, so a step down from
+// Ultra or High really gives the memory back
+export function pruneTx(used) {
+  for (const k of worldTx) if (!used.has(k) && txCache.has(k)) { txCache.get(k).then((t) => t && t.dispose()); txCache.delete(k); worldTx.delete(k); }
 }
 // a 1 x 1 'flat, fairly matte' normal map: what a surface uses until its painted maps have downloaded
 export const flatNormal = () => { if (!flatN) { flatN = new THREE.DataTexture(new Uint8Array([128, 128, 217, 255]), 1, 1); flatN.needsUpdate = true; } return flatN; };
@@ -531,19 +537,22 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   const texSize = opt.texSize || (quality >= 1.5 ? 1024 : 512), nmOn = opt.normalMaps ?? quality >= 1, macroOn = opt.macro ?? quality >= 0.75;
   const aniso = opt.texSize ? Math.max(1, opt.aniso || 1) : Math.min(quality >= 2 ? 16 : quality >= 1.5 ? 8 : quality >= 1 ? 4 : 1, opt.aniso || 1);
   const txQ = (opt.nearestMip ?? quality < 0.75) ? 0.5 : 1, dynSh = opt.dynShadows || 0;
-  const texCache = {};
+  const texCache = {}, txUsed = new Set();
   const matTex = (k) => {
     if (texCache[k]) return texCache[k];
     const sf = surface(k, 128, false), mk = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; if (txQ < 0.75) t.minFilter = THREE.LinearMipmapNearestFilter; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
     return (texCache[k] = { map: mk(sf.map, true), bump: null });
   };
+  // nmSize (graphics.js): the normal maps' size; a map's own scanned hero surfaces (PH: Dust's walls and ground) keep
+  // the full size, everything else on High and Medium takes the half-size normals (the fine detail layer covers it up close)
   const photo = (mat, k) => {   // swap in the photo maps once they arrive (cached across map changes)
+    const hero = !!PH[k], nmS = hero ? texSize : Math.min(texSize, opt.nmSize || texSize);
     if (PH[k]) k = PH[k][0];
-    loadTx(`tx_${k}_${texSize}.jpg`, true, aniso, txQ).then((t) => { if (t) { mat.uniforms ? (mat.uniforms.map.value = t) : (mat.map = t, mat.needsUpdate = true); } });
-    if (nmOn && mat.uniforms && mat.uniforms.nMap) loadTx(`tx_${k}_${texSize}n.jpg`, false, aniso, txQ).then((t) => { if (t) { mat.uniforms.nMap.value = t; mat.uniforms.nOn.value = 1; } });
+    loadTx(`tx_${k}_${texSize}.jpg`, true, aniso, txQ, txUsed).then((t) => { if (t) { mat.uniforms ? (mat.uniforms.map.value = t) : (mat.map = t, mat.needsUpdate = true); } });
+    if (nmOn && mat.uniforms && mat.uniforms.nMap) loadTx(`tx_${k}_${nmS}n.jpg`, false, aniso, txQ, txUsed).then((t) => { if (t) { mat.uniforms.nMap.value = t; mat.uniforms.nOn.value = 1; } });
   };
   const detailT = (opt.detail ?? quality >= 1.5) ? flatNormal() : null;
-  if (detailT && !headless) loadTx('tx_detail_512n.jpg', false, aniso, txQ).then((t) => { if (t) for (const m of matCache.values()) if (m.uniforms && m.uniforms.dMap) m.uniforms.dMap.value = t; });
+  if (detailT && !headless) loadTx('tx_detail_512n.jpg', false, aniso, txQ, txUsed).then((t) => { if (t) for (const m of matCache.values()) if (m.uniforms && m.uniforms.dMap) m.uniforms.dMap.value = t; });
   const worldMat = (k) => {
     if (headless) return new THREE.MeshBasicMaterial();   // simulations without a browser: geometry only
     const M = MATS[k], t = matTex(k);
@@ -755,6 +764,6 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
       });
     }
   }
-  return { B, w, d, h, mat, flag, H, idx, group, placements, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
+  return { B, w, d, h, mat, flag, H, idx, group, placements, txUsed, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
     topAt, cellTop, sunAt, probeAt, useLight, bakeOut, chunks, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
 }
