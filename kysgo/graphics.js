@@ -10,7 +10,9 @@ import * as THREE from '../sdk/three.module.min.js';
 import { LIGHT } from './world.js';
 
 export const TIERS = ['potato', 'low', 'medium', 'high', 'ultra'];
-export const TIER_NAMES = ['Potato', 'Low', 'Medium', 'High', 'Ultra'];
+// the four profiles players pick (Ultra, High, Medium, Performance); 'potato' is only Auto's emergency floor (a weak
+// phone that cannot hold even Performance, or a graphics crash), shown as Performance (saver)
+export const TIER_NAMES = ['Performance (saver)', 'Performance', 'Medium', 'High', 'Ultra'];
 export const QSTEPS = [0.5, 0.75, 1, 1.5, 2];   // the saved setting's numbers (settings and Auto memory use these)
 
 // what each tier turns on. Numbers are engine parameters, not hints:
@@ -32,7 +34,7 @@ export const QSTEPS = [0.5, 0.75, 1, 1.5, 2];   // the saved setting's numbers (
 const BASE = {
   texSize: 512, mipBias: 0, nearestMip: false, normalMaps: false, detail: false, macro: true, aniso: 1, bakeK: 4, probes: true,
   shadows: null, post: false, bloom: 0, grade: false, ssao: false, ssr: 0, msaa: 0, fxaa: false,
-  hqModels: false, dress: true, clouds: true, env: false, chars: true, pixel: { start: 1, max: 1, min: 0.4 }, targetMs: 21,
+  hqModels: false, dress: true, clouds: true, env: false, chars: true, pixel: { start: 1, max: 1, min: 0.4 }, targetMs: 25,   // frame-time targets: Performance 30-60 fps (25 ms keeps 40 with room), Medium/High a steady 60, Ultra 60-120
 };
 export const PROFILES = {
   // integrated graphics at its weakest: everything that costs per pixel is off
@@ -41,7 +43,7 @@ export const PROFILES = {
   low: { ...BASE, q: 0.75, mipBias: 1, nearestMip: true, clouds: false, pixel: { start: 0.75, max: 0.75, min: 0.4 } },
   // MEDIUM: balanced. Full-resolution textures (bias 0), short-range player shadows, colour grade + quarter-res bloom, FXAA
   medium: { ...BASE, q: 1, texSize: 1024, normalMaps: true, aniso: 4, shadows: { cascades: [{ r: 9, size: 1024 }], pcf: 1 },
-    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, env: true, pixel: { start: 1, max: 1, min: 0.55 } },
+    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, env: true, pixel: { start: 1, max: 1, min: 0.55 }, targetMs: 16.7 },
   // HIGH: built for integrated graphics (a Ryzen 3200U / Vega 3 mini PC holds it): the realism comes from what is nearly
   // free at run time. Baked lightmaps and light probes, a photographed HDR sky for reflections (PMREM, once per map),
   // scanned PBR textures with detail normals, ONE soft sun cascade for players only, and one composite pass (ACES, grade,
@@ -54,7 +56,7 @@ export const PROFILES = {
   // reflections on wet and polished floors, 2x MSAA, 16x filtering, the finest lightmap, more blood and debris, and up
   // to 1.5x the screen's pixels where the frame time allows it.
   ultra: { ...BASE, q: 2, texSize: 1024, normalMaps: true, detail: true, aniso: 16, bakeK: 8, shadows: { cascades: [{ r: 14, size: 4096 }], pcf: 9 },
-    post: true, bloom: 1, grade: true, ssao: true, ssr: 32, msaa: 2, hqModels: true, env: true, gore: 2, pixel: { start: 1, max: 1.5, min: 0.75 }, targetMs: 17 },
+    post: true, bloom: 1, grade: true, ssao: true, ssr: 32, msaa: 2, hqModels: true, env: true, gore: 2, pixel: { start: 1, max: 1.5, min: 0.75 }, targetMs: 16.7 },
 };
 export const tierOf = (q) => { let best = 0; QSTEPS.forEach((s, i) => { if (Math.abs(s - q) < Math.abs(QSTEPS[best] - q)) best = i; }); return TIERS[best]; };
 
@@ -67,12 +69,12 @@ export class GraphicsSettingsManager {
   // its cores / memory / platform, and later steps down (or remembers headroom) from measured frame times.
   constructor(setting = 0, env = {}) {
     this.auto = !setting;
+    this.xbox = /Xbox/i.test(((env.navigator || (typeof navigator !== 'undefined' ? navigator : {})).userAgent) || '');   // Edge on Xbox Series X: Ultra tuned for it
     const nav = env.navigator || (typeof navigator !== 'undefined' ? navigator : {});
     let q = setting;
     if (this.auto) {
       const saved = +(store.get('cs:autoq') || 0), weak = (nav.hardwareConcurrency || 4) <= 4 || (nav.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS|PlayStation|Nintendo|SMART-TV|SmartTV|Tizen|Web0S|webOS|CrKey|AFT[A-Z]/i.test(nav.userAgent || '');   // phones, Chromebooks, TV browsers and handheld consoles start on Low (Xbox: Ultra, below)
       q = QSTEPS.includes(saved) && saved < 2 ? saved : weak ? 0.75 : 1;
-      this.xbox = /Xbox/i.test(nav.userAgent || '');
       if (this.xbox && !saved) q = QSTEPS[4];   // Edge on Xbox: the console's GPU gets the showcase tier (stepped down if it can't hold it)
     }
     this.floatRT = true; this.maxAniso = 16; this.listeners = [];
@@ -105,10 +107,17 @@ export class GraphicsSettingsManager {
   }
   get postOn() { return this.p.post && this.floatRT; }
   get msaa() { return Math.min(this.p.msaa, this.maxSamples ?? 4); }
+  get aniso() { return Math.min(this.xbox && this.tier === 'ultra' ? 8 : this.p.aniso, this.maxAniso || 1); }
+  // Auto steps effects down (a tier) when the frame stays over this budget at the lowest render scale
+  get stepBudget() { return this.xbox ? 1 / 55 : 1 / 40; }
   get shadowsOn() { return !!this.p.shadows; }
   // the frame-time governor's render-scale band for this screen
   pixelBand(dpr = 1) {
     const b = this.p.pixel, ultra = this.tier === 'ultra';
+    if (ultra && this.xbox) {   // Series X on a 4K TV: start near 1440p, let the scaler move between 0.6 and 1.0 of the canvas
+      const w = (typeof innerWidth !== 'undefined' && innerWidth) || 1920, full = dpr, s1440 = Math.min(full, 2560 / w);
+      return { start: s1440, max: full, min: 0.6 * full, targetMs: 16.7 };
+    }
     return ultra ? { start: Math.min(1.5, dpr * b.start), max: Math.min(2, dpr * b.max), min: b.min, targetMs: this.p.targetMs }
       : { start: Math.min(dpr, 1) * b.start, max: Math.min(1.5, dpr * b.max), min: this.auto && this.tier !== 'potato' ? Math.max(b.min, 0.55) : b.min, targetMs: this.p.targetMs };
   }
@@ -116,7 +125,7 @@ export class GraphicsSettingsManager {
   worldOpts() {
     const p = this.p;
     return { quality: p.q, texSize: p.texSize, normalMaps: p.normalMaps, detail: p.detail, macro: p.macro, dress: p.dress, nearestMip: p.nearestMip,
-      aniso: Math.min(p.aniso, this.maxAniso || 1), bakeK: p.bakeK, probes: p.probes, dynShadows: p.shadows ? p.shadows.cascades.length : 0, pcf: p.shadows ? p.shadows.pcf : 0 };
+      aniso: this.aniso, bakeK: p.bakeK, probes: p.probes, dynShadows: p.shadows ? p.shadows.cascades.length : 0, pcf: p.shadows ? p.shadows.pcf : 0 };
   }
   // the HDR target's options (MSAA samples, depth texture for SSAO)
   targetOpts(w, h, depth) {

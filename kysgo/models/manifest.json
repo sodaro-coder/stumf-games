@@ -1,7 +1,7 @@
 {
  "barrel": {
   "kind": "prop",
-  "sig": "f64d6d78ad70",
+  "sig": "320e04794d82",
   "files": {
    "hi": "models/barrel.glb",
    "lo": "models/barrel_lo.glb"
@@ -11,10 +11,11 @@
    "lo": 961
   },
   "bytes": {
-   "hi": 747824,
-   "lo": 153852
+   "hi": 747884,
+   "lo": 95692
   },
   "scale": 1,
+  "fit": {},
   "credit": {
    "title": "Barrel 01",
    "author": "Jorge Camacho",
@@ -24,7 +25,7 @@
  },
  "crate": {
   "kind": "prop",
-  "sig": "71af1786e05f",
+  "sig": "7e7e803a6904",
   "files": {
    "hi": "models/crate.glb",
    "lo": "models/crate_lo.glb"
@@ -35,14 +36,620 @@
   },
   "bytes": {
    "hi": 869524,
-   "lo": 269096
+   "lo": 164208
   },
   "scale": 1,
+  "fit": {},
   "credit": {
    "title": "Wooden Crate 01",
    "author": "James Ray Cock",
    "licence": "CC0",
    "url": "https://polyhaven.com/a/wooden_crate_01"
+  }
+ },
+ "ar15": {
+  "kind": "gun",
+  "sig": "b7fb95235b56",
+  "files": {
+   "hi": "models/ar15.glb",
+   "lo": "models/ar15_lo.glb"
+  },
+  "tris": {
+   "hi": 16968,
+   "lo": 4930
+  },
+  "bytes": {
+   "hi": 2554036,
+   "lo": 760308
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "AR-15 style rifle",
+   "author": "SpatialNeglect",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/ar-15-style-rifle-50d33435445e439c95e3b36e9d4bd798"
+  },
+  "auto": {
+   "min": [
+    -0.3209684491625967,
+    -1.913553881944294,
+    -3.8135072062828153
+   ],
+   "max": [
+    0.3598325291313409,
+    0.5555962165022679,
+    2.971522028701474
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "operator": {
+  "kind": "char",
+  "sig": "3559cb5cb04d",
+  "files": {
+   "hi": "models/operator.glb",
+   "lo": "models/operator_lo.glb"
+  },
+  "tris": {
+   "hi": 48367,
+   "lo": 6496
+  },
+  "bytes": {
+   "hi": 6655956,
+   "lo": 2069664
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "S.W.A.T. Operator",
+   "author": "SpatialNeglect",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/swat-operator-9e82fabf26194896b5ad4a364d864eab"
+  }
+ },
+ "operator2": {
+  "kind": "char",
+  "sig": "e448ed3d6255",
+  "files": {
+   "hi": "models/operator2.glb",
+   "lo": "models/operator2_lo.glb"
+  },
+  "tris": {
+   "hi": 50517,
+   "lo": 8498
+  },
+  "bytes": {
+   "hi": 4737464,
+   "lo": 970408
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "S.W.A.T. Operator- 4k Followers Special Remaster",
+   "author": "SpatialNeglect",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/swat-operator-4k-followers-special-remaster-f6923917c8014578b1c1cb2b4c249268"
+  }
+ },
+ "m4a1": {
+  "kind": "gun",
+  "sig": "8a2b45b2766f",
+  "files": {
+   "hi": "models/m4a1.glb",
+   "lo": "models/m4a1_lo.glb"
+  },
+  "tris": {
+   "hi": 58599,
+   "lo": 24388
+  },
+  "bytes": {
+   "hi": 7097724,
+   "lo": 2166972
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Assault rifle M4A1",
+   "author": "bobeer",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/assault-rifle-m4a1-1b858701dd7142d9b82bbe3fd121a97b"
+  },
+  "auto": {
+   "min": [
+    -4.448765442299191,
+    -17.243844985961914,
+    -52.094844818115234
+   ],
+   "max": [
+    4.400057315826416,
+    17.243843078613285,
+    52.10388946533203
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "aks": {
+  "kind": "gun",
+  "sig": "50a6de808645",
+  "files": {
+   "hi": "models/aks.glb",
+   "lo": "models/aks_lo.glb"
+  },
+  "tris": {
+   "hi": 41343,
+   "lo": 4819
+  },
+  "bytes": {
+   "hi": 3856404,
+   "lo": 741816
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "AKS",
+   "author": "SpatialNeglect",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/aks-67eaf310bffa46698ac8e71d3a76e773"
+  },
+  "auto": {
+   "min": [
+    -24.677820857505452,
+    -245.3113427719037,
+    -735.2740700700759
+   ],
+   "max": [
+    40.592908085602105,
+    71.59350881189494,
+    447.2483010879277
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "ak_tactical": {
+  "kind": "gun",
+  "sig": "40ede463a8f1",
+  "files": {
+   "hi": "models/ak_tactical.glb",
+   "lo": "models/ak_tactical_lo.glb"
+  },
+  "tris": {
+   "hi": 17311,
+   "lo": 3446
+  },
+  "bytes": {
+   "hi": 1692176,
+   "lo": 388668
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "AK 47 Tactical Upgrade",
+   "author": "SpatialNeglect",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/ak-47-tactical-upgrade-b15d69e8a5a948819c8c388f97930b9c"
+  },
+  "auto": {
+   "min": [
+    -0.07522798720237638,
+    -0.3755960173534383,
+    -0.9309902741110058
+   ],
+   "max": [
+    0.06287177451986575,
+    0.15807149043088087,
+    0.9120863091472415
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "aks74u": {
+  "kind": "gun",
+  "sig": "a59ff65ae57d",
+  "files": {
+   "hi": "models/aks74u.glb",
+   "lo": "models/aks74u_lo.glb"
+  },
+  "tris": {
+   "hi": 26310,
+   "lo": 7034
+  },
+  "bytes": {
+   "hi": 2563352,
+   "lo": 626384
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "AKS-74U",
+   "author": "SpatialNeglect",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/aks-74u-f290460c6a3649e985dc9460d31d5490"
+  },
+  "auto": {
+   "min": [
+    -14.433824270963665,
+    -101.72085899515076,
+    -205.91908443173517
+   ],
+   "max": [
+    207.27695817161378,
+    97.17662668381588,
+    266.250966575877
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 0,
+   "up": -1,
+   "width": 1
+  }
+ },
+ "deagle": {
+  "kind": "gun",
+  "sig": "16cd09e662f6",
+  "files": {
+   "hi": "models/deagle.glb",
+   "lo": "models/deagle_lo.glb"
+  },
+  "tris": {
+   "hi": 13279,
+   "lo": 6712
+  },
+  "bytes": {
+   "hi": 2856432,
+   "lo": 1010304
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Desert Eagle",
+   "author": "ELIZION",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/desert-eagle-cabde59f5cf24effaf80536e35d04e95"
+  },
+  "auto": {
+   "min": [
+    -2.454412334647563,
+    10.486474853140454,
+    -16.837037803480072
+   ],
+   "max": [
+    2.4544125860066037,
+    26.238233592786067,
+    10.838455529318999
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "m1911": {
+  "kind": "gun",
+  "sig": "32da7b6e3172",
+  "files": {
+   "hi": "models/m1911.glb",
+   "lo": "models/m1911_lo.glb"
+  },
+  "tris": {
+   "hi": 61216,
+   "lo": 27071
+  },
+  "bytes": {
+   "hi": 4670180,
+   "lo": 1319556
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Kimber Stainless TLE/RL II 1911 .45ACP",
+   "author": "8sianDude",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/kimber-stainless-tlerl-ii-1911-45acp-9b2503a1283b4c1fa506510c9dc7d1f5"
+  },
+  "auto": {
+   "min": [
+    -6.871094550093382,
+    -4.774960809380657,
+    -4.635300487608382
+   ],
+   "max": [
+    2.841459210780428,
+    4.878461524553647,
+    5.698149145241487
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 0,
+   "up": 1,
+   "width": 1
+  }
+ },
+ "mp5": {
+  "kind": "gun",
+  "sig": "a59f5499441a",
+  "files": {
+   "hi": "models/mp5.glb",
+   "lo": "models/mp5_lo.glb"
+  },
+  "tris": {
+   "hi": 32171,
+   "lo": 11266
+  },
+  "bytes": {
+   "hi": 5179244,
+   "lo": 1296136
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "HK MP5 SMG",
+   "author": "Daniel Zamary",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/hk-mp5-smg-fad0226e1dcf4af180f707a5509d3a4e"
+  },
+  "auto": {
+   "min": [
+    -0.04056210552343576,
+    -0.21130674478820666,
+    -0.45095467204497197
+   ],
+   "max": [
+    0.04056210552343575,
+    0.15445643768958559,
+    0.44999679441760065
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "shotgun_m4": {
+  "kind": "gun",
+  "sig": "4b87485a52dd",
+  "files": {
+   "hi": "models/shotgun_m4.glb",
+   "lo": "models/shotgun_m4_lo.glb"
+  },
+  "tris": {
+   "hi": 25184,
+   "lo": 4214
+  },
+  "bytes": {
+   "hi": 2219124,
+   "lo": 505272
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "M4 Super 90 (JW2) Brand-Friendly version",
+   "author": "8sianDude",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/m4-super-90-jw2-brand-friendly-version-7e472e24152246708cac8b6f1613c7a8"
+  },
+  "auto": {
+   "min": [
+    -0.2173265617193296,
+    -1.0736337395156528,
+    -4.944056984790869
+   ],
+   "max": [
+    0.38220783213806486,
+    0.9512293446594138,
+    4.9181169171226955
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "shotgun_870": {
+  "kind": "gun",
+  "sig": "68e7ad888e20",
+  "files": {
+   "hi": "models/shotgun_870.glb",
+   "lo": "models/shotgun_870_lo.glb"
+  },
+  "tris": {
+   "hi": 6202,
+   "lo": 1699
+  },
+  "bytes": {
+   "hi": 818808,
+   "lo": 185512
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Remington 870 Shotgun",
+   "author": "Andrei Milin",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/remington-870-shotgun-6db0ad4764d14eee8f063eea3600071b"
+  },
+  "auto": {
+   "min": [
+    -0.5799981822073863,
+    -0.09318202598018036,
+    -0.026021224611357696
+   ],
+   "max": [
+    0.5696565977560741,
+    0.14135396164609648,
+    0.02394776279544011
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "sniper": {
+  "kind": "gun",
+  "sig": "cad0faffad69",
+  "files": {
+   "hi": "models/sniper.glb",
+   "lo": "models/sniper_lo.glb"
+  },
+  "tris": {
+   "hi": 25855,
+   "lo": 7745
+  },
+  "bytes": {
+   "hi": 4475564,
+   "lo": 1290644
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Awp Sniper Rifle - Custom Scope",
+   "author": "M37_R",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/awp-sniper-rifle-custom-scope-f78a0ccafd304f15b46d087ad896478f"
+  },
+  "auto": {
+   "min": [
+    -0.07998779666403143,
+    -0.08279976153855549,
+    -0.4050639193676116
+   ],
+   "max": [
+    0.04624827029781887,
+    0.3157104693356092,
+    1.2738510533369638
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": -1,
+   "width": 0
+  }
+ },
+ "kabar": {
+  "kind": "gun",
+  "sig": "26cbd9870ca8",
+  "files": {
+   "hi": "models/kabar.glb",
+   "lo": "models/kabar_lo.glb"
+  },
+  "tris": {
+   "hi": 16454,
+   "lo": 8307
+  },
+  "bytes": {
+   "hi": 1979284,
+   "lo": 654880
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Fighting Ka-Bar knifes",
+   "author": "vitvitskyi",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/fighting-ka-bar-knifes-b3c3a8c7c28349268f6631567cf01d8a"
+  },
+  "auto": {
+   "min": [
+    -4.076600074768066,
+    0.003599999938160322,
+    -5.823999881744385
+   ],
+   "max": [
+    3.617300033569336,
+    1.2929999828338632,
+    4.643199920654297
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 0,
+   "up": 1,
+   "width": 1
+  }
+ },
+ "frag": {
+  "kind": "gun",
+  "sig": "1229ad714c0e",
+  "files": {
+   "hi": "models/frag.glb",
+   "lo": "models/frag_lo.glb"
+  },
+  "tris": {
+   "hi": 5516,
+   "lo": 4623
+  },
+  "bytes": {
+   "hi": 1458452,
+   "lo": 310968
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "M69 Frag Grenade",
+   "author": "Riley Lewand",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/m69-frag-grenade-e94d90f68bdb4fd68d7a0aac6d9c5dd0"
+  },
+  "auto": {
+   "min": [
+    -5.890435218811035,
+    7.451395034790043,
+    -7.016180992126457
+   ],
+   "max": [
+    5.287243843078613,
+    23.781497001647953,
+    5.520575523376471
+   ],
+   "len": 1,
+   "fwd": 1,
+   "up_axis": 2,
+   "up": -1,
+   "width": 0
+  }
+ },
+ "heart": {
+  "kind": "fx",
+  "sig": "8fdcbec696ee",
+  "files": {
+   "hi": "models/heart.glb",
+   "lo": "models/heart_lo.glb"
+  },
+  "tris": {
+   "hi": 49797,
+   "lo": 9042
+  },
+  "bytes": {
+   "hi": 2534748,
+   "lo": 368980
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "human_heart__photo",
+   "author": "multispets",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/human-heart--photo-fe9ccbc64ea046c99e02f7018e373ed8"
   }
  }
 }

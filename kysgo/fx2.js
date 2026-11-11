@@ -52,6 +52,47 @@ const poolTex = () => canvasTex(256, (g, s) => {   // a pool: lobes that ran int
   g.fillStyle = 'rgb(255,255,255)'; for (let k = 0; k < 12; k++) { g.beginPath(); g.ellipse(c + rnd(-26, 26), c + rnd(-26, 26), rnd(36, 62), rnd(30, 52), rnd(0, 3), 0, 6.28); g.fill(); }
   g.filter = 'none'; for (let k = 0; k < 18; k++) { g.fillStyle = 'rgba(255,255,255,.9)'; const a = rnd(0, 6.28), d = rnd(70, 100); g.beginPath(); g.arc(c + Math.cos(a) * d, c + Math.sin(a) * d, rnd(2, 6), 0, 6.28); g.fill(); }   // satellite drops
 });
+// Blood that reads as liquid (Medium and up): the textures carry the shape in G (a crisp, irregular edge: blood has
+// surface tension, it doesn't feather) and the thickness in R (deepest inside, a rounded meniscus at the edge), which
+// bumps the lighting so the sun and the sky slide over a wet, raised film. Colour comes from the material.
+function liquidTex(w, h, paint, soften = 7) {
+  const a = document.createElement('canvas'); a.width = w; a.height = h; const g = a.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.strokeStyle = '#fff'; paint(g, w, h);
+  const b = document.createElement('canvas'); b.width = w; b.height = h; const gb = b.getContext('2d'); gb.filter = `blur(${soften}px)`; gb.drawImage(a, 0, 0);
+  const ga = document.createElement('canvas'); ga.width = w; ga.height = h; const gg = ga.getContext('2d'); gg.filter = 'blur(0.7px)'; gg.drawImage(a, 0, 0);
+  const M = gg.getImageData(0, 0, w, h), H = gb.getImageData(0, 0, w, h);
+  for (let i = 0; i < M.data.length; i += 4) { const m = M.data[i], hh = H.data[i]; M.data[i] = Math.min(255, Math.round(Math.pow(hh / 255, 0.6) * m)); M.data[i + 1] = m; M.data[i + 2] = 0; M.data[i + 3] = 255; }
+  gg.filter = 'none'; gg.putImageData(M, 0, 0);
+  const t = new THREE.CanvasTexture(ga); t.colorSpace = THREE.NoColorSpace; return t;
+}
+const blob = (g, cx, cy, r, k = 0.22, n = 7) => {   // an irregular closed outline (a few harmonics on a circle)
+  const ph = Array.from({ length: n }, () => Math.random() * 6.28), am = Array.from({ length: n }, (_, j) => k * rnd(0.3, 1) / (j + 1));
+  g.beginPath(); for (let i = 0; i <= 72; i++) { const a = i / 72 * 6.283; let rr = 1; for (let j = 0; j < n; j++) rr += am[j] * Math.sin((j + 2) * a + ph[j]); const x = cx + Math.cos(a) * r * rr, y = cy + Math.sin(a) * r * rr; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.fill();
+};
+const poolLiquid = () => liquidTex(256, 256, (g, s) => {
+  const c = s / 2; blob(g, c, c, s * 0.3, 0.28, 8);
+  for (let k = 0; k < 5; k++) { const a = rnd(0, 6.28), d = rnd(20, 50); blob(g, c + Math.cos(a) * d, c + Math.sin(a) * d, rnd(16, 34), 0.3, 5); }   // lobes where it ran
+  for (let k = 0; k < 3; k++) { const a = rnd(0, 6.28); g.lineWidth = rnd(5, 9); g.lineCap = 'round'; g.beginPath(); g.moveTo(c + Math.cos(a) * 60, c + Math.sin(a) * 60); g.quadraticCurveTo(c + Math.cos(a + 0.2) * 90, c + Math.sin(a + 0.2) * 90, c + Math.cos(a + 0.1) * rnd(100, 118), c + Math.sin(a + 0.1) * rnd(100, 118)); g.stroke(); }   // runnels
+  for (let k = 0; k < 14; k++) { const a = rnd(0, 6.28), d = rnd(92, 120); g.beginPath(); g.arc(c + Math.cos(a) * d, c + Math.sin(a) * d, rnd(1.5, 4.5), 0, 6.28); g.fill(); }
+}, 9);
+const sprayLiquid = () => liquidTex(256, 256, (g, s) => {   // a shot's spray: a dense patch, then droplets stretched along the shot (+x) with tails
+  const c = s / 2; blob(g, c - 40, c, 22, 0.35, 6);
+  for (let k = 0; k < 60; k++) { const d = rnd(-10, 120), sp = rnd(-1, 1) * (12 + d * 0.35), r = Math.max(0.8, rnd(1, 5) * (1 - d / 160)), L = r * rnd(1.5, 4) * (0.5 + d / 80);
+    g.beginPath(); g.ellipse(c - 40 + d, c + sp, L, r, 0, 0, 6.28); g.fill(); g.lineWidth = Math.max(0.6, r * 0.45); g.beginPath(); g.moveTo(c - 40 + d - L, c + sp); g.lineTo(c - 40 + d - L - rnd(4, 14), c + sp); g.stroke(); }
+}, 4);
+const dripLiquid = () => liquidTex(64, 256, (g, w, h) => {   // runs down a wall: a bead at the top, trails of different lengths ending in a drop
+  blob(g, w / 2, 14, 12, 0.3, 5);
+  for (let k = 0; k < 3; k++) { const x = w / 2 + rnd(-12, 12), L = rnd(0.45, 0.97) * h, lw = rnd(2.5, 5); g.lineWidth = lw; g.lineCap = 'round'; g.beginPath(); g.moveTo(x, 14); g.bezierCurveTo(x + rnd(-3, 3), L * 0.4, x + rnd(-3, 3), L * 0.7, x + rnd(-2, 2), L - 6); g.stroke(); g.beginPath(); g.ellipse(x, L - 5, lw * 0.9, lw * 1.4, 0, 0, 6.28); g.fill(); }
+}, 3);
+const woundTex = () => canvasTex(128, (g, s) => {   // an entry wound in cloth: torn fabric, raw red meat, a black hole, blood soaking out and down
+  const c = s / 2;
+  g.fillStyle = 'rgba(40,3,3,.85)'; blob(g, c, c + 14, 30, 0.35, 6); g.fillStyle = 'rgba(40,3,3,.6)'; g.beginPath(); g.ellipse(c + 3, c + 44, 9, 18, 0, 0, 6.28); g.fill();   // soaked fabric, running down
+  g.fillStyle = 'rgba(70,6,6,1)'; blob(g, c, c, 16, 0.4, 7);
+  g.fillStyle = 'rgba(140,22,18,1)'; blob(g, c, c, 11, 0.45, 7);   // raw meat
+  for (let k = 0; k < 9; k++) { const a = rnd(0, 6.28); g.fillStyle = k % 2 ? 'rgba(190,60,50,1)' : 'rgba(90,10,10,1)'; g.beginPath(); g.ellipse(c + Math.cos(a) * 8, c + Math.sin(a) * 8, rnd(1.5, 3.5), rnd(1, 2), a, 0, 6.28); g.fill(); }
+  g.fillStyle = 'rgba(8,1,1,1)'; blob(g, c, c, 5, 0.3, 5);   // the hole
+  g.strokeStyle = 'rgba(30,26,22,.9)'; g.lineWidth = 1.2; for (let k = 0; k < 10; k++) { const a = rnd(0, 6.28); g.beginPath(); g.moveTo(c + Math.cos(a) * 13, c + Math.sin(a) * 13); g.lineTo(c + Math.cos(a) * rnd(16, 22), c + Math.sin(a) * rnd(16, 22)); g.stroke(); }   // torn threads
+});
 const scorchTex = () => canvasTex(256, (g, s) => {
   const c = s / 2, gr = g.createRadialGradient(c, c, 4, c, c, c);
   gr.addColorStop(0, 'rgba(8,7,6,.95)'); gr.addColorStop(0.35, 'rgba(20,18,15,.75)'); gr.addColorStop(0.7, 'rgba(30,26,22,.3)'); gr.addColorStop(1, 'rgba(30,26,22,0)'); g.fillStyle = gr; g.fillRect(0, 0, s, s);
@@ -71,17 +112,21 @@ export const matClass = (m) => MAT_CLASS[m] || 'concrete';
 export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ultra = false }) {
   let W = W0;
   const root = new THREE.Group(); root.name = 'combatfx'; scene.add(root);
-  const T = { concrete: holeTex.concrete(), wood: holeTex.wood(), metal: holeTex.metal(), soft: holeTex.soft(), splat: splatTex(), pool: poolTex(), scorch: scorchTex(), gouge: gougeTex(), soft2: softTex(), ring: ringTex() };
+  const T = { concrete: holeTex.concrete(), wood: holeTex.wood(), metal: holeTex.metal(), soft: holeTex.soft(), splat: liquidTex(256, 256, (g, sz) => { const t0 = splatTex(); g.drawImage(t0.image, 0, 0); t0.dispose(); }, 4), pool: poolLiquid(), spray: sprayLiquid(), drip: dripLiquid(), wound: woundTex(), scorch: scorchTex(), gouge: gougeTex(), soft2: softTex(), ring: ringTex() };
   const plane = new THREE.PlaneGeometry(1, 1);
   const decalMat = (map, color = 0xffffff, opacity = 1) => new THREE.MeshBasicMaterial({ map, color, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
   // blood (Medium and up): lit like everything else (dark in the shade, never glowing), wet and glossy while fresh so it
   // catches the sky and the sun, then duller and browner as it dries
+  // the liquid textures: shape in G (alphaMap), thickness in R (bumpMap). Fresh blood is near-black red with a mirror
+  // film on top (the sky and sun reflect in it); it dulls, browns and goes matte as it dries or soaks into sand.
   const bloodMat = (map, color, opacity = 1) => {
-    if (!hq) return decalMat(map, color, opacity);
-    const m = new THREE.MeshStandardMaterial({ map, color, transparent: true, opacity, roughness: 0.16, metalness: 0, envMapIntensity: 1.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    if (!hq) return new THREE.MeshBasicMaterial({ color: 0x3a0303, alphaMap: map, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const m = new THREE.MeshStandardMaterial({ color: FRESH, alphaMap: map, bumpMap: map, bumpScale: 1.6, transparent: true, opacity, roughness: 0.12, metalness: 0, envMapIntensity: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     return litPatch(m, 'dyn');
   };
 
+  const FRESH = new THREE.Color().setRGB(0.05, 0.0025, 0.002, THREE.LinearSRGBColorSpace), DRY = new THREE.Color().setRGB(0.022, 0.007, 0.0045, THREE.LinearSRGBColorSpace), SOAK = new THREE.Color().setRGB(0.03, 0.006, 0.004, THREE.LinearSRGBColorSpace);
+  const LOWF = new THREE.Color(0x3a0303), LOWD = new THREE.Color(0x24100a);
   // a ring of decals of one kind: placed on a surface (position + normal), the oldest reused
   function ring(n, mat, life = Infinity) {
     const list = [], ms = [];
@@ -90,16 +135,22 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
         let d = list.length >= n ? list.shift() : null;
         if (!d) { const m = new THREE.Mesh(plane, opts.own ? mat.clone() : mat); m.renderOrder = 2; d = { m }; root.add(m); ms.push(m); }
         const m = d.m; m.position.set(p.x + nrm.x * 0.012, p.y + nrm.y * 0.012, p.z + nrm.z * 0.012);
-        m.lookAt(p.x + nrm.x, p.y + nrm.y, p.z + nrm.z); m.rotateZ(spin); m.scale.set(size * stretch, size, 1); m.visible = true;
-        d.t = 0; d.life = opts.life ?? life; d.grow = opts.grow || 0; d.size = size; d.max = opts.max || size; d.dry = opts.dry || 0; d.op = opts.opacity ?? 1;
-        if (opts.own) { m.material.opacity = d.op; if (opts.color) m.material.color.set(opts.color); }
+        if (opts.along && nrm.y > 0.9) m.rotation.set(-Math.PI / 2, 0, Math.atan2(-opts.along.z, opts.along.x));   // on the floor: the streaks point the way the blood flew
+        else { m.lookAt(p.x + nrm.x, p.y + nrm.y, p.z + nrm.z); m.rotateZ(opts.along ? Math.atan2(opts.along.y, opts.along.x * nrm.z - opts.along.z * nrm.x) : spin); }   // on a wall: along the shot's path across it m.scale.set(size * stretch, size, 1); m.visible = true;
+        d.t = 0; d.life = opts.life ?? life; d.grow = opts.grow || 0; d.size = size; d.max = opts.max || size; d.dry = opts.dry || 0; d.op = opts.opacity ?? 1; d.stretch = stretch;
+        d.r0 = opts.soak ? 0.75 : 0.12; d.r1 = opts.soak ? 0.95 : 0.7; d.c0 = opts.soak ? SOAK : FRESH; d.drip = opts.drip || 0; d.len = 0.02;
+        if (d.drip) { d.top = d.top || new THREE.Vector3(); d.top.set(p.x + nrm.x * 0.013, p.y, p.z + nrm.z * 0.013); d.floor = opts.floor ?? -1e9; m.scale.set(size, d.len, 1); }
+        if (opts.own) { m.material.opacity = d.op; if (m.material.isMeshStandardMaterial) { m.material.color.copy(d.c0); m.material.roughness = d.r0; } else m.material.color.copy(LOWF); }
         list.push(d); return d;
       },
       tick(dt) {
         for (let i = list.length - 1; i >= 0; i--) {
           const d = list[i]; d.t += dt;
-          if (d.grow && d.size < d.max) { d.size = Math.min(d.max, d.size + d.grow * dt * (1 - d.size / d.max * 0.7)); d.m.scale.set(d.size, d.size, 1); }
-          if (d.dry && d.m.material.color) { const k = Math.min(1, d.t / d.dry); if (d.m.material.isMeshStandardMaterial) { d.m.material.color.setRGB(0.075 - 0.045 * k, 0.003 + 0.004 * k, 0.003 + 0.002 * k); d.m.material.roughness = 0.12 + 0.6 * k; } else d.m.material.color.setRGB(0.42 - 0.22 * k, 0.02, 0.02); }   // fresh wet red to dried brown-black
+          if (d.grow && d.size < d.max) { d.size = Math.min(d.max, d.size + d.grow * dt * (1 - d.size / d.max * 0.8)); d.m.scale.set(d.size * d.stretch, d.size, 1); }   // creeps out, slower as it thins
+          if (d.drip && d.len < d.drip) {   // a run down a wall: grows downward from where it landed, stops at the floor
+            d.len = Math.min(d.drip, d.len + dt * 0.35 * (1 - d.len / d.drip * 0.85), Math.max(0.02, d.top.y - d.floor)); d.m.scale.y = d.len; d.m.position.set(d.top.x, d.top.y - d.len / 2, d.top.z);
+          }
+          if (d.dry && d.m.material.color && d.m.material !== mat) { const k = Math.min(1, d.t / d.dry); if (d.m.material.isMeshStandardMaterial) { d.m.material.color.copy(d.c0).lerp(DRY, k); d.m.material.roughness = d.r0 + (d.r1 - d.r0) * k * k; } else d.m.material.color.copy(LOWF).lerp(LOWD, k); }   // fresh wet near-black red to dried brown-black, glossy to matte
           if (d.t > d.life) { const f = Math.max(0, 1 - (d.t - d.life) / 3); if (d.m.material.opacity !== undefined && d.m.material !== mat) d.m.material.opacity = d.op * f; if (f <= 0) { d.m.visible = false; list.splice(i, 1); } }
         }
       },
@@ -107,7 +158,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     };
   }
   const holes = { concrete: ring(70, decalMat(T.concrete)), wood: ring(40, decalMat(T.wood)), metal: ring(40, decalMat(T.metal)), soft: ring(40, decalMat(T.soft, 0xffffff, 0.8)) };
-  const splats = ring(ultra ? 160 : hq ? 96 : 48, bloodMat(T.splat, 0x5a0505), 70), pools = ring(ultra ? 32 : 24, bloodMat(T.pool, 0x4a0303, 0.92), 90), scorches = ring(10, decalMat(T.scorch), 120), gouges = ring(24, decalMat(T.gouge), 120);
+  const splats = ring(ultra ? 160 : hq ? 96 : 48, bloodMat(T.splat), 70), sprays = ring(ultra ? 64 : hq ? 40 : 16, bloodMat(T.spray), 90), drips = ring(ultra ? 48 : hq ? 28 : 10, bloodMat(T.drip), 120), pools = ring(ultra ? 32 : 24, bloodMat(T.pool, 0, 0.97), 90), scorches = ring(10, decalMat(T.scorch), 120), gouges = ring(24, decalMat(T.gouge), 120);
 
   // ---- glowing sparks: additive, gravity, bounce off the floor, cool from white-yellow to orange and die ----
   const SPK = hq ? 260 : 120, spGeo = new THREE.BufferGeometry(), spPos = new Float32Array(SPK * 6), spCol = new Float32Array(SPK * 6);
@@ -183,7 +234,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     const sp = rnd(2.5, 4.5) * force; L.v.set(dir.x * sp + rnd(-0.6, 0.6), rnd(2.2, 3.6) * force, dir.z * sp + rnd(-0.6, 0.6)); L.w.set(rnd(-9, 9), rnd(-9, 9), rnd(-9, 9));
     fountains.push({ pos: () => (L.g.visible && L.t < 3 ? _lp.copy(L.cap.position).applyMatrix4(L.g.matrixWorld) : null), dur: 1.4, dir: { x: 0, y: -0.2, z: 0 }, t: 0, acc: 0, drip: 2 });
   }
-  const _lp = new THREE.Vector3();
+  const _lp = new THREE.Vector3(), _sd = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), pending = [];
   function tickLimbs(dt) {
     for (const L of limbs) {
       if (!L.g.visible) continue; L.t += dt; if (L.t > 40) { L.g.visible = false; continue; }
@@ -362,23 +413,39 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       }
       if (parts) parts.emit(x, y, z, { n: Math.round((heavy ? 12 : 7) * G), colors: ['#7a0606', '#a01010', '#4a0303'], speed: 2.4 + (gore > 1 ? 1.2 : 0), up: 0.4, size: 0.022, life: 0.6 + (gore > 1 ? 0.3 : 0), dir: d, spread: 0.5 + (gore > 1 ? 0.2 : 0) });
       if (!W) return;
-      if (gore > 1) for (let k = 0; k < (heavy ? 3 : 2); k++) {   // max: a spray, not a drop: more splats fanned out behind and on the floor
-        const a = rnd(-0.35, 0.35), dd = { x: d.x * Math.cos(a) - d.z * Math.sin(a), y: d.y + rnd(-0.2, 0.15), z: d.x * Math.sin(a) + d.z * Math.cos(a) };
-        const h2 = W.ray({ x, y, z }, dd, 4.5);
-        if (h2) splats.add({ x: h2.x, y: h2.y, z: h2.z }, normalOf(h2, dd).clone(), rnd(0.3, 0.7), Math.random() * 6.28, rnd(1, 2.2), { own: true, color: 0x700606, dry: 45, life: 90 });
-        else { const gx = x + dd.x * rnd(1, 2.4), gz = z + dd.z * rnd(1, 2.4); splats.add({ x: gx, y: W.groundAt(gx, gz, y), z: gz }, { x: 0, y: 1, z: 0 }, rnd(0.25, 0.5), Math.atan2(dd.z, dd.x), rnd(1.4, 2.4), { own: true, color: 0x6a0505, dry: 45, life: 90 }); }
+      // the spray follows the shot: streaked droplets fanned out behind the victim, on the wall (running down it) or the floor
+      const fan = gore > 1 ? (heavy ? 4 : 3) : gore > 0 ? 2 : 1;
+      for (let k = 0; k < fan; k++) {
+        const a = k ? rnd(-0.35, 0.35) : rnd(-0.08, 0.08), dd = _sd.set(d.x * Math.cos(a) - d.z * Math.sin(a), d.y - 0.12 + (k ? rnd(-0.2, 0.15) : 0), d.x * Math.sin(a) + d.z * Math.cos(a));
+        const h2 = W.ray({ x, y, z }, dd, k ? 4.5 : 3.2);
+        if (h2) {
+          const n = normalOf(h2, dd).clone(), along = Math.abs(dd.x * n.x + dd.y * n.y + dd.z * n.z), big = (heavy ? 1.3 : 1) * (1 - Math.min(0.5, Math.hypot(h2.x - x, h2.z - z) / 9));
+          sprays.add({ x: h2.x, y: h2.y, z: h2.z }, n, rnd(0.45, 0.8) * big, 0, 1 + (1 - along) * 1.4, { own: true, dry: 45, life: 100, along: dd });
+          if (Math.abs(n.y) < 0.5 && gore > 0) for (let j = 0; j < (heavy ? 3 : 1 + (gore > 1 ? 1 : 0)); j++) {   // what hits a wall runs down it
+            const sx = h2.x + n.z * rnd(-0.2, 0.2), sz = h2.z - n.x * rnd(-0.2, 0.2), sy = h2.y + rnd(-0.1, 0.12);
+            drips.add({ x: sx, y: sy, z: sz }, n, rnd(0.08, 0.14), 0, 1, { own: true, drip: rnd(0.35, 1.2) * (heavy ? 1.3 : 1), floor: W.groundAt(sx - n.x * 0.1, sz - n.z * 0.1, sy) + 0.02, dry: 50, life: 120 });
+          }
+        } else {
+          const gx = x + dd.x * rnd(0.8, 2.2), gz = z + dd.z * rnd(0.8, 2.2);
+          sprays.add({ x: gx, y: W.groundAt(gx, gz, y), z: gz }, _up, rnd(0.4, 0.7) * (heavy ? 1.3 : 1), 0, rnd(1.4, 2.2), { own: true, dry: 45, life: 100, along: dd });
+        }
       }
-      const o = { x, y, z }, hit = W.ray(o, { x: d.x, y: d.y - 0.15, z: d.z }, 3.2);
-      if (hit) {   // the splat stretches with the angle it lands at (a long streak when it skims a wall or the floor)
-        const n = normalOf(hit, d).clone(), along = Math.abs(d.x * n.x + d.y * n.y + d.z * n.z);
-        splats.add({ x: hit.x, y: hit.y, z: hit.z }, n, rnd(0.35, 0.6) * (heavy ? 1.3 : 1), Math.atan2(d.y, Math.hypot(d.x, d.z)) + rnd(-0.3, 0.3), 1 + (1 - along) * 1.6, { own: true, color: 0x6a0505, dry: 40, life: 70 });
-      } else {   // nothing close behind: it lands on the floor a step back
-        const gx = x + d.x * 0.9, gz = z + d.z * 0.9, gy = W.groundAt(gx, gz, y);
-        splats.add({ x: gx, y: gy, z: gz }, { x: 0, y: 1, z: 0 }, rnd(0.3, 0.5), Math.atan2(d.z, d.x), 1.4, { own: true, color: 0x6a0505, dry: 40, life: 70 });
-      }
+      if (gore > 0) { const gx = x + d.x * 0.3, gz = z + d.z * 0.3; splats.add({ x: gx, y: W.groundAt(gx, gz, y), z: gz }, _up, rnd(0.15, 0.3), Math.random() * 6.28, 1, { own: true, dry: 40, life: 80 }); }   // drops straight down under the wound
     },
     // the dead: a pool that spreads out underneath and darkens
-    pool(x, y, z) { const gy = W ? W.groundAt(x, z, y + 1) : y, big = [0.7, 1.3, 2][gore] || 1; pools.add({ x: x + rnd(-0.2, 0.2), y: gy, z: z + rnd(-0.2, 0.2) }, { x: 0, y: 1, z: 0 }, 0.15, Math.random() * 6.28, 1, { own: true, color: 0x5a0404, grow: 0.25 * big, max: rnd(1.1, 1.6) * big, dry: 60, life: 120, opacity: 0.95 }); },
+    // the dead: a pool that creeps out from under them (a lobe runs downhill after a few seconds); on sand, dirt and
+    // grass it soaks in: a dull, wider wet stain round a smaller glossy middle that dries sooner
+    pool(x, y, z) {
+      const gy = W ? W.groundAt(x, z, y + 1) : y, big = [0.7, 1.3, 2][gore] || 1, px = x + rnd(-0.2, 0.2), pz = z + rnd(-0.2, 0.2);
+      const soft = W && W.matName && matClass(W.matName(W.mat[W.idx(Math.floor(px), Math.floor(pz))])) === 'soft';
+      if (soft) pools.add({ x: px, y: gy - 0.002, z: pz }, _up, 0.2, Math.random() * 6.28, 1, { own: true, soak: true, grow: 0.09 * big, max: rnd(1.4, 1.9) * big, dry: 90, life: 140, opacity: 0.8 });
+      pools.add({ x: px, y: gy, z: pz }, _up, 0.15, Math.random() * 6.28, 1, { own: true, grow: 0.12 * big, max: rnd(1.0, 1.5) * big * (soft ? 0.8 : 1), dry: soft ? 35 : 70, life: 140, opacity: 0.97 });
+      if (W && pending.length < 16) {   // the creep: the lowest way out, a few seconds later
+        let bx = rnd(-1, 1), bz = rnd(-1, 1), lo = gy + 0.01;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const h = W.groundAt(px + dx * 0.9, pz + dz * 0.9, gy + 0.3); if (h < lo) { lo = h; bx = dx; bz = dz; } }
+        const L = Math.hypot(bx, bz) || 1; pending.push({ t: rnd(3, 6), x: px + bx / L * 0.55 * big, z: pz + bz / L * 0.55 * big, big, soft });
+      }
+    },
     // gore: chunks flying from a body (explosions, a head that came off), and a wound that pumps (pos() follows the body)
     gibs(x, y, z, n, dir = null, force = 1) { if (gore > 0) gibBurst(x, y, z, Math.round(n * (gore > 1 ? 1 : 0.5)), dir, force); },
     fountain(pos, dur = 2.2, dir = { x: 0, y: 1, z: 0 }) { if (gore > 0) fountains.push({ pos, dur: dur * (gore > 1 ? 1 : 0.5), dir, t: 0, acc: 0 }); },
@@ -386,7 +453,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     limb(kind, x, y, z, dir, color, force = 1) { if (gore > 1) limb(kind, x, y, z, dir, color, force); },
     stumpCap(bone, child, radius) {   // child: the bone that came off (the cap sits at its joint, facing along it)
       if (gore < 2 || !bone || !child) return null; const c = caps[ci = (ci + 1) % caps.length]; if (c.parent) c.parent.remove(c);
-      c.position.copy(child.position); c.quaternion.setFromUnitVectors(_n.set(0, 0, 1), _d.copy(child.position).normalize()); c.scale.setScalar(radius); c.visible = true; bone.add(c); return c;
+      c.position.copy(child.position); c.quaternion.setFromUnitVectors(_n.set(0, 0, 1), _d.copy(child.position).normalize()); c.scale.setScalar(radius * 0.01 / Math.max(1e-6, bone.getWorldScale(_lp).x));   // radius in cm, whatever units the rig's bones use c.visible = true; bone.add(c); return c;
     },
     setGore(n) { gore = Math.max(0, Math.min(2, n | 0)); },
     get gore() { return gore; },
@@ -425,15 +492,16 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
         const gy = W ? W.groundAt(m.o.position.x, m.o.position.z, m.o.position.y + 0.2) : 0;
         if (m.o.position.y < gy + 0.03) { m.o.position.y = gy + 0.03; m.v.y *= -0.25; m.v.x *= 0.4; m.v.z *= 0.4; m.spin *= 0.3; m.b++; m.o.rotation.x = Math.PI / 2 * (m.b > 1 ? 1 : 0.8); if (m.b === 1 && audio) audio.at('shell', m.o.position.x, m.o.position.y, m.o.position.z, cam, 10); }
       }
-      for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, pools, scorches, gouges]) r.tick(dt);
+      for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, sprays, drips, pools, scorches, gouges]) r.tick(dt);
+      for (let i = pending.length - 1; i >= 0; i--) { const q = pending[i]; q.t -= dt; if (q.t > 0) continue; pending.splice(i, 1); if (!W) continue; const gy = W.groundAt(q.x, q.z, 50); pools.add({ x: q.x, y: gy, z: q.z }, _up, 0.1, Math.random() * 6.28, 1.4, { own: true, grow: 0.06 * q.big, max: rnd(0.6, 0.9) * q.big, dry: q.soft ? 35 : 70, life: 130, opacity: 0.95 }); }
       smokeTick(dt); fireTick(dt); tickGibs(dt); tickLimbs(dt); tickFountains(dt);
     },
     setWorld(w) { W = w; api.clear(); },
     clear() {
-      for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, pools, scorches, gouges]) r.clear();
+      for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, sprays, drips, pools, scorches, gouges]) r.clear();
       for (const k of [...smokes.keys()]) api.smoke.remove(k); for (const k of [...fires.keys()]) api.fire.remove(k);
       for (const m of mags) m.o.visible = false; mags.length = 0;
-      for (const g of gibs) g.m.visible = false; fountains.length = 0; for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
+      for (const g of gibs) g.m.visible = false; fountains.length = 0; pending.length = 0; for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
     },
   };
   return api;

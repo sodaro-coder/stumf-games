@@ -32,7 +32,7 @@ import { createCombatFx } from './fx2.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
-import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear } from './chars.js';
+import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD } from './chars.js';
 import { setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
@@ -348,7 +348,7 @@ export default function start({ cfg, E, N, smoke }) {
     const gfx = new GraphicsSettingsManager(S.quality), AUTO = gfx.auto;
     let Q = gfx.q, P = gfx.p;
     setModelQuality(P.hqModels ? 1 : 0.75);
-    if (P.chars) loadChars();
+    if (P.chars) loadChars(P.hqModels);
     // free every other WebGL context first (menu backdrop, map and item pictures): browsers cap how many can exist
     try { if (shotR) { shotR.dispose(); shotR.forceContextLoss(); shotR = null; } } catch (e) { shotR = null; }
     try { releaseThumbs(); } catch (e) { /* none */ }
@@ -518,7 +518,7 @@ export default function start({ cfg, E, N, smoke }) {
     // the HDR pass needs float render targets; many Android GPUs can't render to them, so check rather than assume
     const postOn = () => gfx.postOn;
     // if the phone's GPU gives up (context lost), drop to Potato and restart instead of leaving a black screen
-    renderer.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (smoke) return; try { S.quality = 0.5; saveSet(S); localStorage.setItem('cs:autoq', '0.5'); } catch (er) { /* private mode */ } toast('Graphics crashed on this device: restarting on Potato'); setTimeout(() => location.reload(), 1500); });
+    renderer.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (smoke) return; try { S.quality = 0; saveSet(S); localStorage.setItem('cs:autoq', '0.5'); } catch (er) { /* private mode */ } toast('Graphics crashed on this device: restarting on the lightest settings (Auto steps back up when it can)'); setTimeout(() => location.reload(), 1500); });
     const _dbs = new THREE.Vector2(), _cc = new THREE.Color();
     const postTarget = () => {
       const v = renderer.getDrawingBufferSize(_dbs), w = Math.max(1, v.x | 0), h = Math.max(1, v.y | 0);
@@ -554,7 +554,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (!AUTO || !W || uiOpen || dt > 0.5) return;
       perfSum += dt; perfN++; if (perfSum < 4) return;
       const avg = perfSum / perfN; perfSum = 0; perfN = 0;
-      if (avg > 1 / 40 && scale <= govMin + 0.06 && gfx.stepDown()) {
+      if (avg > gfx.stepBudget && scale <= govMin + 0.06 && gfx.stepDown()) {   // effects go before the resolution drops under the band's floor (0.6 on Xbox)
         applyTier(); buildMap(mapId); vmKey = ''; setViewModel(); govMin = gfx.pixelBand(devicePixelRatio || 1).min; gov = mkGov();
         toast('Graphics: ' + gfx.name + ' to keep it smooth');
       } else if (avg < 1 / 75 && scale >= gfx.pixelBand(devicePixelRatio || 1).start - 0.01) gfx.rememberHeadroom();   // headroom: next match one step up
@@ -854,7 +854,7 @@ export default function start({ cfg, E, N, smoke }) {
       const useS = charsReady();   // the realistic animated soldier on every quality (11k triangles); the simple rig only while it loads
       const role = info.look && STORY_LOOKS[info.look] ? 'look:' + info.look : info.boss === 'ballin' || info.boss === true ? 'boss' : info.char && CHARACTERS[info.char] ? info.char : '';   // story mode: squad characters, story people, the boss
       const rs = info.scale || (role === 'boss' ? BOSS.model.scale : 1);
-      const key = agentId + team + (useS ? 'S' : '') + role + rs;
+      const key = agentId + team + (useS ? 'S' + soldierModelsV() : '') + role + rs;   // rebuilt once the real soldier model arrives
       if (r0 && r0.key === key) return r0;
       if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
@@ -1992,6 +1992,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (r.soldier && p.rl && !r.wasRl) { soldierEvent(r, 'reload'); if (cfx) setTimeout(() => cfx && cfx.dropMag(p.x, p.y + 1.0, p.z, p.yaw || 0), 300); } r.wasRl = !!p.rl;
         if (r.soldier) setGear(r, p.armor || 0, p.helmet);
         if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0, prone: p.prone || 0 });
+        if (r.model) soldierLOD(r, Math.hypot(p.x - cam.position.x, p.z - cam.position.z));   // far away: the light mesh
         if (r.lost && r.bones) for (const b of r.lost) if (r.bones[b]) r.bones[b].scale.setScalar(0.001);   // gore: what came off stays off
         else posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
         if (!r.soldier && r.torso && p.lean) r.torso.rotation.z -= p.lean * 0.35;

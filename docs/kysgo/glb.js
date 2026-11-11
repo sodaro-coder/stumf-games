@@ -119,7 +119,7 @@ export async function buildGLB({ json: J, bin }, opts = {}) {
     const s = J.skins[si], bones = s.joints.map((j) => nodes[j]);
     const ibm = s.inverseBindMatrices !== undefined ? accessor(s.inverseBindMatrices) : null;
     const inv = bones.map((_, k) => (ibm ? new THREE.Matrix4().fromArray(ibm.array, k * 16) : new THREE.Matrix4()));
-    mesh.bind(new THREE.Skeleton(bones, inv), mesh.matrixWorld);
+    mesh.bind(new THREE.Skeleton(bones, inv), new THREE.Matrix4());   // glTF skins ignore the mesh node's own transform: world = sum(joint * inverseBind * v)
   }
   const animations = (J.animations || []).map((an, ai) => {
     const tracks = [];

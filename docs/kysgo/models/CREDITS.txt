@@ -1,4 +1,20 @@
-Models used by KYS:GO (built by browserdev/assetbuild.py). All free to use under the licence named.
+Models used by KYS:GO (built by browserdev/assetbuild.py). All free to use under the licence named; CC-BY works credit their authors here and in the game's Credits screen.
 
 barrel: "Barrel 01" by Jorge Camacho, CC0, https://polyhaven.com/a/Barrel_01
 crate: "Wooden Crate 01" by James Ray Cock, CC0, https://polyhaven.com/a/wooden_crate_01
+ar15: "AR-15 style rifle" by SpatialNeglect, CC BY 4.0, https://sketchfab.com/3d-models/ar-15-style-rifle-50d33435445e439c95e3b36e9d4bd798
+operator: "S.W.A.T. Operator" by SpatialNeglect, CC BY 4.0, https://sketchfab.com/3d-models/swat-operator-9e82fabf26194896b5ad4a364d864eab
+operator2: "S.W.A.T. Operator- 4k Followers Special Remaster" by SpatialNeglect, CC BY 4.0, https://sketchfab.com/3d-models/swat-operator-4k-followers-special-remaster-f6923917c8014578b1c1cb2b4c249268
+m4a1: "Assault rifle M4A1" by bobeer, CC BY 4.0, https://sketchfab.com/3d-models/assault-rifle-m4a1-1b858701dd7142d9b82bbe3fd121a97b
+aks: "AKS" by SpatialNeglect, CC BY 4.0, https://sketchfab.com/3d-models/aks-67eaf310bffa46698ac8e71d3a76e773
+ak_tactical: "AK 47 Tactical Upgrade" by SpatialNeglect, CC BY 4.0, https://sketchfab.com/3d-models/ak-47-tactical-upgrade-b15d69e8a5a948819c8c388f97930b9c
+aks74u: "AKS-74U" by SpatialNeglect, CC BY 4.0, https://sketchfab.com/3d-models/aks-74u-f290460c6a3649e985dc9460d31d5490
+deagle: "Desert Eagle" by ELIZION, CC BY 4.0, https://sketchfab.com/3d-models/desert-eagle-cabde59f5cf24effaf80536e35d04e95
+m1911: "Kimber Stainless TLE/RL II 1911 .45ACP" by 8sianDude, CC BY 4.0, https://sketchfab.com/3d-models/kimber-stainless-tlerl-ii-1911-45acp-9b2503a1283b4c1fa506510c9dc7d1f5
+mp5: "HK MP5 SMG" by Daniel Zamary, CC BY 4.0, https://sketchfab.com/3d-models/hk-mp5-smg-fad0226e1dcf4af180f707a5509d3a4e
+shotgun_m4: "M4 Super 90 (JW2) Brand-Friendly version" by 8sianDude, CC BY 4.0, https://sketchfab.com/3d-models/m4-super-90-jw2-brand-friendly-version-7e472e24152246708cac8b6f1613c7a8
+shotgun_870: "Remington 870 Shotgun" by Andrei Milin, CC BY 4.0, https://sketchfab.com/3d-models/remington-870-shotgun-6db0ad4764d14eee8f063eea3600071b
+sniper: "Awp Sniper Rifle - Custom Scope" by M37_R, CC BY 4.0, https://sketchfab.com/3d-models/awp-sniper-rifle-custom-scope-f78a0ccafd304f15b46d087ad896478f
+kabar: "Fighting Ka-Bar knifes" by vitvitskyi, CC BY 4.0, https://sketchfab.com/3d-models/fighting-ka-bar-knifes-b3c3a8c7c28349268f6631567cf01d8a
+frag: "M69 Frag Grenade" by Riley Lewand, CC BY 4.0, https://sketchfab.com/3d-models/m69-frag-grenade-e94d90f68bdb4fd68d7a0aac6d9c5dd0
+heart: "human_heart__photo" by multispets, CC BY 4.0, https://sketchfab.com/3d-models/human-heart--photo-fe9ccbc64ea046c99e02f7018e373ed8

@@ -6,12 +6,34 @@
 import * as THREE from '../sdk/three.module.min.js';
 import { litPatch } from './world.js';
 import { glowMask, glowify, gunSurface } from './models.js';
+import { loadGLB, modelManifest } from './glb.js';
 
 let D = null, P = null;
-export function loadChars() {
+// the real soldiers (models/, assetbuild.py): photographed-texture operators on a Mixamo skeleton, so the game's own
+// Mixamo clips play on them by bone name. CT: the black-clad SWAT operator; T: the multicam operator. Each is ONE skinned
+// mesh with one atlas material (one draw call). hq: the full model; otherwise the light one (phones).
+export const SOLDIER_MODEL = { CT: 'operator', T: 'operator2' };
+const MODELS = { hi: {}, lo: {} }, MP = {};
+let MV = 0;
+export const soldierModelsV = () => MV;   // goes up when a soldier model arrives (the game rebuilds its rigs with it)
+function loadSoldierModels(tier) {
+  return MP[tier] || (MP[tier] = modelManifest().then((man) => Promise.all(Object.entries(SOLDIER_MODEL).map(([team, id]) => (man[id]
+    ? loadGLB(man[id].files[tier]).then((m) => { MODELS[tier][team] = m; MV++; }).catch((e) => console.warn('soldier model', id, e.message)) : null)))));
+}
+// hq: true / false = also fetch the real soldier models for that tier (the game does); left out = the built soldier only
+// (menu pictures never trigger the big download)
+export function loadChars(hq) {
   if (!P) P = Promise.all([fetch('chars.json').then((r) => (r.ok ? r.json() : null)), fetch('chars.bin').then((r) => (r.ok ? r.arrayBuffer() : null))])
     .then(([j, b]) => { D = j && b ? build(j, b) : null; return D; }).catch(() => null);
+  if (hq !== undefined) loadSoldierModels(hq ? 'hi' : 'lo').then(() => hq && loadSoldierModels('lo'));   // High and up: the light one too, for soldiers far away
   return P;
+}
+// a working copy of a loaded model: its own bones, the skinned mesh bound to them; geometry and material shared
+function cloneRig(src) {
+  const c = src.clone(true), a = [], b = []; src.traverse((o) => a.push(o)); c.traverse((o) => b.push(o));
+  const map = new Map(a.map((o, i) => [o, b[i]]));
+  b.forEach((o, i) => { if (o.isSkinnedMesh) { const sk = a[i].skeleton; o.bind(new THREE.Skeleton(sk.bones.map((x) => map.get(x)), sk.boneInverses), o.bindMatrix); o.frustumCulled = false; } });
+  return c;
 }
 export const charsReady = () => !!D;
 
@@ -324,6 +346,8 @@ export function makeSoldier(look, team, hq = true) {
   root.position.fromArray(c.root.t); root.quaternion.fromArray(c.root.q); root.scale.fromArray(c.root.s); holder.add(root);
   const bones = c.bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); o.quaternion.fromArray(b.q); o.scale.fromArray(b.s); o.userData.q0 = o.quaternion.clone(); return o; });
   c.bones.forEach((b, i) => { if (b.p >= 0) bones[b.p].add(bones[i]); else root.add(bones[i]); });
+  const tk = team === 'CT' ? 'CT' : 'T', MD = isHuman(L) ? (MODELS[hq ? 'hi' : 'lo'][tk] || MODELS[hq ? 'lo' : 'hi'][tk]) : null;
+  if (MD) return modelSoldier(MD, L, team, g, holder);
   const human = isHuman(L) && D.meshes.some((m) => m.name.startsWith('human_'));
   const mat = human ? null : material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null, costumeOf(L));
   let humanHelm = null;
@@ -363,6 +387,65 @@ export function makeSoldier(look, team, hq = true) {
   r.headCorr = byName.Head.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
   r.chestCorr = byName.Spine2.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
   return r;
+}
+// the game's clips on a model: rotations play as they are (both are Mixamo rigs); the hips' movement is carried from
+// the built soldier's frame (z-up centimetres) into the model's, relative to each one's standing hips
+function modelClips(MD, hips) {
+  if (MD.clips) return MD.clips;
+  const c = D.c, hb = c.bones.find((b) => /Hips$/.test(b.n));
+  const A = new THREE.Matrix4().compose(new THREE.Vector3(), new THREE.Quaternion().fromArray(c.root.q), new THREE.Vector3().fromArray(c.root.s));
+  const pw = hips.parent.matrixWorld.clone().setPosition(0, 0, 0), M = pw.invert().multiply(A);   // game root space -> model hips-parent space (g sits at the origin here)
+  const r0 = new THREE.Vector3().fromArray(hb.t), r1 = hips.position.clone(), v = new THREE.Vector3();
+  const pq = new THREE.Quaternion(); hips.parent.matrixWorld.decompose(v, pq, new THREE.Vector3());
+  const Cq = pq.clone().invert().multiply(new THREE.Quaternion().fromArray(c.root.q)), qa = new THREE.Quaternion();
+  const Kq = new THREE.Quaternion().fromArray(hb.q).invert().multiply(Cq.clone().invert()).multiply(hips.userData.q0 || hips.quaternion);
+  MD.clips = {};
+  for (const [k, clip] of Object.entries(D.clips)) {
+    const tracks = clip.tracks.map((t) => {
+      if (/Hips\.quaternion$/.test(t.name)) {   // the root bone's turn, carried across frames: q' = C q K (rest pose matched)
+        const n = t.clone(), a = n.values;
+        for (let i = 0; i < a.length; i += 4) { qa.fromArray(a, i); qa.premultiply(Cq).multiply(Kq); qa.toArray(a, i); }
+        return n;
+      }
+      if (!/Hips\.position$/.test(t.name)) return t;
+      const n = t.clone(), a = n.values;
+      for (let i = 0; i < a.length; i += 3) { v.set(a[i], a[i + 1], a[i + 2]).sub(r0).applyMatrix4(M).add(r1); a[i] = v.x; a[i + 1] = v.y; a[i + 2] = v.z; }
+      return n;
+    });
+    MD.clips[k] = new THREE.AnimationClip(clip.name, clip.duration, tracks); MD.clips[k].loop = clip.loop;
+  }
+  return MD.clips;
+}
+function modelSoldier(MD, L, team, g, holder) {
+  const root = cloneRig(MD.scene); root.rotation.y = Math.PI; holder.add(root);   // the model faces +z; players face -z
+  const byName = {};
+  root.traverse((o) => { if (o.isBone) { const n = o.name.replace(/^mixamorig[:_]?/i, '').replace(/_\d+$/, ''); o.name = 'mixamorig' + n; o.userData.q0 = o.quaternion.clone(); byName[n] = o; } if (o.isMesh) { o.castShadow = true; } });
+  g.updateMatrixWorld(true);
+  const mixer = new THREE.AnimationMixer(root), act = {};
+  for (const [k, clip] of Object.entries(modelClips(MD, byName.Hips))) { const a = mixer.clipAction(clip); a.setLoop(clip.loop ? THREE.LoopRepeat : THREE.LoopOnce); if (!clip.loop) a.clampWhenFinished = true; act[k] = a; }
+  act.idle.play();
+  const tpGun = new THREE.Group(); g.add(tpGun);
+  const head = new THREE.Group(); g.add(head);
+  const chest = new THREE.Group(); chest.visible = false; g.add(chest);
+  const vest = gearMesh(vestParts(team)); vest.visible = false; chest.add(vest);
+  const bomb = L.bombvest ? gearMesh(bombVestParts()) : null; if (bomb) { chest.add(bomb); chest.visible = true; }
+  const helm = gearMesh(helmetParts(team)); helm.visible = false; head.add(helm);
+  const headCol = team === 'CT' ? '#1d1f22' : '#2c2e26', armCol = team === 'CT' ? '#24262a' : '#5d5a40';
+  let body = null; root.traverse((o) => { if (o.isSkinnedMesh && !body) body = o; });
+  const far = MODELS.lo[team === 'CT' ? 'CT' : 'T'];
+  let geoLo = null; if (far && far !== MD) far.scene.traverse((o) => { if (o.isSkinnedMesh && !geoLo) geoLo = o.geometry; });
+  const r = { soldier: true, model: true, team: team === 'CT' ? 'CT' : 'T', body, geoHi: body && body.geometry, geoLo, headCol, armCol, human: true, humanHelm: null, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, vest, bomb, tpKey: '', over: null, t: 0, dieDone: false };
+  g.updateMatrixWorld(true);
+  r.headCorr = byName.Head.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
+  r.chestCorr = (byName.Spine2 || byName.Spine1).getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
+  return r;
+}
+// distance detail: beyond 9 m the soldier swaps to the light mesh (same skeleton and atlas layout, about a sixth of the
+// triangles). A frame's work: one comparison
+export function soldierLOD(r, dist) {
+  if (!r.model || !r.body) return;
+  if (!r.geoLo) { const far = MODELS.lo[r.team]; if (far) far.scene.traverse((o) => { if (o.isSkinnedMesh && !r.geoLo && o.geometry !== r.geoHi) r.geoLo = o.geometry; }); if (!r.geoLo) return; }
+  const g = dist > 9 ? r.geoLo : r.geoHi; if (r.body.geometry !== g) r.body.geometry = g;
 }
 // swap the looping base animation with a short cross-fade
 const LOCO = new Set(['walk', 'walkBack', 'walkLeft', 'walkRight', 'run', 'runBack', 'runLeft', 'runRight']);
@@ -910,7 +993,8 @@ function betaTag() {
 }
 
 // ---- bought gear: kevlar (a plate carrier) and a helmet, shown only while the player has them ----
-export function setGear(r, armor, helmet) { if (!r || !r.chest) return; r.vest.visible = armor > 0 && !r.human;   // the human has its own plate carrier
+export function setGear(r, armor, helmet) { if (!r || !r.chest) return; if (r.model) return; r.vest.visible = armor > 0 && !r.human;   // a real operator already wears his plate carrier and helmet
+    // the human has its own plate carrier
    r.chest.visible = armor > 0 || !!r.bomb; r.helm.visible = !!helmet && armor > 0 && !r.human;
   if (r.humanHelm) r.humanHelm.visible = r.humanHelm.userData.worn || (!!helmet && armor > 0); }
 let gearMat = null;
