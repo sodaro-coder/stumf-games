@@ -978,6 +978,7 @@ export default function start({ cfg, E, N, smoke }) {
       fx.add(c.m); casings.push(c);
     }
     function stepCasings(dt) {
+      stepDrops(dt);
       for (let i = casings.length - 1; i >= 0; i--) {
         const c = casings[i]; c.t += dt;
         if (c.t > 8) { fx.remove(c.m); casings.splice(i, 1); continue; }
@@ -1021,10 +1022,40 @@ export default function start({ cfg, E, N, smoke }) {
     }
     const flying = new Map();  // grenades in flight (visual)
     const dropObjs = new Map();
+    // a gun that is dropped (or falls from a body) is thrown: it leaves at hand height, tumbles through the air, bounces
+    // off walls and the floor and slides to rest flat on its side where the host says it lies (so pick-ups still match).
+    // Looks only: every player sees their own throw land on the same spot. Guns already on the floor when you join just lie there.
+    const flyDrops = [];
+    let dropsSeen = false;
     function syncDrops() {
       const keep = new Set();
-      for (const d of st.drops) { keep.add(d.id); if (dropObjs.has(d.id)) continue; const sk = d.skin, si = sk ? itemInfo(sk) : null; const m = makeGun(d.wid, sk && si ? skinTexture(sk, si) : null, undefined, undefined, false); m.rotation.set(0, Math.random() * 6, Math.PI / 2); m.position.set(d.x, d.y + 0.04, d.z); fx.add(m); dropObjs.set(d.id, m); }
+      for (const d of st.drops) { keep.add(d.id); if (dropObjs.has(d.id)) continue; const sk = d.skin, si = sk ? itemInfo(sk) : null; const m = makeGun(d.wid, sk && si ? skinTexture(sk, si) : null, undefined, undefined, false); const yaw = Math.random() * 6.28; m.rotation.set(0, yaw, Math.PI / 2); m.position.set(d.x, d.y + 0.04, d.z); fx.add(m); dropObjs.set(d.id, m);
+        if (dropsSeen && flyDrops.length < 12 && Math.hypot(d.x - cam.position.x, d.z - cam.position.z) < 60) {
+          const a = Math.random() * 6.28, T = 0.55 + Math.random() * 0.2, sx = d.x + Math.cos(a) * 0.5, sz = d.z + Math.sin(a) * 0.5, sy = d.y + 1.15;
+          m.position.set(sx, sy, sz); m.rotation.set(Math.random() * 3, yaw, Math.random() * 3);
+          flyDrops.push({ m, d, t: 0, v: new THREE.Vector3((d.x - sx) / T, (d.y + 0.04 - sy + 4.9 * T * T) / T, (d.z - sz) / T), w: new THREE.Vector3((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 14), b: 0, yaw });
+        } }
+      dropsSeen = true;
       for (const [k, m] of dropObjs) if (!keep.has(k)) { fx.remove(m); dropObjs.delete(k); }
+    }
+    function stepDrops(dt) {
+      for (let i = flyDrops.length - 1; i >= 0; i--) {
+        const f = flyDrops[i], m = f.m, p = m.position; f.t += dt;
+        if (!m.parent || f.t > 3) { if (m.parent) { p.set(f.d.x, f.d.y + 0.04, f.d.z); m.rotation.set(0, f.yaw, Math.PI / 2); } flyDrops.splice(i, 1); continue; }
+        f.v.y -= 9.8 * dt; p.addScaledVector(f.v, dt); m.rotation.x += f.w.x * dt; m.rotation.y += f.w.y * dt; m.rotation.z += f.w.z * dt;
+        if (W && W.ray && f.b === 0) { const L = Math.hypot(f.v.x, f.v.z); if (L > 0.5) { const h = W.ray({ x: p.x, y: p.y, z: p.z }, { x: f.v.x / L, y: 0, z: f.v.z / L }, L * dt + 0.1); if (h) { f.v.x *= -0.3; f.v.z *= -0.3; } } }
+        const g = W ? W.groundAt(p.x, p.z, p.y + 0.3) : 0;
+        if (p.y < g + 0.04) {
+          p.y = g + 0.04; f.b++;
+          if (f.b === 1) audio.at('shell', p.x, p.y, p.z, cam, 14);
+          f.v.y = f.b < 3 ? -f.v.y * 0.28 : 0; f.v.x *= 0.45; f.v.z *= 0.45; f.w.multiplyScalar(0.35);
+          if (f.b >= 3) {   // settle: slide to the host's spot and lie flat on its side
+            const k = Math.min(1, dt * 8); p.x += (f.d.x - p.x) * k; p.z += (f.d.z - p.z) * k;
+            m.rotation.x += (0 - m.rotation.x) * k; m.rotation.z += (Math.PI / 2 - m.rotation.z) * k; f.w.set(0, 0, 0);
+            if (Math.hypot(f.d.x - p.x, f.d.z - p.z) < 0.02) { m.rotation.set(0, m.rotation.y, Math.PI / 2); flyDrops.splice(i, 1); }
+          }
+        }
+      }
     }
     const bombObj = makeBomb(); bombObj.visible = false; scene.add(bombObj);
     {   // the C4's screen shows the real countdown, green digits on a dark LCD
