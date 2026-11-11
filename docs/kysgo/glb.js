@@ -168,7 +168,7 @@ export function model(id, { hq = true, far = 14 } = {}) {
 }
 
 // ---- guns: the working parts, found by name -----------------------------------------------------------------------
-const PART_NAMES = { slide: /slide/i, bolt: /bolt|carrier/i, mag: /mag(azine)?\b|mag_|clip/i, trigger: /trigger/i, charging: /charg/i, hammer: /hammer/i, selector: /selector|safety/i, cover: /port_?cover|dust_?cover/i, body: /^body|receiver/i };
+const PART_NAMES = { slide: /^slide(_low|_\d+)?$/i, bolt: /^bolt( carrier)?(_\d+)?$/i, boltback: /^boltback(_\d+)?$/i, mag: /^mag(azine)?([. ]?\d+)?(_\d+)?$/i, trigger: /^trigger(_low|_\d+)?$/i, charging: /charg/i, hammer: /^hammer(_low|_\d+)?$/i, selector: /selector|safety/i, cover: /port_?cover|^dust cover$/i, body: /^body|receiver/i };
 export function gunParts(root) {
   const out = {};
   root.traverse((o) => { for (const [k, re] of Object.entries(PART_NAMES)) if (!out[k] && re.test(o.name)) { out[k] = o; o.userData.rest = o.position.clone(); } });
@@ -197,4 +197,20 @@ export function retarget(clip, root, { hipsScale = 1 } = {}) {
     tracks.push(c);
   }
   return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+}
+
+// ---- guns: turn a model into the game's gun frame (barrel down -z, top up +y), from the axes assetbuild found
+// (manifest "auto": which axis is the length / height, which end is the muzzle, which side is up). Returns the wrapper
+// and the model's box in that frame.
+const _gm = new THREE.Matrix4(), _gv = new THREE.Vector3();
+export function canonGun(scene, auto) {
+  const e = (i) => new THREE.Vector3(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0);
+  const X = e(auto.width), Y = e(auto.up_axis).multiplyScalar(auto.up), Z = e(auto.len).multiplyScalar(-auto.fwd);
+  _gm.set(X.x, X.y, X.z, 0, Y.x, Y.y, Y.z, 0, Z.x, Z.y, Z.z, 0, 0, 0, 0, 1);
+  if (_gm.determinant() < 0) { X.negate(); _gm.set(X.x, X.y, X.z, 0, Y.x, Y.y, Y.z, 0, Z.x, Z.y, Z.z, 0, 0, 0, 0, 1); }   // no mirror image
+  const g = new THREE.Group(), inner = new THREE.Group(); inner.add(scene); g.add(inner);
+  inner.matrixAutoUpdate = false; inner.matrix.copy(_gm);
+  const box = new THREE.Box3();
+  for (let i = 0; i < 8; i++) { _gv.set(i & 1 ? auto.max[0] : auto.min[0], i & 2 ? auto.max[1] : auto.min[1], i & 4 ? auto.max[2] : auto.min[2]).applyMatrix4(_gm); box.expandByPoint(_gv); }
+  return { g, box };
 }

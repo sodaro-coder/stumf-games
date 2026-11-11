@@ -179,18 +179,18 @@
  },
  "aks": {
   "kind": "gun",
-  "sig": "50a6de808645",
+  "sig": "f4e726795f85",
   "files": {
    "hi": "models/aks.glb",
    "lo": "models/aks_lo.glb"
   },
   "tris": {
-   "hi": 41343,
-   "lo": 4819
+   "hi": 40143,
+   "lo": 4048
   },
   "bytes": {
-   "hi": 3856404,
-   "lo": 741816
+   "hi": 3202764,
+   "lo": 541120
   },
   "scale": 1,
   "fit": {},
@@ -204,7 +204,7 @@
    "min": [
     -24.677820857505452,
     -245.3113427719037,
-    -735.2740700700759
+    -536.1905639389008
    ],
    "max": [
     40.592908085602105,
@@ -259,47 +259,6 @@
    "width": 0
   }
  },
- "aks74u": {
-  "kind": "gun",
-  "sig": "a59ff65ae57d",
-  "files": {
-   "hi": "models/aks74u.glb",
-   "lo": "models/aks74u_lo.glb"
-  },
-  "tris": {
-   "hi": 26310,
-   "lo": 7034
-  },
-  "bytes": {
-   "hi": 2563352,
-   "lo": 626384
-  },
-  "scale": 1,
-  "fit": {},
-  "credit": {
-   "title": "AKS-74U",
-   "author": "SpatialNeglect",
-   "licence": "CC BY 4.0",
-   "url": "https://sketchfab.com/3d-models/aks-74u-f290460c6a3649e985dc9460d31d5490"
-  },
-  "auto": {
-   "min": [
-    -14.433824270963665,
-    -101.72085899515076,
-    -205.91908443173517
-   ],
-   "max": [
-    207.27695817161378,
-    97.17662668381588,
-    266.250966575877
-   ],
-   "len": 2,
-   "fwd": 1,
-   "up_axis": 0,
-   "up": -1,
-   "width": 1
-  }
- },
  "deagle": {
   "kind": "gun",
   "sig": "16cd09e662f6",
@@ -339,47 +298,6 @@
    "up_axis": 1,
    "up": 1,
    "width": 0
-  }
- },
- "m1911": {
-  "kind": "gun",
-  "sig": "32da7b6e3172",
-  "files": {
-   "hi": "models/m1911.glb",
-   "lo": "models/m1911_lo.glb"
-  },
-  "tris": {
-   "hi": 61216,
-   "lo": 27071
-  },
-  "bytes": {
-   "hi": 4670180,
-   "lo": 1319556
-  },
-  "scale": 1,
-  "fit": {},
-  "credit": {
-   "title": "Kimber Stainless TLE/RL II 1911 .45ACP",
-   "author": "8sianDude",
-   "licence": "CC BY 4.0",
-   "url": "https://sketchfab.com/3d-models/kimber-stainless-tlerl-ii-1911-45acp-9b2503a1283b4c1fa506510c9dc7d1f5"
-  },
-  "auto": {
-   "min": [
-    -6.871094550093382,
-    -4.774960809380657,
-    -4.635300487608382
-   ],
-   "max": [
-    2.841459210780428,
-    4.878461524553647,
-    5.698149145241487
-   ],
-   "len": 2,
-   "fwd": 1,
-   "up_axis": 0,
-   "up": 1,
-   "width": 1
   }
  },
  "mp5": {
@@ -507,7 +425,7 @@
  },
  "sniper": {
   "kind": "gun",
-  "sig": "cad0faffad69",
+  "sig": "a8980810b44d",
   "files": {
    "hi": "models/sniper.glb",
    "lo": "models/sniper_lo.glb"
@@ -521,7 +439,9 @@
    "lo": 1290644
   },
   "scale": 1,
-  "fit": {},
+  "fit": {
+   "up": 1
+  },
   "credit": {
    "title": "Awp Sniper Rifle - Custom Scope",
    "author": "M37_R",
@@ -542,24 +462,24 @@
    "len": 2,
    "fwd": 1,
    "up_axis": 1,
-   "up": -1,
+   "up": 1,
    "width": 0
   }
  },
  "kabar": {
   "kind": "gun",
-  "sig": "26cbd9870ca8",
+  "sig": "29e74340dcd6",
   "files": {
    "hi": "models/kabar.glb",
    "lo": "models/kabar_lo.glb"
   },
   "tris": {
-   "hi": 16454,
-   "lo": 8307
+   "hi": 4923,
+   "lo": 2602
   },
   "bytes": {
-   "hi": 1979284,
-   "lo": 654880
+   "hi": 600844,
+   "lo": 204100
   },
   "scale": 1,
   "fit": {},
@@ -572,18 +492,18 @@
   "auto": {
    "min": [
     -4.076600074768066,
-    0.003599999938160322,
+    0.010700000450015455,
     -5.823999881744385
    ],
    "max": [
-    3.617300033569336,
-    1.2929999828338632,
-    4.643199920654297
+    -1.688099980354309,
+    1.2065999507904066,
+    3.4816999435424805
    ],
    "len": 2,
-   "fwd": -1,
+   "fwd": 1,
    "up_axis": 0,
-   "up": 1,
+   "up": -1,
    "width": 1
   }
  },

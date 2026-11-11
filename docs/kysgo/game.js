@@ -2111,6 +2111,11 @@ export default function start({ cfg, E, N, smoke }) {
           const locked = it2 && it2.ammo === 0 && (t > 0.045 || t > 8) ? 1 : 0;
           ud.slide.position.z = 0.032 * Math.max(back, locked);
         }
+        if (ud.bolt && w) {   // a real rifle's bolt carrier: cycles back and home on every shot, held back on an empty magazine
+          const it3 = me.inv[me.cur], t = me.lastGun === w.id ? (performance.now() - (me.lastShotAt || 0)) / 1000 : 9, cyc = Math.min(0.09, (w.rof || 0.1) * 0.8);
+          const back = t < cyc ? Math.sin(Math.PI * Math.min(1, t / cyc)) : 0, held = it3 && it3.ammo === 0 && w.cat !== 'sniper' && t > cyc * 0.5 ? 1 : 0;
+          ud.bolt.position.z = (ud.boltTravel || 0.07) * Math.max(back, held);
+        }
         if (ud.flop) {   // floppy: each joint is a damped spring kicked by turning, walking, swinging and stroking
           const F = ud.flopS || (ud.flopS = { x: 0, y: 0, vx: 0, vy: 0 }), stroking = me.inspect > 0 && me.inspectStyle === 'stroke';
           const kick = { x: -lookDY * 0.9 + Math.cos(bob * 2) * 0.6 * Math.min(1, sp / 4) + (me.knifeSwing > 0 ? 9 : 0) + (stroking ? Math.sin(me.inspect * 22) * 7 : 0), y: lookDX * 0.9 };

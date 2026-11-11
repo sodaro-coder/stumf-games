@@ -8,9 +8,7 @@ operator2: "S.W.A.T. Operator- 4k Followers Special Remaster" by SpatialNeglect,
 m4a1: "Assault rifle M4A1" by bobeer, CC BY 4.0, https://sketchfab.com/3d-models/assault-rifle-m4a1-1b858701dd7142d9b82bbe3fd121a97b
 aks: "AKS" by SpatialNeglect, CC BY 4.0, https://sketchfab.com/3d-models/aks-67eaf310bffa46698ac8e71d3a76e773
 ak_tactical: "AK 47 Tactical Upgrade" by SpatialNeglect, CC BY 4.0, https://sketchfab.com/3d-models/ak-47-tactical-upgrade-b15d69e8a5a948819c8c388f97930b9c
-aks74u: "AKS-74U" by SpatialNeglect, CC BY 4.0, https://sketchfab.com/3d-models/aks-74u-f290460c6a3649e985dc9460d31d5490
 deagle: "Desert Eagle" by ELIZION, CC BY 4.0, https://sketchfab.com/3d-models/desert-eagle-cabde59f5cf24effaf80536e35d04e95
-m1911: "Kimber Stainless TLE/RL II 1911 .45ACP" by 8sianDude, CC BY 4.0, https://sketchfab.com/3d-models/kimber-stainless-tlerl-ii-1911-45acp-9b2503a1283b4c1fa506510c9dc7d1f5
 mp5: "HK MP5 SMG" by Daniel Zamary, CC BY 4.0, https://sketchfab.com/3d-models/hk-mp5-smg-fad0226e1dcf4af180f707a5509d3a4e
 shotgun_m4: "M4 Super 90 (JW2) Brand-Friendly version" by 8sianDude, CC BY 4.0, https://sketchfab.com/3d-models/m4-super-90-jw2-brand-friendly-version-7e472e24152246708cac8b6f1613c7a8
 shotgun_870: "Remington 870 Shotgun" by Andrei Milin, CC BY 4.0, https://sketchfab.com/3d-models/remington-870-shotgun-6db0ad4764d14eee8f063eea3600071b

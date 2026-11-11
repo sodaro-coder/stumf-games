@@ -8,7 +8,7 @@ import { paintSkin, KNIFE_BY_ID, ITEM_BY_ID } from './skins.js';
 import { sprayCanvas } from './sprays.js';
 import { litPatch, loadTx } from './world.js';
 import { surface } from './textures.js';
-import { model } from './glb.js';
+import { model, loadGLB, modelManifest, canonGun, gunParts } from './glb.js';
 
 const matCache = new Map();
 export const lam = (color) => { const k = 'l' + color; if (!matCache.has(k)) matCache.set(k, new THREE.MeshLambertMaterial({ color })); return matCache.get(k); };
@@ -1071,8 +1071,61 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
   }
   g.add(muzzleFlash(cg.len + (w.silenced ? 0.04 : 0.02), w.cat === 'pistol' ? 0.6 : 1));
   const ch = cg.hold.charge;
+  const realId = !opt ? REAL_GUN[id] : null;   // a scope from the attachments menu still needs the built gun's rail; a muzzle device does not
   g.userData = { magGroup: magGroup.children.length ? magGroup : null, pump: pumpGroup.children.length ? pumpGroup : null, slide: slideGroup.children.length ? slideGroup : null, magPos, leftArm, leftHand, charge: ch ? new THREE.Vector3(ch[2], ch[1], -ch[0]) : null, flash: g.children[g.children.length - 1], len: cg.len, grip, fore, sight: cg.hold.sight ? new THREE.Vector3(0, cg.hold.sight[1], -cg.hold.sight[0]) : null, optic: opt, iron: !opt && cg.hold.iron ? new THREE.Vector3(0, cg.hold.iron[1], -cg.hold.iron[0]) : null };
+  if (realId) realGun(g, realId, id, cg, hands, tex);
   return g;
+}
+// ---- real gun models (models/, assetbuild.py): the code-built gun stays as the measuring stick (its grip, support hand,
+// sights and length are what the hands, aiming and reloads use) and the real model is fitted over it, then the code
+// gun is hidden. The model's own moving parts ride the game's existing ones: magazine -> the reload's magazine, slide
+// -> the pistol slide, bolt carrier -> a new bolt group that cycles on every shot. Third-person guns use the light,
+// merged file. A skin is painted over the model's own finish (its scratches and shading show through).
+export const REAL_GUN = { ak47: 'ak_tactical', galil: 'aks', m4a4: 'm4a1', m4a1s: 'ar15', mp5: 'mp5', deagle: 'deagle', xm1014: 'shotgun_m4', nova: 'shotgun_870', awp: 'sniper', ssg08: 'sniper' };
+const REAL_FIT = { ar15: { dy: -0.004 }, m4a1: {}, ak_tactical: {}, aks: {}, mp5: {}, deagle: {}, shotgun_m4: {}, shotgun_870: {}, sniper: {} };   // per-model nudges (metres) after the automatic fit
+const realCache = new Map();
+export function realGunFile(mid, tier) {
+  const k = mid + tier;
+  if (!realCache.has(k)) realCache.set(k, modelManifest().then((man) => (man[mid] ? loadGLB(man[mid].files[tier], { lit: false }).then((m) => ({ m, auto: man[mid].auto })) : null)).catch(() => null));
+  return realCache.get(k);
+}
+function realGun(g, mid, id, cg, hands, tex) {
+  realGunFile(mid, hands && HQ ? 'hi' : 'lo').then((R) => {
+    if (!R || !R.auto) return;
+    const src = R.m.scene.clone(true), { g: F, box } = canonGun(src, R.auto), cb = new THREE.Box3();
+    for (const [k, geo] of Object.entries(cg.geos)) if (k !== 'ironpost') { geo.computeBoundingBox(); cb.union(geo.boundingBox); }
+    const s = (cb.max.z - cb.min.z) / Math.max(1e-6, box.max.z - box.min.z), tw = REAL_FIT[mid] || {};
+    F.scale.setScalar(s * (tw.k || 1));
+    F.position.set(-(box.max.x + box.min.x) / 2 * s + (tw.dx || 0), cb.max.y - box.max.y * s + (tw.dy || 0), cb.max.z - box.max.z * s + (tw.dz || 0));
+    const ud = g.userData, keep = new Set([ud.flash, ud.leftArm]);
+    const hide = (o) => o.traverse((c) => { if (c.isMesh && c.material !== armMatC && !keep.has(c) && c !== ud.flash) c.visible = false; });
+    for (const c of g.children) if (!keep.has(c)) hide(c);
+    if (ud.leftArm && ud.leftArm.userData.shell) ud.leftArm.userData.shell.visible = false;
+    src.traverse((o) => { if (o.isMesh) { o.castShadow = !hands; o.frustumCulled = false; } });
+    g.add(F); g.updateMatrixWorld(true);
+    if (hands) {
+      const P = gunParts(src);
+      if (P.mag && ud.magGroup) ud.magGroup.attach(P.mag);
+      if (P.slide && ud.slide) ud.slide.attach(P.slide);
+      if (P.bolt || P.boltback) { const bg = new THREE.Group(); g.add(bg); g.updateMatrixWorld(true); if (P.bolt) bg.attach(P.bolt); if (P.boltback) bg.attach(P.boltback); ud.bolt = bg; ud.boltTravel = mid === 'sniper' ? 0.09 : mid === 'ak_tactical' || mid === 'aks' ? 0.1 : 0.07; }
+    }
+    if (tex) {   // a skin: painted side-on along the gun (u along the barrel, v up), over the model's own finish
+      const du = cb.max.z - cb.min.z || 1, dv = cb.max.y - cb.min.y || 1, inv = new THREE.Matrix4().copy(g.matrixWorld).invert();
+      src.traverse((o) => {
+        if (!o.isMesh) return;
+        const base = o.material, m = base.clone(), M = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+        m.onBeforeCompile = (sh) => {
+          Object.assign(sh.uniforms, { skinMap: { value: tex }, skinM: { value: M }, skinB: { value: new THREE.Vector4(cb.max.z, du, cb.min.y, dv) } });
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform mat4 skinM; varying vec3 vGunP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGunP = (skinM * vec4(position, 1.0)).xyz;');
+          sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D skinMap; uniform vec4 skinB; varying vec3 vGunP;')
+            .replace('#include <map_fragment>', '#include <map_fragment>\n\t{ vec4 sk = texture2D(skinMap, vec2((skinB.x - vGunP.z) / skinB.y, (vGunP.y - skinB.z) / skinB.w)); float l = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = sk.rgb * mix(0.55, 1.35, smoothstep(0.0, 0.5, l)); }');
+        };
+        m.customProgramCacheKey = () => 'realgun-skin';
+        o.material = m;
+      });
+    }
+    ud.real = mid;
+  });
 }
 let armMatC = null;
 const armMat = () => armMatC || (armMatC = HQ ? gunSurface(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.92, envMapIntensity: 0.5 }), 'gpoly', { tile: 34, normal: 1.4, albedo: 1.2, rough: 0.2 }) : new THREE.MeshMatcapMaterial({ vertexColors: true, matcap: matcapTex('satin') }));   // woven sleeve / glove fabric
