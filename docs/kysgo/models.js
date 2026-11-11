@@ -1089,11 +1089,11 @@ export function realGunFile(mid, tier) {
   if (!realCache.has(k)) realCache.set(k, modelManifest().then((man) => (man[mid] ? loadGLB(man[mid].files[tier], { lit: false }).then((m) => ({ m, auto: man[mid].auto })) : null)).catch(() => null));
   return realCache.get(k);
 }
-function realGun(g, mid, id, cg, hands, tex) {
+function realGun(g, mid, id, cg, hands, tex, cbox = null) {
   realGunFile(mid, hands && HQ ? 'hi' : 'lo').then((R) => {
     if (!R || !R.auto) return;
-    const src = R.m.scene.clone(true), { g: F, box } = canonGun(src, R.auto), cb = new THREE.Box3();
-    for (const [k, geo] of Object.entries(cg.geos)) if (k !== 'ironpost') { geo.computeBoundingBox(); cb.union(geo.boundingBox); }
+    const src = R.m.scene.clone(true), { g: F, box } = canonGun(src, R.auto), cb = cbox ? cbox.clone() : new THREE.Box3();
+    if (!cbox) for (const [k, geo] of Object.entries(cg.geos)) if (k !== 'ironpost') { geo.computeBoundingBox(); cb.union(geo.boundingBox); }
     const s = (cb.max.z - cb.min.z) / Math.max(1e-6, box.max.z - box.min.z), tw = REAL_FIT[mid] || {};
     F.scale.setScalar(s * (tw.k || 1));
     F.position.set(-(box.max.x + box.min.x) / 2 * s + (tw.dx || 0), cb.max.y - box.max.y * s + (tw.dy || 0), cb.max.z - box.max.z * s + (tw.dz || 0));
@@ -1255,8 +1255,10 @@ export function makeKnife(knifeId, tex, sleeve = '#3c4e66', glove = '#2a2a2a', h
       strokeHand = new THREE.Mesh(merge(P), armMat()); strokeHand.visible = false; strokeHand.position.set(-0.004, 0.02, -0.08); g.add(strokeHand);
     }
   }
+  const kb = !knifeId && !tex ? new THREE.Box3().setFromObject(g) : null;   // the standard knife: the real Ka-Bar is fitted over it
   if (hands) { const parts = []; vmArm(parts, [0, -0.005, 0.05], [0.35, -0.5, 0.78], sleeve, glove, 0.6); g.add(new THREE.Mesh(merge(parts), armMat())); }
   g.userData = { flash: null, len: 0.3, grip, fore: null, flop, strokeHand };
+  if (kb) realGun(g, 'kabar', 'knife', null, hands, null, kb);
   return g;
 }
 
@@ -1314,9 +1316,10 @@ export function makeGrenade(type, sleeve = '#3c4e66', glove = '#2a2a2a', hands =
     if (type === 'decoy') A('#2a2a2a', place(CYL(r + 0.0005, r + 0.0005, 0.02, 18), [0, 0.0, 0]));
     fuze();
   }
-  const g = partsGroup(B);
+  const g = partsGroup(B), fb = type === 'he' ? new THREE.Box3().setFromObject(g) : null;   // the HE grenade: the real frag is fitted over it
   if (hands) { const P = []; vmArm(P, [0.0, -0.02, 0.04], [0.35, -0.5, 0.78], sleeve, glove, 0.6); g.add(new THREE.Mesh(merge(P), armMat())); }
   g.userData = { flash: null, grip: new THREE.Vector3(0, 0, 0), fore: null };
+  if (fb) realGun(g, 'frag', 'he', null, hands, null, fb);
   return g;
 }
 export function makeBomb(sleeve = '#3c4e66', glove = '#2a2a2a', hands = false) {
