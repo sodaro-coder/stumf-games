@@ -11,6 +11,7 @@
 //   gouges on walls.
 import * as THREE from '../sdk/three.module.min.js';
 import { litPatch } from './world.js';
+import { loadGLB, modelManifest } from './glb.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 function canvasTex(size, paint) {
@@ -226,10 +227,12 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     const g = new THREE.Group(), a = new THREE.Mesh(limbGeo.head, new THREE.MeshStandardMaterial({ roughness: 0.8 })), h = new THREE.Mesh(limbGeo.hand, new THREE.MeshStandardMaterial({ color: 0x1d1c1a, roughness: 0.6 })), cap = new THREE.Mesh(capGeo, capMat);
     g.add(a); g.add(h); g.add(cap); g.visible = false; root.add(g); return { g, a, h, cap, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, landed: 0, kind: 'head' };
   }); let li = 0;
-  function limb(kind, x, y, z, dir, color, force = 1) {
+  function limb(kind, x, y, z, dir, color, force = 1, piece = null) {
     const L = limbs[li = (li + 1) % limbs.length]; L.kind = kind; L.t = 0; L.landed = 0; L.g.visible = true; L.g.position.set(x, y, z); L.g.rotation.set(rnd(0, 6), rnd(0, 6), rnd(0, 6));
-    L.a.geometry = kind === 'head' ? limbGeo.head : limbGeo.arm; L.a.material.color.set(color || '#22231f'); L.a.position.set(0, 0, 0); L.a.scale.set(1, kind === 'head' ? 1.15 : 1, 1);
-    L.h.visible = kind === 'arm'; L.h.position.set(0, -0.28, 0);
+    L.a0 = L.a0 || L.a.material;
+    if (piece) { L.a.geometry = piece.geometry; L.a.material = piece.material; L.a.position.copy(piece.center).negate(); L.a.scale.set(1, 1, 1); }   // the soldier's own head / arm, cut from his mesh
+    else { L.a.geometry = kind === 'head' ? limbGeo.head : limbGeo.arm; L.a.material = L.a0; L.a.material.color.set(color || '#22231f'); L.a.position.set(0, 0, 0); L.a.scale.set(1, kind === 'head' ? 1.15 : 1, 1); }
+    L.h.visible = kind === 'arm' && !piece; L.h.position.set(0, -0.28, 0);
     L.cap.position.set(0, kind === 'head' ? -0.1 : 0.27, 0); L.cap.rotation.set(kind === 'head' ? Math.PI / 2 : -Math.PI / 2, 0, 0); L.cap.scale.setScalar(kind === 'head' ? 0.06 : 0.048);
     const sp = rnd(2.5, 4.5) * force; L.v.set(dir.x * sp + rnd(-0.6, 0.6), rnd(2.2, 3.6) * force, dir.z * sp + rnd(-0.6, 0.6)); L.w.set(rnd(-9, 9), rnd(-9, 9), rnd(-9, 9));
     fountains.push({ pos: () => (L.g.visible && L.t < 3 ? _lp.copy(L.cap.position).applyMatrix4(L.g.matrixWorld) : null), dur: 1.4, dir: { x: 0, y: -0.2, z: 0 }, t: 0, acc: 0, drip: 2 });
@@ -251,6 +254,16 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       }
     }
   }
+  // organs (gore max): a real scanned heart thrown out of a body that was blown open. Two in the pool, loaded on first use
+  const organs = []; let organSrc = null, oi = 0;
+  function organ(x, y, z, dir, force = 1) {
+    if (!organSrc) organSrc = modelManifest().then((m) => (m.heart ? loadGLB(m.heart.files.lo) : null)).then((h) => {
+      if (!h) return null; const b = new THREE.Box3().setFromObject(h.scene), sz = b.getSize(new THREE.Vector3()), k = 0.12 / Math.max(sz.x, sz.y, sz.z);   // an adult heart: about 12 cm
+      for (let i = 0; i < 2; i++) { const g = new THREE.Group(), m = h.scene.clone(true); m.scale.setScalar(k); m.position.copy(b.getCenter(new THREE.Vector3())).multiplyScalar(-k); g.add(m); g.visible = false; root.add(g); organs.push({ m: g, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 30, landed: 0 }); }
+      return true; }).catch(() => null);
+    organSrc.then((ok) => { if (!ok || !organs.length) return; const o = organs[oi = (oi + 1) % organs.length]; o.m.position.set(x, y, z); o.m.visible = true; o.t = 0; o.landed = 0;
+      const sp = rnd(2.5, 4.5) * force; o.v.set((dir ? dir.x : 0) * sp + rnd(-0.8, 0.8), rnd(2, 4) * force, (dir ? dir.z : 0) * sp + rnd(-0.8, 0.8)); o.w.set(rnd(-8, 8), rnd(-8, 8), rnd(-8, 8)); });
+  }
   function gibBurst(x, y, z, n, dir = null, force = 1) {
     for (let k = 0; k < n; k++) {
       const g = gibs[gi = (gi + 1) % gibs.length], sc = rnd(0.6, 1.6);
@@ -260,11 +273,12 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       g.w.set(rnd(-12, 12), rnd(-12, 12), rnd(-12, 12));
     }
   }
-  function tickGibs(dt) {
-    for (const g of gibs) {
-      if (!g.m.visible) continue; g.t += dt;
-      if (g.t > g.life) { g.m.visible = false; continue; }
-      if (g.landed > 3) continue;
+  function tickGibs(dt) { for (const g of gibs) tickGib(g, dt); for (const g of organs) tickGib(g, dt); }   // no array built per frame
+  function tickGib(g, dt) {
+    {
+      if (!g.m.visible) return; g.t += dt;
+      if (g.t > g.life) { g.m.visible = false; return; }
+      if (g.landed > 3) return;
       g.v.y -= 9.8 * dt; g.m.position.addScaledVector(g.v, dt); g.m.rotation.x += g.w.x * dt; g.m.rotation.y += g.w.y * dt; g.m.rotation.z += g.w.z * dt;
       if (W) {
         const p = g.m.position;
@@ -447,10 +461,10 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       }
     },
     // gore: chunks flying from a body (explosions, a head that came off), and a wound that pumps (pos() follows the body)
-    gibs(x, y, z, n, dir = null, force = 1) { if (gore > 0) gibBurst(x, y, z, Math.round(n * (gore > 1 ? 1 : 0.5)), dir, force); },
+    gibs(x, y, z, n, dir = null, force = 1) { if (gore > 0) gibBurst(x, y, z, Math.round(n * (gore > 1 ? 1 : 0.5)), dir, force); if (gore > 1 && n >= 20) organ(x, y, z, dir, force); },
     fountain(pos, dur = 2.2, dir = { x: 0, y: 1, z: 0 }) { if (gore > 0) fountains.push({ pos, dur: dur * (gore > 1 ? 1 : 0.5), dir, t: 0, acc: 0 }); },
     // a severed head or arm flying off with the shot (gore max), and the cap for the stump left behind (on a bone)
-    limb(kind, x, y, z, dir, color, force = 1) { if (gore > 1) limb(kind, x, y, z, dir, color, force); },
+    limb(kind, x, y, z, dir, color, force = 1, piece = null) { if (gore > 1) limb(kind, x, y, z, dir, color, force, piece); },
     stumpCap(bone, child, radius) {   // child: the bone that came off (the cap sits at its joint, facing along it)
       if (gore < 2 || !bone || !child) return null; const c = caps[ci = (ci + 1) % caps.length]; if (c.parent) c.parent.remove(c);
       c.position.copy(child.position); c.quaternion.setFromUnitVectors(_n.set(0, 0, 1), _d.copy(child.position).normalize()); c.scale.setScalar(radius * 0.01 / Math.max(1e-6, bone.getWorldScale(_lp).x));   // radius in cm, whatever units the rig's bones use c.visible = true; bone.add(c); return c;
@@ -501,7 +515,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, sprays, drips, pools, scorches, gouges]) r.clear();
       for (const k of [...smokes.keys()]) api.smoke.remove(k); for (const k of [...fires.keys()]) api.fire.remove(k);
       for (const m of mags) m.o.visible = false; mags.length = 0;
-      for (const g of gibs) g.m.visible = false; fountains.length = 0; pending.length = 0; for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
+      for (const g of gibs) g.m.visible = false; for (const o of organs) o.m.visible = false; fountains.length = 0; pending.length = 0; for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
     },
   };
   return api;

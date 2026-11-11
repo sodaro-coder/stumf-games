@@ -32,7 +32,7 @@ import { createCombatFx } from './fx2.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
-import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD } from './chars.js';
+import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD, cutPiece } from './chars.js';
 import { setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
 
 const SET_KEY = 'cs:settings:v1';
@@ -825,7 +825,7 @@ export default function start({ cfg, E, N, smoke }) {
         cfx.gibs(vp.x, vp.y + 1.0, vp.z, 30, dir, 1.5); cfx.pool(vp.x, vp.y, vp.z); cfx.pool(vp.x + dir.x * 1.2, vp.y, vp.z + dir.z * 1.2);
         cfx.blood(vp.x, vp.y + 1.1, vp.z, { x: dir.x, y: 0.3, z: dir.z }, true); r.gibbed = true;
         if (g > 1 && r.soldier) {   // max: the head and an arm come away whole and fly with the blast
-          cfx.limb('head', vp.x, vp.y + 1.6, vp.z, dir, r.headCol, 1.4); cfx.limb('arm', vp.x + dir.z * 0.3, vp.y + 1.3, vp.z - dir.x * 0.3, { x: dir.x + dir.z * 0.6, y: 0, z: dir.z - dir.x * 0.6 }, r.armCol, 1.3);
+          cfx.limb('head', vp.x, vp.y + 1.6, vp.z, dir, r.headCol, 1.4, cutPiece(r, 'head')); cfx.limb('arm', vp.x + dir.z * 0.3, vp.y + 1.3, vp.z - dir.x * 0.3, { x: dir.x + dir.z * 0.6, y: 0, z: dir.z - dir.x * 0.6 }, r.armCol, 1.3, cutPiece(r, 'armRight'));
         }
         return;
       }
@@ -834,11 +834,11 @@ export default function start({ cfg, E, N, smoke }) {
       if (data.head && !knife) {
         const h = at('Head', 1.7); r.lost = ['Head']; cap('Neck', 'Head', 6.5);
         cfx.gibs(h.x, h.y, h.z, 12, dir, 0.9); cfx.blood(h.x, h.y, h.z, { x: dir.x, y: 0.2, z: dir.z }, true);
-        if (r.soldier && ((W2.dmg || 0) >= 60 || W2.pellets > 1 || dist < 6)) cfx.limb('head', h.x, h.y, h.z, dir, r.headCol, 0.8);   // a big round or close range: the head goes with it, otherwise it bursts
+        if (r.soldier && ((W2.dmg || 0) >= 60 || W2.pellets > 1 || dist < 6)) cfx.limb('head', h.x, h.y, h.z, dir, r.headCol, 0.8, cutPiece(r, 'head'));   // a big round or close range: the head goes with it, otherwise it bursts
         cfx.fountain(() => (r.g.visible ? at('Neck', 1.55) : null), 2.8, { x: -dir.x * 0.3, y: 1, z: -dir.z * 0.3 });
       } else if (W2.pellets > 1 && dist < 7) {
         const side = Math.random() < 0.5 ? 'Left' : 'Right', sh = at(side + 'Arm', 1.4); r.lost = [side + 'Arm']; cap(side + 'Shoulder', side + 'Arm', 5.5);
-        cfx.gibs(sh.x, sh.y, sh.z, 8, dir, 1.1); if (r.soldier) cfx.limb('arm', sh.x, sh.y, sh.z, dir, r.armCol, 1.1);
+        cfx.gibs(sh.x, sh.y, sh.z, 8, dir, 1.1); if (r.soldier) cfx.limb('arm', sh.x, sh.y, sh.z, dir, r.armCol, 1.1, cutPiece(r, 'arm' + side));
         cfx.fountain(() => (r.g.visible ? at(side + 'Shoulder', 1.4) : null), 1.8, { x: dir.x, y: 0.6, z: dir.z });
         const c = at('Spine1', 1.15); cfx.gibs(c.x, c.y, c.z, 6, dir, 0.8);   // and the torso opens up
       } else if (knife) {   // the blade: the throat or the gut, pumping out sideways

@@ -440,6 +440,24 @@ function modelSoldier(MD, L, team, g, holder) {
   r.chestCorr = (byName.Spine2 || byName.Spine1).getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
   return r;
 }
+// gore: the piece that comes off (a head in its helmet, mask and goggles; an arm in its sleeve and glove) cut from the
+// soldier's own mesh: every triangle whose vertices all hang mostly on those bones, as a still mesh with the same
+// material. Built once per model and kind; centred so it tumbles about its middle.
+export function cutPiece(r, kind) {
+  if (!r || !r.model || !r.body) return null;
+  const geo = r.geoHi || r.body.geometry, cache = geo.userData.pieces || (geo.userData.pieces = {});
+  if (cache[kind] !== undefined) return cache[kind];
+  const re = kind === 'head' ? /(Head|Neck)/ : new RegExp('^mixamorig' + (kind === 'armLeft' ? 'Left' : 'Right') + '(Arm|ForeArm|Hand)');
+  const bones = r.body.skeleton.bones, want = new Set(); bones.forEach((b, i) => { if (re.test(b.name)) want.add(i); });
+  const si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight, ix = geo.index.array, n = si.count, mine = new Uint8Array(n);
+  for (let v = 0; v < n; v++) { let w = 0; for (let k = 0; k < 4; k++) if (want.has(si.getComponent(v, k))) w += sw.getComponent(v, k); mine[v] = w > 0.5 ? 1 : 0; }
+  const keep = []; for (let t = 0; t < ix.length; t += 3) if (mine[ix[t]] && mine[ix[t + 1]] && mine[ix[t + 2]]) keep.push(ix[t], ix[t + 1], ix[t + 2]);
+  if (keep.length < 30) return (cache[kind] = null);
+  const g = new THREE.BufferGeometry();
+  for (const k of ['position', 'normal', 'uv', 'tangent']) if (geo.attributes[k]) g.setAttribute(k, geo.attributes[k]);
+  g.setIndex(keep); g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3());
+  return (cache[kind] = { geometry: g, material: r.body.material, center: c });
+}
 // distance detail: beyond 9 m the soldier swaps to the light mesh (same skeleton and atlas layout, about a sixth of the
 // triangles). A frame's work: one comparison
 export function soldierLOD(r, dist) {
