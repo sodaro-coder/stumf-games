@@ -23,6 +23,5 @@ utilbox: "Utility Box 01" by James Ray Cock, CC0, https://polyhaven.com/a/utilit
 shutter: "Rollershutter Door" by MP, CC0, https://polyhaven.com/a/rollershutter_door
 window: "Weathered Wooden Window" by GameReady | mark-peters, CC BY 4.0, https://sketchfab.com/3d-models/weathered-wooden-window-c4256c1d2a0b49edb6a5aefcfe12593a
 rubble: "Rubble Pile (Game Ready / 2K PBR)" by meerschaumdigital, CC BY 4.0, https://sketchfab.com/3d-models/rubble-pile-game-ready-2k-pbr-0e6f85da3433468db226866bd43a43e7
-bricks: "Bricks Pile 02" by RandomScan, CC BY 4.0, https://sketchfab.com/3d-models/bricks-pile-02-f6e69df7b0a1473498e551a81a942d81
 sandpile: "Photoscan Low-poly Construction Sand Pile" by martin.topolski, CC BY 4.0, https://sketchfab.com/3d-models/photoscan-low-poly-construction-sand-pile-7a7533e1ecab4b1d96da55cc3ad9ad98
 bigcrate: "Wooden Crate Low-poly PBR" by MaX3Dd, CC BY 4.0, https://sketchfab.com/3d-models/wooden-crate-low-poly-pbr-f8fb4c96211d475b9370d1c403273fc6

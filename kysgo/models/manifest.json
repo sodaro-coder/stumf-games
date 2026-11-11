@@ -860,42 +860,6 @@
    ]
   }
  },
- "bricks": {
-  "kind": "prop",
-  "sig": "f8511aae6f77",
-  "files": {
-   "hi": "models/bricks.glb",
-   "lo": "models/bricks_lo.glb"
-  },
-  "tris": {
-   "hi": 5488,
-   "lo": 2012
-  },
-  "bytes": {
-   "hi": 285312,
-   "lo": 60944
-  },
-  "scale": 1,
-  "fit": {},
-  "credit": {
-   "title": "Bricks Pile 02",
-   "author": "RandomScan",
-   "licence": "CC BY 4.0",
-   "url": "https://sketchfab.com/3d-models/bricks-pile-02-f6e69df7b0a1473498e551a81a942d81"
-  },
-  "bounds": {
-   "min": [
-    -0.9026889801025391,
-    -0.15502199530601501,
-    -1.0
-   ],
-   "max": [
-    0.9026889801025391,
-    0.15502198040485382,
-    1.0
-   ]
-  }
- },
  "sandpile": {
   "kind": "prop",
   "sig": "c4536849a554",

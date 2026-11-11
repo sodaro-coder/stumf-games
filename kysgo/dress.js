@@ -97,7 +97,7 @@ export function dressWorld({ B, hr, mat, flag, faces, matName, add, ts, detail =
       if (hgt >= 3 && hash(seed, 0, 11) < 0.3) { const s = f.s0 + 0.6 + hash(seed, 0, 12) * (len - 3.6); const [px, pz] = at(f, s + 1.25, 0); place({ id: 'shutter', x: px, y: f.bot, z: pz, yaw: ry, at: 'back', s: 1 }); }
       else if (hash(seed, 0, 8) < 0.3) { const s = f.s0 + 0.8 + hash(seed, 0, 9) * (len - 1.6); const [px, pz] = at(f, s, 0.02); place({ id: 'utilbox', x: px, y: f.bot, z: pz, yaw: ry, at: 'back', s: 1 }); }
       if (detail >= 1 && (fm === 'sand' || fm === 'dirt' || fm === 'concrete')) {
-        const LIT = ['tyre', 'rubble', 'bricks', 'sandpile', 'barrel2', 'rubble'];
+        const LIT = ['tyre', 'rubble', 'sandpile', 'barrel2', 'rubble', 'tyre'];
         for (let s = f.s0 + 1; s < f.s1 - 1; s += 2.5 + hash(seed, Math.floor(s), 13) * 4) {
           const r = hash(seed, Math.floor(s), 14); if (r > 0.42) continue;
           const id = LIT[Math.floor(hash(seed, Math.floor(s), 15) * LIT.length)], yw = hash(seed, Math.floor(s), 16) * 6.28;
