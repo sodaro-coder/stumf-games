@@ -348,7 +348,7 @@ export default function start({ cfg, E, N, smoke }) {
     const gfx = new GraphicsSettingsManager(S.quality), AUTO = gfx.auto;
     let Q = gfx.q, P = gfx.p;
     setModelQuality(P.hqModels ? 1 : 0.75);
-    if (P.chars) loadChars(P.hqModels);
+    if (P.chars) loadChars(P.hqModels ? true : undefined);   // the real soldiers: Medium and up only
     // free every other WebGL context first (menu backdrop, map and item pictures): browsers cap how many can exist
     try { if (shotR) { shotR.dispose(); shotR.forceContextLoss(); shotR = null; } } catch (e) { shotR = null; }
     try { releaseThumbs(); } catch (e) { /* none */ }

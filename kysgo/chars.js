@@ -346,7 +346,7 @@ export function makeSoldier(look, team, hq = true) {
   root.position.fromArray(c.root.t); root.quaternion.fromArray(c.root.q); root.scale.fromArray(c.root.s); holder.add(root);
   const bones = c.bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); o.quaternion.fromArray(b.q); o.scale.fromArray(b.s); o.userData.q0 = o.quaternion.clone(); return o; });
   c.bones.forEach((b, i) => { if (b.p >= 0) bones[b.p].add(bones[i]); else root.add(bones[i]); });
-  const tk = team === 'CT' ? 'CT' : 'T', MD = isHuman(L) ? (MODELS[hq ? 'hi' : 'lo'][tk] || MODELS[hq ? 'lo' : 'hi'][tk]) : null;
+  const tk = team === 'CT' ? 'CT' : 'T', MD = isHuman(L) && L.plain && hq ? (MODELS.hi[tk] || MODELS.lo[tk]) : null;   // the team's standard agent on Medium and up; bought agents and story looks keep their own costume until remodelled; phones keep the built soldier
   if (MD) return modelSoldier(MD, L, team, g, holder);
   const human = isHuman(L) && D.meshes.some((m) => m.name.startsWith('human_'));
   const mat = human ? null : material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null, costumeOf(L));
