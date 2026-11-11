@@ -592,7 +592,7 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     if (r.dead) { r.dead = false; r.rag = null; r.act.die.stop(); r.base = ''; base(r, 'idle'); }
     const sp = Math.hypot(vx, vz), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const f = -(vx * sy) - vz * cy, side = vx * cy - vz * sy;   // speed along where they face, and to their right
-    if (r.rootS) r.root.scale.copy(r.rootS); else r.rootS = V().copy(r.root.scale);   // emotes may squash the whole body: reset first
+    if (r.rootS) r.root.scale.copy(r.rootS); else r.rootS = r.root.scale.clone();   // emotes may squash the whole body: reset first
     if (emote) {
       const a = emote.anim, BASE = { dance: 'dance', floss: 'dance', chicken: 'dance', griddy: 'run', twerk: 'crouch', sit: 'crouch', zombie: 'walk', tbag: Math.floor(r.t * 5) % 2 ? 'crouch' : 'idle', lmao: 'crouch' };
       base(r, BASE[a] || 'idle', a === 'chicken' ? 1.3 : a === 'griddy' ? 1.7 : a === 'zombie' ? 0.45 : 1);
