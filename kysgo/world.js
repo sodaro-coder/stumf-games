@@ -6,7 +6,8 @@ import * as THREE from '../sdk/three.module.min.js';
 import { PHYS } from './data.js';
 import { surface, macroCanvas } from './textures.js';
 import { raiseBuildings, dressWorld, mergeGeos } from './dress.js';
-import { PVS_TILE } from './pvs.js';
+import { PVS_TILE, mapHash } from './pvs.js';
+import { bakeLight, bakeKey } from './lightbake.js';
 
 export const MATS = {  // surfaces (painted in textures.js): base colour (radar, particles), world size of one texture tile (m), wall-bang density
   sand: { c: [196, 168, 118], s: 3, d: 6 }, sandwall: { c: [214, 186, 136], s: 6, d: 4, trim: 1 },
@@ -185,8 +186,9 @@ void main() {
   if (vis > 0.01) vis *= mix(0.25, 1.0, dynShadow());   // players' shadows (they only fall where the sun reaches)
   #endif
   float ndl = max(dot(N, sunDir), 0.0);
-  vec3 light = mix(gndCol, skyCol, N.y * 0.5 + 0.5) * ao + sunCol * ndl * vis * mix(1.0, ao, 0.35);
-  light += sunCol * vec3(1.0, 0.92, 0.8) * 0.22 * (0.5 - 0.5 * N.y) * ao;   // warm bounce off the sunlit ground into shade
+  float gi = mix(1.0, bk.a * 2.0, bakeOn);   // baked sky visibility + bounced sunlight (0.5 in the texture = unchanged)
+  vec3 light = mix(gndCol, skyCol, N.y * 0.5 + 0.5) * ao * gi + sunCol * ndl * vis * mix(1.0, ao, 0.35);
+  light += sunCol * vec3(1.0, 0.92, 0.8) * 0.22 * (0.5 - 0.5 * N.y) * ao * gi;   // warm bounce off the sunlit ground into shade
   vec3 col = alb * light;
   #ifdef NMAP
   {   // sheen: sun glints (normalised Blinn-Phong) and the sky reflected in smooth surfaces, both with Fresnel
@@ -277,7 +279,7 @@ export function litPatch(mat, kind = 'dyn') {
 		${kind === 'world' ? 'if (vWN.y > 0.5) ao = bk.g; else if (vWN.y > -0.5) ao = mix(0.45, 1.0, smoothstep(0.0, 1.4, vWP.y - (bk.b * 16.0 - 2.0)));' : 'ao = mix(0.7, 1.0, smoothstep(0.0, 0.9, vWP.y - (bk.b * 16.0 - 2.0)));'}
 		vis = mix(1.0, vis, bakeOn); ao = mix(1.0, ao, bakeOn);
 		reflectedLight.directDiffuse *= vis * mix(1.0, ao, 0.35);
-		reflectedLight.indirectDiffuse *= ao;
+		reflectedLight.indirectDiffuse *= ao * mix(1.0, bk.a * 2.0, bakeOn);
 		${kind === 'world' ? '' : `if (prInfo.z > 0.5) {   // light probes: the baked sky openness + bounce colour around this point, interpolated
 			vec4 pr = texture2D(prTex, vWP.xz * prInfo.xy + 0.5 * prInfo.xy);
 			reflectedLight.indirectDiffuse *= mix(vec3(1.0), pr.rgb * 2.0, bakeOn);
@@ -305,7 +307,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   // the surface height at a point; a cell's height as seen from a point (ramps: the slope at the cell's nearest point)
   const topAt = (x, z) => { const i = idx(Math.floor(x), Math.floor(z)); if (i < 0) return B.wallH; return rid[i] >= 0 ? slope(rid[i], x, z) : h[i]; };
   // what you see can be taller than what you collide with: buildings rise above the playable walls (looks only)
-  const hr = Float32Array.from(h); if (!headless) raiseBuildings(B, hr, (m) => MAT_LIST[m]);
+  const hr = Float32Array.from(h); if (!headless || opt.raise) raiseBuildings(B, hr, (m) => MAT_LIST[m]);
   const topR = (x, z) => { const i = idx(Math.floor(x), Math.floor(z)); if (i < 0) return B.wallH; return rid[i] >= 0 ? slope(rid[i], x, z) : hr[i]; };
   const cellTop = (xx, zz, px, pz) => { const i = idx(xx, zz); if (i < 0) return B.wallH; const r = rid[i]; return r < 0 ? h[i] : slope(r, Math.min(xx + 1, Math.max(xx, px)), Math.min(zz + 1, Math.max(zz, pz))); };
 
@@ -396,32 +398,21 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   // --- baked light: for every 1/K m of floor, how high the sun's shadow reaches there, plus ambient occlusion ---
   // One small texture gives soft sun shadows on every floor, wall and player and darkened corners, for the price of a
   // texture read: nothing is re-rendered per frame, so it's as fast on a school laptop as on a gaming PC.
-  const K = opt.bakeK || (quality >= 2 ? 8 : quality >= 1.5 ? 6 : quality >= 0.75 ? 4 : 2), TW = w * K, TD = d * K;
-  const sd = B.sunDir || [0.62, 0.66, 0.42], sl = Math.hypot(sd[0], sd[2]), hx = sd[0] / sl, hz = sd[2] / sl, tanEl = sd[1] / sl;
+  const sd = B.sunDir || [0.62, 0.66, 0.42];
   let maxH = B.wallH; for (let i = 0; i < w * d; i++) if (hr[i] > maxH) maxH = hr[i];
   // ceilings: the sun can't get under them (rooms and tunnels are in shade, lit by the sky through doors and windows)
   const roofH = new Float32Array(w * d).fill(-99);
   for (const [x0, z0, x1, z1, rh] of B.roofs || []) { for (let z = Math.max(0, z0); z < Math.min(d, z1); z++) for (let x = Math.max(0, x0); x < Math.min(w, x1); x++) roofH[z * w + x] = Math.max(roofH[z * w + x], rh); if (rh > maxH) maxH = rh; }
   const roofAt = (x, z) => { const ix = Math.floor(x), iz = Math.floor(z); return ix < 0 || iz < 0 || ix >= w || iz >= d ? -99 : roofH[iz * w + ix]; };
   const occAt = (x, z) => Math.max(topR(x, z), roofAt(x, z));
-  const bake = new Uint8Array(TW * TD * 4), enc = (v) => Math.max(0, Math.min(255, Math.round((v + 2) / 16 * 255)));
-  const AO_D = [0.3, 0.65, 1.1, 1.8, 2.6], AO_DIR = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.707, 0.707], [-0.707, 0.707], [0.707, -0.707], [-0.707, -0.707]];
-  const st = 1 / K;
-  for (let tz = 0; tz < TD; tz++) for (let tx = 0; tx < TW; tx++) {
-    const px = (tx + 0.5) / K, pz = (tz + 0.5) / K, ox = Math.floor(px), oz = Math.floor(pz), y0 = topR(px, pz);
-    const rOver = roofAt(px, pz), under = rOver > y0;
-    let best = under ? rOver : -2;
-    for (let t = st; ; t += st) {
-      const lim = maxH - t * tanEl; if (lim <= best || lim < y0 - 0.3) break;
-      const qx = px + hx * t, qz = pz + hz * t; if (Math.floor(qx) === ox && Math.floor(qz) === oz) continue;
-      const c = occAt(qx, qz) - t * tanEl; if (c > best) best = c;
-    }
-    let occ = 0;
-    for (const [dx, dz] of AO_DIR) { let mo = 0; for (const dd of AO_D) { const dh = topR(px + dx * dd, pz + dz * dd) - y0; if (dh > 0.05) { const s = dh / Math.hypot(dh, dd); if (s > mo) mo = s; } } occ += mo; }
-    const k = (tz * TW + tx) * 4;
-    bake[k] = enc(best); bake[k + 1] = Math.round(255 * (1 - occ / 8 * 0.8) * (under ? 0.62 : 1)); bake[k + 2] = enc(y0); bake[k + 3] = 255;
-  }
-  const bakeTex = new THREE.DataTexture(bake, TW, TD, THREE.RGBAFormat, THREE.UnsignedByteType);
+  const albedo = (x, z) => { const i = idx(Math.floor(x), Math.floor(z)); const c = i < 0 ? null : (MATS[MAT_LIST[mat[i]]] || {}).c; return c || [150, 150, 150]; };
+  // a bake made offline for this exact map and sun (browserdev/lightbake.mjs, see lightbake.js) replaces the quick one
+  // as soon as it has downloaded; until then a coarse quick bake (2 texels per metre) keeps the load short
+  const key = bakeKey(mapHash(B), sd), pre = opt.prebaked && opt.prebaked.key === key ? opt.prebaked : null;
+  const bctx = { w, d, K: opt.bakeFull ? (opt.bakeK || 6) : pre ? 2 : opt.bakeK || (quality >= 2 ? 8 : quality >= 1.5 ? 6 : quality >= 0.75 ? 4 : 2), topR, roofAt, occAt, maxH, sd, albedo };
+  let { K, TW, TD, data: bake } = bakeLight(bctx, !!opt.bakeFull);
+  const bakeOut = opt.bakeFull ? { key, K, TW, TD, data: bake } : null;
+  let bakeTex = new THREE.DataTexture(bake, TW, TD, THREE.RGBAFormat, THREE.UnsignedByteType);
   bakeTex.magFilter = bakeTex.minFilter = THREE.LinearFilter; bakeTex.needsUpdate = true;
   { // sun and sky for the surface shader (same numbers as the scene's lights)
     const sl2 = Math.hypot(...sd); LIGHT.sunDir.value.set(sd[0] / sl2, sd[1] / sl2, sd[2] / sl2);
@@ -441,7 +432,6 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   const probesOn = opt.probes ?? !headless;
   const PS = 2, PW = Math.ceil(w / PS) + 1, PD = Math.ceil(d / PS) + 1, probes = new Uint8Array(PW * PD * 4), pOk = new Uint8Array(PW * PD);
   const floorOf = (x, z) => { const ix = Math.floor(x), iz = Math.floor(z); let lo = Infinity; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const v = topR(ix + a + 0.5, iz + b + 0.5); if (v < lo) lo = v; } return lo; };
-  const albedo = (x, z) => { const i = idx(Math.floor(x), Math.floor(z)); const c = i < 0 ? null : (MATS[MAT_LIST[mat[i]]] || {}).c; return c || [150, 150, 150]; };
   if (probesOn) {
     const DIRS = 16, sky = LIGHT.skyCol.value, gnd = LIGHT.gndCol.value, sun = LIGHT.sunCol.value;
     for (let j = 0; j < PD; j++) for (let i = 0; i < PW; i++) {
@@ -484,6 +474,18 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
     }
     return out;
   };
+  // swap in the offline bake (gzipped RGBA, same layout as the quick one at its own resolution)
+  if (pre && pre.enc === 'pd1' && !headless && typeof DecompressionStream !== 'undefined') {
+    fetch(pre.file).then((r) => (r.ok ? new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer() : null)).then((buf) => {
+      if (!buf || buf.byteLength !== pre.TW * pre.TD * 4) return;
+      const src = new Uint8Array(buf), n = pre.TW * pre.TD; bake = new Uint8Array(n * 4); K = pre.K; TW = pre.TW; TD = pre.TD;
+      for (let c = 0; c < 4; c++) for (let y = 0; y < TD; y++) { let v = 0; const o = c * n + y * TW; for (let x = 0; x < TW; x++) { v = (v + src[o + x]) & 255; bake[(y * TW + x) * 4 + c] = v; } }   // undo planar + row-delta
+      const old = bakeTex; bakeTex = new THREE.DataTexture(bake, TW, TD, THREE.RGBAFormat, THREE.UnsignedByteType);
+      bakeTex.magFilter = bakeTex.minFilter = THREE.LinearFilter; bakeTex.needsUpdate = true;
+      if (LIGHT.shTex.value === old) LIGHT.shTex.value = bakeTex;   // this map is on screen: switch now (otherwise useLight() picks it up)
+      old.dispose();
+    }).catch(() => { /* keep the quick bake */ });
+  }
   const useProbes = () => { LIGHT.prTex.value = probeTex; LIGHT.prInfo.value.set(1 / (PS * PW), 1 / (PS * PD), probesOn ? 1 : 0, 0); };
   const useLight0 = useLight;
   useLight = () => { useLight0(); useProbes(); };
@@ -721,5 +723,5 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
     }
   }
   return { B, w, d, h, mat, flag, H, idx, group, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
-    topAt, cellTop, sunAt, probeAt, useLight, chunks, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
+    topAt, cellTop, sunAt, probeAt, useLight, bakeOut, chunks, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
 }

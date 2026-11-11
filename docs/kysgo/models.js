@@ -821,14 +821,18 @@ function optic(G, kind, mount) {
   }
   return null;
 }
-function pistol(G, o) {
+const SLIDE_K = new Set();   // (pistol() marks its slide parts explicitly)
+function pistol(G0, o) {
+  // the slide and what rides on it (sights, serrations, extractor, dots) go in the 'slide|' buckets: makeGun moves them
+  // back on every shot and locks them open on an empty magazine
+  const G = (k, g) => G0(SLIDE_K.has(k) ? 'slide|' + k : k, g); G.att = G0.att; const SG = (k, g) => G0('slide|' + k, g);
   const [s0, s1] = o.slide, sb = 0, st = o.sh || 0.034, w = o.w || 0.03, F = o.frame || 'dark';
-  G('body', ext([[s0, sb], [s1, sb], [s1, st - 0.006], [s1 - 0.008, st], [s0 + 0.006, st], [s0, st - 0.01]], w));
-  for (let k = 0; k < 5; k++) G('dark', blk(s0 + 0.012 + k * 0.009, s0 + 0.016 + k * 0.009, sb + 0.008, st - 0.008, w + 0.002));   // serrations
+  SG('body', ext([[s0, sb], [s1, sb], [s1, st - 0.006], [s1 - 0.008, st], [s0 + 0.006, st], [s0, st - 0.01]], w));
+  for (let k = 0; k < 5; k++) SG('dark', blk(s0 + 0.012 + k * 0.009, s0 + 0.016 + k * 0.009, sb + 0.008, st - 0.008, w + 0.002));   // serrations
   G(F, ext([[s0 + 0.01, sb + 0.002], [s1 - 0.01, sb + 0.002], [s1 - 0.012, sb - 0.016], [s0 + 0.08, sb - 0.018], [s0 + 0.05, sb - 0.11], [s0 - 0.005, sb - 0.112], ['q', -0.008 + s0, sb - 0.05, s0 + 0.012, sb - 0.012]], w * 0.95));
   G('metal', guard(s0 + 0.045, s0 + 0.095, sb - 0.05, sb - 0.012, 0.01)); G('metal', blk(s0 + 0.064, s0 + 0.07, sb - 0.04, sb - 0.016, 0.005));
   G('metal', tube(0.0075, s1 - 0.01, s1 + (o.bl || 0.006), st / 2 - 0.002));
-  G('dark', blk(s1 - 0.012, s1 - 0.004, st, st + 0.008, 0.006)); G('dark', blk(s0 + 0.004, s0 + 0.014, st, st + 0.008, 0.016));
+  SG('dark', blk(s1 - 0.012, s1 - 0.004, st, st + 0.008, 0.006)); SG('dark', blk(s0 + 0.004, s0 + 0.014, st, st + 0.008, 0.016));
   if (o.sil) G('dark', tube(0.017, s1 + 0.005, s1 + 0.16, st / 2 - 0.002, 0, 12));
   else if (G.att && G.att.muzzle && G.att.muzzle !== 'standard') muzzle(G, G.att.muzzle, s1 + (o.bl || 0.006), st / 2 - 0.002);
   G('mag|dark', blk(s0 + 0.008, s0 + 0.046, sb - 0.1, sb - 0.03, w * 0.7));   // the magazine inside the grip (drops out on reload)
@@ -838,13 +842,13 @@ function pistol(G, o) {
   G('dark', blk(s0 + 0.045, s0 + 0.08, sb - 0.004, sb + 0.005, 0.003, w / 2 + 0.0015));      // slide stop
   G('dark', blk(s1 - 0.075, s1 - 0.035, st - 0.0015, st + 0.0007, w * 0.6));                 // ejection port
   G('dark', xpin(s0 + 0.06, sb - 0.012, w + 0.004, 0.0028)); G('dark', xpin(s0 + 0.03, sb - 0.022, w + 0.006, 0.0042));   // takedown pin, mag release
-  for (let k = 0; k < 4; k++) G('dark', blk(s1 - 0.04 + k * 0.007, s1 - 0.037 + k * 0.007, sb + 0.01, st - 0.01, w + 0.002));   // front serrations
-  for (const x of [-0.0045, 0.0045]) G('dark', blk(s0 + 0.004, s0 + 0.012, st, st + 0.009, 0.005, x));   // rear sight: two ears (a notch between)
-  G('dot', place(CYL(0.0011, 0.0011, 0.001, 8), [0.0045, st + 0.0065, -(s0 + 0.0125)], [Math.PI / 2, 0, 0])); G('dot', place(CYL(0.0011, 0.0011, 0.001, 8), [-0.0045, st + 0.0065, -(s0 + 0.0125)], [Math.PI / 2, 0, 0]));
-  G('dot', place(CYL(0.0012, 0.0012, 0.001, 8), [0, st + 0.006, -(s1 - 0.0125)], [Math.PI / 2, 0, 0]));   // three white dots
+  for (let k = 0; k < 4; k++) SG('dark', blk(s1 - 0.04 + k * 0.007, s1 - 0.037 + k * 0.007, sb + 0.01, st - 0.01, w + 0.002));   // front serrations
+  for (const x of [-0.0045, 0.0045]) SG('dark', blk(s0 + 0.004, s0 + 0.012, st, st + 0.009, 0.005, x));   // rear sight: two ears (a notch between)
+  SG('dot', place(CYL(0.0011, 0.0011, 0.001, 8), [0.0045, st + 0.0065, -(s0 + 0.0125)], [Math.PI / 2, 0, 0])); SG('dot', place(CYL(0.0011, 0.0011, 0.001, 8), [-0.0045, st + 0.0065, -(s0 + 0.0125)], [Math.PI / 2, 0, 0]));
+  SG('dot', place(CYL(0.0012, 0.0012, 0.001, 8), [0, st + 0.006, -(s1 - 0.0125)], [Math.PI / 2, 0, 0]));   // three white dots
   for (let k = 0; k < 3; k++) G(F, blk(s1 - 0.045 + k * 0.011, s1 - 0.039 + k * 0.011, sb - 0.019, sb - 0.012, w * 0.7));   // accessory rail
   G('metal', tube(0.0035, s1 - 0.004, s1 + 0.002, sb + 0.006));   // recoil spring guide rod
-  G('metal', blk(s1 - 0.07, s1 - 0.05, st - 0.012, st - 0.007, 0.002, w / 2 + 0.0008));   // extractor
+  SG('metal', blk(s1 - 0.07, s1 - 0.05, st - 0.012, st - 0.007, 0.002, w / 2 + 0.0008));   // extractor
   G('dark', blk(s0 + 0.066, s0 + 0.068, sb - 0.036, sb - 0.02, 0.002));   // trigger safety blade
   G(F, ext([[s0 - 0.002, sb - 0.012], [s0 - 0.016, sb - 0.008], [s0 - 0.014, sb - 0.016], [s0 + 0.004, sb - 0.026]], w * 0.9, 0.002));   // beavertail
   if (o.mag) G('mag|dark', ext([[s0 + 0.075, sb - 0.016], [s0 + 0.095, sb - 0.016], [s0 + 0.105, sb - (o.mag + 0.02)], [s0 + 0.08, sb - (o.mag + 0.02)]], w * 0.8));
@@ -1012,10 +1016,10 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     if (opt && hold.mount) hold.sight = optic(G, opt, hold.mount);
     const geos = {};
     let box = null;
-    for (const [k, list] of Object.entries(buckets)) { geos[k] = merge(list); geos[k].computeBoundingBox(); if (k === 'body') box = geos[k].boundingBox; }
+    for (const [k, list] of Object.entries(buckets)) { geos[k] = merge(list); geos[k].computeBoundingBox(); if (k === 'body' || (k === 'slide|body' && !box)) box = geos[k].boundingBox; }
     // the skin wraps the whole gun side-on (u along the barrel, v up): receiver and, when skinned, the furniture too,
     // like a real hydro-dip, with the barrel, bolt and small metal parts left bare
-    const painted = Object.keys(geos).filter((k) => k === 'body' || (tex && (k.startsWith('f~') || k.startsWith('pump|f~'))));
+    const painted = Object.keys(geos).filter((k) => k === 'body' || k === 'slide|body' || (tex && (k.startsWith('f~') || k.startsWith('pump|f~'))));
     if (box && geos.body) {
       const u = new THREE.Box3(); for (const k of painted) u.union(geos[k].boundingBox);
       const du = u.max.z - u.min.z || 1, dv = u.max.y - u.min.y || 1;
@@ -1044,13 +1048,14 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     cg = { geos, hold, len };
     geoCache.set(ckey, cg);
   }
-  const g = new THREE.Group(), magGroup = new THREE.Group(), pumpGroup = new THREE.Group(); g.add(magGroup);
+  const g = new THREE.Group(), magGroup = new THREE.Group(), pumpGroup = new THREE.Group(), slideGroup = new THREE.Group(); g.add(magGroup);
   for (const [k0, geo] of Object.entries(cg.geos)) {
     if (k0.startsWith('mag|')) { magGroup.add(new THREE.Mesh(geo, gm(k0.slice(4)))); continue; }
-    const k = k0.startsWith('pump|') ? k0.slice(5) : k0, furn = k.startsWith('f~');   // pump|: the slide of a pump-action, moved as one piece
-    (k0 === k ? g : pumpGroup).add(new THREE.Mesh(geo, k === 'body' || (furn && tex) ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(furn ? k.slice(2) : k === 'ironpost' ? 'dark' : k)));
+    const k = k0.startsWith('pump|') ? k0.slice(5) : k0.startsWith('slide|') ? k0.slice(6) : k0, furn = k.startsWith('f~');   // pump|: the slide of a pump-action, moved as one piece; slide|: a pistol's slide
+    (k0 === k ? g : k0.startsWith('slide|') ? slideGroup : pumpGroup).add(new THREE.Mesh(geo, k === 'body' || (furn && tex) ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(furn ? k.slice(2) : k === 'ironpost' ? 'dark' : k)));
   }
   if (pumpGroup.children.length) g.add(pumpGroup);
+  if (slideGroup.children.length) g.add(slideGroup);
   const magBox = new THREE.Box3().setFromObject(magGroup), magPos = magGroup.children.length ? magBox.getCenter(new THREE.Vector3()) : null;
   const grip = new THREE.Vector3(0, cg.hold.grip[1], -cg.hold.grip[0]), fore = cg.hold.fore ? new THREE.Vector3(0, cg.hold.fore[1], -cg.hold.fore[0]) : null;
   let leftArm = null, leftHand = null;
@@ -1065,7 +1070,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
   }
   g.add(muzzleFlash(cg.len + (w.silenced ? 0.04 : 0.02), w.cat === 'pistol' ? 0.6 : 1));
   const ch = cg.hold.charge;
-  g.userData = { magGroup: magGroup.children.length ? magGroup : null, pump: pumpGroup.children.length ? pumpGroup : null, magPos, leftArm, leftHand, charge: ch ? new THREE.Vector3(ch[2], ch[1], -ch[0]) : null, flash: g.children[g.children.length - 1], len: cg.len, grip, fore, sight: cg.hold.sight ? new THREE.Vector3(0, cg.hold.sight[1], -cg.hold.sight[0]) : null, optic: opt, iron: !opt && cg.hold.iron ? new THREE.Vector3(0, cg.hold.iron[1], -cg.hold.iron[0]) : null };
+  g.userData = { magGroup: magGroup.children.length ? magGroup : null, pump: pumpGroup.children.length ? pumpGroup : null, slide: slideGroup.children.length ? slideGroup : null, magPos, leftArm, leftHand, charge: ch ? new THREE.Vector3(ch[2], ch[1], -ch[0]) : null, flash: g.children[g.children.length - 1], len: cg.len, grip, fore, sight: cg.hold.sight ? new THREE.Vector3(0, cg.hold.sight[1], -cg.hold.sight[0]) : null, optic: opt, iron: !opt && cg.hold.iron ? new THREE.Vector3(0, cg.hold.iron[1], -cg.hold.iron[0]) : null };
   return g;
 }
 let armMatC = null;

@@ -11,6 +11,7 @@ import { KIT_BY_ID, playKit } from './musickits.js';
 import { GraphicsSettingsManager, DynamicShadows, markCaster } from './graphics.js';
 import { PVSCuller, decodePVS, mapHash } from './pvs.js';
 import { PVS_DATA } from './pvs_data.js';
+import { BAKE } from './bake_data.js';
 import { MAPS } from './maps.js';
 import { mobileControls } from './mobile.js';
 import { gamepadControls } from './gamepad.js';
@@ -377,6 +378,26 @@ export default function start({ cfg, E, N, smoke }) {
         vec3 aces(vec3 c) { const mat3 i = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
           const mat3 o = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
           c = i * c; vec3 a = c * (c + 0.0245786) - 0.000090537, b = c * (0.983729 * c + 0.4329510) + 0.238081; return clamp(o * (a / b), 0.0, 1.0); }
+        #ifdef BLOOM
+        uniform sampler2D bloomTex;
+        #endif
+        #ifdef FXAA
+        // FXAA (the cheap PC variant): four half-pixel corner taps find the edge direction, two or four taps along it
+        // smooth it; flat areas leave after the corner taps. Luma is taken after a soft tone curve so HDR edges behave.
+        float lumH(vec3 c) { float l = dot(c, vec3(0.299, 0.587, 0.114)); return l / (1.0 + l); }
+        vec3 fxaa(vec3 rgbM) {
+          vec2 px = 1.0 / res;
+          float nw = lumH(comp(vUv + vec2(-0.5, 0.5) * px)), ne = lumH(comp(vUv + vec2(0.5, 0.5) * px)), sw = lumH(comp(vUv + vec2(-0.5, -0.5) * px)), se = lumH(comp(vUv + vec2(0.5, -0.5) * px)), m = lumH(rgbM);
+          float mn = min(m, min(min(nw, ne), min(sw, se))), mx = max(m, max(max(nw, ne), max(sw, se)));
+          if (mx - mn < max(0.04, mx * 0.125)) return rgbM;
+          vec2 dir = vec2(-((nw + ne) - (sw + se)), (nw + sw) - (ne + se));
+          float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + max((nw + ne + sw + se) * 0.03125, 0.0078125));
+          dir = clamp(dir * rcp, -8.0, 8.0) * px;
+          vec3 a = 0.5 * (comp(vUv - dir * 0.1667) + comp(vUv + dir * 0.1667));
+          vec3 b = a * 0.5 + 0.25 * (comp(vUv - dir * 0.5) + comp(vUv + dir * 0.5));
+          float lb = lumH(b); return (lb < mn || lb > mx) ? a : b;
+        }
+        #endif
         vec3 srgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
         #if defined(SSAO) || defined(SSR)
         float lin(vec2 p) { float z = texture2D(depthTex, p).r * 2.0 - 1.0; return 2.0 * camNF.x * camNF.y / (camNF.y + camNF.x - z * (camNF.y - camNF.x)); }
@@ -449,12 +470,15 @@ export default function start({ cfg, E, N, smoke }) {
           { float gloss = clamp((1.0 - w4.a) / 0.98, 0.0, 1.0); if (gloss > 0.06 && ssrK > 0.0) wc = ssr(wc, gloss); }
           #endif
           vec3 c = wc * (1.0 - g.a) + g.rgb;
+          #ifdef FXAA
+          if (ads < 0.01 && cine < 0.01) c = fxaa(c);
+          #endif
           #ifdef BLOOM
-          { vec3 bl = vec3(0.0);
-            float rot = fract(sin(dot(vUv * res, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;   // per-pixel rotation: a soft halo, not a ring of dots
-            for (int k = 0; k < BLOOM_TAPS; k++) { float a = float(k) * 6.2832 / float(BLOOM_TAPS) + rot; vec2 o = vec2(cos(a), sin(a)) / res; float rr = 2.0 + float(k) * 13.0 / float(BLOOM_TAPS);
-              bl += max(comp(vUv + o * rr) - 0.9, 0.0) * (1.0 - float(k) * 0.7 / float(BLOOM_TAPS)); }
-            c += bl * 0.6 / float(BLOOM_TAPS); }
+          { vec2 bp = 4.0 / res;   // the bright parts, already cut and shrunk to a quarter of the size: nine soft taps make the glow
+            vec3 bl = texture2D(bloomTex, vUv).rgb * 2.0;
+            bl += texture2D(bloomTex, vUv + vec2(1.5, 0.0) * bp).rgb + texture2D(bloomTex, vUv - vec2(1.5, 0.0) * bp).rgb + texture2D(bloomTex, vUv + vec2(0.0, 1.5) * bp).rgb + texture2D(bloomTex, vUv - vec2(0.0, 1.5) * bp).rgb;
+            bl += 0.6 * (texture2D(bloomTex, vUv + vec2(2.6, 2.6) * bp).rgb + texture2D(bloomTex, vUv - vec2(2.6, 2.6) * bp).rgb + texture2D(bloomTex, vUv + vec2(2.6, -2.6) * bp).rgb + texture2D(bloomTex, vUv - vec2(2.6, -2.6) * bp).rgb);
+            c += bl * (0.6 / 8.4); }
           #endif
           c = aces(c * exposure / 0.6);
           #ifdef GRADE
@@ -475,21 +499,34 @@ export default function start({ cfg, E, N, smoke }) {
           gl_FragColor = vec4(srgb(clamp(c, 0.0, 1.0)), 1.0);
         }`;
     post.mat = new THREE.ShaderMaterial({
-      uniforms: { tex: { value: null }, vmTex: { value: null }, depthTex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 }, ads: { value: 0 }, cine: { value: 0 }, focusZ: { value: 3 }, aperture: { value: 1 }, camNF: { value: new THREE.Vector3(0.05, 400, 1) }, ssrK: { value: 1 }, upV: { value: new THREE.Vector3(0, 1, 0) } },
+      uniforms: { tex: { value: null }, vmTex: { value: null }, depthTex: { value: null }, bloomTex: { value: null }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 }, exposure: { value: 1.08 }, ads: { value: 0 }, cine: { value: 0 }, focusZ: { value: 3 }, aperture: { value: 1 }, camNF: { value: new THREE.Vector3(0.05, 400, 1) }, ssrK: { value: 1 }, upV: { value: new THREE.Vector3(0, 1, 0) } },
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: POST_FS, defines: gfx.postDefines(), depthTest: false, depthWrite: false,
     });
     post.scene = new THREE.Scene(); post.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post.mat); post.quad.frustumCulled = false; post.scene.add(post.quad);
     post.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    // bloom's bright pass, at a quarter of the frame's size (a sixteenth of the pixels): four bilinear taps average each
+    // 4x4 block of the world + gun layers and keep only what is brighter than white (muzzle flashes, the sun, glowing skins)
+    post.bmat = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, vmTex: { value: null }, px: { value: new THREE.Vector2(1, 1) } }, depthTest: false, depthWrite: false,
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `uniform sampler2D tex; uniform sampler2D vmTex; uniform vec2 px; varying vec2 vUv;
+        vec3 comp(vec2 p) { vec4 v = texture2D(vmTex, p); return texture2D(tex, p).rgb * (1.0 - v.a) + v.rgb; }
+        void main() { vec3 c = comp(vUv + vec2(-1.0, -1.0) * px) + comp(vUv + vec2(1.0, -1.0) * px) + comp(vUv + vec2(-1.0, 1.0) * px) + comp(vUv + vec2(1.0, 1.0) * px);
+          gl_FragColor = vec4(max(c * 0.25 - 0.9, 0.0), 1.0); }` });
+    post.bscene = new THREE.Scene(); { const q = new THREE.Mesh(post.quad.geometry, post.bmat); q.frustumCulled = false; post.bscene.add(q); }
     // the HDR pass needs float render targets; many Android GPUs can't render to them, so check rather than assume
     const postOn = () => gfx.postOn;
     // if the phone's GPU gives up (context lost), drop to Potato and restart instead of leaving a black screen
     renderer.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (smoke) return; try { S.quality = 0.5; saveSet(S); localStorage.setItem('cs:autoq', '0.5'); } catch (er) { /* private mode */ } toast('Graphics crashed on this device: restarting on Potato'); setTimeout(() => location.reload(), 1500); });
+    const _dbs = new THREE.Vector2(), _cc = new THREE.Color();
     const postTarget = () => {
-      const v = renderer.getDrawingBufferSize(new THREE.Vector2()), w = Math.max(1, v.x | 0), h = Math.max(1, v.y | 0);
+      const v = renderer.getDrawingBufferSize(_dbs), w = Math.max(1, v.x | 0), h = Math.max(1, v.y | 0);
       if (!post.rt || post.w !== w || post.h !== h) {
         if (post.rt) { if (post.rt.depthTexture) post.rt.depthTexture.dispose(); post.rt.dispose(); post.vt.dispose(); }
+        if (post.bt) { post.bt.dispose(); post.bt = null; }
         post.rt = new THREE.WebGLRenderTarget(w, h, gfx.targetOpts(w, h, true)); post.vt = new THREE.WebGLRenderTarget(w, h, gfx.targetOpts(w, h, false));
+        if (gfx.p.bloom) { post.bt = new THREE.WebGLRenderTarget(Math.max(1, w >> 2), Math.max(1, h >> 2), { type: THREE.HalfFloatType, depthBuffer: false }); post.bmat.uniforms.px.value.set(1 / w, 1 / h); }
+        post.mat.uniforms.bloomTex.value = post.bt ? post.bt.texture : null;
         post.mat.uniforms.depthTex.value = post.rt.depthTexture || null;
         post.w = w; post.h = h; post.mat.uniforms.res.value.set(w, h);
       }
@@ -521,7 +558,15 @@ export default function start({ cfg, E, N, smoke }) {
         toast('Graphics: ' + gfx.name + ' to keep it smooth');
       } else if (avg < 1 / 75 && scale >= gfx.pixelBand(devicePixelRatio || 1).start - 0.01) gfx.rememberHeadroom();   // headroom: next match one step up
     };
-    const fpsM = S.fps ? E.fpsMeter() : () => {};
+    // Show FPS (settings): frames per second, the frame time, the render scale the governor picked, draw calls and
+    // triangles per frame, and the tier, for tuning on a real machine. Counted over every pass of the frame.
+    const fpsM = S.fps ? (() => {
+      const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:6px;top:6px;font:12px/1.35 monospace;color:#bff;background:rgba(0,0,0,.45);padding:3px 6px;border-radius:4px;z-index:60;pointer-events:none;white-space:pre';
+      document.body.appendChild(box); renderer.info.autoReset = false;
+      let n = 0, t = 0, worst = 0, calls = 0, tris = 0;
+      return (dt) => { n++; t += dt; worst = Math.max(worst, dt); calls += renderer.info.render.calls; tris += renderer.info.render.triangles; renderer.info.reset();
+        if (t >= 1) { box.textContent = `${n} fps  ${(t / n * 1000).toFixed(1)} ms (worst ${(worst * 1000).toFixed(0)})\n${gfx.name}  scale ${scale.toFixed(2)}\n${Math.round(calls / n)} draws  ${Math.round(tris / n / 1000)}k tris`; n = 0; t = 0; worst = 0; calls = 0; tris = 0; } };
+    })() : () => {};
     const hud = new Hud(S);
 
     let culler = null, lobbyPanel = null, sunLight = null, sky = null, parts = null, cfx = null, sunDir = [0.6, 0.7, 0.4];
@@ -682,9 +727,42 @@ export default function start({ cfg, E, N, smoke }) {
     // ---- world ----
     // what shiny things reflect (Medium and up): this map's own sky, horizon haze, sunlit ground and the sun, blurred
     // into a tiny environment map once per map. Gun metal, knives, scopes and brass pick it up like real metal.
-    let envRT = null;
+    let envRT = null, envHdrOf = null;
+    // the real thing (Medium and up): a photographed HDR sky for this map (env_<sky>.rgbe, from Poly Haven, CC0; see
+    // browserdev/hdribuild.py), turned so its sun sits where the map's sun is, the sun disc clamped (the baked lightmap and
+    // the sun light already carry direct sunlight) and its brightness matched to the map's own sky colour. Prefiltered
+    // into a PMREM once per map; until it arrives (or if it can't load) the painted environment below is used.
+    const envCache = new Map();
+    function envSky(B) { if (B.photo) return B.photo; const c = new THREE.Color(B.sky || 0x88aadd); return c.r + c.g + c.b < 0.15 ? 'night' : 'sunrise'; }
+    function setEnvHDR(B) {
+      const name = envSky(B);
+      const got = envCache.get(name) || fetch(`env_${name}.rgbe`).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+      envCache.set(name, got);
+      got.then((buf) => {
+        if (!buf || buf.byteLength !== 512 * 256 * 4 || !W || W.B !== B || !P.env) return;
+        const w = 512, h = 256, src = new Uint8Array(buf), out = new Uint16Array(w * h * 4), sd = B.sunDir || [0.6, 0.7, 0.4];
+        const shift = Math.round((Math.atan2(sd[2], sd[0]) / (Math.PI * 2)) * w);   // three.js equirect: u = atan(z, x) / 2pi + 0.5
+        const sc = new THREE.Color(B.sky || 0x88aadd), target = Math.max(0.03, (0.2126 * sc.r + 0.7152 * sc.g + 0.0722 * sc.b) * 1.4);
+        let sum = 0, n = 0;
+        for (let y = h / 2; y < h; y++) for (let x = 0; x < w; x += 4) { const i = (y * w + x) * 4, e = src[i + 3]; if (e) { const f = Math.pow(2, e - 136); sum += Math.min(40, 0.2126 * src[i] * f + 0.7152 * src[i + 1] * f + 0.0722 * src[i + 2] * f); n++; } }
+        const k = n && sum > 0 ? target / (sum / n) : 1, toH = THREE.DataUtils.toHalfFloat;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4, o = (y * w + ((x + shift) % w + w) % w) * 4, e = src[i + 3], f = e ? Math.pow(2, e - 136) * k : 0;
+          let r = src[i] * f, g = src[i + 1] * f, b = src[i + 2] * f; const m = Math.max(r, g, b), cap = 60 * k;
+          if (m > cap) { const s = cap / m; r *= s; g *= s; b *= s; }
+          out[o] = toH(r); out[o + 1] = toH(g); out[o + 2] = toH(b); out[o + 3] = toH(1);
+        }
+        const tex = new THREE.DataTexture(out, w, h, THREE.RGBAFormat, THREE.HalfFloatType);
+        tex.mapping = THREE.EquirectangularReflectionMapping; tex.colorSpace = THREE.LinearSRGBColorSpace; tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+        const pm = new THREE.PMREMGenerator(renderer);
+        const rt = pm.fromEquirectangular(tex); pm.dispose(); tex.dispose();
+        if (envRT) envRT.dispose();
+        envRT = rt; envHdrOf = B; scene.environment = envRT.texture; vmScene.environment = envRT.texture;
+      });
+    }
     function setEnv(B) {
-      const es = new THREE.Scene(), sd = new THREE.Vector3(...(B.sunDir || [0.6, 0.7, 0.4])).normalize();
+      if (envHdrOf === B) return;   // the photographed sky is already in
+      const es =new THREE.Scene(), sd = new THREE.Vector3(...(B.sunDir || [0.6, 0.7, 0.4])).normalize();
       es.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
         uniforms: { sky: { value: new THREE.Color(B.sky || 0x88aadd) }, fog: { value: new THREE.Color(B.fog || 0xccccbb) }, gnd: { value: new THREE.Color((B.amb || [])[1] || 0x776655) },
           sun: { value: new THREE.Color(B.sunColor || 0xffffff).multiplyScalar(B.sunI || 2.4) }, sd: { value: sd },
@@ -704,7 +782,7 @@ export default function start({ cfg, E, N, smoke }) {
     function buildMap(id) {
       if (W) { scene.remove(W.group); W.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
       mapId = id; const wx = weather && WEATHER[weather] && weather !== 'day' ? weather : null;
-      W = buildWorld(E, wx ? { ...MAPS[id], build: () => applyWeather(MAPS[id].build(), wx) } : MAPS[id], scene, Q, { ...gfx.worldOpts(), dynShadows: dsh ? P.shadows.cascades.length : 0 });
+      W = buildWorld(E, wx ? { ...MAPS[id], build: () => applyWeather(MAPS[id].build(), wx) } : MAPS[id], scene, Q, { ...gfx.worldOpts(), dynShadows: dsh ? P.shadows.cascades.length : 0, prebaked: BAKE[id] });
       if (precip) { precip.dispose(); precip = null; }
       audio.occlude((x, y, z, L) => W.los({ x: L.x, y: L.y, z: L.z }, { x, y: y + 1.0, z }));
       if (W.B.precip && gfx.tier !== 'potato') precip = new Precip(scene, W.B.precip, gfx.tier === 'low' ? 1200 : 2600);
@@ -713,7 +791,7 @@ export default function start({ cfg, E, N, smoke }) {
       const lit = dressScene(scene, B, false, P.clouds, Q >= 1 ? 2048 : 1024); sunLight = lit.sun; sky = lit.sky; sunDir = lit.dir;
       sky.userData.onPhoto = () => { if (envRT) setEnv(B); };   // reflections pick up the real sky once it's in
       vmHemi.color.set(B.amb[0]); vmHemi.groundColor.set(B.amb[1]); vmSun.color.set(B.sunColor);
-      if (P.env) setEnv(B);
+      if (P.env) { setEnv(B); setEnvHDR(B); }
       // occlusion culling: the map's precompiled visibility set, if it was compiled from this exact map (pvs.js)
       culler = null;
       const pd = PVS_DATA[id];
@@ -723,7 +801,7 @@ export default function start({ cfg, E, N, smoke }) {
       }
       W.spinners = []; W.breakables = []; for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); if (m.userData.spin) W.spinners.push(m.userData.spin); if (m.userData.breakable) W.breakables.push(m); }
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
-      if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier) }); else cfx.setWorld(W);
+      if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier), ultra: gfx.tier === 'ultra' }); else cfx.setWorld(W);
       cfx.setGore(S.gore ?? 2);   // holes, blood, sparks, smoke that fills rooms, fire, ripples
       hud.radarBase(W);
       if (SC) SC.setWorld(W);
@@ -740,22 +818,33 @@ export default function start({ cfg, E, N, smoke }) {
     const EXPLOSIVE = /^(he|c4|molotov|incgrenade|rocket|rocket_ball|triple_ball|dunk|explosion|bomb|vest)$/;
     function goreKill(r, vp, data, W2, dir, dist) {
       const g = S.gore ?? 2, at = (bone, fy) => { const b = r.bones && r.bones[bone]; if (b) { const v = new THREE.Vector3(); b.getWorldPosition(v); return v; } return new THREE.Vector3(vp.x, vp.y + fy, vp.z); };
+      const cap = (parent, child, rad) => { const c = r.bones && cfx.stumpCap(r.bones[parent], r.bones[child], rad); if (c) (r.caps || (r.caps = [])).push(c); };
       if (g <= 0) return;
       if (EXPLOSIVE.test(String(data.weapon || ''))) {
-        cfx.gibs(vp.x, vp.y + 1.0, vp.z, 26, dir, 1.5); cfx.pool(vp.x, vp.y, vp.z); cfx.pool(vp.x + dir.x * 1.2, vp.y, vp.z + dir.z * 1.2);
-        cfx.blood(vp.x, vp.y + 1.1, vp.z, { x: dir.x, y: 0.3, z: dir.z }, true); r.gibbed = true; return;
+        cfx.gibs(vp.x, vp.y + 1.0, vp.z, 30, dir, 1.5); cfx.pool(vp.x, vp.y, vp.z); cfx.pool(vp.x + dir.x * 1.2, vp.y, vp.z + dir.z * 1.2);
+        cfx.blood(vp.x, vp.y + 1.1, vp.z, { x: dir.x, y: 0.3, z: dir.z }, true); r.gibbed = true;
+        if (g > 1 && r.soldier) {   // max: the head and an arm come away whole and fly with the blast
+          cfx.limb('head', vp.x, vp.y + 1.6, vp.z, dir, r.headCol, 1.4); cfx.limb('arm', vp.x + dir.z * 0.3, vp.y + 1.3, vp.z - dir.x * 0.3, { x: dir.x + dir.z * 0.6, y: 0, z: dir.z - dir.x * 0.6 }, r.armCol, 1.3);
+        }
+        return;
       }
       if (g < 2) return;
       const knife = W2.cat === 'knife' || data.weapon === 'knife';
       if (data.head && !knife) {
-        const h = at('Head', 1.7); r.lost = ['Head'];
-        cfx.gibs(h.x, h.y, h.z, 9, dir, 0.9); cfx.blood(h.x, h.y, h.z, { x: dir.x, y: 0.2, z: dir.z }, true);
+        const h = at('Head', 1.7); r.lost = ['Head']; cap('Neck', 'Head', 6.5);
+        cfx.gibs(h.x, h.y, h.z, 12, dir, 0.9); cfx.blood(h.x, h.y, h.z, { x: dir.x, y: 0.2, z: dir.z }, true);
+        if (r.soldier && ((W2.dmg || 0) >= 60 || W2.pellets > 1 || dist < 6)) cfx.limb('head', h.x, h.y, h.z, dir, r.headCol, 0.8);   // a big round or close range: the head goes with it, otherwise it bursts
         cfx.fountain(() => (r.g.visible ? at('Neck', 1.55) : null), 2.8, { x: -dir.x * 0.3, y: 1, z: -dir.z * 0.3 });
       } else if (W2.pellets > 1 && dist < 7) {
-        const side = Math.random() < 0.5 ? 'Left' : 'Right', sh = at(side + 'Arm', 1.4); r.lost = [side + 'Arm'];
-        cfx.gibs(sh.x, sh.y, sh.z, 6, dir, 1.1); cfx.fountain(() => (r.g.visible ? at(side + 'Shoulder', 1.4) : null), 1.8, { x: dir.x, y: 0.6, z: dir.z });
-      } else if (knife) {
-        const c = at('Spine2', 1.3); cfx.fountain(() => (r.g.visible ? at('Spine2', 1.3) : null), 1.4, { x: dir.x, y: 0.4, z: dir.z }); cfx.blood(c.x, c.y, c.z, dir, true);
+        const side = Math.random() < 0.5 ? 'Left' : 'Right', sh = at(side + 'Arm', 1.4); r.lost = [side + 'Arm']; cap(side + 'Shoulder', side + 'Arm', 5.5);
+        cfx.gibs(sh.x, sh.y, sh.z, 8, dir, 1.1); if (r.soldier) cfx.limb('arm', sh.x, sh.y, sh.z, dir, r.armCol, 1.1);
+        cfx.fountain(() => (r.g.visible ? at(side + 'Shoulder', 1.4) : null), 1.8, { x: dir.x, y: 0.6, z: dir.z });
+        const c = at('Spine1', 1.15); cfx.gibs(c.x, c.y, c.z, 6, dir, 0.8);   // and the torso opens up
+      } else if (knife) {   // the blade: the throat or the gut, pumping out sideways
+        const c = at(data.head ? 'Neck' : 'Spine2', 1.3); cfx.fountain(() => (r.g.visible ? at(data.head ? 'Neck' : 'Spine2', 1.3) : null), 2.2, { x: dir.z * 0.8, y: 0.5, z: -dir.x * 0.8 }); cfx.blood(c.x, c.y, c.z, dir, true);
+        if (!data.head) cfx.gibs(c.x, c.y - 0.2, c.z, 4, dir, 0.4);
+      } else if ((W2.dmg || 0) >= 80) {   // a rifle round that size: an exit wound, out the back, with what it took along
+        const c = at('Spine2', 1.3); cfx.gibs(c.x + dir.x * 0.2, c.y, c.z + dir.z * 0.2, 7, dir, 1.0); cfx.blood(c.x, c.y, c.z, dir, true);
       }
     }
     function rigFor(id) {
@@ -878,7 +967,7 @@ export default function start({ cfg, E, N, smoke }) {
     const tracer = (a, b) => { if (tracers.length > 24) { const t = tracers.shift(); fx.remove(t.l); t.l.geometry.dispose(); } const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]); const l = new THREE.Line(g, tracerMat); fx.add(l); tracers.push({ l, t: 0.05 }); };
     // spent brass: flies out of the ejection port, tumbles, bounces and tinkles, then lies there a while
     const brassGeo = new THREE.CylinderGeometry(0.0045, 0.0045, 0.022, 6), shellGeo = new THREE.CylinderGeometry(0.009, 0.009, 0.06, 7), casings = [];
-    const brassMat = lam('#c8a048'), shellMat = lam('#b8221e');
+    const brassMat = P.hqModels ? new THREE.MeshStandardMaterial({ color: '#c89a48', metalness: 1, roughness: 0.28 }) : lam('#c8a048'), shellMat = P.hqModels ? new THREE.MeshStandardMaterial({ color: '#a8201c', roughness: 0.45 }) : lam('#b8221e');   // polished brass and a plastic hull catch the sky (Medium and up)
     function ejectCasing(o, rx, rz, ax, az, shell) {
       let c = casings.length > 40 ? casings.shift() : null;
       if (!c) c = { m: new THREE.Mesh(shell ? shellGeo : brassGeo, shell ? shellMat : brassMat) };
@@ -1341,7 +1430,8 @@ export default function start({ cfg, E, N, smoke }) {
         }
         if (data.assist === myName) stats.a++;
         const r = rigs.get(data.vid); if (r) { r.dieT = 0.001; const kp2 = data.kid === myId ? me : st.players.get(data.kid), vp = st.players.get(data.vid); if (kp2 && vp) { const dx = vp.x - kp2.x, dz = vp.z - kp2.z, L = Math.hypot(dx, dz) || 1; r.fall = { x: dx / L, z: dz / L, side: Math.random() < 0.5 ? -1 : 1, close: L < 6 };
-          const W2 = W_BY_ID[data.weapon] || {}; r.rag = { t: 0, head: !!data.head, force: Math.min(1.6, 0.7 + (W2.dmg || 30) / 60 + (W2.pellets > 1 && L < 8 ? 0.5 : 0) + (data.weapon === 'he' ? 0.6 : 0)) };
+          const W2 = W_BY_ID[data.weapon] || {}; r.rag = { t: 0, head: !!data.head, force: Math.min(1.6, 0.7 + (W2.dmg || 30) / 60 + (W2.pellets > 1 && L < 8 ? 0.5 : 0) + (data.weapon === 'he' ? 0.6 : 0)),
+            zone: data.head ? 'head' : (W2.cat === 'knife' || data.weapon === 'knife') ? 'knife' : (W2.pellets > 1 && L < 8) || (W2.dmg || 0) >= 80 ? 'heavy' : 'body' };   // a different death for each: dropped where they stood, slumped round the blade, thrown back, or the fall
           if (cfx) goreKill(r, vp, data, W2, { x: dx / L, y: 0, z: dz / L }, L); } }
         const fxd = data.fx && KILL_FX[data.fx], vp2 = data.vid === myId ? me : st.players.get(data.vid);
         if (fxd && vp2) { if (parts) parts.emit(vp2.x, vp2.y + 1.2, vp2.z, { n: fxd.n, colors: fxd.colors, speed: fxd.speed, up: 1, size: 0.06, life: 1.4, g: fxd.g ?? 1 }); if (fxd.text) textPop(scene, vp2.x, vp2.y + 2.2, vp2.z, fxd.text, fxd.textColor); audio.at(fxd.sound, vp2.x, vp2.y, vp2.z, cam, 40); }
@@ -1853,7 +1943,7 @@ export default function start({ cfg, E, N, smoke }) {
       for (const p of st.players.values()) {
         if (!rigs.has(p.id) && p.id !== myId && ++newRigs > 3) continue;
         const r = rigFor(p.id); r.g.visible = (p.alive || (r.dieT != null && r.dieT < 6)) && !(r.gibbed && !p.alive);
-        if (p.alive && (r.lost || r.gibbed)) { if (r.lost && r.bones) for (const b of r.lost) if (r.bones[b]) r.bones[b].scale.setScalar(1); r.lost = null; r.gibbed = false; }   // back in one piece on respawn
+        if (p.alive && (r.lost || r.gibbed || r.caps)) { if (r.lost && r.bones) for (const b of r.lost) if (r.bones[b]) r.bones[b].scale.setScalar(1); r.lost = null; r.gibbed = false; if (r.caps) { for (const c of r.caps) if (c.parent) c.parent.remove(c); r.caps = null; } }   // back in one piece on respawn
         if (!p.alive && r.dieT == null) r.dieT = 0.001;
         if (p.alive) r.dieT = null; else r.dieT += dt;
         const sp = Math.hypot(p.x - r.x, p.z - r.z) / Math.max(dt, 1e-3), kv = Math.min(1, dt * 10);
@@ -1874,7 +1964,7 @@ export default function start({ cfg, E, N, smoke }) {
         if (r.blob) { r.blob.visible = r.g.visible; const gy = W.groundAt(p.x, p.z, p.y + 0.1); r.blob.position.set(p.x, gy + 0.02, p.z); const k = Math.max(0.2, 1 - (p.y - gy) * 0.8); r.blob.scale.setScalar(0.95 * k); }
         { const gf = r.tpGun.children[0]; if (gf && gf.userData.flash) { r.flashT = (r.flashT || 0) - dt; gf.userData.flash.visible = r.flashT > 0; if (r.flashT > 0) gf.userData.flash.rotation.z = Math.random() * 6.3; } }
         if (r.dieT && r.fall && r.soldier && W) {   // knocked away from the shot: turn to face the shooter (the fall is backwards) and slide a little
-          const k = 1 - Math.exp(-r.dieT * 4), push = (r.rag ? r.rag.force : 1) * (r.fall.close ? 0.7 : 0.4);
+          const k = 1 - Math.exp(-r.dieT * 4), push = (r.rag ? r.rag.force : 1) * (r.fall.close ? 0.7 : 0.4) * ({ head: 0.25, knife: 0.3, heavy: 1.8 }[r.rag && r.rag.zone] || 1);   // a headshot drops where they stood, a heavy hit throws them
           const nx = p.x + r.fall.x * push * k, nz = p.z + r.fall.z * push * k;
           if (W.H(Math.floor(nx), Math.floor(nz)) <= p.y + 0.35) { r.g.position.x = nx; r.g.position.z = nz; }
           r.g.rotation.y = Math.atan2(-r.fall.z, r.fall.x);   // the death clip falls to its right: point that away from the shooter
@@ -1981,6 +2071,11 @@ export default function start({ cfg, E, N, smoke }) {
           ud.pump.position.z = 0.075 * k; if (ud.leftArm && animReload && me.reload <= 0) ud.leftArm.position.z += 0.075 * k;
           if (k > 0 && ud.pumpAt !== me.lastShotAt) { ud.pumpAt = me.lastShotAt; audio.play('bolt', 0.7); }
         }
+        if (ud.slide && w) {   // a pistol's slide: slams back and forward on every shot (90 ms), and stays locked open on an empty magazine
+          const it2 = me.inv[me.cur], t = me.lastGun === w.id ? (performance.now() - (me.lastShotAt || 0)) / 1000 : 9, back = t < 0.09 ? Math.sin(Math.PI * Math.min(1, t / 0.09)) : 0;
+          const locked = it2 && it2.ammo === 0 && (t > 0.045 || t > 8) ? 1 : 0;
+          ud.slide.position.z = 0.032 * Math.max(back, locked);
+        }
         if (ud.flop) {   // floppy: each joint is a damped spring kicked by turning, walking, swinging and stroking
           const F = ud.flopS || (ud.flopS = { x: 0, y: 0, vx: 0, vy: 0 }), stroking = me.inspect > 0 && me.inspectStyle === 'stroke';
           const kick = { x: -lookDY * 0.9 + Math.cos(bob * 2) * 0.6 * Math.min(1, sp / 4) + (me.knifeSwing > 0 ? 9 : 0) + (stroking ? Math.sin(me.inspect * 22) * 7 : 0), y: lookDX * 0.9 };
@@ -2023,9 +2118,10 @@ export default function start({ cfg, E, N, smoke }) {
         post.mat.uniforms.camNF.value.set(cam.near, cam.far, Math.tan(cam.fov * Math.PI / 360));
         post.mat.uniforms.exposure.value = 1.08 * (S.bright || 1);   // the player's brightness setting
         post.mat.uniforms.upV.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); post.mat.uniforms.ssrK.value = W && W.B && W.B.wet != null ? W.B.wet : 2.2;   // how wet this map is (rain, polish)
-        renderer.setRenderTarget(post.vt); const cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha(); renderer.setClearColor(0x000000, 0); renderer.clear();
+        renderer.setRenderTarget(post.vt); const cc = renderer.getClearColor(_cc), ca = renderer.getClearAlpha(); renderer.setClearColor(0x000000, 0); renderer.clear();
         if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
         renderer.setClearColor(cc, ca);
+        if (post.bt) { post.bmat.uniforms.tex.value = rt.texture; post.bmat.uniforms.vmTex.value = post.vt.texture; renderer.setRenderTarget(post.bt); renderer.render(post.bscene, post.cam); }
         renderer.setRenderTarget(null); post.mat.uniforms.tex.value = rt.texture; post.mat.uniforms.vmTex.value = post.vt.texture; post.mat.uniforms.ads.value = vm && vm.visible ? me.ads : 0; post.cineK = (post.cineK || 0) + ((SC && SC.cutscene ? 1 : 0) - (post.cineK || 0)) * Math.min(1, dt * 2.5); post.mat.uniforms.cine.value = post.cineK; post.mat.uniforms.focusZ.value = post.focus || 3; post.mat.uniforms.aperture.value = post.aperture || 1; post.mat.uniforms.time.value = (post.mat.uniforms.time.value + dt) % 100; renderer.render(post.scene, post.cam);
       } else { renderer.toneMappingExposure = 1.08 * (S.bright || 1); renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam); }
       // ---- HUD (throttled) ----

@@ -10,6 +10,7 @@
 //   that runs over the ground and down slopes; ripples in water; barrel smoke after a burst; dropped magazines; knife
 //   gouges on walls.
 import * as THREE from '../sdk/three.module.min.js';
+import { litPatch } from './world.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 function canvasTex(size, paint) {
@@ -45,9 +46,11 @@ const splatTex = () => canvasTex(256, (g, s) => {   // a high-velocity spatter: 
   for (let k = 0; k < 70; k++) { const a = rnd(-0.9, 0.9), d = rnd(20, 120), r = rnd(1, 5) * (1 - d / 140); g.globalAlpha = rnd(0.6, 1); g.beginPath(); g.arc(c + Math.cos(a) * d, c + Math.sin(a) * d * 0.7, Math.max(0.6, r), 0, 6.28); g.fill(); }
   for (let k = 0; k < 10; k++) { const a = rnd(-0.6, 0.6), d0 = rnd(25, 40), d1 = d0 + rnd(20, 60); g.globalAlpha = 0.8; g.lineWidth = rnd(1.5, 3.5); g.strokeStyle = '#fff'; g.beginPath(); g.moveTo(c + Math.cos(a) * d0, c + Math.sin(a) * d0 * 0.7); g.lineTo(c + Math.cos(a) * d1, c + Math.sin(a) * d1 * 0.7); g.stroke(); }
 });
-const poolTex = () => canvasTex(256, (g, s) => {
-  const c = s / 2; g.fillStyle = '#fff';
-  for (let k = 0; k < 12; k++) { g.beginPath(); g.ellipse(c + rnd(-30, 30), c + rnd(-30, 30), rnd(40, 70), rnd(35, 60), rnd(0, 3), 0, 6.28); g.fill(); }
+const poolTex = () => canvasTex(256, (g, s) => {   // a pool: lobes that ran into each other, a soft feathered edge, a darker rim where it thickens
+  const c = s / 2; g.filter = 'blur(3px)';
+  g.fillStyle = 'rgb(150,150,150)'; for (let k = 0; k < 12; k++) { g.beginPath(); g.ellipse(c + rnd(-30, 30), c + rnd(-30, 30), rnd(44, 72), rnd(38, 62), rnd(0, 3), 0, 6.28); g.fill(); }
+  g.fillStyle = 'rgb(255,255,255)'; for (let k = 0; k < 12; k++) { g.beginPath(); g.ellipse(c + rnd(-26, 26), c + rnd(-26, 26), rnd(36, 62), rnd(30, 52), rnd(0, 3), 0, 6.28); g.fill(); }
+  g.filter = 'none'; for (let k = 0; k < 18; k++) { g.fillStyle = 'rgba(255,255,255,.9)'; const a = rnd(0, 6.28), d = rnd(70, 100); g.beginPath(); g.arc(c + Math.cos(a) * d, c + Math.sin(a) * d, rnd(2, 6), 0, 6.28); g.fill(); }   // satellite drops
 });
 const scorchTex = () => canvasTex(256, (g, s) => {
   const c = s / 2, gr = g.createRadialGradient(c, c, 4, c, c, c);
@@ -65,12 +68,19 @@ const MAT_CLASS = { metal: 'metal', cred: 'metal', cblue: 'metal', cgreen: 'meta
   wood: 'wood', crate: 'wood', darkwood: 'wood', fence: 'wood', sand: 'soft', dirt: 'soft', grass: 'soft', snow: 'soft', carpet: 'soft', water: 'water' };
 export const matClass = (m) => MAT_CLASS[m] || 'concrete';
 
-export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
+export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ultra = false }) {
   let W = W0;
   const root = new THREE.Group(); root.name = 'combatfx'; scene.add(root);
   const T = { concrete: holeTex.concrete(), wood: holeTex.wood(), metal: holeTex.metal(), soft: holeTex.soft(), splat: splatTex(), pool: poolTex(), scorch: scorchTex(), gouge: gougeTex(), soft2: softTex(), ring: ringTex() };
   const plane = new THREE.PlaneGeometry(1, 1);
   const decalMat = (map, color = 0xffffff, opacity = 1) => new THREE.MeshBasicMaterial({ map, color, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+  // blood (Medium and up): lit like everything else (dark in the shade, never glowing), wet and glossy while fresh so it
+  // catches the sky and the sun, then duller and browner as it dries
+  const bloodMat = (map, color, opacity = 1) => {
+    if (!hq) return decalMat(map, color, opacity);
+    const m = new THREE.MeshStandardMaterial({ map, color, transparent: true, opacity, roughness: 0.16, metalness: 0, envMapIntensity: 1.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    return litPatch(m, 'dyn');
+  };
 
   // a ring of decals of one kind: placed on a surface (position + normal), the oldest reused
   function ring(n, mat, life = Infinity) {
@@ -89,7 +99,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
         for (let i = list.length - 1; i >= 0; i--) {
           const d = list[i]; d.t += dt;
           if (d.grow && d.size < d.max) { d.size = Math.min(d.max, d.size + d.grow * dt * (1 - d.size / d.max * 0.7)); d.m.scale.set(d.size, d.size, 1); }
-          if (d.dry && d.m.material.color) { const k = Math.min(1, d.t / d.dry); d.m.material.color.setRGB(0.42 - 0.22 * k, 0.02, 0.02); }   // fresh red to dried brown-black
+          if (d.dry && d.m.material.color) { const k = Math.min(1, d.t / d.dry); if (d.m.material.isMeshStandardMaterial) { d.m.material.color.setRGB(0.075 - 0.045 * k, 0.003 + 0.004 * k, 0.003 + 0.002 * k); d.m.material.roughness = 0.12 + 0.6 * k; } else d.m.material.color.setRGB(0.42 - 0.22 * k, 0.02, 0.02); }   // fresh wet red to dried brown-black
           if (d.t > d.life) { const f = Math.max(0, 1 - (d.t - d.life) / 3); if (d.m.material.opacity !== undefined && d.m.material !== mat) d.m.material.opacity = d.op * f; if (f <= 0) { d.m.visible = false; list.splice(i, 1); } }
         }
       },
@@ -97,7 +107,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
     };
   }
   const holes = { concrete: ring(70, decalMat(T.concrete)), wood: ring(40, decalMat(T.wood)), metal: ring(40, decalMat(T.metal)), soft: ring(40, decalMat(T.soft, 0xffffff, 0.8)) };
-  const splats = ring(96, decalMat(T.splat, 0x6a0505), 70), pools = ring(24, decalMat(T.pool, 0x4a0303, 0.92), 90), scorches = ring(10, decalMat(T.scorch), 120), gouges = ring(24, decalMat(T.gouge), 120);
+  const splats = ring(ultra ? 160 : hq ? 96 : 48, bloodMat(T.splat, 0x5a0505), 70), pools = ring(ultra ? 32 : 24, bloodMat(T.pool, 0x4a0303, 0.92), 90), scorches = ring(10, decalMat(T.scorch), 120), gouges = ring(24, decalMat(T.gouge), 120);
 
   // ---- glowing sparks: additive, gravity, bounce off the floor, cool from white-yellow to orange and die ----
   const SPK = hq ? 260 : 120, spGeo = new THREE.BufferGeometry(), spPos = new Float32Array(SPK * 6), spCol = new Float32Array(SPK * 6);
@@ -137,12 +147,59 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
   // ---- gore (settings: 0 low, 1 heavy, 2 max): flying chunks that bounce, roll and leave splats; fountains from wounds ----
   let gore = 2;
   const GK = () => [0.6, 1.6, 3][gore] || 1;   // how much more blood everything throws
-  const gibGeo = [new THREE.IcosahedronGeometry(0.07, 0), new THREE.DodecahedronGeometry(0.05, 0), new THREE.BoxGeometry(0.11, 0.05, 0.06), new THREE.CylinderGeometry(0.025, 0.03, 0.16, 5)];
-  const gibMat = [new THREE.MeshStandardMaterial({ color: 0x7a1410, roughness: 0.35, metalness: 0.05 }), new THREE.MeshStandardMaterial({ color: 0x3f0505, roughness: 0.3 }),
-    new THREE.MeshStandardMaterial({ color: 0xa8443a, roughness: 0.5 }), new THREE.MeshStandardMaterial({ color: 0xded3c2, roughness: 0.6 })];   // flesh, dark, meat, bone
-  const gibs = Array.from({ length: hq ? 60 : 32 }, (_, i) => { const m = new THREE.Mesh(gibGeo[i % 4], gibMat[(i * 7) % 4]); m.visible = false; m.castShadow = false; root.add(m); return { m, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 0, landed: 0 }; });
+  // the pieces: torn, lumpy flesh (a noise-displaced ball, flattened), a loop of gut, a bone shard with a marrow end,
+  // a strip of skin and fat; wet flesh is glossy, bone is matte. Shapes are built once and shared by the whole pool.
+  const lumpy = (r, sq, seed) => { const g = new THREE.IcosahedronGeometry(r, hq ? 1 : 0), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), n = 0.7 + 0.45 * Math.abs(Math.sin(x * 61 + seed) * Math.cos(y * 47 - seed) + Math.sin(z * 53 + seed * 2)) * 0.6; p.setXYZ(i, x * n, y * n * sq, z * n); }
+    g.computeVertexNormals(); return g; };
+  const gut = (() => { const pts = []; for (let k = 0; k < 7; k++) pts.push(new THREE.Vector3(Math.sin(k * 1.3) * 0.06, Math.cos(k * 0.9) * 0.03, k * 0.035 - 0.1)); return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), hq ? 24 : 10, 0.016, hq ? 7 : 4, false); })();
+  const shard = (() => { const g = new THREE.CylinderGeometry(0.008, 0.02, 0.15, 5, 1), p = g.attributes.position; for (let i = 0; i < p.count; i++) if (p.getY(i) > 0) p.setX(i, p.getX(i) + 0.006); g.computeVertexNormals(); return g; })();
+  const gibGeo = [lumpy(0.06, 0.75, 1), lumpy(0.045, 0.6, 2), gut, shard, lumpy(0.07, 0.35, 3)];
+  const gibMat = [new THREE.MeshStandardMaterial({ color: 0x6a0e0b, roughness: 0.22, metalness: 0, envMapIntensity: 1.2 }), new THREE.MeshStandardMaterial({ color: 0x3a0404, roughness: 0.2, envMapIntensity: 1.2 }),
+    new THREE.MeshStandardMaterial({ color: 0x9a4a46, roughness: 0.25, envMapIntensity: 1.2 }), new THREE.MeshStandardMaterial({ color: 0xd8ccb4, roughness: 0.65 }), new THREE.MeshStandardMaterial({ color: 0xb06a58, roughness: 0.35 })];   // flesh, dark, gut, bone, skin + fat
+  const GIB_MAT = [0, 1, 2, 3, 4];
+  const gibs = Array.from({ length: ultra ? 96 : hq ? 60 : 32 }, (_, i) => { const t = i % 5, m = new THREE.Mesh(gibGeo[t], gibMat[GIB_MAT[t]]); m.visible = false; m.castShadow = false; root.add(m); return { m, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 0, landed: 0 }; });
   let gi = 0;
   const fountains = [];
+  // ---- what comes off (gore max): a head or an arm as a physical piece, and the stump cap left on the body ----
+  // A severed piece is a simple stand-in shaped and coloured like the part (a head in its balaclava or skin, an arm in
+  // its sleeve with a gloved hand), with a raw cut face; it flies with the shot, tumbles, bounces, rolls to a stop and
+  // drips. The cap (meat with a ring of fat and the bone in the middle) covers the cut on the body.
+  const capGeo = (() => { const g = new THREE.CircleGeometry(1, 18), c = new Float32Array(g.attributes.position.count * 3), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getY(i)), bone = r < 0.32, fat = r > 0.82; c[i * 3] = bone ? 0.85 : fat ? 0.75 : 0.32 + Math.sin(i * 7.3) * 0.05; c[i * 3 + 1] = bone ? 0.8 : fat ? 0.6 : 0.02; c[i * 3 + 2] = bone ? 0.7 : fat ? 0.4 : 0.02; p.setZ(i, (1 - r) * 0.25); }
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.computeVertexNormals(); return g; })();
+  const capMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, side: THREE.DoubleSide, envMapIntensity: 1.2 });
+  const caps = Array.from({ length: 10 }, () => { const m = new THREE.Mesh(capGeo, capMat); m.visible = false; return m; }); let ci = 0;
+  const limbGeo = { head: new THREE.SphereGeometry(0.1, hq ? 16 : 8, hq ? 12 : 6), arm: new THREE.CapsuleGeometry(0.045, 0.42, 3, hq ? 10 : 6), hand: new THREE.SphereGeometry(0.05, 8, 6) };
+  const limbs = Array.from({ length: 4 }, () => {
+    const g = new THREE.Group(), a = new THREE.Mesh(limbGeo.head, new THREE.MeshStandardMaterial({ roughness: 0.8 })), h = new THREE.Mesh(limbGeo.hand, new THREE.MeshStandardMaterial({ color: 0x1d1c1a, roughness: 0.6 })), cap = new THREE.Mesh(capGeo, capMat);
+    g.add(a); g.add(h); g.add(cap); g.visible = false; root.add(g); return { g, a, h, cap, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, landed: 0, kind: 'head' };
+  }); let li = 0;
+  function limb(kind, x, y, z, dir, color, force = 1) {
+    const L = limbs[li = (li + 1) % limbs.length]; L.kind = kind; L.t = 0; L.landed = 0; L.g.visible = true; L.g.position.set(x, y, z); L.g.rotation.set(rnd(0, 6), rnd(0, 6), rnd(0, 6));
+    L.a.geometry = kind === 'head' ? limbGeo.head : limbGeo.arm; L.a.material.color.set(color || '#22231f'); L.a.position.set(0, 0, 0); L.a.scale.set(1, kind === 'head' ? 1.15 : 1, 1);
+    L.h.visible = kind === 'arm'; L.h.position.set(0, -0.28, 0);
+    L.cap.position.set(0, kind === 'head' ? -0.1 : 0.27, 0); L.cap.rotation.set(kind === 'head' ? Math.PI / 2 : -Math.PI / 2, 0, 0); L.cap.scale.setScalar(kind === 'head' ? 0.06 : 0.048);
+    const sp = rnd(2.5, 4.5) * force; L.v.set(dir.x * sp + rnd(-0.6, 0.6), rnd(2.2, 3.6) * force, dir.z * sp + rnd(-0.6, 0.6)); L.w.set(rnd(-9, 9), rnd(-9, 9), rnd(-9, 9));
+    fountains.push({ pos: () => (L.g.visible && L.t < 3 ? _lp.copy(L.cap.position).applyMatrix4(L.g.matrixWorld) : null), dur: 1.4, dir: { x: 0, y: -0.2, z: 0 }, t: 0, acc: 0, drip: 2 });
+  }
+  const _lp = new THREE.Vector3();
+  function tickLimbs(dt) {
+    for (const L of limbs) {
+      if (!L.g.visible) continue; L.t += dt; if (L.t > 40) { L.g.visible = false; continue; }
+      if (L.landed > 4) continue;
+      L.v.y -= 9.8 * dt; L.g.position.addScaledVector(L.v, dt); L.g.rotation.x += L.w.x * dt; L.g.rotation.y += L.w.y * dt; L.g.rotation.z += L.w.z * dt;
+      if (!W) continue; const p = L.g.position, rad = L.kind === 'head' ? 0.11 : 0.06;
+      if (W.ray && (L.v.x || L.v.z)) { const s = Math.hypot(L.v.x, L.v.z); if (s > 0.3) { const h = W.ray({ x: p.x, y: p.y, z: p.z }, { x: L.v.x / s, y: 0, z: L.v.z / s }, s * dt + rad); if (h) { splats.add({ x: h.x, y: h.y, z: h.z }, normalOf(h, { x: L.v.x / s, y: 0, z: L.v.z / s }).clone(), rnd(0.35, 0.55), Math.random() * 6.28, 1.2, { own: true, color: 0x5a0505, dry: 40, life: 90 }); L.v.x *= -0.25; L.v.z *= -0.25; } } }
+      const gy = W.groundAt(p.x, p.z, p.y + 0.3);
+      if (p.y < gy + rad) {
+        p.y = gy + rad; if (gore > 0) splats.add({ x: p.x, y: gy, z: p.z }, { x: 0, y: 1, z: 0 }, rnd(0.3, 0.5), Math.random() * 6.28, rnd(1, 1.6), { own: true, color: 0x5a0404, dry: 40, life: 90 });
+        L.landed++; L.v.y *= -0.28; L.v.x *= 0.5; L.v.z *= 0.5; L.w.multiplyScalar(0.35);
+        if (L.landed === 1 && audio) audio.at('shell', p.x, p.y, p.z, cam, 10);
+        if (L.landed > 4) pools.add({ x: p.x, y: gy, z: p.z }, { x: 0, y: 1, z: 0 }, 0.08, Math.random() * 6.28, 1, { own: true, color: 0x4a0303, grow: 0.12, max: 0.45, dry: 60, life: 120, opacity: 0.95 });
+      }
+    }
+  }
   function gibBurst(x, y, z, n, dir = null, force = 1) {
     for (let k = 0; k < n; k++) {
       const g = gibs[gi = (gi + 1) % gibs.length], sc = rnd(0.6, 1.6);
@@ -173,8 +230,14 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
   function tickFountains(dt) {
     for (let i = fountains.length - 1; i >= 0; i--) {
       const f = fountains[i]; f.t += dt; f.acc += dt;
-      if (f.t > f.dur) { fountains.splice(i, 1); continue; }
+      const dripT = f.drip ?? 3.5;   // after the pumping stops, the wound keeps dripping for a few seconds
+      if (f.t > f.dur + dripT) { fountains.splice(i, 1); continue; }
       const p = f.pos(); if (!p) { fountains.splice(i, 1); continue; }
+      if (f.t > f.dur) {
+        if (f.acc > 0.22) { f.acc = 0; if (parts) parts.emit(p.x, p.y - 0.02, p.z, { n: 1, colors: ['#5a0606'], speed: 0.1, up: -0.5, size: 0.02, life: 0.9 });
+          if (W && Math.random() < 0.35) splats.add({ x: p.x + rnd(-0.05, 0.05), y: W.groundAt(p.x, p.z, p.y), z: p.z + rnd(-0.05, 0.05) }, { x: 0, y: 1, z: 0 }, rnd(0.05, 0.1), Math.random() * 6.28, 1, { own: true, color: 0x5a0505, dry: 40, life: 80 }); }
+        continue;
+      }
       const k = 1 - f.t / f.dur;   // pumps hard, then weakens (with a pulse, like a heartbeat)
       const pulse = 0.55 + 0.45 * Math.max(0, Math.sin(f.t * 9));
       while (f.acc > 0.04) {
@@ -319,6 +382,12 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
     // gore: chunks flying from a body (explosions, a head that came off), and a wound that pumps (pos() follows the body)
     gibs(x, y, z, n, dir = null, force = 1) { if (gore > 0) gibBurst(x, y, z, Math.round(n * (gore > 1 ? 1 : 0.5)), dir, force); },
     fountain(pos, dur = 2.2, dir = { x: 0, y: 1, z: 0 }) { if (gore > 0) fountains.push({ pos, dur: dur * (gore > 1 ? 1 : 0.5), dir, t: 0, acc: 0 }); },
+    // a severed head or arm flying off with the shot (gore max), and the cap for the stump left behind (on a bone)
+    limb(kind, x, y, z, dir, color, force = 1) { if (gore > 1) limb(kind, x, y, z, dir, color, force); },
+    stumpCap(bone, child, radius) {   // child: the bone that came off (the cap sits at its joint, facing along it)
+      if (gore < 2 || !bone || !child) return null; const c = caps[ci = (ci + 1) % caps.length]; if (c.parent) c.parent.remove(c);
+      c.position.copy(child.position); c.quaternion.setFromUnitVectors(_n.set(0, 0, 1), _d.copy(child.position).normalize()); c.scale.setScalar(radius); c.visible = true; bone.add(c); return c;
+    },
     setGore(n) { gore = Math.max(0, Math.min(2, n | 0)); },
     get gore() { return gore; },
     // an HE grenade: shrapnel sparks bouncing everywhere, a flash that lights the room, a scorch mark, the smoke blown back
@@ -357,14 +426,14 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true }) {
         if (m.o.position.y < gy + 0.03) { m.o.position.y = gy + 0.03; m.v.y *= -0.25; m.v.x *= 0.4; m.v.z *= 0.4; m.spin *= 0.3; m.b++; m.o.rotation.x = Math.PI / 2 * (m.b > 1 ? 1 : 0.8); if (m.b === 1 && audio) audio.at('shell', m.o.position.x, m.o.position.y, m.o.position.z, cam, 10); }
       }
       for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, pools, scorches, gouges]) r.tick(dt);
-      smokeTick(dt); fireTick(dt); tickGibs(dt); tickFountains(dt);
+      smokeTick(dt); fireTick(dt); tickGibs(dt); tickLimbs(dt); tickFountains(dt);
     },
     setWorld(w) { W = w; api.clear(); },
     clear() {
       for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, pools, scorches, gouges]) r.clear();
       for (const k of [...smokes.keys()]) api.smoke.remove(k); for (const k of [...fires.keys()]) api.fire.remove(k);
       for (const m of mags) m.o.visible = false; mags.length = 0;
-      for (const g of gibs) g.m.visible = false; fountains.length = 0;
+      for (const g of gibs) g.m.visible = false; fountains.length = 0; for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
     },
   };
   return api;

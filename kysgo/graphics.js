@@ -22,7 +22,7 @@ export const QSTEPS = [0.5, 0.75, 1, 1.5, 2];   // the saved setting's numbers (
 //  bakeK        lightmap texels per metre
 //  probes       light-probe interpolation for players and props (otherwise a flat hemisphere light)
 //  shadows      dynamic sun shadow cascades for players: [{ r: half-size m, size: px }], pcf: filter taps (1, 4 or 9)
-//  post         HDR composite pass;   bloom: taps (0 = off);   grade: ACES + colour grade + vignette + grain
+//  post         HDR composite pass;   bloom: quarter-resolution bloom (0 = off);   grade: ACES + colour grade + vignette + grain
 //  ssao         screen-space ambient occlusion in the composite
 //  ssr          screen-space reflections: ray-march steps (0 = off); smoothness comes from the world's roughness maps
 //  msaa         samples on the HDR render target (0 = off);  fxaa: one-pass FXAA in the composite
@@ -39,18 +39,27 @@ export const PROFILES = {
   potato: { ...BASE, q: 0.5, mipBias: 1.5, nearestMip: true, macro: false, bakeK: 2, probes: false, dress: false, clouds: false, pixel: { start: 0.5, max: 0.5, min: 0.4 } },
   // LOW: maximum fps. Higher mip bias, no dynamic shadows (lightmaps only), no post-processing at all, no AA
   low: { ...BASE, q: 0.75, mipBias: 1, nearestMip: true, clouds: false, pixel: { start: 0.75, max: 0.75, min: 0.4 } },
-  // MEDIUM: balanced. Full-resolution textures (bias 0), short-range player shadows, colour grade + cheap bloom, 2x MSAA
+  // MEDIUM: balanced. Full-resolution textures (bias 0), short-range player shadows, colour grade + quarter-res bloom, FXAA
   medium: { ...BASE, q: 1, texSize: 1024, normalMaps: true, aniso: 4, shadows: { cascades: [{ r: 9, size: 1024 }], pcf: 1 },
-    post: true, bloom: 6, grade: true, ssao: true, msaa: 2, hqModels: true, env: true, pixel: { start: 1, max: 1, min: 0.55 } },
-  // HIGH: 8x anisotropic, two soft shadow cascades, full stack (SSAO, bloom, ACES grade), 4x MSAA
-  high: { ...BASE, q: 1.5, texSize: 1024, normalMaps: true, detail: true, aniso: 8, bakeK: 6, shadows: { cascades: [{ r: 7, size: 2048 }, { r: 26, size: 1024 }], pcf: 9 },
-    post: true, bloom: 10, grade: true, ssao: true, ssr: 20, msaa: 4, hqModels: true, env: true, pixel: { start: 1, max: 1.5, min: 0.55 } },
-  // ULTRA: High plus 16x filtering, sharper cascades, finer lightmap and up to 2x the screen's pixels (4K on 1080p)
-  ultra: { ...BASE, q: 2, texSize: 1024, normalMaps: true, detail: true, aniso: 16, bakeK: 8, shadows: { cascades: [{ r: 8, size: 4096 }, { r: 32, size: 2048 }], pcf: 9 },
-    post: true, bloom: 10, grade: true, ssao: true, ssr: 32, msaa: 4, hqModels: true, env: true, pixel: { start: 2, max: 2, min: 1 }, targetMs: 30 },
+    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, env: true, pixel: { start: 1, max: 1, min: 0.55 } },
+  // HIGH: built for integrated graphics (a Ryzen 3200U / Vega 3 mini PC holds it): the realism comes from what is nearly
+  // free at run time. Baked lightmaps and light probes, a photographed HDR sky for reflections (PMREM, once per map),
+  // scanned PBR textures with detail normals, ONE soft sun cascade for players only, and one composite pass (ACES, grade,
+  // quarter-resolution bloom, vignette, grain, FXAA). No SSAO, no SSR, no MSAA: those cost bandwidth an iGPU hasn't got.
+  // The render scale drops (to 0.6) before the frame rate does.
+  high: { ...BASE, q: 1.5, texSize: 1024, normalMaps: true, detail: true, aniso: 8, bakeK: 6, shadows: { cascades: [{ r: 10, size: 2048 }], pcf: 4 },
+    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, env: true, pixel: { start: 1, max: 1, min: 0.6 }, targetMs: 17 },
+  // ULTRA: the showcase, for a console (Edge on Xbox: picked automatically there) or a real graphics card. Everything
+  // High has, plus what a console GPU affords live: one big soft sun cascade (9-tap filtered), SSAO, screen-space
+  // reflections on wet and polished floors, 2x MSAA, 16x filtering, the finest lightmap, more blood and debris, and up
+  // to 1.5x the screen's pixels where the frame time allows it.
+  ultra: { ...BASE, q: 2, texSize: 1024, normalMaps: true, detail: true, aniso: 16, bakeK: 8, shadows: { cascades: [{ r: 14, size: 4096 }], pcf: 9 },
+    post: true, bloom: 1, grade: true, ssao: true, ssr: 32, msaa: 2, hqModels: true, env: true, gore: 2, pixel: { start: 1, max: 1.5, min: 0.75 }, targetMs: 17 },
 };
 export const tierOf = (q) => { let best = 0; QSTEPS.forEach((s, i) => { if (Math.abs(s - q) < Math.abs(QSTEPS[best] - q)) best = i; }); return TIERS[best]; };
 
+// desktop / mini-PC integrated graphics (shared memory): AMD APUs (Vega 3/6/8, "AMD Radeon(TM) Graphics"), Intel UHD/Iris/HD
+export const isIntegrated = (r) => /Radeon\(TM\) (Vega \d+ )?Graphics|Radeon Vega \d|Vega \d+ Graphics|AMD Radeon Graphics|Intel.*(UHD|Iris|HD) Graphics/i.test(String(r || ''));
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } } };
 
 export class GraphicsSettingsManager {
@@ -61,8 +70,10 @@ export class GraphicsSettingsManager {
     const nav = env.navigator || (typeof navigator !== 'undefined' ? navigator : {});
     let q = setting;
     if (this.auto) {
-      const saved = +(store.get('cs:autoq') || 0), weak = (nav.hardwareConcurrency || 4) <= 4 || (nav.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS|Xbox|PlayStation|Nintendo|SMART-TV|SmartTV|Tizen|Web0S|webOS|CrKey|AFT[A-Z]/i.test(nav.userAgent || '');   // phones, Chromebooks, console and TV browsers start on Low
+      const saved = +(store.get('cs:autoq') || 0), weak = (nav.hardwareConcurrency || 4) <= 4 || (nav.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS|PlayStation|Nintendo|SMART-TV|SmartTV|Tizen|Web0S|webOS|CrKey|AFT[A-Z]/i.test(nav.userAgent || '');   // phones, Chromebooks, TV browsers and handheld consoles start on Low (Xbox: Ultra, below)
       q = QSTEPS.includes(saved) && saved < 2 ? saved : weak ? 0.75 : 1;
+      this.xbox = /Xbox/i.test(nav.userAgent || '');
+      if (this.xbox && !saved) q = QSTEPS[4];   // Edge on Xbox: the console's GPU gets the showcase tier (stepped down if it can't hold it)
     }
     this.floatRT = true; this.maxAniso = 16; this.listeners = [];
     this.set(q, true);
@@ -73,7 +84,7 @@ export class GraphicsSettingsManager {
     if (!silent) this.listeners.forEach((f) => f(this));
     return this;
   }
-  get name() { return TIER_NAMES[TIERS.indexOf(this.tier)] + (this.auto ? ' (Auto)' : ''); }
+  get name() { return TIER_NAMES[TIERS.indexOf(this.tier)] + (this.auto ? (this.igpu ? ' (Auto, integrated graphics)' : ' (Auto)') : ''); }
   onChange(f) { this.listeners.push(f); }
   // read once the renderer exists: what this GPU can actually do
   probe(renderer) {
@@ -81,6 +92,15 @@ export class GraphicsSettingsManager {
     this.floatRT = caps.isWebGL2 && (renderer.extensions.has('EXT_color_buffer_half_float') || renderer.extensions.has('EXT_color_buffer_float'));
     this.maxAniso = caps.getMaxAnisotropy();
     this.maxSamples = caps.isWebGL2 ? caps.maxSamples || 4 : 0;
+    // integrated graphics on a desktop or mini PC (AMD Vega / "Radeon Graphics" APUs, Intel UHD / Iris): High is built
+    // for exactly these, so Auto starts there (once; after that it remembers what the device really managed)
+    try {
+      const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+      this.gpu = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER) || '');
+    } catch (e) { this.gpu = ''; }
+    const nav = typeof navigator !== 'undefined' ? navigator : {};
+    this.igpu = isIntegrated(this.gpu) && !/Mobi|Android|iPhone|iPad/i.test(nav.userAgent || '');
+    if (this.auto && this.igpu && store.get('cs:igpu') !== '1') { store.set('cs:igpu', '1'); store.set('cs:autoq', String(QSTEPS[3])); if (this.tier !== 'high') this.set(QSTEPS[3], true); }
     return this;
   }
   get postOn() { return this.p.post && this.floatRT; }
@@ -89,7 +109,7 @@ export class GraphicsSettingsManager {
   // the frame-time governor's render-scale band for this screen
   pixelBand(dpr = 1) {
     const b = this.p.pixel, ultra = this.tier === 'ultra';
-    return ultra ? { start: Math.min(2, dpr * 2), max: Math.min(3, dpr * 2), min: 1, targetMs: this.p.targetMs }
+    return ultra ? { start: Math.min(1.5, dpr * b.start), max: Math.min(2, dpr * b.max), min: b.min, targetMs: this.p.targetMs }
       : { start: Math.min(dpr, 1) * b.start, max: Math.min(1.5, dpr * b.max), min: this.auto && this.tier !== 'potato' ? Math.max(b.min, 0.55) : b.min, targetMs: this.p.targetMs };
   }
   // everything buildWorld needs to compile a map for this tier
@@ -106,13 +126,13 @@ export class GraphicsSettingsManager {
   }
   // composite shader defines for this tier
   postDefines() {
-    const p = this.p, d = { BLOOM_TAPS: String(Math.max(1, p.bloom)) };
+    const p = this.p, d = {};
     if (p.bloom) d.BLOOM = ''; if (p.grade) d.GRADE = ''; if (p.ssao) d.SSAO = ''; if (p.ssr) { d.SSR = ''; d.SSR_STEPS = String(p.ssr); } if (p.fxaa) d.FXAA = '';
     return d;
   }
   // Auto: one tier down (true if it changed). Never below Potato, never into Ultra by itself.
   stepDown() { const i = TIERS.indexOf(this.tier); if (!this.auto || i <= 0) return false; this.set(QSTEPS[i - 1]); store.set('cs:autoq', String(this.q)); return true; }
-  rememberHeadroom() { const i = TIERS.indexOf(this.tier); if (this.auto && i < 2) store.set('cs:autoq', String(QSTEPS[i + 1])); }
+  rememberHeadroom() { const i = TIERS.indexOf(this.tier); if (this.auto && (i < 2 || (this.igpu && i < 3))) store.set('cs:autoq', String(QSTEPS[i + 1])); }
 }
 
 // ---- dynamic sun shadows for players (Medium and up) ------------------------------------------------------------------

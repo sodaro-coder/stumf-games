@@ -192,6 +192,126 @@ vec4 tri3(sampler2D t, vec3 p, vec3 w) { return texture2D(t, p.yz * tileK) * w.x
   D.mats.set(key, m); return m;
 }
 
+// ---- the human in ONE draw call -------------------------------------------------------------------------------------
+// The body's parts (shirt, trousers, boots, gloves, balaclava, belt, plate carrier, skin, eyes, and a shemagh or visor
+// when worn) are merged into one skinned mesh with a per-vertex part number, and one material colours and finishes each
+// part from small uniform arrays: its colour, roughness, metalness, which scanned fabric it is made of, and flags (flannel
+// check, rubber sole, skin). The fabrics live in one texture array (normal xy + roughness + height per layer), sampled
+// triplanar in the body's rest space so the weave stays put on the cloth as it moves; the height also bumps the
+// lighting (a real weave, not a flat colour). A soldier is 1 draw (2 with a bought helmet) instead of 11-13, in the
+// main pass and in the shadow pass: about 250 fewer draw calls with ten players, which is what weak integrated
+// graphics run out of first. The helmet stays its own mesh so a bought one can show.
+const HPARTS = ['human_shirt', 'human_pants', 'human_boot', 'human_glove', 'human_bala', 'human_belt', 'human_vest', 'human_shemagh', 'human_visor', 'human_skin', 'human_eye', 'human_iris'];
+const CLOTH_IDX = { linen: 0, twill: 1, cordura: 2, knit: 3, leather: 4 }, CLOTH_TILE = [1 / 45, 1 / 40, 1 / 34, 1 / 26, 1 / 36];
+function humanGeo(shemagh, visor) {
+  const key = 'hgeo|' + (shemagh ? 1 : 0) + (visor ? 1 : 0); if (D.tex.has(key)) return D.tex.get(key);
+  const list = D.meshes.filter((m) => HPARTS.includes(m.name) && (m.name !== 'human_shemagh' || shemagh) && (m.name !== 'human_visor' || visor));
+  let nv = 0, ni = 0; for (const m of list) { nv += m.g.attributes.position.count; ni += m.g.index.count * (m.name === 'human_boot' ? 2 : 1); }
+  const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), ao = new Uint8Array(nv).fill(255), part = new Float32Array(nv);
+  const si = new Uint8Array(nv * 4), sw = new Uint8Array(nv * 4), idx = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+  let v0 = 0, i0 = 0;
+  for (const m of list) {
+    const g = m.g, n = g.attributes.position.count, pi = HPARTS.indexOf(m.name), na = g.attributes.normal;
+    pos.set(g.attributes.position.array, v0 * 3);
+    for (let k = 0; k < n; k++) { nrm[(v0 + k) * 3] = na.getX(k); nrm[(v0 + k) * 3 + 1] = na.getY(k); nrm[(v0 + k) * 3 + 2] = na.getZ(k); }
+    if (g.attributes.uv) uv.set(g.attributes.uv.array, v0 * 2);
+    if (g.attributes.ao) ao.set(g.attributes.ao.array, v0);
+    part.fill(pi, v0, v0 + n);
+    const sk = g.attributes.skinIndex.array; for (let k = 0; k < n * 4; k++) si[v0 * 4 + k] = m.joints[sk[k]];   // the part's joint list -> the whole rig's bone numbers
+    sw.set(g.attributes.skinWeight.array, v0 * 4);
+    const ix = g.index.array, c = g.index.count;
+    for (let k = 0; k < c; k++) idx[i0 + k] = ix[k] + v0;
+    i0 += c;
+    if (m.name === 'human_boot') { for (let k = 0; k < c; k += 3) { idx[i0 + k] = ix[k] + v0; idx[i0 + k + 1] = ix[k + 2] + v0; idx[i0 + k + 2] = ix[k + 1] + v0; } i0 += c; }   // the lofted boot's end caps: both sides
+    v0 += n;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('ao', new THREE.BufferAttribute(ao, 1, true)); g.setAttribute('part', new THREE.BufferAttribute(part, 1));
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4, true)); g.setIndex(new THREE.BufferAttribute(idx, 1));
+  D.tex.set(key, g); return g;
+}
+// the five scanned fabrics in one atlas: RGB = normal xy + roughness, A = height (detail). Stacked one above the other,
+// each with a 32 px wrapped border so the smaller mip levels don't bleed one fabric into the next. Sampled with explicit
+// gradients so the tiling seam picks the right mip level.
+const CL_S = 512, CL_PAD = 32, CL_SLOT = CL_S + 2 * CL_PAD;
+function clothArray() {
+  if (D.tex.has('clothArr')) return D.tex.get('clothArr');
+  const names = Object.keys(CLOTH_IDX), H = CL_SLOT * names.length, data = new Uint8Array(CL_S * H * 4);
+  for (let k = 0; k < data.length; k += 4) { data[k] = 128; data[k + 1] = 128; data[k + 2] = 200; data[k + 3] = 128; }
+  const t = new THREE.DataTexture(data, CL_S, H, THREE.RGBAFormat); t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
+  t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true; t.colorSpace = THREE.NoColorSpace; t.anisotropy = 4; t.needsUpdate = true;
+  const load = (src) => new Promise((ok) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => ok(null); im.src = src; });
+  names.forEach((n, L) => Promise.all([load(`cloth_${n}n.jpg`), load(`cloth_${n}.jpg`)]).then(([nm, hm]) => {
+    if (!nm || !hm) return;
+    const c = document.createElement('canvas'); c.width = c.height = CL_S; const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(nm, 0, 0, CL_S, CL_S); const a = g.getImageData(0, 0, CL_S, CL_S).data; g.drawImage(hm, 0, 0, CL_S, CL_S); const b = g.getImageData(0, 0, CL_S, CL_S).data;
+    for (let y = 0; y < CL_SLOT; y++) {
+      const sy = ((y - CL_PAD) % CL_S + CL_S) % CL_S, o = ((L * CL_SLOT + y) * CL_S) * 4, i0 = sy * CL_S * 4;
+      for (let x = 0; x < CL_S * 4; x += 4) { data[o + x] = a[i0 + x]; data[o + x + 1] = a[i0 + x + 1]; data[o + x + 2] = a[i0 + x + 2]; data[o + x + 3] = b[i0 + x]; }
+    }
+    t.needsUpdate = true;
+  }));
+  D.tex.set('clothArr', t); return t;
+}
+function humanBodyMat(L, team, hq) {
+  const cols = humanColors(L, team), plaidShirt = team !== 'CT';
+  const key = 'hb|' + HPARTS.map((p) => cols[p]).join(',') + '|' + hq + '|' + plaidShirt;
+  if (D.mats.has(key)) return D.mats.get(key);
+  const pCol = HPARTS.map((p) => new THREE.Color(cols[p] || '#888'));
+  const pMat = HPARTS.map((p) => {
+    const rough = p === 'human_eye' || p === 'human_iris' ? 0.12 : p === 'human_visor' ? 0.15 : p === 'human_skin' ? 0.5 : p === 'human_boot' ? 0.6 : 0.95;
+    const cloth = CLOTH[p] && hq ? CLOTH_IDX[CLOTH[p]] : -1;
+    const flags = ((p === 'human_shirt' && plaidShirt) || p === 'human_shemagh' ? 1 : 0) + (p === 'human_boot' ? 2 : 0) + (p === 'human_skin' ? 4 : 0);
+    return new THREE.Vector4(rough, p === 'human_visor' ? 0.4 : 0, cloth, flags);
+  });
+  const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
+  litPatch(m, 'dyn');
+  const lit = m.onBeforeCompile, arr = hq ? clothArray() : null;
+  m.onBeforeCompile = (sh, r) => {
+    lit(sh, r);
+    Object.assign(sh.uniforms, { pCol: { value: pCol }, pMat: { value: pMat }, clothArr: { value: arr }, clothTile: { value: CLOTH_TILE } });
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float ao;\nattribute float part;\nvarying float vAO;\nvarying float vPart;\nvarying vec3 vRestP;\nvarying vec3 vRestN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAO = ao; vPart = part; vRestP = position; vRestN = normal;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying float vAO; varying float vPart; varying vec3 vRestP; varying vec3 vRestN;
+uniform vec3 pCol[${HPARTS.length}]; uniform vec4 pMat[${HPARTS.length}]; uniform float clothTile[5];
+${hq ? `uniform sampler2D clothArr;
+vec4 clothAt(vec2 p, float layer) { vec2 q = vec2(p.x, (${CL_PAD.toFixed(1)} + fract(p.y) * ${CL_S.toFixed(1)} + layer * ${CL_SLOT.toFixed(1)}) / ${(CL_SLOT * 5).toFixed(1)});
+  vec2 k = vec2(1.0, ${(CL_S / (CL_SLOT * 5)).toFixed(6)}); return textureGrad(clothArr, q, dFdx(p) * k, dFdy(p) * k); }` : ''}
+vec3 hbBump(vec3 sp, vec3 sn, vec2 dH) { vec3 sx = normalize(dFdx(sp)), sy = normalize(dFdy(sp)), r1 = cross(sy, sn), r2 = cross(sn, sx); float det = dot(sx, r1); return normalize(abs(det) * sn - sign(det) * (dH.x * r1 + dH.y * r2)); }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+	int hp = int(vPart + 0.5); vec4 hm = pMat[hp]; float hFlags = hm.w, hCloth = hm.z, hDet = 0.5, hRough = 0.5;
+	diffuseColor.rgb *= pCol[hp];
+	${hq ? `{
+		float layer = max(hCloth, 0.0), tk = clothTile[int(layer)];
+		vec3 tw = pow(abs(normalize(vRestN)), vec3(4.0)); tw /= (tw.x + tw.y + tw.z);
+		vec4 cs = clothAt(vRestP.yz * tk, layer) * tw.x + clothAt(vRestP.xz * tk, layer) * tw.y + clothAt(vRestP.xy * tk, layer) * tw.z;
+		float on = step(-0.5, hCloth); hDet = mix(0.5, cs.a, on); hRough = mix(0.5, cs.b, on);
+		diffuseColor.rgb *= mix(1.0, 0.8 + cs.a * 0.4, on);
+	}` : ''}
+	if (mod(hFlags, 2.0) > 0.5) {   // a worn flannel check
+		vec2 g = fract(vec2(vRestP.x + vRestP.y * 0.3, vRestP.z) / 5.2);
+		float band = smoothstep(0.62, 0.66, g.x) * smoothstep(0.98, 0.94, g.x) + smoothstep(0.62, 0.66, g.y) * smoothstep(0.98, 0.94, g.y);
+		float thin = smoothstep(0.03, 0.0, abs(g.x - 0.3)) + smoothstep(0.03, 0.0, abs(g.y - 0.3));
+		diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55, clamp(band, 0.0, 1.0) * 0.8) + vec3(0.06, 0.05, 0.035) * thin;
+	}
+	if (mod(floor(hFlags / 2.0), 2.0) > 0.5 && vRestP.z < 2.8) diffuseColor.rgb *= 0.3;   // rubber sole`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = clamp(hm.x * mix(0.75, 1.15, hRough), 0.05, 1.0);')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor = hm.y;')
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+	${hq ? 'normal = hbBump(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * step(-0.5, hCloth) * 1.5);   // the weave catches the light' : ''}`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+	reflectedLight.indirectDiffuse *= vAO; reflectedLight.directDiffuse *= mix(1.0, vAO, 0.55); reflectedLight.indirectSpecular *= vAO;
+	if (hFlags > 3.5) {   // skin: light scattered under it. Shadowed sides keep a warm red, edges facing away glow a little
+		float rim = 1.0 - max(dot(normal, normalize(vViewPosition)), 0.0);
+		reflectedLight.indirectDiffuse *= vec3(1.1, 0.96, 0.93); reflectedLight.directDiffuse += diffuseColor.rgb * vec3(0.85, 0.22, 0.12) * 0.22 * rim * rim * vAO;
+	}`);
+  };
+  m.customProgramCacheKey = () => 'human-body-' + (hq ? 'hq' : 'lq');
+  D.mats.set(key, m); return m;
+}
+
 // clip speeds (metres per second at timeScale 1) for matching the feet to the ground speed
 const SPEED = { walk: 1.0, walkBack: 1.1, walkLeft: 1.4, walkRight: 0.75, run: 3.1, runBack: 2.7, runLeft: 2.8, runRight: 3.2, crouchWalk: 0.6 };
 const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3(), _fw = new THREE.Vector3(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
@@ -207,7 +327,15 @@ export function makeSoldier(look, team, hq = true) {
   const human = isHuman(L) && D.meshes.some((m) => m.name.startsWith('human_'));
   const mat = human ? null : material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null, costumeOf(L));
   let humanHelm = null;
-  if (L.model !== 'log') for (const m of D.meshes) {
+  if (human) {   // one skinned mesh for the whole body (+ the helmet on its own, hidden until worn or bought)
+    const sm = new THREE.SkinnedMesh(humanGeo(L.hat === 'shemagh', !!L.visor), humanBodyMat(L, team, hq)); sm.frustumCulled = false; root.add(sm);
+    const inv = c.bones.map(() => new THREE.Matrix4()), m0 = D.meshes.find((m) => m.name === 'human_shirt');
+    m0.joints.forEach((j, k) => inv[j].copy(m0.inverses[k]));
+    sm.bind(new THREE.Skeleton(bones, inv), m0.bind);
+    const hm = D.meshes.find((m) => m.name === 'human_helmet');
+    if (hm) { const wear = L.hat === 'helmet', hs = new THREE.SkinnedMesh(hm.g, humanMat('human_helmet', L, team, hq)); hs.frustumCulled = false; root.add(hs); hs.bind(sm.skeleton, m0.bind); humanHelm = hs; hs.visible = wear; hs.userData.worn = wear; }
+  }
+  if (L.model !== 'log' && !human) for (const m of D.meshes) {
     if (m.name.startsWith('human_') !== human) continue;
     const wear = HEADGEAR[m.name] ? HEADGEAR[m.name](L) : true;
     if (!wear && m.name !== 'human_helmet') continue;   // the helmet is kept (hidden) so a bought one can show
@@ -228,7 +356,8 @@ export function makeSoldier(look, team, hq = true) {
   const vest = gearMesh(vestParts(team)); chest.add(vest);
   const bomb = L.bombvest ? gearMesh(bombVestParts()) : null; if (bomb) { chest.add(bomb); chest.visible = true; }
   const helm = gearMesh(helmetParts(team)); helm.visible = false; head.add(helm);
-  const r = { soldier: true, human, humanHelm, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, vest, bomb, tpKey: '', over: null, t: 0, dieDone: false };
+  const headCol = L.hat === 'balaclava' || (human && !L.hat) ? (L.hatColor || '#22231f') : L.head || '#c89a74', armCol = L.arms || L.body || (team === 'CT' ? '#3c4e66' : '#7a6a4a');   // what a severed piece looks like (gore)
+  const r = { soldier: true, headCol, armCol, human, humanHelm, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, vest, bomb, tpKey: '', over: null, t: 0, dieDone: false };
   // where the head and hand sit relative to their bones at rest: lets props follow the animated bones
   g.updateMatrixWorld(true);
   r.headCorr = byName.Head.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
@@ -451,15 +580,19 @@ function legs(r, rt, rest, crouched, moving) {
   }
 }
 // per frame: pick the base animation from how the player moves, then aim, gun and props
+const _VP = Array.from({ length: 96 }, () => new THREE.Vector3()), _gq = new THREE.Quaternion(), _gq2 = new THREE.Quaternion(); let _vi = 0;
+const V = () => _VP[_vi++ % 96];
+// how fast each kind of death goes down: a headshot drops on the spot, a blade slumps slowly, a heavy hit throws
+const DIE_SPEED = { head: 1.55, knife: 0.7, heavy: 1.2, body: 1 };
 export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
-  r.t += dt;
+  r.t += dt; _vi = 0;   // scratch vectors from the pool below: no allocations per soldier per frame
   if (dead) {
-    if (!r.dead) { r.dead = true; r.rag = r.rag || { t: 0, force: 1, head: false }; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.play(); r.base = 'die'; }
+    if (!r.dead) { r.dead = true; r.rag = r.rag || { t: 0, force: 1, head: false }; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.timeScale = DIE_SPEED[r.rag.zone] || 1; d.play(); r.base = 'die'; }
   } else {
     if (r.dead) { r.dead = false; r.rag = null; r.act.die.stop(); r.base = ''; base(r, 'idle'); }
     const sp = Math.hypot(vx, vz), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const f = -(vx * sy) - vz * cy, side = vx * cy - vz * sy;   // speed along where they face, and to their right
-    if (r.rootS) r.root.scale.copy(r.rootS); else r.rootS = r.root.scale.clone();   // emotes may squash the whole body: reset first
+    if (r.rootS) r.root.scale.copy(r.rootS); else r.rootS = V().copy(r.root.scale);   // emotes may squash the whole body: reset first
     if (emote) {
       const a = emote.anim, BASE = { dance: 'dance', floss: 'dance', chicken: 'dance', griddy: 'run', twerk: 'crouch', sit: 'crouch', zombie: 'walk', tbag: Math.floor(r.t * 5) % 2 ? 'crouch' : 'idle', lmao: 'crouch' };
       base(r, BASE[a] || 'idle', a === 'chicken' ? 1.3 : a === 'griddy' ? 1.7 : a === 'zombie' ? 0.45 : 1);
@@ -488,6 +621,16 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     if (B.LeftArm) turnWorld(B.LeftArm, _t1, -0.7 * k * w);
     if (B.RightUpLeg) turnWorld(B.RightUpLeg, _v, 0.3 * k * w2);
     if (B.LeftUpLeg) turnWorld(B.LeftUpLeg, _v, -0.25 * k * w);
+    const z = g.zone, e = Math.min(1, g.t * 2.5);
+    if (z === 'head') {   // the lights go out: knees buckle forward, the head snaps back with the hit
+      if (B.RightLeg) turnWorld(B.RightLeg, _v, 0.9 * e); if (B.LeftLeg) turnWorld(B.LeftLeg, _v, 0.8 * e);
+      if (B.Head) turnWorld(B.Head, _v, -0.5 * Math.exp(-g.t * 2) * g.force);
+    } else if (z === 'knife') {   // curled round the wound: arms in, chin down
+      if (B.RightArm) turnWorld(B.RightArm, _t1, -0.6 * e); if (B.LeftArm) turnWorld(B.LeftArm, _t1, 0.6 * e);
+      if (B.Spine1) turnWorld(B.Spine1, _v, 0.35 * e); if (B.Head) turnWorld(B.Head, _v, 0.4 * e);
+    } else if (z === 'heavy') {   // thrown: the chest caves back, arms fly up
+      if (B.Spine2) turnWorld(B.Spine2, _v, -0.4 * e * g.force); if (B.RightArm) turnWorld(B.RightArm, _t1, 0.8 * e); if (B.LeftArm) turnWorld(B.LeftArm, _t1, -0.8 * e);
+    }
     r.g.updateMatrixWorld(true);
   }
   if (!r.dead) {
@@ -532,10 +675,10 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       // at rest (menus, showcases): the relaxed two-handed low ready. The rifle lies across the body at the belt, muzzle
       // to the left and a little down; right hand on the grip by the right hip, left hand under the handguard, elbows
       // bent and tucked down by the sides.
-      const q = r.g.getWorldQuaternion(_q2.identity()), rt = _t5.set(1, 0, 0).applyQuaternion(q).clone(), fw = _fw.set(0, 0, -1).applyQuaternion(q).clone(), up = new THREE.Vector3(0, 1, 0);
-      const hips = B.Hips.getWorldPosition(new THREE.Vector3());
-      const grip = hips.clone().addScaledVector(rt, 0.15).addScaledVector(fw, 0.21).addScaledVector(up, 0.12);   // pistol grip at the right belt, a fist in front of the vest
-      const dir = new THREE.Vector3().addScaledVector(rt, -0.8).addScaledVector(fw, 0.5).addScaledVector(up, 0.2).normalize();   // across the belly, muzzle up towards the left shoulder
+      const q = r.g.getWorldQuaternion(_q2.identity()), rt = V().set(1, 0, 0).applyQuaternion(q), fw = V().set(0, 0, -1).applyQuaternion(q), up = V().set(0, 1, 0);
+      const hips = B.Hips.getWorldPosition(V());
+      const grip = V().copy(hips).addScaledVector(rt, 0.15).addScaledVector(fw, 0.21).addScaledVector(up, 0.12);   // pistol grip at the right belt, a fist in front of the vest
+      const dir = V().addScaledVector(rt, -0.8).addScaledVector(fw, 0.5).addScaledVector(up, 0.2).normalize();   // across the belly, muzzle up towards the left shoulder
       // the rifle is placed first, then each palm is closed onto it: right palm round the pistol grip (fingers forward
       // under the trigger guard, palm against the grip's right side), left palm up under the handguard, fingers over the far side
       const zA = _t4.copy(dir).negate(), yA = _v.set(0, 1, 0).addScaledVector(zA, -zA.y).normalize(), xA = _t2.crossVectors(yA, zA);
@@ -544,53 +687,53 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       tg.position.copy(grip); r.g.worldToLocal(tg.position);
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
-      const X = xA.clone(), Y = yA.clone();
-      r.wrapR = { p: grip.clone(), d: Y.clone().multiplyScalar(-0.988).addScaledVector(dir, -0.156).normalize(), rad: 0.022 };   // the pistol grip: down and raked back
-      reachPalm(r, 'Right', grip.clone().addScaledVector(X, 0.03).addScaledVector(Y, -0.012), dir.clone().addScaledVector(Y, 0.16).addScaledVector(X, -0.25), X.clone().negate(),
-        B.RightArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.6).addScaledVector(rt, 0.4).addScaledVector(fw, -0.3));   // elbow down and back by the ribs (kept out of them)
-      const fore = (gm.userData.fore ? gm.localToWorld(gm.userData.fore.clone()) : grip.clone().addScaledVector(dir, 0.3)).addScaledVector(Y, -0.035).addScaledVector(X, -0.01);   // palm against the underside of the handguard
-      r.wrapL = { p: fore.clone().addScaledVector(Y, 0.053), d: dir.clone(), rad: 0.024 };   // the handguard, palm under it
-      reachPalm(r, 'Left', fore, X.clone().addScaledVector(dir, 0.35).addScaledVector(Y, 0.2), Y,
-        B.LeftArm.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.7).addScaledVector(rt, -0.35).addScaledVector(fw, -0.05));   // elbow down at the side, bent ~90 degrees
+      const X = V().copy(xA), Y = V().copy(yA);
+      r.wrapR = { p: V().copy(grip), d: V().copy(Y).multiplyScalar(-0.988).addScaledVector(dir, -0.156).normalize(), rad: 0.022 };   // the pistol grip: down and raked back
+      reachPalm(r, 'Right', V().copy(grip).addScaledVector(X, 0.03).addScaledVector(Y, -0.012), V().copy(dir).addScaledVector(Y, 0.16).addScaledVector(X, -0.25), V().copy(X).negate(),
+        B.RightArm.getWorldPosition(V()).addScaledVector(up, -0.6).addScaledVector(rt, 0.4).addScaledVector(fw, -0.3));   // elbow down and back by the ribs (kept out of them)
+      const fore = (gm.userData.fore ? gm.localToWorld(V().copy(gm.userData.fore)) : V().copy(grip).addScaledVector(dir, 0.3)).addScaledVector(Y, -0.035).addScaledVector(X, -0.01);   // palm against the underside of the handguard
+      r.wrapL = { p: V().copy(fore).addScaledVector(Y, 0.053), d: V().copy(dir), rad: 0.024 };   // the handguard, palm under it
+      reachPalm(r, 'Left', fore, V().copy(X).addScaledVector(dir, 0.35).addScaledVector(Y, 0.2), Y,
+        B.LeftArm.getWorldPosition(V()).addScaledVector(up, -0.7).addScaledVector(rt, -0.35).addScaledVector(fw, -0.05));   // elbow down at the side, bent ~90 degrees
       r.restGrip = true;
     } else if (armed && cat !== 'knife' && cat !== 'grenade' && cat !== 'c4') {
       // The gun is placed from the body, then the arms are solved onto it (like a real shooter, and like the menu pose):
       // the stock in the right shoulder pocket, the sights just under the eyes, pointing where the player aims (lower at
       // the ready, level the moment they fire). Right palm round the grip, left palm under the handguard, elbows bending
       // out and down like a person's. The clip only drives the legs, hips and back, whatever it does with its arms.
-      const pistol = cat === 'pistol', gq = r.g.getWorldQuaternion(_q2.identity()).clone(), rt = new THREE.Vector3(1, 0, 0).applyQuaternion(gq), up = new THREE.Vector3(0, 1, 0);
-      const fwv = new THREE.Vector3(0, 0, -1).applyQuaternion(gq);
+      const pistol = cat === 'pistol', gq = _gq.copy(r.g.getWorldQuaternion(_q2.identity())), rt = V().set(1, 0, 0).applyQuaternion(gq), up = V().set(0, 1, 0);
+      const fwv = V().set(0, 0, -1).applyQuaternion(gq);
       if (!prone) leanTo(r, rt, STANCE[r.base] ?? 0.2);
-      const dir = fwv.clone().multiplyScalar(Math.cos(ap)).addScaledVector(up, Math.sin(ap)).normalize();
-      const zA = dir.clone().negate(), yA = up.clone().addScaledVector(zA, -zA.y).normalize(), xA = new THREE.Vector3().crossVectors(yA, zA);
-      const eye = B.Head.getWorldPosition(new THREE.Vector3()).addScaledVector(up, 0.075).addScaledVector(fwv, 0.08);
+      const dir = V().copy(fwv).multiplyScalar(Math.cos(ap)).addScaledVector(up, Math.sin(ap)).normalize();
+      const zA = V().copy(dir).negate(), yA = V().copy(up).addScaledVector(zA, -zA.y).normalize(), xA = V().crossVectors(yA, zA);
+      const eye = B.Head.getWorldPosition(V()).addScaledVector(up, 0.075).addScaledVector(fwv, 0.08);
       const grip = pistol
-        ? eye.clone().addScaledVector(dir, 0.46).addScaledVector(yA, -0.06 - (1 - (r.aimK || 0)) * 0.1).addScaledVector(xA, 0.015)   // arms out, a little lower between shots
-        : eye.clone().addScaledVector(dir, 0.11).addScaledVector(yA, -0.095).addScaledVector(xA, 0.045);   // the pistol grip a hand's width in front of the cheek
+        ? V().copy(eye).addScaledVector(dir, 0.46).addScaledVector(yA, -0.06 - (1 - (r.aimK || 0)) * 0.1).addScaledVector(xA, 0.015)   // arms out, a little lower between shots
+        : V().copy(eye).addScaledVector(dir, 0.11).addScaledVector(yA, -0.095).addScaledVector(xA, 0.045);   // the pistol grip a hand's width in front of the cheek
       _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
-      tg.quaternion.copy(gq.clone().invert().multiply(_q));
+      tg.quaternion.copy(_gq2.copy(gq).invert().multiply(_q));
       tg.position.copy(grip); r.g.worldToLocal(tg.position);
       if (gm.userData.grip) gm.position.copy(gm.userData.grip).multiply(gm.scale).negate();
       tg.updateMatrixWorld(true);
-      const shR = B.RightArm.getWorldPosition(new THREE.Vector3()), shL = B.LeftArm.getWorldPosition(new THREE.Vector3());
-      r.wrapR = { p: grip.clone(), d: yA.clone().multiplyScalar(-0.988).addScaledVector(dir, -0.156).normalize(), rad: pistol ? 0.019 : 0.022 };
-      reachPalm(r, 'Right', grip.clone().addScaledVector(xA, 0.03).addScaledVector(yA, -0.012), dir.clone().addScaledVector(yA, 0.16).addScaledVector(xA, -0.25), xA.clone().negate(),
-        shR.clone().addScaledVector(up, -0.5).addScaledVector(xA, 0.6).addScaledVector(dir, -0.1));   // elbow out and down
+      const shR = B.RightArm.getWorldPosition(V()), shL = B.LeftArm.getWorldPosition(V());
+      r.wrapR = { p: V().copy(grip), d: V().copy(yA).multiplyScalar(-0.988).addScaledVector(dir, -0.156).normalize(), rad: pistol ? 0.019 : 0.022 };
+      reachPalm(r, 'Right', V().copy(grip).addScaledVector(xA, 0.03).addScaledVector(yA, -0.012), V().copy(dir).addScaledVector(yA, 0.16).addScaledVector(xA, -0.25), V().copy(xA).negate(),
+        V().copy(shR).addScaledVector(up, -0.5).addScaledVector(xA, 0.6).addScaledVector(dir, -0.1));   // elbow out and down
       r.restGrip = true;
-      let fore = gm.userData.fore ? gm.localToWorld(gm.userData.fore.clone()) : grip.clone().addScaledVector(dir, 0.3);
-      if (pistol) fore = grip.clone().addScaledVector(xA, -0.045).addScaledVector(yA, -0.03).addScaledVector(dir, 0.01);   // the support hand wraps the grip
+      let fore = gm.userData.fore ? gm.localToWorld(V().copy(gm.userData.fore)) : V().copy(grip).addScaledVector(dir, 0.3);
+      if (pistol) fore = V().copy(grip).addScaledVector(xA, -0.045).addScaledVector(yA, -0.03).addScaledVector(dir, 0.01);   // the support hand wraps the grip
       else {
         fore.addScaledVector(yA, -0.04);
         const reach = 0.92 * (B.LeftArm.getWorldPosition(_t1).distanceTo(B.LeftForeArm.getWorldPosition(_t2)) + B.LeftForeArm.getWorldPosition(_t1).distanceTo(B.LeftHand.getWorldPosition(_t2)) + 0.07);
         for (let k = 0; k < 12 && fore.distanceTo(shL) > reach; k++) fore.addScaledVector(dir, -0.025);   // out of reach: the hand slides back along the handguard (a shorter, C-clamp style hold)
       }
       if (!pistol && r.reloadT > 0 && B.Hips) {   // reload: the left hand drops to the mag pouch and brings a fresh one up
-        const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(new THREE.Vector3()).addScaledVector(rt, -0.18).addScaledVector(up, 0.05);
+        const k = 1 - r.reloadT / 1.6, out = Math.sin(Math.min(1, k * 1.25) * Math.PI), pouch = B.Hips.getWorldPosition(V()).addScaledVector(rt, -0.18).addScaledVector(up, 0.05);
         fore.lerp(pouch, out);
       }
-      r.wrapL = pistol ? { p: grip.clone(), d: r.wrapR.d.clone(), rad: 0.042 } : r.reloadT > 0 ? null : { p: fore.clone().addScaledVector(yA, 0.058), d: dir.clone(), rad: 0.024 };   // pistol: round the firing hand
-      reachPalm(r, 'Left', fore, pistol ? dir.clone().addScaledVector(yA, -0.3) : xA.clone().addScaledVector(dir, 0.35).addScaledVector(yA, 0.2), pistol ? xA.clone() : yA.clone(),
-        shL.clone().addScaledVector(up, -0.7).addScaledVector(xA, -0.25).addScaledVector(dir, 0.15));   // elbow down under the gun
+      r.wrapL = pistol ? { p: V().copy(grip), d: V().copy(r.wrapR.d), rad: 0.042 } : r.reloadT > 0 ? null : { p: V().copy(fore).addScaledVector(yA, 0.058), d: V().copy(dir), rad: 0.024 };   // pistol: round the firing hand
+      reachPalm(r, 'Left', fore, pistol ? V().copy(dir).addScaledVector(yA, -0.3) : V().copy(xA).addScaledVector(dir, 0.35).addScaledVector(yA, 0.2), pistol ? V().copy(xA) : V().copy(yA),
+        V().copy(shL).addScaledVector(up, -0.7).addScaledVector(xA, -0.25).addScaledVector(dir, 0.15));   // elbow down under the gun
     } else {   // knife, grenade, bomb: carried in the right hand as animated
       hand.getWorldPosition(_v); r.g.worldToLocal(_v);
       tg.position.copy(_v); tg.rotation.set(ap, 0, 0, 'YXZ');
