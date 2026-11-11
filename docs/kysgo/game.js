@@ -34,7 +34,8 @@ import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMy
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
 import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD, cutPiece } from './chars.js';
 import { setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
-import { setModelTexTier } from './glb.js';
+import { setModelTexTier, placeModels } from './glb.js';
+let pmT = 0;
 
 const SET_KEY = 'cs:settings:v1';
 // story mode: Ricky's sidearm, a full-auto Glock with a drum mag (story_sim.js hands it out with sw: true)
@@ -802,6 +803,7 @@ export default function start({ cfg, E, N, smoke }) {
         for (const c of W.chunks) { const bb = c.geometry.boundingBox; culler.addBox(c, bb.min.x, bb.min.z, bb.max.x, bb.max.z); }
       }
       W.spinners = []; W.breakables = []; for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); if (m.userData.spin) W.spinners.push(m.userData.spin); if (m.userData.breakable) W.breakables.push(m); }
+      if (W.placements && W.placements.length) { W.models = placeModels(W.placements, { hq: P.hqModels }); W.group.add(W.models); }   // real crates, barrels, windows, shutters and litter (glb.js), instanced
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier), ultra: gfx.tier === 'ultra' }); else cfx.setWorld(W);
       cfx.setGore(S.gore ?? 2);   // holes, blood, sparks, smoke that fills rooms, fire, ripples
@@ -2147,6 +2149,7 @@ export default function start({ cfg, E, N, smoke }) {
       }
       if (W) W.sortChunks(cam);
       if (culler) culler.update(cam.position, (x, z) => W.groundAt(x, z, cam.position.y));
+      if (W.models && (pmT -= dt) <= 0) { pmT = 0.25; W.models.userData.update(cam.position.x, cam.position.z); }   // real props: full detail near, light far
       if (dsh && W) dsh.update(renderer, scene, cam, LIGHT.sunDir.value);
       if (sky) { sky.position.set(cam.position.x, 0, cam.position.z); if (sky.userData.drift) sky.userData.drift.x += dt * 0.0015; }
       // ---- draw ----

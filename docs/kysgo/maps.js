@@ -46,21 +46,21 @@ function dust() {
   B.roof(108, 84, 112, 88, 3.6, 'sandwall').roof(66, 36, 70, 40, 3.2, 'sandwall').roof(32, 24, 36, 32, 3.2, 'sandwall')
     .roof(32, 8, 36, 14, 3.4, 'sandwall').roof(88, 26, 92, 34, 4.6, 'sandwall');
   // cover
-  B.stack(68, 60, 71, 63, 1.1, 'crate');                     // Xbox
+  B.crates(68, 60, 71, 63, 1.1);                     // Xbox
   B.stack(92, 6, 100, 13, 1.0, 'wood');                      // A platform
-  B.stack(104, 10, 107, 13, 1.1, 'crate'); B.stack(104, 10, 105, 11, 1.1, 'crate');  // default box + stack
-  B.stack(100, 19, 102, 21, 1.1, 'crate');                   // triple
+  B.crates(104, 10, 107, 13, 1.1); B.crates(104, 10, 105, 11, 1.1);  // default box + stack
+  B.crates(100, 19, 102, 21, 1.1);                   // triple
   B.stack(112, 4, 116, 8, 1.0, 'wood');                      // goose corner
   B.stack(106, 40, 109, 43, 1.4, 'cblue');                   // Blue (long)
   B.stack(112, 70, 116, 72, 1.3, 'darkwood');                // long corner cart
   B.stack(6, 4, 14, 10, 1.0, 'wood');                        // B back plat
-  B.stack(18, 14, 21, 17, 1.1, 'crate'); B.stack(18, 14, 19, 15, 1.1, 'crate');  // B default
+  B.crates(18, 14, 21, 17, 1.1); B.crates(18, 14, 19, 15, 1.1);  // B default
   B.stack(24, 6, 30, 9, 1.3, 'cred');                        // B car
-  B.stack(10, 26, 12, 28, 1.1, 'crate');                     // B doors box
-  B.stack(60, 112, 64, 115, 1.1, 'crate'); B.stack(76, 118, 79, 121, 1.1, 'crate');  // T spawn boxes
-  B.stack(64, 26, 66, 28, 1.1, 'crate');                     // CT mid box
-  B.stack(108, 26, 110, 28, 1.0, 'darkwood'); B.stack(96, 26, 98, 28, 1.0, 'darkwood');  // A barrels
-  B.stack(24, 30, 27, 33, 1.1, 'crate');                     // B back site box
+  B.crates(10, 26, 12, 28, 1.1);                     // B doors box
+  B.crates(60, 112, 64, 115, 1.1); B.crates(76, 118, 79, 121, 1.1);  // T spawn boxes
+  B.crates(64, 26, 66, 28, 1.1);                     // CT mid box
+  B.barrels(108, 26, 110, 28, 1.0); B.barrels(96, 26, 98, 28, 1.0);  // A barrels
+  B.crates(24, 30, 27, 33, 1.1);                     // B back site box
   // callouts
   B.zone('T Spawn', 50, 100, 88, 132).zone('T Ramp', 86, 100, 104, 108).zone('Outside Long', 100, 88, 124, 100).zone('Long Doors', 104, 82, 116, 88)
     .zone('Long A', 104, 36, 118, 82).zone('Pit', 116, 24, 124, 50).zone('A Ramp', 104, 30, 116, 36).zone('A Site', 90, 4, 116, 30).zone('Goose', 110, 4, 116, 9)
@@ -86,6 +86,7 @@ function dust() {
     .prop('model', 75.3, 30.6, { model: 'barrel' }).prop('model', 59.2, 4.8, { model: 'crate', rot: 0.4 }).prop('model', 59.4, 5.6, { model: 'crate', rot: -0.2 });   // real scanned models (models/, assetbuild.py)
   B.sky = 0x6f9fd8; B.fog = 0xd9cdb4; B.sunColor = 0xffeed2; B.amb = [0xc4d8f2, 0x9c7c54]; B.sunDir = [0.62, 0.66, 0.42]; B.sunI = 2.7; B.ambI = 1.15;
   B.photo = 'day';   // the real sky over it (sky_<name>_*.jpg)
+  B.photos = { sandwall: ['dustwall', 4], sand: ['dustsand', 2.5] };   // scanned plaster-over-sandstone walls and gravelly ground (texreal.py)
   return B;
 }
 

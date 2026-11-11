@@ -28,7 +28,7 @@ export function mergeGeos(list) {
 }
 
 // faces: [{dirx, dirz, a, s0, s1, bot, top, m}] wall faces from the mesh builder; add(material, geometry); ts(material) = 1/tile size
-export function dressWorld({ B, hr, mat, flag, faces, matName, add, ts, detail = 1 }) {
+export function dressWorld({ B, hr, mat, flag, faces, matName, add, ts, detail = 1, place = null }) {
   const { w, d } = B;
   const idx = (x, z) => (x < 0 || z < 0 || x >= w || z >= d ? -1 : z * w + x);
   const HR = (x, z) => { const i = idx(x, z); return i < 0 ? B.wallH : hr[i]; };
@@ -64,6 +64,11 @@ export function dressWorld({ B, hr, mat, flag, faces, matName, add, ts, detail =
           const ww = 0.9 + hash(seed, s, 3) * 0.4, wh = 1.15;
           const [cx, cz] = at(f, s, 0.012);
           box('glassdark', cx, wy, cz, ww, wh, 0.02, ry);
+          if (place) {   // a real weathered wooden window (frame and an open wing) over the dark opening, a stone sill under it
+            const [mx, mz] = at(f, s, 0.0); place({ id: 'window', x: mx, y: wy - wh / 2 - 0.08, z: mz, yaw: ry, at: 'back', fit: [ww + 0.3, wh + 0.2, 0.55] });
+            const [sx2, sz2] = at(f, s, 0.09); box('sill', sx2, wy - wh / 2 - 0.1, sz2, ww + 0.4, 0.08, 0.18, ry);
+            continue;
+          }
           for (const [ox, oy, sx, sy] of [[0, wh / 2 + 0.06, ww + 0.24, 0.12], [-ww / 2 - 0.06, 0, 0.12, wh], [ww / 2 + 0.06, 0, 0.12, wh]]) {
             const [px, pz] = at(f, s + ox, 0.05); box('trim', px, wy + oy, pz, sx, sy, 0.1, ry);
           }
@@ -86,8 +91,24 @@ export function dressWorld({ B, hr, mat, flag, faces, matName, add, ts, detail =
       const [qx, qz] = at(f, s, 0.06); cyl('metal', qx, f.top - 0.3, qz, px, f.top - 0.15, pz, 0.055, 8);
       for (let y = f.bot + 1; y < f.top - 0.4; y += 1.6) { const [bx, bz] = at(f, s, 0.06); box('metal', bx, y, bz, 0.14, 0.04, 0.12, ry); }
     }
-    // an AC unit or a utility box, high on the wall
-    if (len >= 3 && hgt >= 3.6 && hash(seed, 0, 8) < 0.3) {
+    // street level, real models: a roller shutter over a shop front, a utility box, and litter along the wall base
+    if (place && f.bot <= 2.2 && len >= 4) {
+      const fm = floorMatAt(f, (f.s0 + f.s1) / 2);
+      if (hgt >= 3 && hash(seed, 0, 11) < 0.3) { const s = f.s0 + 0.6 + hash(seed, 0, 12) * (len - 3.6); const [px, pz] = at(f, s + 1.25, 0); place({ id: 'shutter', x: px, y: f.bot, z: pz, yaw: ry, at: 'back', s: 1 }); }
+      else if (hash(seed, 0, 8) < 0.3) { const s = f.s0 + 0.8 + hash(seed, 0, 9) * (len - 1.6); const [px, pz] = at(f, s, 0.02); place({ id: 'utilbox', x: px, y: f.bot, z: pz, yaw: ry, at: 'back', s: 1 }); }
+      if (detail >= 1 && (fm === 'sand' || fm === 'dirt' || fm === 'concrete')) {
+        const LIT = ['tyre', 'rubble', 'bricks', 'sandpile', 'barrel2', 'rubble'];
+        for (let s = f.s0 + 1; s < f.s1 - 1; s += 2.5 + hash(seed, Math.floor(s), 13) * 4) {
+          const r = hash(seed, Math.floor(s), 14); if (r > 0.42) continue;
+          const id = LIT[Math.floor(hash(seed, Math.floor(s), 15) * LIT.length)], yw = hash(seed, Math.floor(s), 16) * 6.28;
+          const off = id === 'rubble' || id === 'bricks' ? 0.75 : id === 'sandpile' ? 0.9 : 0.35, [px, pz] = at(f, s, off);
+          if (id === 'tyre') place({ id, x: px, y: f.bot - 0.215, z: pz, yaw: yw, tilt: Math.PI / 2, s: 1, cull: 30 });   // lying flat
+          else place({ id, x: px, y: f.bot, z: pz, yaw: yw, s: id === 'sandpile' ? 0.3 : id === 'bricks' || id === 'rubble' ? 0.7 : 1, cull: 30 });
+        }
+      }
+    }
+    // an AC unit or a utility box, high on the wall (box-built; street level gets the real models above)
+    if ((!place || f.bot > 2.2 || len < 4) && len >= 3 && hgt >= 3.6 && hash(seed, 0, 8) < 0.3) {
       const s = f.s0 + 0.8 + hash(seed, 0, 9) * (len - 1.6); const [px, pz] = at(f, s, 0.28);
       box('metal', px, f.bot + 2.6, pz, 0.8, 0.55, 0.5, ry); const [gx, gz] = at(f, s, 0.535); box('glassdark', gx, f.bot + 2.6, gz, 0.6, 0.38, 0.02, ry);
     }

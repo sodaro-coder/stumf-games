@@ -124,7 +124,7 @@ export class GraphicsSettingsManager {
   // everything buildWorld needs to compile a map for this tier
   worldOpts() {
     const p = this.p;
-    return { quality: p.q, texSize: p.texSize, normalMaps: p.normalMaps, detail: p.detail, macro: p.macro, dress: p.dress, nearestMip: p.nearestMip,
+    return { quality: p.q, texSize: p.texSize, normalMaps: p.normalMaps, detail: p.detail, macro: p.macro, dress: p.dress, realProps: p.dress, nearestMip: p.nearestMip,
       aniso: this.aniso, bakeK: p.bakeK, probes: p.probes, dynShadows: p.shadows ? p.shadows.cascades.length : 0, pcf: p.shadows ? p.shadows.pcf : 0 };
   }
   // the HDR target's options (MSAA samples, depth texture for SSAO)

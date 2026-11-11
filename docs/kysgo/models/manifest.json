@@ -1,7 +1,7 @@
 {
  "barrel": {
   "kind": "prop",
-  "sig": "86586914524f",
+  "sig": "5b7b46380d12",
   "files": {
    "hi": "models/barrel.glb",
    "lo": "models/barrel_lo.glb"
@@ -21,11 +21,23 @@
    "author": "Jorge Camacho",
    "licence": "CC0",
    "url": "https://polyhaven.com/a/Barrel_01"
+  },
+  "bounds": {
+   "min": [
+    -0.2815175950527191,
+    -0.006614277604967356,
+    -0.28151750564575195
+   ],
+   "max": [
+    0.28151753544807434,
+    0.8733857274055481,
+    0.28151771426200867
+   ]
   }
  },
  "crate": {
   "kind": "prop",
-  "sig": "d678152588bc",
+  "sig": "028256a8e7c0",
   "files": {
    "hi": "models/crate.glb",
    "lo": "models/crate_lo.glb"
@@ -45,11 +57,23 @@
    "author": "James Ray Cock",
    "licence": "CC0",
    "url": "https://polyhaven.com/a/wooden_crate_01"
+  },
+  "bounds": {
+   "min": [
+    -0.4126364588737488,
+    -0.00793334562331438,
+    -0.1961396187543869
+   ],
+   "max": [
+    0.4126364588737488,
+    0.3416849374771118,
+    0.2128141224384308
+   ]
   }
  },
  "ar15": {
   "kind": "gun",
-  "sig": "496f3848b9b1",
+  "sig": "c5383371e2bc",
   "files": {
    "hi": "models/ar15.glb",
    "lo": "models/ar15_lo.glb"
@@ -90,7 +114,7 @@
  },
  "operator": {
   "kind": "char",
-  "sig": "942f8cda9829",
+  "sig": "67556e919b3c",
   "files": {
    "uhd": "models/operator_uhd.glb",
    "hi": "models/operator.glb",
@@ -117,7 +141,7 @@
  },
  "operator2": {
   "kind": "char",
-  "sig": "751c9068d5f7",
+  "sig": "18790a29bc11",
   "files": {
    "uhd": "models/operator2_uhd.glb",
    "hi": "models/operator2.glb",
@@ -144,7 +168,7 @@
  },
  "m4a1": {
   "kind": "gun",
-  "sig": "83cccae8f389",
+  "sig": "f6e055e54ec9",
   "files": {
    "hi": "models/m4a1.glb",
    "lo": "models/m4a1_lo.glb"
@@ -185,7 +209,7 @@
  },
  "aks": {
   "kind": "gun",
-  "sig": "f16e9910f2e7",
+  "sig": "e142b3a749b7",
   "files": {
    "hi": "models/aks.glb",
    "lo": "models/aks_lo.glb"
@@ -226,7 +250,7 @@
  },
  "ak_tactical": {
   "kind": "gun",
-  "sig": "841d18ecb8d0",
+  "sig": "6157edd72661",
   "files": {
    "hi": "models/ak_tactical.glb",
    "lo": "models/ak_tactical_lo.glb"
@@ -267,7 +291,7 @@
  },
  "deagle": {
   "kind": "gun",
-  "sig": "be49352ab49d",
+  "sig": "f58840f4bb87",
   "files": {
    "hi": "models/deagle.glb",
    "lo": "models/deagle_lo.glb"
@@ -308,7 +332,7 @@
  },
  "mp5": {
   "kind": "gun",
-  "sig": "de6cd1ae98fc",
+  "sig": "5bed3dc5b185",
   "files": {
    "hi": "models/mp5.glb",
    "lo": "models/mp5_lo.glb"
@@ -349,7 +373,7 @@
  },
  "shotgun_m4": {
   "kind": "gun",
-  "sig": "092991022843",
+  "sig": "a41c10f5de1e",
   "files": {
    "hi": "models/shotgun_m4.glb",
    "lo": "models/shotgun_m4_lo.glb"
@@ -390,7 +414,7 @@
  },
  "shotgun_870": {
   "kind": "gun",
-  "sig": "79c15bd3cea5",
+  "sig": "92982e14a870",
   "files": {
    "hi": "models/shotgun_870.glb",
    "lo": "models/shotgun_870_lo.glb"
@@ -431,7 +455,7 @@
  },
  "sniper": {
   "kind": "gun",
-  "sig": "fbf2889b2206",
+  "sig": "6617d2bac849",
   "files": {
    "hi": "models/sniper.glb",
    "lo": "models/sniper_lo.glb"
@@ -474,7 +498,7 @@
  },
  "kabar": {
   "kind": "gun",
-  "sig": "117ea3b464f2",
+  "sig": "a1fe6de37f38",
   "files": {
    "hi": "models/kabar.glb",
    "lo": "models/kabar_lo.glb"
@@ -515,7 +539,7 @@
  },
  "frag": {
   "kind": "gun",
-  "sig": "38777b5b9eb4",
+  "sig": "cfdf55e69f48",
   "files": {
    "hi": "models/frag.glb",
    "lo": "models/frag_lo.glb"
@@ -562,7 +586,7 @@
  },
  "heart": {
   "kind": "fx",
-  "sig": "7bea73c97966",
+  "sig": "b1b58ff498e4",
   "files": {
    "hi": "models/heart.glb",
    "lo": "models/heart_lo.glb"
@@ -582,6 +606,367 @@
    "author": "multispets",
    "licence": "CC BY 4.0",
    "url": "https://sketchfab.com/3d-models/human-heart--photo-fe9ccbc64ea046c99e02f7018e373ed8"
+  }
+ },
+ "barrel2": {
+  "kind": "prop",
+  "sig": "8de7a2a82d01",
+  "files": {
+   "hi": "models/barrel2.glb",
+   "lo": "models/barrel2_lo.glb"
+  },
+  "tris": {
+   "hi": 2688,
+   "lo": 1090
+  },
+  "bytes": {
+   "hi": 220460,
+   "lo": 49544
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Barrel 02",
+   "author": "Jorge Camacho",
+   "licence": "CC0",
+   "url": "https://polyhaven.com/a/Barrel_02"
+  },
+  "bounds": {
+   "min": [
+    -0.24408777058124542,
+    0.004637363366782665,
+    -0.24230831861495972
+   ],
+   "max": [
+    0.2440878003835678,
+    0.8846373558044434,
+    0.2423081248998642
+   ]
+  }
+ },
+ "barrel3": {
+  "kind": "prop",
+  "sig": "c23ad9a12f63",
+  "files": {
+   "hi": "models/barrel3.glb",
+   "lo": "models/barrel3_lo.glb"
+  },
+  "tris": {
+   "hi": 1473,
+   "lo": 762
+  },
+  "bytes": {
+   "hi": 231196,
+   "lo": 42808
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Barrel 03",
+   "author": "Serhii Khromov",
+   "licence": "CC0",
+   "url": "https://polyhaven.com/a/barrel_03"
+  },
+  "bounds": {
+   "min": [
+    -0.31697171926498413,
+    -1.1793932941372987e-07,
+    -0.31929945945739746
+   ],
+   "max": [
+    0.3169717788696289,
+    0.9304735064506531,
+    0.3193000555038452
+   ]
+  }
+ },
+ "tyre": {
+  "kind": "prop",
+  "sig": "509e0d0d9ad6",
+  "files": {
+   "hi": "models/tyre.glb",
+   "lo": "models/tyre_lo.glb"
+  },
+  "tris": {
+   "hi": 2880,
+   "lo": 2091
+  },
+  "bytes": {
+   "hi": 137368,
+   "lo": 77124
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Old Tyre",
+   "author": "MP",
+   "licence": "CC0",
+   "url": "https://polyhaven.com/a/old_tyre"
+  },
+  "bounds": {
+   "min": [
+    -0.30000001192092896,
+    -0.30000001192092896,
+    -0.08276332169771194
+   ],
+   "max": [
+    0.30000001192092896,
+    0.30000001192092896,
+    0.08223667740821838
+   ]
+  }
+ },
+ "utilbox": {
+  "kind": "prop",
+  "sig": "f03e08d34e90",
+  "files": {
+   "hi": "models/utilbox.glb",
+   "lo": "models/utilbox_lo.glb"
+  },
+  "tris": {
+   "hi": 4404,
+   "lo": 789
+  },
+  "bytes": {
+   "hi": 314548,
+   "lo": 50560
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Utility Box 01",
+   "author": "James Ray Cock",
+   "licence": "CC0",
+   "url": "https://polyhaven.com/a/utility_box_01"
+  },
+  "bounds": {
+   "min": [
+    -0.2600001096725464,
+    0.0,
+    -0.20999999344348907
+   ],
+   "max": [
+    0.2600001096725464,
+    1.1203334331512451,
+    0.22200000286102295
+   ]
+  }
+ },
+ "shutter": {
+  "kind": "prop",
+  "sig": "e3e640ae5c72",
+  "files": {
+   "hi": "models/shutter.glb",
+   "lo": "models/shutter_lo.glb"
+  },
+  "tris": {
+   "hi": 552,
+   "lo": 63
+  },
+  "bytes": {
+   "hi": 174332,
+   "lo": 15564
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Rollershutter Door",
+   "author": "MP",
+   "licence": "CC0",
+   "url": "https://polyhaven.com/a/rollershutter_door"
+  },
+  "bounds": {
+   "min": [
+    -0.5400000214576721,
+    2.2873277885082643e-06,
+    -0.0010000001639127731
+   ],
+   "max": [
+    0.5400000214576721,
+    2.3999757766723633,
+    0.29908570647239685
+   ]
+  }
+ },
+ "window": {
+  "kind": "prop",
+  "sig": "ea4c85860478",
+  "files": {
+   "hi": "models/window.glb",
+   "lo": "models/window_lo.glb"
+  },
+  "tris": {
+   "hi": 1064,
+   "lo": 348
+  },
+  "bytes": {
+   "hi": 198752,
+   "lo": 39292
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Weathered Wooden Window",
+   "author": "GameReady | mark-peters",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/weathered-wooden-window-c4256c1d2a0b49edb6a5aefcfe12593a"
+  },
+  "bounds": {
+   "min": [
+    -0.7458845973014832,
+    -2.851112057555838e-08,
+    -0.17500002682209015
+   ],
+   "max": [
+    0.7458845973014832,
+    1.2557384967803955,
+    0.6594274640083313
+   ]
+  }
+ },
+ "rubble": {
+  "kind": "prop",
+  "sig": "61056f602b41",
+  "files": {
+   "hi": "models/rubble.glb",
+   "lo": "models/rubble_lo.glb"
+  },
+  "tris": {
+   "hi": 1536,
+   "lo": 812
+  },
+  "bytes": {
+   "hi": 297220,
+   "lo": 40332
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Rubble Pile (Game Ready / 2K PBR)",
+   "author": "meerschaumdigital",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/rubble-pile-game-ready-2k-pbr-0e6f85da3433468db226866bd43a43e7"
+  },
+  "bounds": {
+   "min": [
+    -0.7725600600242615,
+    0.004265883471816778,
+    -0.5614990592002869
+   ],
+   "max": [
+    0.7937626242637634,
+    0.3696521818637848,
+    0.6036320924758911
+   ]
+  }
+ },
+ "bricks": {
+  "kind": "prop",
+  "sig": "f8511aae6f77",
+  "files": {
+   "hi": "models/bricks.glb",
+   "lo": "models/bricks_lo.glb"
+  },
+  "tris": {
+   "hi": 5488,
+   "lo": 2012
+  },
+  "bytes": {
+   "hi": 285312,
+   "lo": 60944
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Bricks Pile 02",
+   "author": "RandomScan",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/bricks-pile-02-f6e69df7b0a1473498e551a81a942d81"
+  },
+  "bounds": {
+   "min": [
+    -0.9026889801025391,
+    -0.15502199530601501,
+    -1.0
+   ],
+   "max": [
+    0.9026889801025391,
+    0.15502198040485382,
+    1.0
+   ]
+  }
+ },
+ "sandpile": {
+  "kind": "prop",
+  "sig": "c4536849a554",
+  "files": {
+   "hi": "models/sandpile.glb",
+   "lo": "models/sandpile_lo.glb"
+  },
+  "tris": {
+   "hi": 2506,
+   "lo": 1028
+  },
+  "bytes": {
+   "hi": 219268,
+   "lo": 42104
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Photoscan Low-poly Construction Sand Pile",
+   "author": "martin.topolski",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/photoscan-low-poly-construction-sand-pile-7a7533e1ecab4b1d96da55cc3ad9ad98"
+  },
+  "bounds": {
+   "min": [
+    -2.90518856048584,
+    -4.1375642467755824e-07,
+    -2.539618968963623
+   ],
+   "max": [
+    3.024991989135742,
+    1.295276403427124,
+    3.4031918048858643
+   ]
+  }
+ },
+ "bigcrate": {
+  "kind": "prop",
+  "sig": "af99602e9645",
+  "tint": 1.8,
+  "files": {
+   "hi": "models/bigcrate.glb",
+   "lo": "models/bigcrate_lo.glb"
+  },
+  "tris": {
+   "hi": 268,
+   "lo": 181
+  },
+  "bytes": {
+   "hi": 263180,
+   "lo": 27924
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Wooden Crate Low-poly PBR",
+   "author": "MaX3Dd",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/wooden-crate-low-poly-pbr-f8fb4c96211d475b9370d1c403273fc6"
+  },
+  "bounds": {
+   "min": [
+    -0.12008585035800934,
+    8.048002200666815e-05,
+    -0.12008585035800934
+   ],
+   "max": [
+    0.12008585035800934,
+    0.2402518391609192,
+    0.12008586525917053
+   ]
   }
  }
 }

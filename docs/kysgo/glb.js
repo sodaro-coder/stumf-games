@@ -189,6 +189,63 @@ export function model(id, { hq = true, far = 14 } = {}) {
   return g;
 }
 
+// ---- set dressing: many copies of real models, instanced ------------------------------------------------------------
+// list: [{ id, x, y, z, yaw, s (uniform scale) | fit: [w, h, d] (metres: stretched to fill that box), at: 'base' | 'back',
+//   tilt (about x), cull (metres: not drawn beyond) }]
+// 'base': the model's footprint centre sits on (x, y, z); 'back': its back face (min z) is on the point, centred in x
+// and starting at y (things flat against a wall). One InstancedMesh per model primitive per 64 m block (so blocks off
+// screen are culled), the full file for copies near and the light one for the rest (update(), every quarter second,
+// no garbage);
+// hq false (Performance, phones): only the light files are ever downloaded.
+const _im = new THREE.Matrix4(), _iq = new THREE.Quaternion(), _iv = new THREE.Vector3(), _is = new THREE.Vector3(), _ia = new THREE.Matrix4(), _iy = new THREE.Vector3(0, 1, 0);
+const propMats = new WeakMap();
+function propMat(m, tint = 1) {   // the model's material, lit as a placed prop (world.js litPatch 'prop'); tint: assets.json "tint" (a scan shot darker than it reads in the sun)
+  if (!propMats.has(m)) { const c = m.clone(); c.color.multiplyScalar(tint); litPatch(c, 'prop'); if (c.metalnessMap || c.metalness > 0.3) coatPatch(c); propMats.set(m, c); }
+  return propMats.get(m);
+}
+export function placeModels(list, { hq = true, far = 10 } = {}) {
+  const root = new THREE.Group(); root.name = 'models'; const blocks = []; root.userData.blocks = blocks;
+  const byId = new Map(); for (const p of list) { if (!byId.has(p.id)) byId.set(p.id, []); byId.get(p.id).push(p); }
+  modelManifest().then((man) => { for (const [id, ps] of byId) {
+    const ent = man[id]; if (!ent || !ent.bounds) continue;
+    const lo = ent.bounds.min, hi = ent.bounds.max, ex = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+    const mats = ps.map((p) => {
+      if (p.fit) _is.set(p.fit[0] / ex[0], p.fit[1] / ex[1], p.fit[2] / ex[2]); else _is.setScalar(p.s || 1);
+      const ox = -(lo[0] + hi[0]) / 2, oy = -lo[1], oz = p.at === 'back' ? -lo[2] : -(lo[2] + hi[2]) / 2;
+      _ia.makeTranslation(ox, oy, oz);
+      _im.compose(_iv.set(p.x, p.y, p.z), _iq.setFromAxisAngle(_iy, p.yaw || 0), _is).multiply(_ia);
+      if (p.tilt) _im.multiply(_ia.makeRotationX(p.tilt));
+      return { m: _im.clone(), k: Math.floor(p.x / 64) + ',' + Math.floor(p.z / 64), x: p.x, z: p.z, cull: p.cull };
+    });
+    Promise.all([hq ? file(id, 'hi') : null, file(id, 'lo')]).then(([H, L]) => {
+      const groups = new Map(); for (const q of mats) { if (!groups.has(q.k)) groups.set(q.k, []); groups.get(q.k).push(q); }
+      // per level: one InstancedMesh per primitive holding every copy in the block; src = each copy's matrix (16 floats)
+      const level = (src, qs) => { if (!src) return null; const out = []; src.scene.updateMatrixWorld(true);
+        src.scene.traverse((o) => { if (!o.isMesh) return; const im = new THREE.InstancedMesh(o.geometry, propMat(o.material, ent.tint || 1), qs.length), all = new Float32Array(qs.length * 16);
+          qs.forEach((q, i) => { _ia.multiplyMatrices(q.m, o.matrixWorld); _ia.toArray(all, i * 16); im.setMatrixAt(i, _ia); });
+          im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.receiveShadow = true; im.castShadow = false; im.userData.all = all; root.add(im); out.push(im); });
+        return out; };
+      for (const qs of groups.values()) {
+        let cx = 0, cz = 0; for (const q of qs) { cx += q.x; cz += q.z; } cx /= qs.length; cz /= qs.length;
+        let r = 0; for (const q of qs) r = Math.max(r, Math.hypot(q.x - cx, q.z - cz));
+        const b = { hi: level(H, qs), lo: level(L, qs) || [], cx, cz, r, px: Float32Array.from(qs, (q) => q.x), pz: Float32Array.from(qs, (q) => q.z), cull: Float32Array.from(qs, (q) => q.cull || 1e9) };
+        b.hasHi = !!b.hi;
+        if (b.hi) for (const im of b.hi) { im.count = 0; im.visible = false; }
+        blocks.push(b);
+      }
+    });
+  } });
+  // full detail for the copies within `far` metres, the light file out to each copy's `cull` distance (litter: 30 m),
+  // nothing beyond: each copy's matrix is copied into the near or the far InstancedMesh (count = how many are drawn).
+  // Every quarter second, a few hundred copies: no garbage
+  const fill = (ims, b, lvl, x, z) => { for (const im of ims) { const A = im.instanceMatrix.array, all = im.userData.all; let n = 0;
+    for (let i = 0; i < b.px.length; i++) { const d = Math.hypot(b.px[i] - x, b.pz[i] - z), want = d < far && b.hasHi ? 2 : d < b.cull[i] ? 1 : 0;
+      if (want === lvl) { for (let k = 0; k < 16; k++) A[n * 16 + k] = all[i * 16 + k]; n++; } }
+    im.count = n; im.visible = n > 0; im.instanceMatrix.needsUpdate = true; } };
+  root.userData.update = (x, z) => { for (const b of blocks) { if (b.hi) fill(b.hi, b, 2, x, z); fill(b.lo, b, 1, x, z); } };
+  return root;
+}
+
 // ---- guns: the working parts, found by name -----------------------------------------------------------------------
 const PART_NAMES = { slide: /^slide(_low|_\d+)?$/i, bolt: /^bolt( carrier)?(_\d+)?$/i, boltback: /^boltback(_\d+)?$/i, mag: /^mag(azine)?([. ]?\d+)?(_\d+)?$/i, trigger: /^trigger(_low|_\d+)?$/i, charging: /charg/i, hammer: /^hammer(_low|_\d+)?$/i, selector: /selector|safety/i, cover: /port_?cover|^dust cover$/i, body: /^body|receiver/i };
 export function gunParts(root) {

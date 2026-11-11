@@ -57,6 +57,15 @@ export class MapBuilder {
   block(x0, z0, x1, z1, h, mat = 'crate') { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 0; }); return this; }
   // raise by h from the floor already there (crates on a raised site)
   stack(x0, z0, x1, z1, h, mat = 'crate') { this._rect(x0, z0, x1, z1, (i) => { this.h[i] += h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 0; }); return this; }
+  // cover drawn with real model files (glb.js placeModels): the same collision box as stack(), and when the game shows
+  // models the box's own faces are skipped and real crates / barrels fill it. kind 'crates': cubes stacked to fill it;
+  // 'barrels': upright drums in a grid
+  crates(x0, z0, x1, z1, h, model = 'bigcrate') { return this._dressed('crates', model, 'crate', x0, z0, x1, z1, h); }
+  barrels(x0, z0, x1, z1, h, model = 'barrel3') { return this._dressed('barrels', model, 'darkwood', x0, z0, x1, z1, h); }
+  _dressed(kind, model, mat, x0, z0, x1, z1, h) {
+    const base = this.h[Math.max(0, z0) * this.w + Math.max(0, x0)];
+    this.stack(x0, z0, x1, z1, h, mat); (this.dressed || (this.dressed = [])).push({ kind, model, x0, z0, x1, z1, h, base }); return this;
+  }
   solid(x0, z0, x1, z1, mat = this.wallMat, h = this.wallH) { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID[mat]; this.flag[i] = 0; }); return this; }
   // deep water off the edge of a boat: deadly like lava (sharks)
   water(x0, z0, x1, z1, h = -0.8) { this._rect(x0, z0, x1, z1, (i) => { this.h[i] = h; this.mat[i] = MAT_ID.water; this.flag[i] = 3; }); return this; }
@@ -262,17 +271,19 @@ vec3 perturbNormalArb( vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDire
 }
 #endif`;
 // kind 'world': static surfaces (shadow looked up just outside the surface, AO on floors and wall bases, large-scale
-// colour variation so tiling doesn't show); 'dyn': players and props (shadow at their own position)
+// colour variation so tiling doesn't show); 'dyn': players and props (shadow at their own position); 'prop': model
+// files placed in the world (glb.js placeModels): like 'dyn', but the shadow is looked up just outside the surface, so
+// a crate standing on its own baked footprint isn't shaded by itself
 export function litPatch(mat, kind = 'dyn') {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.shTex = LIGHT.shTex; sh.uniforms.shInfo = LIGHT.shInfo; sh.uniforms.macroTex = LIGHT.macro; sh.uniforms.bakeOn = LIGHT.bake; sh.uniforms.prTex = LIGHT.prTex; sh.uniforms.prInfo = LIGHT.prInfo;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vWN;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWN = normalize(mat3(modelMatrix) * objectNormal);');
+      .replace('#include <project_vertex>', '#include <project_vertex>\n#ifdef USE_INSTANCING\nvWP = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;\nvWN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * objectNormal);\n#else\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWN = normalize(mat3(modelMatrix) * objectNormal);\n#endif');
     let f = sh.fragmentShader.replace('#include <bumpmap_pars_fragment>', BUMP_SAFE).replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vWN;\nuniform sampler2D shTex;\nuniform vec4 shInfo;\nuniform sampler2D macroTex;\nuniform float bakeOn;\nuniform sampler2D prTex;\nuniform vec4 prInfo;');
     if (kind === 'world') f = f.replace('#include <map_fragment>', '#include <map_fragment>\n\tdiffuseColor.rgb *= mix(1.0, 0.8 + 0.4 * texture2D(macroTex, vWP.xz * 0.037 + vec2(vWP.y * 0.029, vWP.y * 0.013)).r, bakeOn);');
     f = f.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
 	{
-		vec4 bk = texture2D(shTex, (vWP.xz + ${kind === 'world' ? 'vWN.xz * 0.3' : 'vec2(0.0)'}) * shInfo.xy);
+		vec4 bk = texture2D(shTex, (vWP.xz + ${kind !== 'dyn' ? 'vWN.xz * 0.3' : 'vec2(0.0)'}) * shInfo.xy);
 		float shH = bk.r * 16.0 - 2.0;
 		float vis = smoothstep(shH - 0.05, shH + 0.16, vWP.y);
 		float ao = 1.0;
@@ -323,7 +334,11 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
     const base = g.pos.length / 3;
     g.pos.push(...a, ...b, ...c, ...dd); g.uv.push(...uvs); g.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   };
-  const tsOf = (m) => 1 / MATS[MAT_LIST[m]].s;
+  // a map can photograph a material differently (B.photos: { material: [photo set, tile metres] }): Dust's walls are
+  // weathered plaster over sandstone at the scan's real size instead of the shared clean blocks; collisions, sounds and
+  // impacts still go by the material
+  const PH = (!headless && B.photos) || {}, tileOf2 = (k) => (PH[k] ? PH[k][1] : (MATS[k] || { s: 2 }).s);
+  const tsOf = (m) => 1 / tileOf2(MAT_LIST[m]);
   // a horizontal quad (y per corner: (x0,z1) (x1,z1) (x1,z0) (x0,z0)); down = facing down
   const flat = (m, x0, z0, x1, z1, ya, yb = ya, yc = ya, yd = ya, down = false) => {
     const k = tsOf(m);
@@ -347,6 +362,23 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   };
   // tops: greedy rectangles of equal (height, material); ramp cells get sloped quads of their own
   const done = new Uint8Array(w * d);
+  // cover dressed with real models (MapBuilder.crates / barrels): its box is not drawn, the models stand in it
+  const realProps = !headless && !!opt.realProps && (opt.dress ?? quality >= 0.75), hide = new Uint8Array(w * d), placements = [];
+  if (realProps) for (const c of B.dressed || []) {
+    for (let z = c.z0; z < c.z1; z++) for (let x = c.x0; x < c.x1; x++) { const i = idx(x, z); if (i >= 0) { hide[i] = 1; done[i] = 1; } }
+    flat(MAT_ID[B.floorMat] ?? 0, c.x0, c.z0, c.x1, c.z1, c.base + 0.002);   // the ground under the models (their rounded edges must not show a gap)
+    const W0 = c.x1 - c.x0, D0 = c.z1 - c.z0, sd0 = (c.x0 * 7 + c.z0 * 13) | 0;
+    if (c.kind === 'crates') {   // cubes of about 1.1 m stacked to fill the box exactly, each turned a little
+      const nx = Math.max(1, Math.round(W0 / 1.1)), nz = Math.max(1, Math.round(D0 / 1.1)), ny = Math.max(1, Math.round(c.h / 1.1)), sx = W0 / nx, sz = D0 / nz, sy = c.h / ny;
+      for (let a = 0; a < nx; a++) for (let b = 0; b < nz; b++) for (let k = 0; k < ny; k++) {
+        const q = ((sd0 + a * 3 + b * 5 + k * 11) % 4); const sink = k ? 0 : 0.03;   // the bottom row sits 3 cm into the ground: the scan's bottom edge has a light texture seam
+        placements.push({ id: c.model, x: c.x0 + (a + 0.5) * sx, y: c.base + k * sy - sink, z: c.z0 + (b + 0.5) * sz, yaw: q * Math.PI / 2, fit: q % 2 ? [sz, sy + sink, sx] : [sx, sy + sink, sz] });
+      }
+    } else {   // drums about 0.62 m across, upright, a little turned
+      const nx = Math.max(1, Math.floor(W0 / 0.62)), nz = Math.max(1, Math.floor(D0 / 0.62)), sx = W0 / nx, sz = D0 / nz;
+      for (let a = 0; a < nx; a++) for (let b = 0; b < nz; b++) placements.push({ id: (a + b) % 3 === 2 ? 'barrel2' : c.model, x: c.x0 + (a + 0.5) * sx, y: c.base, z: c.z0 + (b + 0.5) * sz, yaw: (sd0 + a * 7 + b * 3) % 6, s: c.h / 0.93 });
+    }
+  }
   for (let i = 0; i < w * d; i++) if (rid[i] >= 0) { done[i] = 1; const x = i % w, z = (i / w) | 0, r = rid[i]; flat(mat[i], x, z, x + 1, z + 1, slope(r, x, z + 1), slope(r, x + 1, z + 1), slope(r, x + 1, z), slope(r, x, z)); }
   for (let z = 0; z < d; z++) for (let x = 0; x < w; x++) {
     const i = z * w + x; if (done[i]) continue;
@@ -381,7 +413,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
           continue;
         }
         const top = hr[i], bot = ni < 0 ? top : hr[ni];
-        if (top > bot + 1e-3) {
+        if (top > bot + 1e-3 && !hide[i]) {
           if (run && run.top === top && run.bot === bot && run.m === m && run.s1 === b && Math.floor(b / T) === Math.floor(run.s0 / T)) run.s1 = b + 1;
           else { flush(); run = { s0: b, s1: b + 1, top, bot, m }; }
         } else flush();
@@ -393,7 +425,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
   side(1, 0); side(-1, 0); side(0, 1); side(0, -1);
   // set dressing (windows, lintels, beams, pipes, sand drifts, rooftop clutter): extra geometry per material
   const extra = new Map();
-  if (!headless && (opt.dress ?? quality >= 0.75)) dressWorld({ B, hr, mat, flag, faces, detail: quality, matName: (m) => MAT_LIST[m], ts: (k) => 1 / ((MATS[k] || { s: 2 }).s), add: (k, g) => { g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3()), key = k + '|' + tileOf(c.x, c.z); if (!extra.has(key)) extra.set(key, []); extra.get(key).push(g); } });
+  if (!headless && (opt.dress ?? quality >= 0.75)) dressWorld({ B, hr, mat, flag, faces, detail: quality, place: realProps ? (p) => placements.push(p) : null, matName: (m) => MAT_LIST[m], ts: (k) => 1 / tileOf2(k), add: (k, g) => { g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3()), key = k + '|' + tileOf(c.x, c.z); if (!extra.has(key)) extra.set(key, []); extra.get(key).push(g); } });
 
   // --- baked light: for every 1/K m of floor, how high the sun's shadow reaches there, plus ambient occlusion ---
   // One small texture gives soft sun shadows on every floor, wall and player and darkened corners, for the price of a
@@ -506,6 +538,7 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
     return (texCache[k] = { map: mk(sf.map, true), bump: null });
   };
   const photo = (mat, k) => {   // swap in the photo maps once they arrive (cached across map changes)
+    if (PH[k]) k = PH[k][0];
     loadTx(`tx_${k}_${texSize}.jpg`, true, aniso, txQ).then((t) => { if (t) { mat.uniforms ? (mat.uniforms.map.value = t) : (mat.map = t, mat.needsUpdate = true); } });
     if (nmOn && mat.uniforms && mat.uniforms.nMap) loadTx(`tx_${k}_${texSize}n.jpg`, false, aniso, txQ).then((t) => { if (t) { mat.uniforms.nMap.value = t; mat.uniforms.nOn.value = 1; } });
   };
@@ -722,6 +755,6 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
       });
     }
   }
-  return { B, w, d, h, mat, flag, H, idx, group, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
+  return { B, w, d, h, mat, flag, H, idx, group, placements, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
     topAt, cellTop, sunAt, probeAt, useLight, bakeOut, chunks, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
 }
