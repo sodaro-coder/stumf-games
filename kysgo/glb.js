@@ -75,6 +75,7 @@ export async function buildGLB({ json: J, bin }, opts = {}) {
     if (m.emissiveTexture || m.emissiveFactor) { mat.emissiveMap = tex(m.emissiveTexture, true); mat.emissive.setRGB(...(m.emissiveFactor || [1, 1, 1]), THREE.LinearSRGBColorSpace); }
     if (m.alphaMode === 'BLEND') { mat.transparent = true; mat.opacity = bc[3]; mat.depthWrite = false; } else if (m.alphaMode === 'MASK') mat.alphaTest = m.alphaCutoff ?? 0.5;
     if (opts.lit !== false) litPatch(mat, 'dyn');
+    if (mat.metalnessMap || mat.metalness > 0.3) coatPatch(mat);
     return mat;
   });
   const defMat = () => mats.def || (mats.def = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8, metalness: 0 }));
@@ -102,6 +103,8 @@ export async function buildGLB({ json: J, bin }, opts = {}) {
       }
       const mat = pr.material !== undefined ? mats[pr.material] : defMat();
       if (g.attributes.color && !mat.vertexColors) mat.vertexColors = true;
+      // glTF normal maps: the green flip is only for tangents derived on the GPU; with the file's own tangents, as is
+      if (g.attributes.tangent && mat.normalMap && !mat.userData.tan) { mat.userData.tan = true; mat.normalScale.y = -mat.normalScale.y; }
       const sk = n.skin !== undefined && g.attributes.skinIndex;
       const mesh = sk ? new THREE.SkinnedMesh(g, mat) : new THREE.Mesh(g, mat);
       mesh.name = J.meshes[n.mesh].primitives.length > 1 ? nodes[i].name + '_' + pi : nodes[i].name;
@@ -140,6 +143,20 @@ export async function buildGLB({ json: J, bin }, opts = {}) {
   return { scene, nodes: byName, animations, credit: (J.asset && J.asset.copyright) || '' };
 }
 
+// dark "metal" is paint or anodising: many model files mark a black gun or blackened steel fully metallic, and metal
+// with a dark base colour reflects almost nothing (a black hole lit only by blue sky). Where the base colour is darker
+// than bare steel, the surface is treated as a coating over metal: it fades toward a dielectric (diffuse + 4% gloss)
+function coatPatch(mat) {
+  const prev = mat.onBeforeCompile, key = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev.call(mat, sh, r);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor *= smoothstep(0.015, 0.12, dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));')
+      // the sky probe is the only light in the shade and it is blue: a dark gun took it as navy. Its reflection keeps
+      // 40% of the sky's colour (enough to read outdoors) and is lifted a little so steel edges catch it
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\t{ float sl = dot(reflectedLight.indirectSpecular, vec3(0.2126, 0.7152, 0.0722)); reflectedLight.indirectSpecular = mix(vec3(sl), reflectedLight.indirectSpecular, 0.4) * 1.3; }');
+  };
+  mat.customProgramCacheKey = () => (key ? key.call(mat) : '') + '-coat';
+}
 export async function loadGLB(url, opts) {
   const r = await fetch(url); if (!r.ok) throw new Error(url + ' ' + r.status);
   return buildGLB(parseGLB(await r.arrayBuffer()), opts);
@@ -148,10 +165,15 @@ export async function loadGLB(url, opts) {
 // ---- the model library ----------------------------------------------------------------------------------------------
 let manifest = null;
 const loaded = new Map();
+// the texture tier of the full files: Ultra loads <id>_uhd.glb (2048 px maps) where one exists; High and Medium the 1K
+// <id>.glb; Performance and phones the light 512 px one. game.js sets it from the graphics profile.
+let UHD = false;
+export function setModelTexTier(ultra) { UHD = !!ultra; }
+export function modelFile(entry, tier) { const f = entry.files; return (tier === 'hi' && UHD && f.uhd) || f[tier] || f.hi; }
 export function modelManifest() { return manifest || (manifest = fetch('models/manifest.json').then((r) => (r.ok ? r.json() : {})).catch(() => ({}))); }
 function file(id, tier) {
   const k = id + '|' + tier;
-  if (!loaded.has(k)) loaded.set(k, modelManifest().then((m) => (m[id] ? loadGLB(m[id].files[tier] || m[id].files.hi) : null)).catch((e) => { console.warn('model', id, e.message); return null; }));
+  if (!loaded.has(k)) loaded.set(k, modelManifest().then((m) => (m[id] ? loadGLB(modelFile(m[id], tier)) : null)).catch((e) => { console.warn('model', id, e.message); return null; }));
   return loaded.get(k);
 }
 // a placed copy of a model: an empty group at once, filled when the file arrives. hq: the full model up close and the

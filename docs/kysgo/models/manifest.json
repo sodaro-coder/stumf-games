@@ -1,7 +1,7 @@
 {
  "barrel": {
   "kind": "prop",
-  "sig": "320e04794d82",
+  "sig": "86586914524f",
   "files": {
    "hi": "models/barrel.glb",
    "lo": "models/barrel_lo.glb"
@@ -25,7 +25,7 @@
  },
  "crate": {
   "kind": "prop",
-  "sig": "7e7e803a6904",
+  "sig": "d678152588bc",
   "files": {
    "hi": "models/crate.glb",
    "lo": "models/crate_lo.glb"
@@ -49,7 +49,7 @@
  },
  "ar15": {
   "kind": "gun",
-  "sig": "b7fb95235b56",
+  "sig": "496f3848b9b1",
   "files": {
    "hi": "models/ar15.glb",
    "lo": "models/ar15_lo.glb"
@@ -90,18 +90,21 @@
  },
  "operator": {
   "kind": "char",
-  "sig": "3559cb5cb04d",
+  "sig": "942f8cda9829",
   "files": {
+   "uhd": "models/operator_uhd.glb",
    "hi": "models/operator.glb",
    "lo": "models/operator_lo.glb"
   },
   "tris": {
+   "uhd": 48367,
    "hi": 48367,
-   "lo": 6496
+   "lo": 6495
   },
   "bytes": {
-   "hi": 6655956,
-   "lo": 2069664
+   "uhd": 6655956,
+   "hi": 5158484,
+   "lo": 1615060
   },
   "scale": 1,
   "fit": {},
@@ -114,18 +117,21 @@
  },
  "operator2": {
   "kind": "char",
-  "sig": "e448ed3d6255",
+  "sig": "751c9068d5f7",
   "files": {
+   "uhd": "models/operator2_uhd.glb",
    "hi": "models/operator2.glb",
    "lo": "models/operator2_lo.glb"
   },
   "tris": {
+   "uhd": 50517,
    "hi": 50517,
    "lo": 8498
   },
   "bytes": {
-   "hi": 4737464,
-   "lo": 970408
+   "uhd": 4737464,
+   "hi": 3701220,
+   "lo": 651360
   },
   "scale": 1,
   "fit": {},
@@ -138,7 +144,7 @@
  },
  "m4a1": {
   "kind": "gun",
-  "sig": "8a2b45b2766f",
+  "sig": "83cccae8f389",
   "files": {
    "hi": "models/m4a1.glb",
    "lo": "models/m4a1_lo.glb"
@@ -179,7 +185,7 @@
  },
  "aks": {
   "kind": "gun",
-  "sig": "f4e726795f85",
+  "sig": "f16e9910f2e7",
   "files": {
    "hi": "models/aks.glb",
    "lo": "models/aks_lo.glb"
@@ -220,7 +226,7 @@
  },
  "ak_tactical": {
   "kind": "gun",
-  "sig": "40ede463a8f1",
+  "sig": "841d18ecb8d0",
   "files": {
    "hi": "models/ak_tactical.glb",
    "lo": "models/ak_tactical_lo.glb"
@@ -261,7 +267,7 @@
  },
  "deagle": {
   "kind": "gun",
-  "sig": "16cd09e662f6",
+  "sig": "be49352ab49d",
   "files": {
    "hi": "models/deagle.glb",
    "lo": "models/deagle_lo.glb"
@@ -302,7 +308,7 @@
  },
  "mp5": {
   "kind": "gun",
-  "sig": "a59f5499441a",
+  "sig": "de6cd1ae98fc",
   "files": {
    "hi": "models/mp5.glb",
    "lo": "models/mp5_lo.glb"
@@ -343,7 +349,7 @@
  },
  "shotgun_m4": {
   "kind": "gun",
-  "sig": "4b87485a52dd",
+  "sig": "092991022843",
   "files": {
    "hi": "models/shotgun_m4.glb",
    "lo": "models/shotgun_m4_lo.glb"
@@ -384,7 +390,7 @@
  },
  "shotgun_870": {
   "kind": "gun",
-  "sig": "68e7ad888e20",
+  "sig": "79c15bd3cea5",
   "files": {
    "hi": "models/shotgun_870.glb",
    "lo": "models/shotgun_870_lo.glb"
@@ -425,7 +431,7 @@
  },
  "sniper": {
   "kind": "gun",
-  "sig": "a8980810b44d",
+  "sig": "fbf2889b2206",
   "files": {
    "hi": "models/sniper.glb",
    "lo": "models/sniper_lo.glb"
@@ -468,7 +474,7 @@
  },
  "kabar": {
   "kind": "gun",
-  "sig": "29e74340dcd6",
+  "sig": "117ea3b464f2",
   "files": {
    "hi": "models/kabar.glb",
    "lo": "models/kabar_lo.glb"
@@ -509,7 +515,7 @@
  },
  "frag": {
   "kind": "gun",
-  "sig": "ab6f6d5e24a3",
+  "sig": "38777b5b9eb4",
   "files": {
    "hi": "models/frag.glb",
    "lo": "models/frag_lo.glb"
@@ -556,7 +562,7 @@
  },
  "heart": {
   "kind": "fx",
-  "sig": "8fdcbec696ee",
+  "sig": "7bea73c97966",
   "files": {
    "hi": "models/heart.glb",
    "lo": "models/heart_lo.glb"

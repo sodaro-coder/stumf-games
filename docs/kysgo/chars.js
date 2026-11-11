@@ -6,19 +6,20 @@
 import * as THREE from '../sdk/three.module.min.js';
 import { litPatch } from './world.js';
 import { glowMask, glowify, gunSurface } from './models.js';
-import { loadGLB, modelManifest } from './glb.js';
+import { loadGLB, modelManifest, modelFile } from './glb.js';
 
 let D = null, P = null;
 // the real soldiers (models/, assetbuild.py): photographed-texture operators on a Mixamo skeleton, so the game's own
 // Mixamo clips play on them by bone name. CT: the black-clad SWAT operator; T: the multicam operator. Each is ONE skinned
-// mesh with one atlas material (one draw call). hq: the full model; otherwise the light one (phones).
+// mesh with one atlas material (one draw call). hq: the full model; otherwise the light one (phones). Cloth in the
+// shade is lit only by the sky: the sky light is raised (1.8) and the baked cavity AO softened so multicam reads, not black.
 export const SOLDIER_MODEL = { CT: 'operator', T: 'operator2' };
 const MODELS = { hi: {}, lo: {} }, MP = {};
 let MV = 0;
 export const soldierModelsV = () => MV;   // goes up when a soldier model arrives (the game rebuilds its rigs with it)
 function loadSoldierModels(tier) {
   return MP[tier] || (MP[tier] = modelManifest().then((man) => Promise.all(Object.entries(SOLDIER_MODEL).map(([team, id]) => (man[id]
-    ? loadGLB(man[id].files[tier]).then((m) => { MODELS[tier][team] = m; MV++; }).catch((e) => console.warn('soldier model', id, e.message)) : null)))));
+    ? loadGLB(modelFile(man[id], tier)).then((m) => { m.scene.traverse((o) => { if (o.material && o.material.isMeshStandardMaterial) { o.material.envMapIntensity = 1.8; o.material.aoMapIntensity = 0.6; } }); MODELS[tier][team] = m; MV++; }).catch((e) => console.warn('soldier model', id, e.message)) : null)))));
 }
 // hq: true / false = also fetch the real soldier models for that tier (the game does); left out = the built soldier only
 // (menu pictures never trigger the big download)
@@ -455,7 +456,10 @@ export function cutPiece(r, kind) {
   if (keep.length < 30) return (cache[kind] = null);
   const g = new THREE.BufferGeometry();
   for (const k of ['position', 'normal', 'uv', 'tangent']) if (geo.attributes[k]) g.setAttribute(k, geo.attributes[k]);
-  g.setIndex(keep); g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3());
+  g.setIndex(keep);
+  const pa = geo.attributes.position, bb = new THREE.Box3(), _v = new THREE.Vector3();   // the piece's own bounds (computeBoundingBox would measure every vertex of the shared buffer: the whole body)
+  for (const i of keep) bb.expandByPoint(_v.fromBufferAttribute(pa, i));
+  g.boundingBox = bb; g.boundingSphere = bb.getBoundingSphere(new THREE.Sphere()); const c = bb.getCenter(new THREE.Vector3());
   return (cache[kind] = { geometry: g, material: r.body.material, center: c });
 }
 // distance detail: beyond 9 m the soldier swaps to the light mesh (same skeleton and atlas layout, about a sixth of the

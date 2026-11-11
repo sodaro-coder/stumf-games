@@ -34,6 +34,7 @@ import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMy
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
 import { loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD, cutPiece } from './chars.js';
 import { setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
+import { setModelTexTier } from './glb.js';
 
 const SET_KEY = 'cs:settings:v1';
 // story mode: Ricky's sidearm, a full-auto Glock with a drum mag (story_sim.js hands it out with sw: true)
@@ -347,7 +348,7 @@ export default function start({ cfg, E, N, smoke }) {
     // ~40 fps even at reduced resolution. Remembered per device.
     const gfx = new GraphicsSettingsManager(S.quality), AUTO = gfx.auto;
     let Q = gfx.q, P = gfx.p;
-    setModelQuality(P.hqModels ? 1 : 0.75);
+    setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra');
     if (P.chars) loadChars(P.hqModels ? true : undefined);   // the real soldiers: Medium and up only
     // free every other WebGL context first (menu backdrop, map and item pictures): browsers cap how many can exist
     try { if (shotR) { shotR.dispose(); shotR.forceContextLoss(); shotR = null; } } catch (e) { shotR = null; }
@@ -485,9 +486,9 @@ export default function start({ cfg, E, N, smoke }) {
           #ifdef GRADE
           c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);                                   // contrast
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = mix(vec3(l), c, 1.08);   // a touch more colour
-          c += (1.0 - l) * vec3(-0.012, 0.0, 0.018) + l * vec3(0.016, 0.006, -0.012);   // cool shadows, warm highlights
+          c = c * (vec3(1.0) + (1.0 - l) * vec3(-0.06, 0.0, 0.07)) + l * vec3(0.016, 0.006, -0.012);   // cool shadows (scaled: black stays black; an added blue lifted dark red blood to purple and dark guns to navy), warm highlights
           vec2 q = vUv - 0.5; c *= 1.0 - 0.32 * pow(length(q * vec2(1.25, 1.0)) * 1.3, 2.4);   // vignette
-          c += (fract(sin(dot(vUv * res + time * 61.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.007;   // grain
+          c += (fract(sin(dot(vUv * res + time * 61.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.007 * min(1.0, 0.2 + l * 8.0);   // grain (faint in near-black: linear noise there is a visible speckle after sRGB)
           #endif
           if (cine > 0.01) {   // the film look: teal shadows, warm skin and highlights, deeper contrast, heavier vignette and grain
             float lc = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -536,7 +537,7 @@ export default function start({ cfg, E, N, smoke }) {
     // tier switches that live outside the map: post defines and target, models, the dynamic player shadows
     let dsh = null;
     const applyTier = () => {
-      Q = gfx.q; P = gfx.p; setModelQuality(P.hqModels ? 1 : 0.75);
+      Q = gfx.q; P = gfx.p; setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra');
       post.mat.defines = gfx.postDefines(); post.mat.needsUpdate = true; post.w = 0;
       if (dsh) { dsh.dispose(); dsh = null; }
       if (P.shadows && renderer.capabilities.isWebGL2) dsh = new DynamicShadows(P.shadows);
@@ -2269,6 +2270,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip, startReplay, get rp() { return rp; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, vmScene, rigs, switchTo, fire: (alt) => fire(!!alt), post, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip, startReplay, get rp() { return rp; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

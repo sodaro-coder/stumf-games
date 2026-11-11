@@ -8,7 +8,7 @@ import { paintSkin, KNIFE_BY_ID, ITEM_BY_ID } from './skins.js';
 import { sprayCanvas } from './sprays.js';
 import { litPatch, loadTx } from './world.js';
 import { surface } from './textures.js';
-import { model, loadGLB, modelManifest, canonGun, gunParts } from './glb.js';
+import { model, loadGLB, modelManifest, modelFile, canonGun, gunParts } from './glb.js';
 
 const matCache = new Map();
 export const lam = (color) => { const k = 'l' + color; if (!matCache.has(k)) matCache.set(k, new THREE.MeshLambertMaterial({ color })); return matCache.get(k); };
@@ -1086,7 +1086,7 @@ const REAL_FIT = { ar15: { dy: -0.004 }, m4a1: {}, ak_tactical: {}, aks: {}, mp5
 const realCache = new Map();
 export function realGunFile(mid, tier) {
   const k = mid + tier;
-  if (!realCache.has(k)) realCache.set(k, modelManifest().then((man) => (man[mid] ? loadGLB(man[mid].files[tier], { lit: false }).then((m) => ({ m, auto: man[mid].auto })) : null)).catch(() => null));
+  if (!realCache.has(k)) realCache.set(k, modelManifest().then((man) => (man[mid] ? loadGLB(modelFile(man[mid], tier), { lit: false }).then((m) => ({ m, auto: man[mid].auto })) : null)).catch(() => null));
   return realCache.get(k);
 }
 function realGun(g, mid, id, cg, hands, tex, cbox = null) {

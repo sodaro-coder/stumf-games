@@ -122,7 +122,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
   // film on top (the sky and sun reflect in it); it dulls, browns and goes matte as it dries or soaks into sand.
   const bloodMat = (map, color, opacity = 1) => {
     if (!hq) return new THREE.MeshBasicMaterial({ color: 0x3a0303, alphaMap: map, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-    const m = new THREE.MeshStandardMaterial({ color: FRESH, alphaMap: map, bumpMap: map, bumpScale: 1.6, transparent: true, opacity, roughness: 0.12, metalness: 0, envMapIntensity: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const m = new THREE.MeshStandardMaterial({ color: FRESH, alphaMap: map, bumpMap: map, bumpScale: 1.6, transparent: true, opacity, roughness: 0.12, metalness: 0, envMapIntensity: 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     return litPatch(m, 'dyn');
   };
 
@@ -242,9 +242,10 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     for (const L of limbs) {
       if (!L.g.visible) continue; L.t += dt; if (L.t > 40) { L.g.visible = false; continue; }
       if (L.landed > 4) continue;
-      L.v.y -= 9.8 * dt; L.g.position.addScaledVector(L.v, dt); L.g.rotation.x += L.w.x * dt; L.g.rotation.y += L.w.y * dt; L.g.rotation.z += L.w.z * dt;
+      const px = L.g.position.x, pz = L.g.position.z; L.v.y -= 9.8 * dt; L.g.position.addScaledVector(L.v, dt); L.g.rotation.x += L.w.x * dt; L.g.rotation.y += L.w.y * dt; L.g.rotation.z += L.w.z * dt;
       if (!W) continue; const p = L.g.position, rad = L.kind === 'head' ? 0.11 : 0.06;
       if (W.ray && (L.v.x || L.v.z)) { const s = Math.hypot(L.v.x, L.v.z); if (s > 0.3) { const h = W.ray({ x: p.x, y: p.y, z: p.z }, { x: L.v.x / s, y: 0, z: L.v.z / s }, s * dt + rad); if (h) { splats.add({ x: h.x, y: h.y, z: h.z }, normalOf(h, { x: L.v.x / s, y: 0, z: L.v.z / s }).clone(), rnd(0.35, 0.55), Math.random() * 6.28, 1.2, { own: true, color: 0x5a0505, dry: 40, life: 90 }); L.v.x *= -0.25; L.v.z *= -0.25; } } }
+      if (W.topAt && W.topAt(p.x, p.z) > p.y + rad) { p.x = px; p.z = pz; L.v.x *= -0.25; L.v.z *= -0.25; }   // flew into a wall between two frames (a slow frame): back out and bounce, never fall inside it
       const gy = W.groundAt(p.x, p.z, p.y + 0.3);
       if (p.y < gy + rad) {
         p.y = gy + rad; if (gore > 0) splats.add({ x: p.x, y: gy, z: p.z }, { x: 0, y: 1, z: 0 }, rnd(0.3, 0.5), Math.random() * 6.28, rnd(1, 1.6), { own: true, color: 0x5a0404, dry: 40, life: 90 });
@@ -279,10 +280,11 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       if (!g.m.visible) return; g.t += dt;
       if (g.t > g.life) { g.m.visible = false; return; }
       if (g.landed > 3) return;
-      g.v.y -= 9.8 * dt; g.m.position.addScaledVector(g.v, dt); g.m.rotation.x += g.w.x * dt; g.m.rotation.y += g.w.y * dt; g.m.rotation.z += g.w.z * dt;
+      const px = g.m.position.x, pz = g.m.position.z; g.v.y -= 9.8 * dt; g.m.position.addScaledVector(g.v, dt); g.m.rotation.x += g.w.x * dt; g.m.rotation.y += g.w.y * dt; g.m.rotation.z += g.w.z * dt;
       if (W) {
         const p = g.m.position;
         if (W.ray && (g.v.x || g.v.z)) { /* walls: a chunk that hits one drops straight down */ const L = Math.hypot(g.v.x, g.v.z); if (L > 0.3) { const h = W.ray({ x: p.x, y: p.y, z: p.z }, { x: g.v.x / L, y: 0, z: g.v.z / L }, L * dt + 0.06); if (h) { if (gore > 0) splats.add({ x: h.x, y: h.y, z: h.z }, normalOf(h, { x: g.v.x / L, y: 0, z: g.v.z / L }).clone(), rnd(0.12, 0.25), Math.random() * 6.28, 1, { own: true, color: 0x6a0505, dry: 40, life: 70 }); g.v.x *= -0.2; g.v.z *= -0.2; } } }
+        if (W.topAt && W.topAt(p.x, p.z) > p.y + 0.03) { p.x = px; p.z = pz; g.v.x *= -0.2; g.v.z *= -0.2; }   // inside a wall after a long frame: back out
         const gy = W.groundAt(p.x, p.z, p.y + 0.3);
         if (p.y < gy + 0.03) {
           p.y = gy + 0.03; if (!g.landed && gore > 0) splats.add({ x: p.x, y: gy, z: p.z }, { x: 0, y: 1, z: 0 }, rnd(0.18, 0.34), Math.random() * 6.28, rnd(1, 1.8), { own: true, color: 0x5a0404, dry: 40, life: 80 });
