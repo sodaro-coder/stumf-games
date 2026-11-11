@@ -8,6 +8,7 @@ import { paintSkin, KNIFE_BY_ID, ITEM_BY_ID } from './skins.js';
 import { sprayCanvas } from './sprays.js';
 import { litPatch, loadTx } from './world.js';
 import { surface } from './textures.js';
+import { model } from './glb.js';
 
 const matCache = new Map();
 export const lam = (color) => { const k = 'l' + color; if (!matCache.has(k)) matCache.set(k, new THREE.MeshLambertMaterial({ color })); return matCache.get(k); };
@@ -1313,6 +1314,7 @@ export function makeProp(p) {
     case 'duck': P.push([place(SPH(0.25, 12, 9), [0, 0.2, 0], [0, 0, 0], [1.2, 0.8, 0.9]), '#f2d33c'], [place(SPH(0.15, 12, 9), [0.22, 0.48, 0]), '#f2d33c'], [place(new THREE.ConeGeometry(0.06, 0.14, 8), [0.4, 0.46, 0], [0, 0, -Math.PI / 2], [1, 1, 0.5]), '#e8702a'], [place(SPH(0.025, 6, 4), [0.33, 0.53, 0.07]), '#111'], [place(SPH(0.025, 6, 4), [0.33, 0.53, -0.07]), '#111']); break;
     case 'lamp': P.push([place(CYL(0.06, 0.09, 4, 8), [0, 2, 0]), '#3a3a3a'], [place(CYL(0.14, 0.16, 0.2, 8), [0, 0.1, 0]), '#333'], [place(CYL(0.025, 0.025, 0.6, 6), [0.28, 3.95, 0], [0, 0, Math.PI / 2]), '#3a3a3a'], [place(CYL(0.08, 0.18, 0.14, 10), [0.55, 3.88, 0]), '#2a2a2a']);
       break;
+    case 'model': { const m = model(p.model, { hq: HQ }); if (p.scale) m.scale.setScalar(p.scale); g.add(m); break; }   // a real model file (glb.js, browserdev/assetbuild.py)
     default: break;
   }
   if (P.length) g.add(new THREE.Mesh(merge(P), propMat()));

@@ -1,0 +1,4 @@
+Models used by KYS:GO (built by browserdev/assetbuild.py). All free to use under the licence named.
+
+barrel: "Barrel 01" by Jorge Camacho, CC0, https://polyhaven.com/a/Barrel_01
+crate: "Wooden Crate 01" by James Ray Cock, CC0, https://polyhaven.com/a/wooden_crate_01

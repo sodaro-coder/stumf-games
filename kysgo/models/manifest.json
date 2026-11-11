@@ -1,0 +1,48 @@
+{
+ "barrel": {
+  "kind": "prop",
+  "sig": "f64d6d78ad70",
+  "files": {
+   "hi": "models/barrel.glb",
+   "lo": "models/barrel_lo.glb"
+  },
+  "tris": {
+   "hi": 2682,
+   "lo": 961
+  },
+  "bytes": {
+   "hi": 747824,
+   "lo": 153852
+  },
+  "scale": 1,
+  "credit": {
+   "title": "Barrel 01",
+   "author": "Jorge Camacho",
+   "licence": "CC0",
+   "url": "https://polyhaven.com/a/Barrel_01"
+  }
+ },
+ "crate": {
+  "kind": "prop",
+  "sig": "71af1786e05f",
+  "files": {
+   "hi": "models/crate.glb",
+   "lo": "models/crate_lo.glb"
+  },
+  "tris": {
+   "hi": 6576,
+   "lo": 3522
+  },
+  "bytes": {
+   "hi": 869524,
+   "lo": 269096
+  },
+  "scale": 1,
+  "credit": {
+   "title": "Wooden Crate 01",
+   "author": "James Ray Cock",
+   "licence": "CC0",
+   "url": "https://polyhaven.com/a/wooden_crate_01"
+  }
+ }
+}

@@ -82,7 +82,8 @@ function dust() {
   B.sign(45, 24.05, 2.6, 0, 'NO PEEING\nIN THE CAVE\n(looking at you, Gary)', 3.2, 1.4, '#efe6cf', '#3a2a1a');
   B.sign(121.95, 94, 3.1, -Math.PI / 2, 'EMPLOYEE OF THE MONTH\nOSAMA (posthumous)', 3.6, 1.3, '#273', '#fff');
   B.prop('goat', 96, 24, {}).prop('goat', 20, 92, {}).prop('palm', 56, 110, {}).prop('palm', 86, 124, {}).prop('palm', 100, 92, {})
-    .prop('tv', 10, 18, { rot: Math.PI / 2 }).prop('barrel', 74, 30, {}).prop('barrel', 120, 96, {}).prop('palm', 30, 10, {});
+    .prop('tv', 10, 18, { rot: Math.PI / 2 }).prop('barrel', 74, 30, {}).prop('barrel', 120, 96, {}).prop('palm', 30, 10, {})
+    .prop('model', 75.3, 30.6, { model: 'barrel' }).prop('model', 59.2, 4.8, { model: 'crate', rot: 0.4 }).prop('model', 59.4, 5.6, { model: 'crate', rot: -0.2 });   // real scanned models (models/, assetbuild.py)
   B.sky = 0x6f9fd8; B.fog = 0xd9cdb4; B.sunColor = 0xffeed2; B.amb = [0xc4d8f2, 0x9c7c54]; B.sunDir = [0.62, 0.66, 0.42]; B.sunI = 2.7; B.ambI = 1.15;
   B.photo = 'day';   // the real sky over it (sky_<name>_*.jpg)
   return B;
