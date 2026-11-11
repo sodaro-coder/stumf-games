@@ -356,7 +356,7 @@ export function makeSoldier(look, team, hq = true) {
   const vest = gearMesh(vestParts(team)); chest.add(vest);
   const bomb = L.bombvest ? gearMesh(bombVestParts()) : null; if (bomb) { chest.add(bomb); chest.visible = true; }
   const helm = gearMesh(helmetParts(team)); helm.visible = false; head.add(helm);
-  const headCol = L.hat === 'balaclava' || (human && !L.hat) ? (L.hatColor || '#22231f') : L.head || '#c89a74', armCol = L.arms || L.body || (team === 'CT' ? '#3c4e66' : '#7a6a4a');   // what a severed piece looks like (gore)
+  const headCol = L.hat === 'balaclava' || (human && !L.hat) ? (L.hatColor || '#22231f') : L.hat === 'helmet' ? (L.hatColor || '#2a3646') : L.head || '#c89a74', armCol = L.arms || L.body || (team === 'CT' ? '#3c4e66' : '#7a6a4a');   // what a severed piece looks like (gore)
   const r = { soldier: true, headCol, armCol, human, humanHelm, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, vest, bomb, tpKey: '', over: null, t: 0, dieDone: false };
   // where the head and hand sit relative to their bones at rest: lets props follow the animated bones
   g.updateMatrixWorld(true);
@@ -585,7 +585,7 @@ const V = () => _VP[_vi++ % 96];
 // how fast each kind of death goes down: a headshot drops on the spot, a blade slumps slowly, a heavy hit throws
 const DIE_SPEED = { head: 1.55, knife: 0.7, heavy: 1.2, body: 1 };
 export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
-  r.t += dt; _vi = 0;   // scratch vectors from the pool below: no allocations per soldier per frame
+  r.t += dt; _vi = 0; let secWant = null, secW = 0;   // scratch vectors from the pool below: no allocations per soldier per frame
   if (dead) {
     if (!r.dead) { r.dead = true; r.rag = r.rag || { t: 0, force: 1, head: false }; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.timeScale = DIE_SPEED[r.rag.zone] || 1; d.play(); r.base = 'die'; }
   } else {
@@ -603,8 +603,24 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
     else if (sp < 0.35) base(r, 'idle');
     else {
       const run = sp > (String(r.base).startsWith('run') ? 3.0 : 3.7), ax = Math.abs(f) >= Math.abs(side) * 0.8;
-      const name = ax ? (f >= 0 ? (run ? 'run' : 'walk') : (run ? 'runBack' : 'walkBack')) : (side > 0 ? (run ? 'runRight' : 'walkRight') : (run ? 'runLeft' : 'walkLeft'));
+      const fw = f >= 0 ? (run ? 'run' : 'walk') : (run ? 'runBack' : 'walkBack'), sd = side > 0 ? (run ? 'runRight' : 'walkRight') : (run ? 'runLeft' : 'walkLeft');
+      const name = ax ? fw : sd;
       base(r, name, Math.max(0.6, Math.min(1.7, sp / SPEED[name])));
+      // moving diagonally: the other direction's clip blends in by the angle (walking forward-right is half "walk"
+      // and half "walk right", feet in step), instead of snapping to whichever axis is bigger
+      const other = ax ? sd : fw, w2 = Math.min(Math.abs(f), Math.abs(side)) / (Math.abs(f) + Math.abs(side) + 1e-6);
+      if (w2 > 0.08) secWant = other, secW = w2 * 1.6;
+    }
+  }
+  { // the blended second clip: in step with the main one, faded in and out
+    if (r.sec && r.sec !== secWant) { const o = r.act[r.sec]; if (o) o.fadeOut(0.2); r.sec = null; }
+    if (secWant) {
+      const a2 = r.act[secWant], a1 = r.act[r.base];
+      if (a2 && a1) {
+        if (r.sec !== secWant) { a2.reset(); a2.setEffectiveWeight(0); a2.play(); r.sec = secWant; }
+        a2.stopFading(); a2.timeScale = 0; a2.time = (a1.time / a1.getClip().duration) % 1 * a2.getClip().duration;
+        a2.setEffectiveWeight(Math.min(1, a2.getEffectiveWeight() + 0.12) > secW ? secW : Math.min(1, a2.getEffectiveWeight() + 0.12));
+      }
     }
   }
   r.mixer.update(dt);
