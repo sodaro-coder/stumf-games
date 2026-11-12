@@ -4,6 +4,7 @@
 // caller-owned {up, side} objects. Callers that keep a hit past the next trace copy the fields they need.
 import { U, LEAN } from './data.js';
 import { recoilPatternInto } from './guns.js';
+import { calOf, dropAt } from './ballistics.js';
 
 // ---- hitboxes ---------------------------------------------------------------------------------------------------------
 // four AABBs per player: head, chest, stomach, legs ([x0,y0,z0,x1,y1,z1] each, 24 floats). Leaning moves the head and
@@ -58,8 +59,15 @@ export class TraceResult {
   reset() { this.hits.length = 0; this.wallHits.length = 0; this.end = null; this._ids.length = 0; return this; }
 }
 const SHARED = new TraceResult();
-export function traceShot(W, players, shooterId, o, d, w, range = 8192 * U, out = SHARED) {
+const _dd = { x: 0, y: 0, z: 1 };
+export function traceShot(W, players, shooterId, o, d0, w, range = 8192 * U, out = SHARED) {
   const res = out.reset();
+  // bullet drop: the round falls 1/2 g t^2 over its flight (t from the cartridge's muzzle velocity). The straight ray is
+  // tilted down by the drop at the distance it would travel (to the first wall, or 60 m in the open), so a pistol at
+  // 40 m hits ~6 cm low and a .338 at 50 m ~1.5 cm low. Same on every machine (host, bots and players share this)
+  let d = d0; const cal = w && calOf(w.id);
+  if (cal && W.ray) { const f = W.ray(o, d0, range, 0), D = Math.min(f ? f.t : 60, 120); const k = dropAt(cal, D) / Math.max(1, D);
+    _dd.x = d0.x; _dd.y = d0.y - k; _dd.z = d0.z; const L = Math.hypot(_dd.x, _dd.y, _dd.z) || 1; _dd.x /= L; _dd.y /= L; _dd.z /= L; d = _dd; }
   let t = 0, pen = 1;
   for (let n = 0; n < 3; n++) {
     const wall = W.ray(o, d, range, t), wallT = wall ? wall.t : range;

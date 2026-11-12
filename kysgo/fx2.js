@@ -336,6 +336,25 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       }
     }
   }
+  // ---- wounds that stay on the body: an entry hole where the round went in, a torn exit where it came out (bigger), each
+  // stuck to the bone under it so it moves with the body, alive or dead, until the round ends. Lit like the soldier.
+  const exitTex = canvasTex(128, (g, sz) => { const c = sz / 2; g.fillStyle = 'rgba(45,3,3,.8)'; blob(g, c, c + 8, 40, 0.45, 7);
+    g.fillStyle = 'rgba(95,8,8,1)'; blob(g, c, c, 26, 0.5, 8); g.fillStyle = 'rgba(150,30,24,1)'; blob(g, c, c, 17, 0.55, 8);
+    for (let k = 0; k < 14; k++) { const a = rnd(0, 6.28); g.fillStyle = k % 3 ? 'rgba(120,14,12,1)' : 'rgba(220,200,170,1)'; g.beginPath(); g.ellipse(c + Math.cos(a) * rnd(8, 20), c + Math.sin(a) * rnd(8, 20), rnd(2, 5), rnd(1, 3), a, 0, 6.28); g.fill(); }   // torn tissue, a fleck of bone
+    g.fillStyle = 'rgba(10,1,1,1)'; blob(g, c, c, 8, 0.4, 6); });
+  const woundMat = (map) => litPatch(new THREE.MeshStandardMaterial({ map, transparent: true, alphaTest: 0.06, roughness: 0.25, envMapIntensity: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), 'dyn');
+  const WM = [woundMat(T.wound), woundMat(exitTex)];
+  const wounds = Array.from({ length: ultra ? 80 : hq ? 48 : 12 }, () => { const m = new THREE.Mesh(plane, WM[0]); m.renderOrder = 2; return m; }); let wi = 0;
+  const _wp = new THREE.Vector3(), _wq = new THREE.Quaternion(), _ws = new THREE.Vector3(), _wz = new THREE.Vector3(0, 0, 1);
+  function wound(bone, p, dir, size, exit) {
+    if (!bone) return null; const m = wounds[wi = (wi + 1) % wounds.length]; if (m.parent) m.parent.remove(m);
+    m.material = WM[exit ? 1 : 0]; bone.updateMatrixWorld(true);
+    _wp.set(p.x, p.y, p.z); bone.worldToLocal(_wp); m.position.copy(_wp);
+    // face out of the body: against the shot for an entry, along it for an exit
+    _ws.set(exit ? dir.x : -dir.x, exit ? dir.y : -dir.y, exit ? dir.z : -dir.z).normalize(); _wq.setFromUnitVectors(_wz, _ws);
+    bone.getWorldQuaternion(m.quaternion).invert().multiply(_wq); m.rotateZ(Math.random() * 6.28);
+    m.scale.setScalar(size / Math.max(1e-6, bone.getWorldScale(_ws).x)); m.visible = true; bone.add(m); return m;
+  }
   // organs (gore max): a real scanned heart thrown out of a body that was blown open. Two in the pool, loaded on first use
   const organs = []; let organSrc = null, oi = 0;
   function organ(x, y, z, dir, force = 1) {
@@ -554,6 +573,11 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     },
     // gore: chunks flying from a body (explosions, a head that came off), and a wound that pumps (pos() follows the body)
     gibs(x, y, z, n, dir = null, force = 1) { if (gore > 0) gibBurst(x, y, z, Math.round(n * (gore > 1 ? 1 : 0.5)), dir, force); if (gore > 1 && n >= 20) organ(x, y, z, dir, force); },
+    // a hit that stays: entry (and exit) wound on the bone, and the wound keeps bleeding: drops run off it to the floor
+    wound(bone, p, dir, size = 0.04, exit = false, bleed = 0) { if (gore < 1 && exit) return null; const m = wound(bone, p, dir, size, exit);
+      if (m && bleed > 0 && gore > 0) { const wp = new THREE.Vector3(); fountains.push({ pos: () => (m.parent && m.visible ? m.getWorldPosition(wp) : null), dur: 0.01, dir: { x: 0, y: -1, z: 0 }, t: 0, acc: 0, drip: bleed }); }
+      return m; },
+    clearWounds() { for (const m of wounds) { if (m.parent) m.parent.remove(m); } },
     heart(x, y, z, dir, force = 1) { if (gore > 1) organ(x, y, z, dir, force); },   // a torso blown open (max gore)
     fountain(pos, dur = 2.2, dir = { x: 0, y: 1, z: 0 }) { if (gore > 0) fountains.push({ pos, dur: dur * (gore > 1 ? 1 : 0.5), dir, t: 0, acc: 0 }); },
     // a severed head or arm flying off with the shot (gore max), and the cap for the stump left behind (on a bone)
@@ -608,7 +632,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, sprays, drips, pools, scorches, gouges]) r.clear();
       for (const k of [...smokes.keys()]) api.smoke.remove(k); for (const k of [...fires.keys()]) api.fire.remove(k);
       for (const m of mags) m.o.visible = false; mags.length = 0;
-      for (const g of gibs) g.m.visible = false; for (const o of organs) o.m.visible = false; dSA.fill(0); fountains.length = 0; pending.length = 0; for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
+      for (const g of gibs) g.m.visible = false; for (const o of organs) o.m.visible = false; dSA.fill(0); fountains.length = 0; pending.length = 0; for (const m of wounds) if (m.parent) m.parent.remove(m); for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
     },
   };
   return api;

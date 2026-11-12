@@ -35,6 +35,7 @@ import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
 import { releaseSoldiers, loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD, cutPiece } from './chars.js';
 import { releaseRealGuns, setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
 import { setModelTexTier, placeModels, releaseLoaded } from './glb.js';
+import { calOf, goreOf } from './ballistics.js';
 let pmT = 0;
 
 const SET_KEY = 'cs:settings:v1';
@@ -828,6 +829,21 @@ export default function start({ cfg, E, N, smoke }) {
     // gore on a kill. Max: a headshot takes the head off (a neck that pumps, skull and meat flying), a close shotgun blast
     // takes an arm, explosives blow the body apart. Heavy: explosions only. Low: blood only.
     const EXPLOSIVE = /^(he|c4|molotov|incgrenade|rocket|rocket_ball|triple_ball|dunk|explosion|bomb|vest)$/;
+    // a round's wounds on a body (ballistics.js decides how big and whether it went through): the bone under the hit,
+    // the entry on the side facing the shooter, the exit out the back. A shotgun leaves a spread of pellet holes
+    const WBONE = { head: ['Head'], chest: ['Spine2', 'Spine1'], stomach: ['Spine', 'Spine1'], legs: ['LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg'] };
+    function bodyWound(r, group, dir, wid, dist) {
+      if (!cfx || !cfx.wound || !r.bones) return; const G = goreOf(wid, dist); if (G.cls === 'none') return;
+      const names = WBONE[group] || WBONE.chest, bone = r.bones[names[(Math.random() * names.length) | 0]] || r.bones.Spine2; if (!bone) return;
+      const c = new THREE.Vector3(); bone.getWorldPosition(c); if (group === 'head') c.y += 0.06;
+      const R = group === 'head' ? 0.1 : group === 'legs' ? 0.075 : 0.14, side = new THREE.Vector3(-dir.z, 0, dir.x);
+      const n = G.cls === 'shotgun' ? (G.k >= 1 ? 3 : 5) : 1, size = { pistol: 0.035, magnum: 0.05, rifle: 0.045, sniper: 0.06, shotgun: G.k >= 1 ? 0.04 : 0.018 }[G.cls] || 0.04;
+      for (let k = 0; k < n; k++) {
+        const o = side.clone().multiplyScalar((Math.random() - 0.5) * (n > 1 ? 0.22 : 0.08)); o.y += (Math.random() - 0.5) * (n > 1 ? 0.2 : 0.08);
+        cfx.wound(bone, { x: c.x - dir.x * R + o.x, y: c.y - (dir.y || 0) * R + o.y, z: c.z - dir.z * R + o.z }, dir, size * (0.8 + Math.random() * 0.4), false, k ? 0 : G.cls === 'pistol' ? 6 : 4);
+      }
+      if (G.cls === 'rifle' || G.cls === 'sniper' || G.cls === 'magnum') cfx.wound(bone, { x: c.x + dir.x * R, y: c.y, z: c.z + dir.z * R }, dir, size * (G.cls === 'sniper' ? 2.6 : 1.9), true, 3);
+    }
     function goreKill(r, vp, data, W2, dir, dist) {
       const g = S.gore ?? 2, at = (bone, fy) => { const b = r.bones && r.bones[bone]; if (b) { const v = new THREE.Vector3(); b.getWorldPosition(v); return v; } return new THREE.Vector3(vp.x, vp.y + fy, vp.z); };
       const cap = (parent, child, rad) => { const c = r.bones && cfx.stumpCap(r.bones[parent], r.bones[child], rad); if (c) (r.caps || (r.caps = [])).push(c); };
@@ -840,14 +856,37 @@ export default function start({ cfg, E, N, smoke }) {
         }
         return;
       }
+      const knife = W2.cat === 'knife' || data.weapon === 'knife', G = goreOf(data.weapon, dist);
+      // every kill leaves its wounds on the body: an entry hole facing the shooter, and for rifles, magnums and big
+      // rounds a larger torn exit on the far side; they keep bleeding onto the floor for a few seconds
+      if (!knife && G.cls !== 'none') bodyWound(r, data.head ? 'head' : 'chest', dir, data.weapon, dist);
       if (g < 2) return;
-      const knife = W2.cat === 'knife' || data.weapon === 'knife';
+      // max gore, by what the round can really do (ballistics.js): a pistol round makes holes; a rifle up close can take
+      // a hand or an arm; a shotgun close blows pieces off (less with distance: wounds, then pellet marks); a .338/.308
+      // takes heads and limbs
+      if (!knife && !data.head && (G.cls === 'rifle' && G.k >= 2 || G.cls === 'sniper')) {
+        const side = Math.random() < 0.5 ? 'Left' : 'Right', roll = Math.random();
+        if (G.cls === 'sniper' ? roll < 0.55 : roll < 0.12) {   // the arm, at the shoulder
+          const sh = at(side + 'Arm', 1.4); r.lost = [side + 'Arm']; cap(side + 'Shoulder', side + 'Arm', 5.5); cfx.gibs(sh.x, sh.y, sh.z, 6, dir, 1.0);
+          if (r.soldier) cfx.limb('arm', sh.x, sh.y, sh.z, dir, r.armCol, 1.1, cutPiece(r, 'arm' + side));
+          cfx.fountain(() => (r.g.visible ? at(side + 'Shoulder', 1.4) : null), 1.8, { x: dir.x, y: 0.6, z: dir.z });
+        } else if (G.cls === 'rifle' ? roll < 0.4 : roll < 0.8) {   // the hand, at the wrist (it was up holding the gun)
+          const hd = at(side + 'Hand', 1.2); r.lost = [side + 'Hand']; cap(side + 'ForeArm', side + 'Hand', 3.2); cfx.gibs(hd.x, hd.y, hd.z, 3, dir, 0.8);
+          if (r.soldier) cfx.limb('arm', hd.x, hd.y, hd.z, dir, r.armCol, 0.9, cutPiece(r, 'hand' + side));
+          cfx.fountain(() => (r.g.visible ? at(side + 'ForeArm', 1.2) : null), 1.4, { x: dir.x * 0.5, y: 0.3, z: dir.z * 0.5 });
+        }
+      }
+      if (data.head && !knife && (G.cls === 'pistol' || (G.cls === 'shotgun' && G.k < 1))) {   // a pistol round or a far pellet: a hole and a burst of blood, the head stays on
+        const h = at('Head', 1.7); cfx.gibs(h.x, h.y, h.z, G.cls === 'pistol' ? 3 : 1, dir, 0.6); cfx.blood(h.x, h.y, h.z, { x: dir.x, y: 0.2, z: dir.z }, true);
+        return;
+      }
+      if (G.cls === 'shotgun' && G.k < 2 && !data.head) { const c = at('Spine2', 1.3); cfx.blood(c.x, c.y, c.z, dir, G.k > 0); if (G.k > 0) cfx.gibs(c.x, c.y, c.z, 3, dir, 0.6); return; }   // past 4 m the pellets wound; past 10 m they only mark
       if (data.head && !knife) {
         const h = at('Head', 1.7); r.lost = ['Head']; cap('Neck', 'Head', 6.5);
         cfx.gibs(h.x, h.y, h.z, 12, dir, 0.9); cfx.blood(h.x, h.y, h.z, { x: dir.x, y: 0.2, z: dir.z }, true);
-        if (r.soldier && ((W2.dmg || 0) >= 60 || W2.pellets > 1 || dist < 6)) cfx.limb('head', h.x, h.y, h.z, dir, r.headCol, 0.8, cutPiece(r, 'head'));   // a big round or close range: the head goes with it, otherwise it bursts
+        if (r.soldier && (G.cls === 'sniper' || (G.cls === 'shotgun' && G.k >= 2) || (G.cls === 'rifle' && G.k >= 2 && Math.random() < 0.35) || (G.cls === 'magnum' && dist < 3))) cfx.limb('head', h.x, h.y, h.z, dir, r.headCol, 0.8, cutPiece(r, 'head'));   // a big round or close range: the head goes with it, otherwise it bursts
         cfx.fountain(() => (r.g.visible ? at('Neck', 1.55) : null), 2.8, { x: -dir.x * 0.3, y: 1, z: -dir.z * 0.3 });
-      } else if (W2.pellets > 1 && dist < 7) {
+      } else if (W2.pellets > 1 && dist < 4) {
         const side = Math.random() < 0.5 ? 'Left' : 'Right', sh = at(side + 'Arm', 1.4); r.lost = [side + 'Arm']; cap(side + 'Shoulder', side + 'Arm', 5.5);
         cfx.gibs(sh.x, sh.y, sh.z, 8, dir, 1.1); if (r.soldier) cfx.limb('arm', sh.x, sh.y, sh.z, dir, r.armCol, 1.1, cutPiece(r, 'arm' + side));
         cfx.fountain(() => (r.g.visible ? at(side + 'Shoulder', 1.4) : null), 1.8, { x: dir.x, y: 0.6, z: dir.z });
@@ -979,14 +1018,27 @@ export default function start({ cfg, E, N, smoke }) {
     const tracers = [];
     const tracer = (a, b) => { if (tracers.length > 24) { const t = tracers.shift(); fx.remove(t.l); t.l.geometry.dispose(); } const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]); const l = new THREE.Line(g, tracerMat); fx.add(l); tracers.push({ l, t: 0.05 }); };
     // spent brass: flies out of the ejection port, tumbles, bounces and tinkles, then lies there a while
-    const brassGeo = new THREE.CylinderGeometry(0.0045, 0.0045, 0.022, 6), shellGeo = new THREE.CylinderGeometry(0.009, 0.009, 0.06, 7), casings = [];
-    const brassMat = P.hqModels ? new THREE.MeshStandardMaterial({ color: '#c89a48', metalness: 1, roughness: 0.28 }) : lam('#c8a048'), shellMat = P.hqModels ? new THREE.MeshStandardMaterial({ color: '#a8201c', roughness: 0.45 }) : lam('#b8221e');   // polished brass and a plastic hull catch the sky (Medium and up)
-    function ejectCasing(o, rx, rz, ax, az, shell) {
+    // each gun throws its own cartridge's case (ballistics.js): a bottle-necked rifle case, a straight pistol case, a
+    // red shotgun hull with its brass head; brass, nickel or the AK's lacquered steel
+    const caseGeos = new Map(), caseMats = {};
+    const caseGeo = (c) => { const k = c.dia + ':' + c.len + ':' + c.neck + c.metal; if (caseGeos.has(k)) return caseGeos.get(k);
+      const r = c.dia / 2, L = c.len, pts = c.neck ? [[0, 0], [r * 1.02, 0], [r * 1.02, L * 0.04], [r * 0.92, L * 0.06], [r, L * 0.09], [r * 0.95, L * 0.76], [r * 0.62, L * 0.84], [r * 0.6, L], [0, L]] : [[0, 0], [r * 1.03, 0], [r * 1.03, L * 0.06], [r * 0.95, L * 0.1], [r, L * 0.13], [r * 0.98, L], [0, L]];
+      const g = new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y - L / 2)), P.hqModels ? 10 : 6); g.rotateX(Math.PI / 2);
+      if (c.metal === 'shell') { const pa = g.attributes.position, col = new Float32Array(pa.count * 3); for (let i = 0; i < pa.count; i++) { const brass = pa.getZ(i) < -L / 2 + L * 0.28; col[i * 3] = brass ? 0.78 : 0.55; col[i * 3 + 1] = brass ? 0.58 : 0.05; col[i * 3 + 2] = brass ? 0.25 : 0.04; } g.setAttribute('color', new THREE.BufferAttribute(col, 3)); }
+      caseGeos.set(k, g); return g; };
+    const caseMat = (metal) => caseMats[metal] || (caseMats[metal] = !P.hqModels ? lam(metal === 'steel' ? '#5a5848' : metal === 'nickel' ? '#c8c8c2' : metal === 'shell' ? '#a8201c' : '#c8a048')
+      : metal === 'shell' ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.1 })
+      : new THREE.MeshStandardMaterial({ color: metal === 'steel' ? '#57553f' : metal === 'nickel' ? '#cfcfca' : '#c89a48', metalness: metal === 'steel' ? 0.55 : 1, roughness: metal === 'steel' ? 0.5 : 0.28 }));
+    const casings = [];
+    // o: the ejection port; (rx, rz): out to the gun's right; (ax, az): forward. Brass flies right, up and a little back
+    function ejectCasing(o, rx, rz, ax, az, cal) {
+      if (!cal || cal.noEject) return;
       let c = casings.length > 40 ? casings.shift() : null;
-      if (!c) c = { m: new THREE.Mesh(shell ? shellGeo : brassGeo, shell ? shellMat : brassMat) };
-      c.m.geometry = shell ? shellGeo : brassGeo; c.m.material = shell ? shellMat : brassMat;
+      if (!c) c = { m: new THREE.Mesh(caseGeo(cal), caseMat(cal.metal)) };
+      c.m.geometry = caseGeo(cal); c.m.material = caseMat(cal.metal); c.cal = cal;
+      const shell = cal.metal === 'shell', sp = shell ? 0.7 : 1;
       c.m.position.set(o.x + rx * 0.16 + ax * 0.32, o.y - 0.08, o.z + rz * 0.16 + az * 0.32); c.m.rotation.set(Math.random() * 6, Math.random() * 6, 0);
-      c.v = new THREE.Vector3(rx * (1.6 + Math.random()) - ax * 0.3, 1.6 + Math.random() * 0.8, rz * (1.6 + Math.random()) - az * 0.3); c.spin = 18 + Math.random() * 10; c.t = 0; c.bounced = 0;
+      c.v = new THREE.Vector3(rx * (1.6 + Math.random()) * sp - ax * 0.3, (1.6 + Math.random() * 0.8) * sp, rz * (1.6 + Math.random()) * sp - az * 0.3); c.spin = (18 + Math.random() * 10) * (shell ? 0.6 : 1); c.t = 0; c.bounced = 0;
       fx.add(c.m); casings.push(c);
     }
     function stepCasings(dt) {
@@ -995,9 +1047,11 @@ export default function start({ cfg, E, N, smoke }) {
         const c = casings[i]; c.t += dt;
         if (c.t > 8) { fx.remove(c.m); casings.splice(i, 1); continue; }
         if (c.bounced > 2) continue;
+        const px = c.m.position.x, pz = c.m.position.z;
         c.v.y -= 9.8 * dt; c.m.position.addScaledVector(c.v, dt); c.m.rotation.x += c.spin * dt; c.m.rotation.z += c.spin * 0.7 * dt;
+        if (W && W.topAt && W.topAt(c.m.position.x, c.m.position.z) > c.m.position.y + 0.02) { c.m.position.x = px; c.m.position.z = pz; c.v.x *= -0.3; c.v.z *= -0.3; if (c.bounced < 1) audio.at('shell', px, c.m.position.y, pz, cam, 12); }   // a case that hits a wall drops off it (it used to fall inside the wall)
         const g = W ? W.groundAt(c.m.position.x, c.m.position.z, c.m.position.y + 0.3) : 0;
-        if (c.m.position.y < g + 0.005) { c.m.position.y = g + 0.005; if (c.v.y < -0.6) { c.v.y *= -0.35; c.v.x *= 0.5; c.v.z *= 0.5; c.spin *= 0.5; c.bounced++; if (c.bounced === 1) audio.at('shell', c.m.position.x, c.m.position.y, c.m.position.z, cam, 14); } else { c.bounced = 3; c.m.rotation.set(Math.PI / 2, Math.random() * 6, 0); } }
+        if (c.m.position.y < g + 0.005) { c.m.position.y = g + 0.005; if (c.v.y < -0.6) { c.v.y *= -0.35; c.v.x *= 0.5; c.v.z *= 0.5; c.spin *= 0.5; c.bounced++; if (c.bounced === 1) audio.at(c.cal && c.cal.metal === 'shell' ? 'bounce' : 'shell', c.m.position.x, c.m.position.y, c.m.position.z, cam, 14); } else { c.bounced = 3; c.m.rotation.set(Math.PI / 2, Math.random() * 6, 0); } }
       }
     }
     // what a bullet throws up depends on what it hit
@@ -1298,6 +1352,7 @@ export default function start({ cfg, E, N, smoke }) {
       const w = W_BY_ID[m.wid] || {}; const snd = typeof m.s === 'string' ? m.s : shotSound(m.wid, null, false);
       audio.at(snd, m.o[0], m.o[1], m.o[2], cam, w.silenced || m.sup ? 25 : w.cat === 'knife' ? 12 : 110);
       if (cfx && w.cat !== 'knife' && w.cat !== 'zeus') { const L = m.e ? Math.hypot(m.e[0] - m.o[0], m.e[1] - m.o[1], m.e[2] - m.o[2]) || 1 : 1, dx = m.e ? (m.e[0] - m.o[0]) / L : 0, dz = m.e ? (m.e[2] - m.o[2]) / L : 0; cfx.muzzle(m.o[0] + dx * 0.8, m.o[1] - 0.1, m.o[2] + dz * 0.8, w.silenced || m.sup ? 0.25 : 0.8); if (m.e) cfx.tracer({ x: m.o[0], y: m.o[1], z: m.o[2] }, { x: m.e[0], y: m.e[1], z: m.e[2] }); }
+      if (w.cat && w.cat !== 'knife' && w.cat !== 'zeus' && m.e && Math.hypot(m.o[0] - cam.position.x, m.o[2] - cam.position.z) < 15) { const L = Math.hypot(m.e[0] - m.o[0], m.e[2] - m.o[2]) || 1, ax = (m.e[0] - m.o[0]) / L, az = (m.e[2] - m.o[2]) / L; ejectCasing({ x: m.o[0], y: m.o[1], z: m.o[2] }, -az, ax, ax, az, calOf(m.wid)); }   // other players' brass, near you
       if (m.e && w.cat !== 'knife') { tracer(m.o, m.e); if (parts) parts.emit(m.e[0], m.e[1], m.e[2], { n: 3, colors: ['#8a8070', '#ffd27a'], speed: 1.2, up: 0.5, size: 0.03, life: 0.35 }); }
       if (m.id === specId && W_BY_ID[m.wid] && W_BY_ID[m.wid].cat !== 'knife') { specKick = Math.min(specKick + (W_BY_ID[m.wid].kick || 0.02) * 0.9, 0.09); specFlashT = 0.045; }
       const r = rigs.get(m.id); if (r) { r.flashT = 0.05; if (r.soldier && W_BY_ID[m.wid] && W_BY_ID[m.wid].cat !== 'knife') soldierEvent(r, 'fire'); }
@@ -1643,7 +1698,7 @@ export default function start({ cfg, E, N, smoke }) {
       const RH = rhK(), rc = { up: 0, side: 0 },   // recoil moves your view (below), so bullets always go where the crosshair is
         sp = (adsOn ? adsSpread() : spreadOf(w, me, me.scoped > 0, me.spray)) * (me.flash > 1 ? 1.3 : 1);
       me.shotK = 1; me.shotRoll = Math.random() - 0.5;
-      if (w.cat !== 'knife' && w.cat !== 'zeus' && !w.shellReload) { const fx2 = -Math.sin(me.yaw), fz2 = -Math.cos(me.yaw); ejectCasing({ x: eye.x + fx2 * 0.2, y: eye.y - 0.04, z: eye.z + fz2 * 0.2 }, Math.cos(me.yaw) * S.hand, -Math.sin(me.yaw) * S.hand, fx2, fz2, false); }
+      if (w.cat !== 'knife' && w.cat !== 'zeus') { const fx2 = -Math.sin(me.yaw), fz2 = -Math.cos(me.yaw), cal = calOf(w.id), pumped = w.shellReload && !w.auto; const ej = () => ejectCasing({ x: eye.x + fx2 * 0.2, y: eye.y - 0.04, z: eye.z + fz2 * 0.2 }, Math.cos(me.yaw) * S.hand, -Math.sin(me.yaw) * S.hand, fx2, fz2, cal); if (pumped || w.cat === 'sniper' && w.rpm < 60) setTimeout(ej, pumped ? 300 : 520); else ej(); }   // a pump gun throws its hull when it is racked, a bolt-action when the bolt comes back
       if (parts && w.cat !== 'knife' && w.cat !== 'zeus' && Math.random() < 0.5) { const fx2 = -Math.sin(me.yaw) * Math.cos(me.pitch), fy2 = Math.sin(me.pitch), fz2 = -Math.cos(me.yaw) * Math.cos(me.pitch); parts.smoke(eye.x + fx2 * 1.0 + Math.cos(me.yaw) * 0.12 * S.hand, eye.y + fy2 * 1.0 - 0.08, eye.z + fz2 * 1.0 - Math.sin(me.yaw) * 0.12 * S.hand, { size: 0.12, life: 0.8, alpha: 0.3 }); }   // a wisp of muzzle smoke
       me.spray++; me.sprayT = 0.4 + 60 / w.rpm; me.lastGun = w.id; me.lastShotAt = performance.now(); me.lastScoped = me.scoped > 0;
       if (w.zoom && me.scoped && w.cat === 'sniper') me.unscopeAfterShot = true;
@@ -1655,7 +1710,7 @@ export default function start({ cfg, E, N, smoke }) {
         const tr = traceShot(W, players, myId, eye, d, w);   // pooled result: keep copies of what outlives this pellet
         for (const h of tr.hits) hits.push({ id: h.id, group: h.group, dist: h.dist, pen: h.pen });
         if (!end && tr.end) end = { x: tr.end.x, y: tr.end.y, z: tr.end.z };
-        for (const h of tr.hits) { const p = st.players.get(h.id); if (p) { if (cfx) cfx.blood(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, d, h.group === 'head'); else puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); const rg = rigs.get(h.id); if (rg) rg.flinch = { x: d.x, z: d.z, t: 0.22, k: h.group === 'head' ? 1.3 : 1 }; } }
+        for (const h of tr.hits) { const p = st.players.get(h.id); if (p) { if (cfx) cfx.blood(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, d, h.group === 'head'); else puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); const rg = rigs.get(h.id); if (rg) { rg.flinch = { x: d.x, z: d.z, t: 0.22, k: h.group === 'head' ? 1.3 : 1 }; if ((S.gore ?? 2) > 0 && (!(w.pellets > 1) || k < 3)) bodyWound(rg, h.group, d, w.id, h.dist); } } }
         if (cfx && tr.wallHits.length > 1) for (let wi = 0; wi < tr.wallHits.length - 1; wi++) {   // wallbang: the exit hole on the far side, debris blown out of it
           const wh = tr.wallHits[wi], o2 = { x: wh.x - d.x * 0.02, y: wh.y - d.y * 0.02, z: wh.z - d.z * 0.02 }, th = W.thickness(o2, d, 0, 1.2);
           if (th < 1.2) { const ex = { x: wh.x + d.x * th, y: wh.y + d.y * th, z: wh.z + d.z * th, side: true }; cfx.impact(ex, { x: -d.x, y: -d.y, z: -d.z }, W.matName(wh.m)); if (parts) parts.emit(ex.x + d.x * 0.05, ex.y, ex.z + d.z * 0.05, { ...impactFx(W.matName(wh.m)), n: 7, dir: d, spread: 0.4 }); }
@@ -2127,6 +2182,11 @@ export default function start({ cfg, E, N, smoke }) {
           const it3 = me.inv[me.cur], t = me.lastGun === w.id ? (performance.now() - (me.lastShotAt || 0)) / 1000 : 9, cyc = Math.min(0.09, (w.rof || 0.1) * 0.8);
           const back = t < cyc ? Math.sin(Math.PI * Math.min(1, t / cyc)) : 0, held = it3 && it3.ammo === 0 && w.cat !== 'sniper' && t > cyc * 0.5 ? 1 : 0;
           ud.bolt.position.z = (ud.boltTravel || 0.07) * Math.max(back, held);
+          if (w.cat === 'sniper' && w.rpm < 60) {   // a bolt-action: after the shot the hand lifts the bolt handle, runs it back (the case flies), pushes it home and turns it down; the gun cants while it is worked
+            const p = (t - 0.25) / 0.6, on = p > 0 && p < 1 ? Math.sin(Math.PI * p) : 0, lift = p > 0 && p < 1 ? Math.min(1, Math.min(p, 1 - p) * 6) : 0;
+            ud.bolt.position.z = (ud.boltTravel || 0.09) * on; ud.bolt.rotation.z = -1.0 * lift; vm.rotation.z += 0.14 * on * S.hand; vm.position.y -= 0.012 * on;
+            if (on > 0.95 && ud.boltAt !== me.lastShotAt) { ud.boltAt = me.lastShotAt; audio.play('bolt', 0.8); }
+          }
         }
         if (ud.flop) {   // floppy: each joint is a damped spring kicked by turning, walking, swinging and stroking
           const F = ud.flopS || (ud.flopS = { x: 0, y: 0, vx: 0, vy: 0 }), stroking = me.inspect > 0 && me.inspectStyle === 'stroke';

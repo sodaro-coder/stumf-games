@@ -451,7 +451,7 @@ export function cutPiece(r, kind) {
   if (!r || !r.model || !r.body) return null;
   const geo = r.geoHi || r.body.geometry, cache = geo.userData.pieces || (geo.userData.pieces = {});
   if (cache[kind] !== undefined) return cache[kind];
-  const re = kind === 'head' ? /(Head|Neck)/ : new RegExp('^mixamorig' + (kind === 'armLeft' ? 'Left' : 'Right') + '(Arm|ForeArm|Hand)');
+  const re = kind === 'head' ? /(Head|Neck)/ : /^hand/.test(kind) ? new RegExp('^mixamorig' + (kind === 'handLeft' ? 'Left' : 'Right') + 'Hand') : new RegExp('^mixamorig' + (kind === 'armLeft' ? 'Left' : 'Right') + '(Arm|ForeArm|Hand)');
   const bones = r.body.skeleton.bones, want = new Set(); bones.forEach((b, i) => { if (re.test(b.name)) want.add(i); });
   const si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight, ix = geo.index.array, n = si.count, mine = new Uint8Array(n);
   for (let v = 0; v < n; v++) { let w = 0; for (let k = 0; k < 4; k++) if (want.has(si.getComponent(v, k))) w += sw.getComponent(v, k); mine[v] = w > 0.5 ? 1 : 0; }
