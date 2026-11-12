@@ -32,10 +32,11 @@ import { createCombatFx } from './fx2.js';
 import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, applyInspect, KILL_FX } from './fx.js';
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
-import { releaseSoldiers, loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD, cutPiece } from './chars.js';
+import { releaseSoldiers, loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD, cutPiece, setRagdolls, ragdollStats, ragdollLose } from './chars.js';
 import { releaseRealGuns, setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
 import { setModelTexTier, placeModels, releaseLoaded } from './glb.js';
-import { calOf, goreOf } from './ballistics.js';
+import { calOf, goreOf, momentum } from './ballistics.js';
+import { loadArms, armsReady, makeArms, poseArms, hideBuiltArms } from './fparms.js';
 let pmT = 0;
 
 const SET_KEY = 'cs:settings:v1';
@@ -351,6 +352,7 @@ export default function start({ cfg, E, N, smoke }) {
     const gfx = new GraphicsSettingsManager(S.quality), AUTO = gfx.auto;
     let Q = gfx.q, P = gfx.p;
     setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra');
+    if (P.hqModels) loadArms('hi');   // the real first-person arms (Medium and up; Performance keeps the built ones)
     if (P.chars) loadChars(P.hqModels ? true : undefined);   // the real soldiers: Medium and up only
     // free every other WebGL context first (menu backdrop, map and item pictures): browsers cap how many can exist
     try { if (shotR) { shotR.dispose(); shotR.forceContextLoss(); shotR = null; } } catch (e) { shotR = null; }
@@ -543,7 +545,7 @@ export default function start({ cfg, E, N, smoke }) {
     // tier switches that live outside the map: post defines and target, models, the dynamic player shadows
     let dsh = null;
     const applyTier = () => {
-      Q = gfx.q; P = gfx.p; setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra');
+      Q = gfx.q; P = gfx.p; try { if (W) setRagdolls(W, P.ragdolls ?? 3); } catch (e) { /* first profile: before the world exists */ } setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra');
       if (applyTier.done) { releaseSoldiers(); releaseRealGuns(); releaseLoaded(); }   // a step down: every real model's textures leave the GPU; what is still drawn uploads its own again
       applyTier.done = true;
       if (P.chars) loadChars(P.hqModels ? true : undefined);   // a step down from Ultra swaps the 2K soldiers for the 1K ones
@@ -816,6 +818,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier), ultra: gfx.tier === 'ultra' }); else cfx.setWorld(W);
       cfx.setGore(S.gore ?? 2);   // holes, blood, sparks, smoke that fills rooms, fire, ripples
+      setRagdolls(W, P.ragdolls ?? 3);   // bodies go limp on this map's floors and walls; how many fall at once is the tier's
       hud.radarBase(W);
       if (SC) SC.setWorld(W);
       // shaders for the new map built now (behind the loading card), not on the first frames of play: phones hitched there
@@ -834,7 +837,7 @@ export default function start({ cfg, E, N, smoke }) {
     const WBONE = { head: ['Head'], chest: ['Spine2', 'Spine1'], stomach: ['Spine', 'Spine1'], legs: ['LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg'] };
     function bodyWound(r, group, dir, wid, dist) {
       if (!cfx || !cfx.wound || !r.bones) return; const G = goreOf(wid, dist); if (G.cls === 'none') return;
-      const names = WBONE[group] || WBONE.chest, bone = r.bones[names[(Math.random() * names.length) | 0]] || r.bones.Spine2; if (!bone) return;
+      const names = WBONE[group] || WBONE.chest, bone = r.bones[names[(Math.random() * names.length) | 0]] || r.bones.Spine2 || r.bones.Spine1; if (!bone) return;   // (the T file has no Spine2)
       const c = new THREE.Vector3(); bone.getWorldPosition(c); if (group === 'head') c.y += 0.06;
       const R = group === 'head' ? 0.1 : group === 'legs' ? 0.075 : 0.14, side = new THREE.Vector3(-dir.z, 0, dir.x);
       const n = G.cls === 'shotgun' ? (G.k >= 1 ? 3 : 5) : 1, size = { pistol: 0.035, magnum: 0.05, rifle: 0.045, sniper: 0.06, shotgun: G.k >= 1 ? 0.04 : 0.018 }[G.cls] || 0.04;
@@ -926,7 +929,7 @@ export default function start({ cfg, E, N, smoke }) {
 
     // ---- first-person view model ----
     let lastMelee = false;
-    let vm = null, vmKey = '', vmSunK = 1, vmProbeK = 1; const vmProbe = [1, 1, 1];
+    let vm = null, vmKey = '', vmSunK = 1, vmProbeK = 1, vmArms = null, vmKind = 'rifle', armsLate = false; const vmProbe = [1, 1, 1], armsBy = new Map();
     function setViewModel() {
       const it = me.cur === 4 ? { wid: me.nades[me.nadeSel] } : me.inv[me.cur];
       const wid = it ? it.wid : null;
@@ -947,6 +950,15 @@ export default function start({ cfg, E, N, smoke }) {
       const small = (W_BY_ID[wid] || {}).cat === 'pistol' || wid === 'zeus';
       vm.userData.base = small ? new THREE.Vector3(0.17 * S.hand, -0.16, -0.44) : new THREE.Vector3(0.19 * S.hand, -0.2, -0.46); vm.userData.ry = (small ? 0.28 : 0.16) * S.hand; vm.scale.multiplyScalar(small ? 0.62 : 0.85);
       vm.position.copy(vm.userData.base); vmScene.add(vm);
+      // the real rigged arms hold it (fparms.js): one pair per team's sleeve, the built arms hidden; not for the joke
+      // guns, left-handed play (the rig is right-handed) or Performance
+      vmKind = wid === 'knife' ? 'knife' : G_BY_ID[wid] || wid === 'c4' ? 'ball' : (W_BY_ID[wid] || {}).cat === 'pistol' || wid === 'zeus' ? 'pistol' : vm.userData.pump ? 'shotgun' : 'rifle';
+      const fingerGun = it && it.skin && /:Finger Gun$/.test(it.skin.def), joke = (wid === 'knife' && SC && SC.melee) || fingerGun || !!vm.userData.flop;
+      if (vmArms) vmArms.root.visible = false;
+      vmArms = null;
+      if (P.hqModels && S.hand >= 0 && !joke && armsReady()) {
+        vmArms = armsBy.get(sleeve) || makeArms(sleeve); if (vmArms) { armsBy.set(sleeve, vmArms); if (!vmArms.root.parent) vmScene.add(vmArms.root); hideBuiltArms(vm, true); }
+      }
       me.deploy = wid === 'knife' ? 0.25 : G_BY_ID[wid] ? 0.35 : (W_BY_ID[wid] || {}).cat === 'pistol' ? 0.35 : (W_BY_ID[wid] || {}).cat === 'sniper' ? 0.7 : 0.5;   // quick draws: fast-paced, R6-like me.scoped = 0; audio.play('deploy');
     }
 
@@ -1016,7 +1028,15 @@ export default function start({ cfg, E, N, smoke }) {
     const fx = new THREE.Group(); scene.add(fx);
     const tracerMat = new THREE.LineBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.6 });
     const tracers = [];
-    const tracer = (a, b) => { if (tracers.length > 24) { const t = tracers.shift(); fx.remove(t.l); t.l.geometry.dispose(); } const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]); const l = new THREE.Line(g, tracerMat); fx.add(l); tracers.push({ l, t: 0.05 }); };
+    // a tracer is the round in flight: a short bright streak that travels from the muzzle to where it hit at the
+    // cartridge's real speed (ballistics.js: an AWP crosses Dust's longest street, 123 m, in 0.14 s; a Glock in 0.34 s).
+    // The hit itself is decided at the trigger pull (see KYSGO.md, Stage 10: travel time)
+    const tracer = (a, b, wid) => { if (tracers.length > 24) { const t = tracers.shift(); fx.remove(t.l); t.l.geometry.dispose(); }
+      const cal = calOf(wid), v = cal ? cal.v : 700, L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1e-3, S = Math.min(L, Math.max(0.8, v * 0.004));
+      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...a)]); const l = new THREE.Line(g, tracerMat); l.frustumCulled = false; fx.add(l);
+      tracers.push({ l, a, b, L, S, v, s: 0, t: L / v + 0.02 }); };
+    const tickTracer = (q, dt) => { q.s = Math.min(q.L, q.s + q.v * dt); const k1 = q.s / q.L, k0 = Math.max(0, q.s - q.S) / q.L, P = q.l.geometry.attributes.position, a = q.a, b = q.b;
+      P.setXYZ(0, a[0] + (b[0] - a[0]) * k0, a[1] + (b[1] - a[1]) * k0, a[2] + (b[2] - a[2]) * k0); P.setXYZ(1, a[0] + (b[0] - a[0]) * k1, a[1] + (b[1] - a[1]) * k1, a[2] + (b[2] - a[2]) * k1); P.needsUpdate = true; };
     // spent brass: flies out of the ejection port, tumbles, bounces and tinkles, then lies there a while
     // each gun throws its own cartridge's case (ballistics.js): a bottle-necked rifle case, a straight pistol case, a
     // red shotgun hull with its brass head; brass, nickel or the AK's lacquered steel
@@ -1033,7 +1053,7 @@ export default function start({ cfg, E, N, smoke }) {
     // o: the ejection port; (rx, rz): out to the gun's right; (ax, az): forward. Brass flies right, up and a little back
     function ejectCasing(o, rx, rz, ax, az, cal) {
       if (!cal || cal.noEject) return;
-      let c = casings.length > 40 ? casings.shift() : null;
+      let c = casings.length >= (gfx.tier === 'ultra' ? 40 : P.hqModels ? 24 : 10) ? casings.shift() : null;   // cases on the ground at once (each one a draw): Ultra 40, Medium/High 24, Performance 10; 8 s each
       if (!c) c = { m: new THREE.Mesh(caseGeo(cal), caseMat(cal.metal)) };
       c.m.geometry = caseGeo(cal); c.m.material = caseMat(cal.metal); c.cal = cal;
       const shell = cal.metal === 'shell', sp = shell ? 0.7 : 1;
@@ -1353,7 +1373,7 @@ export default function start({ cfg, E, N, smoke }) {
       audio.at(snd, m.o[0], m.o[1], m.o[2], cam, w.silenced || m.sup ? 25 : w.cat === 'knife' ? 12 : 110);
       if (cfx && w.cat !== 'knife' && w.cat !== 'zeus') { const L = m.e ? Math.hypot(m.e[0] - m.o[0], m.e[1] - m.o[1], m.e[2] - m.o[2]) || 1 : 1, dx = m.e ? (m.e[0] - m.o[0]) / L : 0, dz = m.e ? (m.e[2] - m.o[2]) / L : 0; cfx.muzzle(m.o[0] + dx * 0.8, m.o[1] - 0.1, m.o[2] + dz * 0.8, w.silenced || m.sup ? 0.25 : 0.8); if (m.e) cfx.tracer({ x: m.o[0], y: m.o[1], z: m.o[2] }, { x: m.e[0], y: m.e[1], z: m.e[2] }); }
       if (w.cat && w.cat !== 'knife' && w.cat !== 'zeus' && m.e && Math.hypot(m.o[0] - cam.position.x, m.o[2] - cam.position.z) < 15) { const L = Math.hypot(m.e[0] - m.o[0], m.e[2] - m.o[2]) || 1, ax = (m.e[0] - m.o[0]) / L, az = (m.e[2] - m.o[2]) / L; ejectCasing({ x: m.o[0], y: m.o[1], z: m.o[2] }, -az, ax, ax, az, calOf(m.wid)); }   // other players' brass, near you
-      if (m.e && w.cat !== 'knife') { tracer(m.o, m.e); if (parts) parts.emit(m.e[0], m.e[1], m.e[2], { n: 3, colors: ['#8a8070', '#ffd27a'], speed: 1.2, up: 0.5, size: 0.03, life: 0.35 }); }
+      if (m.e && w.cat !== 'knife') { tracer(m.o, m.e, m.wid); if (parts) parts.emit(m.e[0], m.e[1], m.e[2], { n: 3, colors: ['#8a8070', '#ffd27a'], speed: 1.2, up: 0.5, size: 0.03, life: 0.35 }); }
       if (m.id === specId && W_BY_ID[m.wid] && W_BY_ID[m.wid].cat !== 'knife') { specKick = Math.min(specKick + (W_BY_ID[m.wid].kick || 0.02) * 0.9, 0.09); specFlashT = 0.045; }
       const r = rigs.get(m.id); if (r) { r.flashT = 0.05; if (r.soldier && W_BY_ID[m.wid] && W_BY_ID[m.wid].cat !== 'knife') soldierEvent(r, 'fire'); }
     }
@@ -1530,8 +1550,10 @@ export default function start({ cfg, E, N, smoke }) {
         if (data.assist === myName) stats.a++;
         const r = rigs.get(data.vid); if (r) { r.dieT = 0.001; const kp2 = data.kid === myId ? me : st.players.get(data.kid), vp = st.players.get(data.vid); if (kp2 && vp) { const dx = vp.x - kp2.x, dz = vp.z - kp2.z, L = Math.hypot(dx, dz) || 1; r.fall = { x: dx / L, z: dz / L, side: Math.random() < 0.5 ? -1 : 1, close: L < 6 };
           const W2 = W_BY_ID[data.weapon] || {}; r.rag = { t: 0, head: !!data.head, force: Math.min(1.6, 0.7 + (W2.dmg || 30) / 60 + (W2.pellets > 1 && L < 8 ? 0.5 : 0) + (data.weapon === 'he' ? 0.6 : 0)),
-            zone: data.head ? 'head' : (W2.cat === 'knife' || data.weapon === 'knife') ? 'knife' : (W2.pellets > 1 && L < 8) || (W2.dmg || 0) >= 80 ? 'heavy' : 'body' };   // a different death for each: dropped where they stood, slumped round the blade, thrown back, or the fall
-          if (cfx) goreKill(r, vp, data, W2, { x: dx / L, y: 0, z: dz / L }, L); } }
+            zone: data.head ? 'head' : (W2.cat === 'knife' || data.weapon === 'knife') ? 'knife' : (W2.pellets > 1 && L < 8) || (W2.dmg || 0) >= 80 ? 'heavy' : 'body',
+            // the ragdoll's push: the round's momentum along the shot, at the part hit; how they were moving carries on
+            imp: EXPLOSIVE.test(String(data.weapon || '')) ? 30 : momentum(data.weapon, L), dir: { x: dx / L, y: 0, z: dz / L }, at: data.head ? 'HeadC' : 'Chest', vel: { x: Math.abs(r.vx || 0) < 8 ? r.vx || 0 : 0, y: 0, z: Math.abs(r.vz || 0) < 8 ? r.vz || 0 : 0 } };   // a different death for each: dropped where they stood, slumped round the blade, thrown back, or the fall
+          if (cfx) goreKill(r, vp, data, W2, { x: dx / L, y: 0, z: dz / L }, L); if (r.rd && r.lost) ragdollLose(r, r.lost); } }
         const fxd = data.fx && KILL_FX[data.fx], vp2 = data.vid === myId ? me : st.players.get(data.vid);
         if (fxd && vp2) { if (parts) parts.emit(vp2.x, vp2.y + 1.2, vp2.z, { n: fxd.n, colors: fxd.colors, speed: fxd.speed, up: 1, size: 0.06, life: 1.4, g: fxd.g ?? 1 }); if (fxd.text) textPop(scene, vp2.x, vp2.y + 2.2, vp2.z, fxd.text, fxd.textColor); audio.at(fxd.sound, vp2.x, vp2.y, vp2.z, cam, 40); }
       }
@@ -1727,7 +1749,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (w.cat === 'zeus') for (const h of hits) h.group = 'chest';
       if (w.cat === 'zeus') { const zr = w.range || 4.5; for (let i = hits.length - 1; i >= 0; i--) if (hits[i].dist > zr) hits.splice(i, 1); }
       toHost('shot', { w: w.id, h: hits.map((h) => ({ id: h.id, group: h.group, pen: +h.pen.toFixed(2) })), o: [eye.x, eye.y, eye.z], e: end ? [end.x, end.y, end.z] : null, sup: sup ? 1 : 0 });
-      if (end && w.cat !== 'zeus') tracer([eye.x + Math.cos(me.yaw) * 0.15 * S.hand, eye.y - 0.1, eye.z - Math.sin(me.yaw) * 0.15 * S.hand], [end.x, end.y, end.z]);
+      if (end && w.cat !== 'zeus') tracer([eye.x + Math.cos(me.yaw) * 0.15 * S.hand, eye.y - 0.1, eye.z - Math.sin(me.yaw) * 0.15 * S.hand], [end.x, end.y, end.z], w.id);
       if (cfx && w.cat !== 'zeus') { const fx3 = -Math.sin(me.yaw), fz3 = -Math.cos(me.yaw); cfx.muzzle(eye.x + fx3 * 0.7, eye.y - 0.1, eye.z + fz3 * 0.7, sup ? 0.25 : 1); if (end) cfx.tracer(eye, end);
         if (me.spray >= 4 && !sup) { const sx = eye.x + fx3 * 0.6 + Math.cos(me.yaw) * 0.12 * S.hand, sy = eye.y - 0.1, sz = eye.z + fz3 * 0.6 - Math.sin(me.yaw) * 0.12 * S.hand; setTimeout(() => cfx && cfx.barrelSmoke(sx, sy, sz), 160); } }
       audio.play(sup ? supSound(w) : shotSound(w.id, it.skin, false), sup ? 0.45 : 0.8);
@@ -1978,7 +2000,7 @@ export default function start({ cfg, E, N, smoke }) {
 
       // grenades in flight (visual)
       for (const [id, f] of flying) { nadeStep(W, f.n, dt); f.m.position.set(f.n.x, f.n.y + 0.06, f.n.z); f.m.rotation.x += dt * 8; f.n.age += dt; if (f.n.age > 8) { fx.remove(f.m); flying.delete(id); } }
-      for (let i = tracers.length - 1; i >= 0; i--) { tracers[i].t -= dt; if (tracers[i].t <= 0) { fx.remove(tracers[i].l); tracers[i].l.geometry.dispose(); tracers.splice(i, 1); } }
+      for (let i = tracers.length - 1; i >= 0; i--) { tracers[i].t -= dt; if (tracers[i].s !== undefined) tickTracer(tracers[i], dt); if (tracers[i].t <= 0) { fx.remove(tracers[i].l); tracers[i].l.geometry.dispose(); tracers.splice(i, 1); } }
       for (let i = puffs.length - 1; i >= 0; i--) { puffs[i].t -= dt; puffs[i].m.scale.setScalar(1 + (0.25 - puffs[i].t) * 6); if (puffs[i].t <= 0) { fx.remove(puffs[i].m); puffs.splice(i, 1); } }
       // bomb beeps
       if (st.bomb && st.bomb.s === 'planted' && st.bomb.t != null) { bombBeep -= dt; const rate = Math.max(0.12, Math.min(1, st.bomb.t / 30)); if (bombBeep <= 0) { bombBeep = rate; audio.at('beep', st.bomb.x, st.bomb.y, st.bomb.z, cam, 50); } }
@@ -2043,14 +2065,15 @@ export default function start({ cfg, E, N, smoke }) {
       let newRigs = 0;   // at most 3 new character models a frame: a 20-man wave used to build all at once and hitch the frame a fight started on
       for (const p of st.players.values()) {
         if (!rigs.has(p.id) && p.id !== myId && ++newRigs > 3) continue;
-        const r = rigFor(p.id); r.g.visible = (p.alive || (r.dieT != null && r.dieT < 6)) && !(r.gibbed && !p.alive);
+        const r = rigFor(p.id); r.g.visible = (p.alive || r.dieT != null) && !(r.gibbed && !p.alive);   // the dead stay where they fell until they respawn (was: gone after 6 s)
         if (p.alive && (r.lost || r.gibbed || r.caps)) { if (r.lost && r.bones) for (const b of r.lost) if (r.bones[b]) r.bones[b].scale.setScalar(1); r.lost = null; r.gibbed = false; if (r.caps) { for (const c of r.caps) if (c.parent) c.parent.remove(c); r.caps = null; } }   // back in one piece on respawn
         if (!p.alive && r.dieT == null) r.dieT = 0.001;
         if (p.alive) r.dieT = null; else r.dieT += dt;
         const sp = Math.hypot(p.x - r.x, p.z - r.z) / Math.max(dt, 1e-3), kv = Math.min(1, dt * 10);
         r.vx = (r.vx || 0) + ((p.x - r.x) / Math.max(dt, 1e-3) - (r.vx || 0)) * kv; r.vz = (r.vz || 0) + ((p.z - r.z) / Math.max(dt, 1e-3) - (r.vz || 0)) * kv; r.vy = (r.vy || 0) + ((p.y - (r.y || p.y)) / Math.max(dt, 1e-3) - (r.vy || 0)) * kv;
         r.x = p.x; r.z = p.z; r.y = p.y;
-        { const pr = p.prone || 0; r.g.position.set(p.x + Math.sin(p.yaw) * 0.85 * pr, p.y + pr * 0.14, p.z + Math.cos(p.yaw) * 0.85 * pr); }   // feet behind the hitbox centre when lying r.g.rotation.order = 'YXZ'; r.g.rotation.y = p.yaw; r.g.rotation.x = r.dieT ? 0 : -(p.prone || 0) * Math.PI / 2 * 0.94;   // prone: lie forward
+        { const pr = p.prone || 0; r.g.position.set(p.x + Math.sin(p.yaw) * 0.85 * pr, p.y + pr * 0.14, p.z + Math.cos(p.yaw) * 0.85 * pr); }   // feet behind the hitbox centre when lying
+        r.g.rotation.order = 'YXZ'; r.g.rotation.y = p.yaw; r.g.rotation.x = r.dieT ? 0 : -(p.prone || 0) * Math.PI / 2 * 0.94;   // facing where they look (this sat inside the comment above: every soldier faced north); prone: lie forward
         setTpGun(r, SC && SC.melee && (p.wid || 'knife') === 'knife' ? (p.team === 'T' ? 'fists' : 'knife:dildo') : p.wid || 'knife', rosterAtt(p.id, p.wid));   // the club: sabers versus slaps
         if (r.tag) { const dT = Math.hypot(p.x - cam.position.x, p.z - cam.position.z); r.tag.visible = p.alive && p.team === me.team && !(spectating && p.id === spectating.id) && !(SC && SC.cutscene) && dT > 3.5; if (r.tag.visible) { const k = Math.min(1.6, Math.max(0.55, dT / 12)); r.tag.scale.set(1.3 * k, 0.25 * k, 1); } }   // tags stay readable far off and out of your face up close   // no name tags in a cutscene's shots
         r.t += dt;
@@ -2065,8 +2088,8 @@ export default function start({ cfg, E, N, smoke }) {
         if (!r.soldier && r.torso && p.lean) r.torso.rotation.z -= p.lean * 0.35;
         if (r.blob) { r.blob.visible = r.g.visible; const gy = W.groundAt(p.x, p.z, p.y + 0.1); r.blob.position.set(p.x, gy + 0.02, p.z); const k = Math.max(0.2, 1 - (p.y - gy) * 0.8); r.blob.scale.setScalar(0.95 * k); }
         { const gf = r.tpGun.children[0]; if (gf && gf.userData.flash) { r.flashT = (r.flashT || 0) - dt; gf.userData.flash.visible = r.flashT > 0; if (r.flashT > 0) gf.userData.flash.rotation.z = Math.random() * 6.3; } }
-        if (r.dieT && r.fall && r.soldier && W) {   // knocked away from the shot: turn to face the shooter (the fall is backwards) and slide a little
-          const k = 1 - Math.exp(-r.dieT * 4), push = (r.rag ? r.rag.force : 1) * (r.fall.close ? 0.7 : 0.4) * ({ head: 0.25, knife: 0.3, heavy: 1.8 }[r.rag && r.rag.zone] || 1);   // a headshot drops where they stood, a heavy hit throws them
+        if (r.dieT && r.fall && r.soldier && W && !r.rd) {   // knocked away from the shot: turn to face the shooter (the fall is backwards) and slide a little
+          const k = 1 - Math.exp(-r.dieT * 4), push = Math.min(0.5, (r.rag && r.rag.imp || 0) * 0.04) * ({ head: 0.3, knife: 0.2, heavy: 1 }[r.rag && r.rag.zone] || 0.6);   // the death clip (no ragdoll free): they drop where they stood; only a shotgun or a .338 up close moves them, a few cm per kg m/s of the round's momentum
           const nx = p.x + r.fall.x * push * k, nz = p.z + r.fall.z * push * k;
           if (W.H(Math.floor(nx), Math.floor(nz)) <= p.y + 0.35) { r.g.position.x = nx; r.g.position.z = nz; }
           r.g.rotation.y = Math.atan2(-r.fall.z, r.fall.x);   // the death clip falls to its right: point that away from the shooter
@@ -2207,7 +2230,9 @@ export default function start({ cfg, E, N, smoke }) {
           const arc = Math.sin(k * Math.PI);   // R6-style: the gun rolls in and dips slightly on its way up to the eye, then settles dead level
           vm.rotation.z += arc * 0.16 * S.hand; vm.position.y -= arc * 0.014; vm.position.x += arc * 0.01 * S.hand;
         }
-      }
+        if (vmArms) { vmArms.root.visible = vm.visible; if (vm.visible) poseArms(vmArms, vm, vmKind); }   // the hands onto the gun as it now sits
+        else if (!armsLate && P.hqModels && armsReady()) { armsLate = true; vmKey = ''; setViewModel(); }   // the arms file arrived after the gun was made: once, again with them
+      } else if (vmArms) vmArms.root.visible = false;
       if (parts) parts.tick(dt);
       stepCasings(dt); if (cfx) { cfx.tick(dt); if (me.alive) cfx.wade(me.x, me.y, me.z, speedOf(me)); }
       if (W) {   // first-person arms catch the sun only when you stand in it (from the same baked shadows as the map)
@@ -2346,6 +2371,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, vmScene, rigs, switchTo, fire: (alt) => fire(!!alt), post, vmCam, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip, startReplay, get rp() { return rp; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, vmScene, rigs, switchTo, fire: (alt) => fire(!!alt), post, vmCam, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip, startReplay, get rp() { return rp; }, ragdollStats, get vmArms() { return vmArms; }, get vm() { return vm; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }

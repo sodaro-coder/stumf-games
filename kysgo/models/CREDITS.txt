@@ -27,3 +27,4 @@ window: "Weathered Wooden Window" by GameReady | mark-peters, CC BY 4.0, https:/
 rubble: "Rubble Pile (Game Ready / 2K PBR)" by meerschaumdigital, CC BY 4.0, https://sketchfab.com/3d-models/rubble-pile-game-ready-2k-pbr-0e6f85da3433468db226866bd43a43e7
 sandpile: "Photoscan Low-poly Construction Sand Pile" by martin.topolski, CC BY 4.0, https://sketchfab.com/3d-models/photoscan-low-poly-construction-sand-pile-7a7533e1ecab4b1d96da55cc3ad9ad98
 bigcrate: "Wooden Crate Low-poly PBR" by MaX3Dd, CC BY 4.0, https://sketchfab.com/3d-models/wooden-crate-low-poly-pbr-f8fb4c96211d475b9370d1c403273fc6
+fparms: "FREE [FPS Arms] GameReady - RIGGED" by bamenwo05, CC BY 4.0, https://sketchfab.com/3d-models/free-fps-arms-gameready-rigged-296d30fc705b4dff85c2c8a2d2724e7f

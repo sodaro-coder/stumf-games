@@ -1117,6 +1117,7 @@ function realGun(g, mid, id, cg, hands, tex, cbox = null) {
       ge.setAttribute('color', new THREE.BufferAttribute(col, 3)); ge.userData.rear = true; } });
     for (const [re, f] of Object.entries(tw.parts || {})) src.traverse((o) => { if (o.isMesh && new RegExp(re).test(o.name) && f.rear) o.material.vertexColors = true; if (o.isMesh && new RegExp(re).test(o.name) && !f.rear) { const m = o.material.clone(); m.color.multiplyScalar(f.k ?? 1); if (f.metal !== undefined) { m.metalness = f.metal; m.metalnessMap = null; } if (f.rough !== undefined) { m.roughness = f.rough; m.roughnessMap = null; } m.onBeforeCompile = o.material.onBeforeCompile; m.customProgramCacheKey = o.material.customProgramCacheKey; o.material = m; } });
     g.add(F); g.updateMatrixWorld(true);
+    if (cg) realAnchors(g, F, mid, cg);   // the hands go where THIS model's pistol grip and handguard are (fparms.js, the soldiers' IK)
     if (hands) {
       const P = gunParts(src);
       if (P.mag && ud.magGroup) ud.magGroup.attach(P.mag);
@@ -1141,6 +1142,47 @@ function realGun(g, mid, id, cg, hands, tex, cbox = null) {
     ud.real = mid;
   });
 }
+// Where the real model's pistol grip and handguard are, measured from its own vertices once per model (the built gun's
+// grip was where the hands went; on the real AK that was 8 cm behind and above its grip). In the gun's space, 1 cm
+// slices along the barrel: the lowest point of each slice. Parts hanging below the receiver line (magazine, pistol grip,
+// stock) stand out; the grip is the one nearest the built gun's grip (the magazine's own meshes left out). The anchor is
+// the middle of the grip 4 cm under the receiver; the handguard anchor sits on its underside where the built one was.
+const anchorCache = new Map();
+export const anchorInfo = new Map();   // what the fit found, per model (tests read it)
+function realAnchors(g, F, mid, cg) {
+  const ud = g.userData, key = mid + '|' + (cg.hold.grip || []).join(','); let A = anchorCache.get(key);
+  if (A === undefined) {
+    A = null;
+    try {
+      const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), v = new THREE.Vector3(), M = new THREE.Matrix4(), pts = [];
+      F.traverse((o) => { if (!o.isMesh || /mag|clip|bullet|round|scope|optic|sight|sling|strap/i.test(o.name || '')) return; M.multiplyMatrices(inv, o.matrixWorld); const P = o.geometry.attributes.position, step = Math.max(1, Math.floor(P.count / 6000));
+        for (let i = 0; i < P.count; i += step) { v.fromBufferAttribute(P, i).applyMatrix4(M); pts.push(v.x, v.y, v.z); } });
+      let z0 = Infinity, z1 = -Infinity; for (let i = 2; i < pts.length; i += 3) { z0 = Math.min(z0, pts[i]); z1 = Math.max(z1, pts[i]); }
+      const n = Math.max(1, Math.ceil((z1 - z0) / 0.01)), lo = new Float32Array(n).fill(Infinity);
+      for (let i = 0; i < pts.length; i += 3) { const b = Math.min(n - 1, Math.floor((pts[i + 2] - z0) / 0.01)); if (Math.abs(pts[i]) < 0.04) lo[b] = Math.min(lo[b], pts[i + 1]); }
+      const fin = [...lo].filter(isFinite).sort((a, b) => a - b), yR = fin[Math.floor(fin.length * 0.7)];   // the receiver / handguard line: most slices end there
+      // the pistol grip: the rearmost low point (a local minimum of the slices' bottoms, 4.5 cm or more under the
+      // receiver line) from 8 cm in front of the built grip to 18 cm behind it, not in the stock's last 12 cm. (The
+      // magazine sits in front of it and the stock behind: both are other minima.)
+      const gz = ud.grip.z, runs = [], mins = [];
+      for (let b = 2; b < n - 2; b++) { const z = z0 + (b + 0.5) * 0.01; if (!(lo[b] < yR - 0.045) || z < gz - 0.08 || z > gz + 0.18 || z > z1 - 0.12) continue;
+        let isMin = true; for (let d = -3; d <= 3; d++) if (d && b + d >= 0 && b + d < n && lo[b + d] < lo[b] - 1e-4) isMin = false; if (isMin) mins.push(b); }
+      const best = mins.length ? { q: { a: mins[mins.length - 1], b: mins[mins.length - 1] } } : null;
+      if (best) { // the grip's middle 4 cm under the receiver line: the mean of its points at that height, just in front of its lowest point (the rake)
+        let sz = 0, sx = 0, k = 0; const yA = yR - 0.04, zb0 = z0 + (best.q.a + 0.5) * 0.01, za = zb0 - 0.06, zb = zb0 + 0.025;
+        for (let i = 0; i < pts.length; i += 3) if (Math.abs(pts[i + 1] - yA) < 0.012 && pts[i + 2] > za && pts[i + 2] < zb && Math.abs(pts[i]) < 0.04) { sz += pts[i + 2]; sx += pts[i]; k++; }
+        A = { grip: k > 3 ? new THREE.Vector3(sx / k, yA, sz / k) : new THREE.Vector3(0, yA, zb0 - 0.02) };
+      }
+      anchorInfo.set(key, { n, yR, gz, z0, z1, pts: pts.length / 3, mins: mins.map((b) => [+(z0 + (b + 0.5) * 0.01).toFixed(3), +lo[b].toFixed(3)]), grip: A && A.grip ? A.grip.toArray().map((x) => +x.toFixed(3)) : null });
+      if (A && ud.fore) { const b = Math.floor((ud.fore.z - z0) / 0.01); let m = Infinity; for (let d = -3; d <= 3; d++) if (b + d >= 0 && b + d < n) m = Math.min(m, lo[b + d]); if (isFinite(m) && m > yR - 0.06) A.fore = new THREE.Vector3(ud.fore.x, m, ud.fore.z); }
+    } catch (e) { A = null; anchorInfo.set(key, { err: String(e) }); }
+    anchorCache.set(key, A);
+  }
+  if (!A) return;
+  ud.grip0 = ud.grip0 || ud.grip.clone(); ud.grip.copy(A.grip);
+  if (A.fore && ud.fore && ud.leftHand) { const d = A.fore.clone().sub(ud.fore); ud.fore.copy(A.fore); ud.leftHand.add(d); }
+  ud.anchored = mid;
+}
 // first person: the gun sits 40 cm from the eye with the sun often behind you, so any flat face turned to the camera
 // mirrors the sun at full strength (the AK's receiver end read as a white block). The gun's own sun highlight is kept
 // below white and its finish never polished below roughness 0.45; reflections of the sky and the fill are untouched
@@ -1155,6 +1197,7 @@ function vmGunMat(m) {
   vmMats.set(m, c); return c;
 }
 let armMatC = null;
+export const isBuiltArm = (o) => !!armMatC && o.material === armMatC;   // the built arms (fparms.js hides them while the real arms hold the gun)
 const armMat = () => armMatC || (armMatC = HQ ? gunSurface(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.9, envMapIntensity: 0.4 }), 'gcloth', { tile: 22, normal: 1.6, albedo: 1.0, rough: 0.1 }) : new THREE.MeshMatcapMaterial({ vertexColors: true, matcap: matcapTex('satin') }));   // woven sleeve / glove fabric
 let flashTex = null;
 function muzzleFlash(z, k = 1) {

@@ -980,5 +980,29 @@
    "licence": "CC BY 4.0",
    "url": "https://sketchfab.com/3d-models/cc0-raw-meat-4-f49758b8fde1451fa401edb8b86cd6f1"
   }
+ },
+ "fparms": {
+  "kind": "arms",
+  "sig": "1877eb27ad5f",
+  "files": {
+   "hi": "models/fparms.glb",
+   "lo": "models/fparms_lo.glb"
+  },
+  "tris": {
+   "hi": 13728,
+   "lo": 13728
+  },
+  "bytes": {
+   "hi": 1888088,
+   "lo": 962768
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "FREE [FPS Arms] GameReady - RIGGED",
+   "author": "bamenwo05",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/free-fps-arms-gameready-rigged-296d30fc705b4dff85c2c8a2d2724e7f"
+  }
  }
 }

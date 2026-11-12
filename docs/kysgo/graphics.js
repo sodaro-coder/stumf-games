@@ -34,33 +34,34 @@ export const QSTEPS = [0.5, 0.75, 1, 1.5, 2];   // the saved setting's numbers (
 //               near = full detail within this many metres, max = nothing drawn beyond (litter has its own 30 m)
 //  charLod      metres: soldiers nearer than this draw the full mesh, further the light one;  shadowLo: the player shadow
 //               map draws every soldier with the light mesh (a shadow 10 m wide cannot show 48k triangles of detail)
+//  ragdolls     bodies that may be falling limp at once (ragdoll.js); more deaths at the same moment use the death clip
 //  pixel        render scale band for the frame-time governor: start / max as multiples of the screen's pixel ratio
 const BASE = {
   texSize: 512, mipBias: 0, nearestMip: false, normalMaps: false, detail: false, macro: true, aniso: 1, bakeK: 4, probes: true,
   shadows: null, post: false, bloom: 0, grade: false, ssao: false, ssr: 0, msaa: 0, fxaa: false,
-  hqModels: false, nmSize: 512, props: { hq: false, near: 0, max: 40 }, charLod: 6, shadowLo: true, dress: true, clouds: true, env: false, chars: true, pixel: { start: 1, max: 1, min: 0.4 }, targetMs: 25,   // frame-time targets: Performance 30-60 fps (25 ms keeps 40 with room), Medium/High a steady 60, Ultra 60-120
+  hqModels: false, nmSize: 512, props: { hq: false, near: 0, max: 40 }, charLod: 6, shadowLo: true, ragdolls: 2, dress: true, clouds: true, env: false, chars: true, pixel: { start: 1, max: 1, min: 0.4 }, targetMs: 25,   // frame-time targets: Performance 30-60 fps (25 ms keeps 40 with room), Medium/High a steady 60, Ultra 60-120
 };
 export const PROFILES = {
   // integrated graphics at its weakest: everything that costs per pixel is off
-  potato: { ...BASE, q: 0.5, mipBias: 1.5, nearestMip: true, macro: false, bakeK: 2, probes: false, dress: false, clouds: false, pixel: { start: 0.5, max: 0.5, min: 0.4 } },
+  potato: { ...BASE, q: 0.5, ragdolls: 1, mipBias: 1.5, nearestMip: true, macro: false, bakeK: 2, probes: false, dress: false, clouds: false, pixel: { start: 0.5, max: 0.5, min: 0.4 } },
   // LOW: maximum fps. Higher mip bias, no dynamic shadows (lightmaps only), no post-processing at all, no AA
   low: { ...BASE, q: 0.75, mipBias: 1, nearestMip: true, clouds: false, pixel: { start: 0.75, max: 0.75, min: 0.4 } },
   // MEDIUM: balanced. Full-resolution textures (bias 0), short-range player shadows, colour grade + quarter-res bloom, FXAA
   medium: { ...BASE, q: 1, texSize: 1024, normalMaps: true, aniso: 4, shadows: { cascades: [{ r: 9, size: 1024 }], pcf: 1 },
-    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, props: { hq: false, near: 0, max: 45 }, charLod: 5, env: true, pixel: { start: 1, max: 1, min: 0.55 }, targetMs: 16.7 },
+    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, props: { hq: false, near: 0, max: 45 }, charLod: 5, ragdolls: 4, env: true, pixel: { start: 1, max: 1, min: 0.55 }, targetMs: 16.7 },
   // HIGH: built for integrated graphics (a Ryzen 3200U / Vega 3 mini PC holds it): the realism comes from what is nearly
   // free at run time. Baked lightmaps and light probes, a photographed HDR sky for reflections (PMREM, once per map),
   // scanned PBR textures with detail normals, ONE soft sun cascade for players only, and one composite pass (ACES, grade,
   // quarter-resolution bloom, vignette, grain, FXAA). No SSAO, no SSR, no MSAA: those cost bandwidth an iGPU hasn't got.
   // The render scale drops (to 0.6) before the frame rate does.
   high: { ...BASE, q: 1.5, texSize: 1024, normalMaps: true, detail: true, aniso: 8, bakeK: 6, shadows: { cascades: [{ r: 10, size: 2048 }], pcf: 4 },
-    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, props: { hq: false, near: 0, max: 55 }, charLod: 6, env: true, pixel: { start: 1, max: 1, min: 0.6 }, targetMs: 17 },
+    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, props: { hq: false, near: 0, max: 55 }, charLod: 6, ragdolls: 6, env: true, pixel: { start: 1, max: 1, min: 0.6 }, targetMs: 17 },
   // ULTRA: the showcase, for a console (Edge on Xbox: picked automatically there) or a real graphics card. Everything
   // High has, plus what a console GPU affords live: one big soft sun cascade (9-tap filtered), SSAO, screen-space
   // reflections on wet and polished floors, 2x MSAA, 16x filtering, the finest lightmap, more blood and debris, and up
   // to 1.5x the screen's pixels where the frame time allows it.
   ultra: { ...BASE, q: 2, texSize: 1024, normalMaps: true, detail: true, aniso: 16, bakeK: 8, shadows: { cascades: [{ r: 14, size: 4096 }], pcf: 9 },
-    post: true, bloom: 1, grade: true, ssao: true, ssr: 32, msaa: 2, hqModels: true, nmSize: 1024, props: { hq: true, near: 12, max: 1e9 }, charLod: 10, shadowLo: false, env: true, gore: 2, pixel: { start: 1, max: 1.5, min: 0.75 }, targetMs: 16.7 },
+    post: true, bloom: 1, grade: true, ssao: true, ssr: 32, msaa: 2, hqModels: true, nmSize: 1024, props: { hq: true, near: 12, max: 1e9 }, charLod: 10, shadowLo: false, ragdolls: 10, env: true, gore: 2, pixel: { start: 1, max: 1.5, min: 0.75 }, targetMs: 16.7 },
 };
 export const tierOf = (q) => { let best = 0; QSTEPS.forEach((s, i) => { if (Math.abs(s - q) < Math.abs(QSTEPS[best] - q)) best = i; }); return TIERS[best]; };
 

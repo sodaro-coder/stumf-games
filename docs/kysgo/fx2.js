@@ -141,34 +141,58 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
   const FRESH = new THREE.Color().setRGB(0.05, 0.0025, 0.002, THREE.LinearSRGBColorSpace), DRY = new THREE.Color().setRGB(0.022, 0.007, 0.0045, THREE.LinearSRGBColorSpace), SOAK = new THREE.Color().setRGB(0.03, 0.006, 0.004, THREE.LinearSRGBColorSpace);
   const LOWF = new THREE.Color(0x3a0303), LOWD = new THREE.Color(0x24100a);
   // a ring of decals of one kind: placed on a surface (position + normal), the oldest reused
+  // Every ring is ONE instanced draw (it used to be one mesh per decal: a long round's bullet holes and blood could add
+  // 400 draw calls); each decal's colour, opacity and gloss are per-instance values, so blood still dries one by one.
+  // Instances keep the order they were made in (the newest blood is drawn over the older).
+  const _o = new THREE.Object3D();
   function ring(n, mat, life = Infinity) {
-    const list = [], ms = [];
+    const list = [], std = !!mat.isMeshStandardMaterial, base = mat.color ? mat.color.clone() : new THREE.Color(1, 1, 1), baseOp = mat.opacity ?? 1, baseR = mat.roughness ?? 1;
+    if (mat.color) mat.color.set(0xffffff); mat.opacity = 1;
+    const geo = plane.clone(), iOR = new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2); iOR.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('iOR', iOR);
+    const prev = mat.onBeforeCompile, key = mat.customProgramCacheKey;
+    mat.onBeforeCompile = (sh, r) => { if (prev) prev.call(mat, sh, r);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 iOR; varying vec2 vIOR;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvIOR = iOR;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vIOR;').replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.a *= vIOR.x;')
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = vIOR.y;'); };
+    mat.customProgramCacheKey = () => (key ? key.call(mat) : '') + '-iring';
+    const im = new THREE.InstancedMesh(geo, mat, n); im.count = 0; im.renderOrder = 2; im.frustumCulled = false; im.visible = false; root.add(im);
+    im.setColorAt(0, base); im.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    const _c = new THREE.Color();
+    function flush() {
+      im.count = list.length; im.visible = list.length > 0; if (!list.length) return;
+      for (let i = 0; i < list.length; i++) { const d = list[i]; d.m.updateMatrix(); im.setMatrixAt(i, d.m.matrix); im.setColorAt(i, d.own ? d.col : base); iOR.setXY(i, d.alpha, d.rough); }
+      im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; iOR.needsUpdate = true;
+    }
     return {
       add(p, nrm, size, spin = Math.random() * 6.28, stretch = 1, opts = {}) {
         let d = list.length >= n ? list.shift() : null;
-        if (!d) { const m = new THREE.Mesh(plane, opts.own ? mat.clone() : mat); m.renderOrder = 2; d = { m }; root.add(m); ms.push(m); }
-        const m = d.m; m.position.set(p.x + nrm.x * 0.012, p.y + nrm.y * 0.012, p.z + nrm.z * 0.012);
+        if (!d) d = { m: new THREE.Object3D(), col: new THREE.Color() };
+        const m = d.m; m.position.set(p.x + nrm.x * 0.012, p.y + nrm.y * 0.012, p.z + nrm.z * 0.012); m.quaternion.identity(); m.rotation.set(0, 0, 0);
         if (opts.along && nrm.y > 0.9) m.rotation.set(-Math.PI / 2, 0, Math.atan2(-opts.along.z, opts.along.x));   // on the floor: the streaks point the way the blood flew
         else { m.lookAt(p.x + nrm.x, p.y + nrm.y, p.z + nrm.z); m.rotateZ(opts.along ? Math.atan2(opts.along.y, opts.along.x * nrm.z - opts.along.z * nrm.x) : spin); }   // on a wall: along the shot's path across it
-        m.scale.set(size * stretch, size, 1); m.visible = true;   // (was swallowed by the comment above: every decal came out 1 m square, and a reused one kept its old size)
-        d.t = 0; d.life = opts.life ?? life; d.grow = opts.grow || 0; d.size = size; d.max = opts.max || size; d.dry = opts.dry || 0; d.op = opts.opacity ?? 1; d.stretch = stretch;
-        d.r0 = opts.soak ? 0.75 : 0.12; d.r1 = opts.soak ? 0.95 : 0.7; d.c0 = opts.soak ? SOAK : FRESH; d.drip = opts.drip || 0; d.len = 0.02;
+        m.scale.set(size * stretch, size, 1);
+        d.t = 0; d.life = opts.life ?? life; d.grow = opts.grow || 0; d.size = size; d.max = opts.max || size; d.dry = opts.dry || 0; d.op = (opts.opacity ?? 1) * (opts.own ? 1 : baseOp); d.stretch = stretch;
+        d.r0 = opts.soak ? 0.75 : 0.12; d.r1 = opts.soak ? 0.95 : 0.7; d.c0 = opts.soak ? SOAK : FRESH; d.drip = opts.drip || 0; d.len = 0.02; d.own = !!opts.own;
         if (d.drip) { d.top = d.top || new THREE.Vector3(); d.top.set(p.x + nrm.x * 0.013, p.y, p.z + nrm.z * 0.013); d.floor = opts.floor ?? -1e9; m.scale.set(size, d.len, 1); }
-        if (opts.own) { m.material.opacity = d.op; if (m.material.isMeshStandardMaterial) { m.material.color.copy(d.c0); m.material.roughness = d.r0; } else m.material.color.copy(LOWF); }
-        list.push(d); return d;
+        d.alpha = d.op; d.rough = d.own && std ? d.r0 : baseR;
+        if (d.own) d.col.copy(std ? d.c0 : LOWF);
+        list.push(d); flush(); return d;
       },
       tick(dt) {
+        if (!list.length) return;
         for (let i = list.length - 1; i >= 0; i--) {
           const d = list[i]; d.t += dt;
           if (d.grow && d.size < d.max) { d.size = Math.min(d.max, d.size + d.grow * dt * (1 - d.size / d.max * 0.8)); d.m.scale.set(d.size * d.stretch, d.size, 1); }   // creeps out, slower as it thins
           if (d.drip && d.len < d.drip) {   // a run down a wall: grows downward from where it landed, stops at the floor
             d.len = Math.min(d.drip, d.len + dt * 0.35 * (1 - d.len / d.drip * 0.85), Math.max(0.02, d.top.y - d.floor)); d.m.scale.y = d.len; d.m.position.set(d.top.x, d.top.y - d.len / 2, d.top.z);
           }
-          if (d.dry && d.m.material.color && d.m.material !== mat) { const k = Math.min(1, d.t / d.dry); if (d.m.material.isMeshStandardMaterial) { d.m.material.color.copy(d.c0).lerp(DRY, k); d.m.material.roughness = d.r0 + (d.r1 - d.r0) * k * k; } else d.m.material.color.copy(LOWF).lerp(LOWD, k); }   // fresh wet near-black red to dried brown-black, glossy to matte
-          if (d.t > d.life) { const f = Math.max(0, 1 - (d.t - d.life) / 3); if (d.m.material.opacity !== undefined && d.m.material !== mat) d.m.material.opacity = d.op * f; if (f <= 0) { d.m.visible = false; list.splice(i, 1); } }
+          if (d.dry && d.own) { const k = Math.min(1, d.t / d.dry); if (std) { d.col.copy(d.c0).lerp(DRY, k); d.rough = d.r0 + (d.r1 - d.r0) * k * k; } else d.col.copy(LOWF).lerp(LOWD, k); }
+          if (d.t > d.life) { const f = Math.max(0, 1 - (d.t - d.life) / 3); d.alpha = d.op * f; if (f <= 0) list.splice(i, 1); }
         }
+        flush();
       },
-      clear() { for (const d of list) d.m.visible = false; list.length = 0; },
+      clear() { list.length = 0; flush(); },
+      get count() { return list.length; },
     };
   }
   const holes = { concrete: ring(70, decalMat(T.concrete)), wood: ring(40, decalMat(T.wood)), metal: ring(40, decalMat(T.metal)), soft: ring(40, decalMat(T.soft, 0xffffff, 0.8)) };
@@ -207,7 +231,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
 
   // ---- blood mist: soft red sprites that puff out along the shot and sink ----
   const mistMat = new THREE.SpriteMaterial({ map: T.soft2, color: 0x4a0404, transparent: true, depthWrite: false, opacity: 0 });
-  const mist = Array.from({ length: hq ? 40 : 24 }, () => { const s = new THREE.Sprite(mistMat.clone()); s.visible = false; root.add(s); return { s, t: 1, life: 1, v: new THREE.Vector3() }; }); let mi = 0;
+  const mist = Array.from({ length: hq ? 40 : 12 }, () => { const s = new THREE.Sprite(mistMat.clone()); s.visible = false; root.add(s); return { s, t: 1, life: 1, v: new THREE.Vector3() }; }); let mi = 0;
 
   // ---- blood droplets: one instanced draw for every drop in the air. Each is a round, soft-edged bead with a wet
   // highlight, stretched along its own motion on screen (a fast drop reads as a streak, a slow one as a bead), dark red
@@ -260,46 +284,91 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
   // ---- gore (settings: 0 low, 1 heavy, 2 max): flying chunks that bounce, roll and leave splats; fountains from wounds ----
   let gore = 2;
   const GK = () => [0.6, 1.6, 3][gore] || 1;   // how much more blood everything throws
-  // the pieces: two photo-scanned raw meat cuts (CC BY, models/meat*.glb, the light files), torn flesh and clotted
-  // tissue (lumps wearing a painted wet-meat texture with a bump map), a bone splinter stained with blood and a strip of
-  // skin with its yellow fat underneath. Everything is wet (glossy, darkened with blood) and lit by the map's baked light.
-  const lumpy = (r, sq, seed) => { const g = new THREE.IcosahedronGeometry(r, hq ? 2 : 1), p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), n = 0.72 + 0.4 * Math.abs(Math.sin(x * 61 + seed) * Math.cos(y * 47 - seed) + Math.sin(z * 53 + seed * 2)) * 0.6 + 0.08 * Math.sin(x * 190 + z * 170 + seed); p.setXYZ(i, x * n, y * n * sq, z * n); }
-    g.computeVertexNormals(); return g; };
-  const shard = (() => { const g = new THREE.CylinderGeometry(0.006, 0.016, 0.13, 6, 3), p = g.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) * (1 + 0.35 * Math.sin(i * 2.7)) + (y > 0 ? 0.005 : 0)); } g.computeVertexNormals(); return g; })();
-  const flap = (() => { const g = new THREE.PlaneGeometry(0.11, 0.07, 6, 4), p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, 0.012 * Math.sin(p.getX(i) * 40) + 0.008 * Math.cos(p.getY(i) * 55)); g.computeVertexNormals(); return g; })();
-  const meatTex = canvasTex(256, (g, sz) => {   // wet torn muscle: dark red fibres, clotted near-black patches, a few strands of fat
-    g.fillStyle = '#4a0606'; g.fillRect(0, 0, sz, sz);
-    for (let k = 0; k < 900; k++) { const y = rnd(0, sz), x = rnd(0, sz), L = rnd(8, 40); g.strokeStyle = `rgba(${rnd(90, 150) | 0},${rnd(8, 22) | 0},${rnd(8, 18) | 0},${rnd(0.25, 0.6)})`; g.lineWidth = rnd(0.6, 2.2); g.beginPath(); g.moveTo(x, y); g.lineTo(x + L, y + rnd(-3, 3)); g.stroke(); }   // muscle fibres
-    for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(${rnd(15, 35) | 0},2,2,${rnd(0.4, 0.8)})`; blob(g, rnd(0, sz), rnd(0, sz), rnd(4, 18), 0.4, 5); }   // clots
-    for (let k = 0; k < 10; k++) { g.strokeStyle = `rgba(${rnd(200, 235) | 0},${rnd(170, 200) | 0},${rnd(120, 150) | 0},${rnd(0.3, 0.6)})`; g.lineWidth = rnd(1, 3); g.beginPath(); const x = rnd(0, sz), y = rnd(0, sz); g.moveTo(x, y); g.bezierCurveTo(x + rnd(-30, 30), y + rnd(-30, 30), x + rnd(-30, 30), y + rnd(-30, 30), x + rnd(-50, 50), y + rnd(-50, 50)); g.stroke(); }   // fat / fascia
-  });
-  meatTex.wrapS = meatTex.wrapT = THREE.RepeatWrapping;
-  const skinTex = canvasTex(128, (g, sz) => { g.fillStyle = '#b07a5e'; g.fillRect(0, 0, sz, sz / 2); g.fillStyle = '#d8b46a'; g.fillRect(0, sz / 2, sz, sz / 2);   // skin over yellow fat
-    for (let k = 0; k < 120; k++) { g.fillStyle = `rgba(${rnd(60, 120) | 0},6,6,${rnd(0.2, 0.7)})`; blob(g, rnd(0, sz), rnd(0, sz), rnd(2, 9), 0.4, 5); } });
-  const boneTex = canvasTex(64, (g, sz) => { g.fillStyle = '#cdbf9f'; g.fillRect(0, 0, sz, sz); for (let k = 0; k < 30; k++) { g.fillStyle = `rgba(${rnd(70, 120) | 0},8,6,${rnd(0.3, 0.8)})`; blob(g, rnd(0, sz), rnd(0, sz), rnd(2, 8), 0.4, 5); } });
+  // the pieces: torn chunks of a body, built once as irregular solids (no two faces alike) and drawn instanced (one draw
+  // per kind, whatever the burst size): a chunk of the body wall with the uniform still on it over a band of yellow fat,
+  // ragged muscle torn along its fibres, a flap of skin and fat, a jagged bone splinter with red marrow at the break,
+  // stringy bits, and a scrap of bloodied fabric. One painted atlas (meat fibres, fat, bone, cloth) and the vertex
+  // colours carry the surfaces; everything is wet (glossy, darkened with blood) and lit by the map's baked light.
   const wet = (o) => litPatch(new THREE.MeshStandardMaterial({ roughness: 0.28, metalness: 0, envMapIntensity: 0.55, ...o }), 'dyn');
-  const gibGeo = [lumpy(0.05, 0.7, 1), lumpy(0.045, 0.6, 2), lumpy(0.055, 0.45, 4), shard, flap];
-  const gibMat = [wet({ map: meatTex, bumpMap: meatTex, bumpScale: 2 }), wet({ map: meatTex, bumpMap: meatTex, bumpScale: 2 }), wet({ map: meatTex, bumpMap: meatTex, bumpScale: 2.5, color: 0x8a6060 }),
-    wet({ map: boneTex, roughness: 0.55 }), wet({ map: skinTex, roughness: 0.4, side: THREE.DoubleSide })];
-  const GIB_MAT = [0, 1, 2, 3, 4];
-  const gibs = Array.from({ length: ultra ? 96 : hq ? 60 : 32 }, (_, i) => { const t = i % 5, m = new THREE.Mesh(gibGeo[t], gibMat[GIB_MAT[t]]); m.visible = false; m.castShadow = false; root.add(m); return { m, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 0, landed: 0, kind: t }; });
-  // the scanned meat replaces the first two kinds as soon as it has loaded (Medium and up; the light files)
-  if (hq) for (const [k, id] of [[0, 'meat'], [1, 'meat2']]) modelManifest().then((m) => (m[id] ? loadGLB(m[id].files.lo) : null)).then((h) => {
-    if (!h) return; let src = null; h.scene.updateMatrixWorld(true); h.scene.traverse((o) => { if (o.isMesh && !src) src = o; }); if (!src) return;
-    const g = src.geometry.clone().applyMatrix4(src.matrixWorld); g.computeBoundingBox(); const b = g.boundingBox, sz = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3());
-    g.translate(-c.x, -c.y, -c.z); g.scale(0.11 / Math.max(sz.x, sz.y, sz.z), 0.11 / Math.max(sz.x, sz.y, sz.z), 0.11 / Math.max(sz.x, sz.y, sz.z)); g.computeBoundingSphere();
-    const mt = src.material.clone(); mt.color.multiplyScalar(0.42).multiply(new THREE.Color(1, 0.55, 0.55)); mt.roughness = 0.3; mt.metalness = 0; mt.metalnessMap = null; mt.envMapIntensity = 0.55;   // blood-soaked and wet
-    for (const q of gibs) if (q.kind === k) { q.m.geometry = g; q.m.material = mt; }
-  }).catch(() => {});
+  const gibTex = canvasTex(512, (g, sz) => {   // atlas: [0-.5, 0-.5] muscle, [.5-1, 0-.5] fat and skin, [0-.5, .5-1] bone, [.5-1, .5-1] cloth
+    const h = sz / 2;
+    g.fillStyle = '#4c0707'; g.fillRect(0, 0, h, h);
+    for (let k = 0; k < 700; k++) { const y = rnd(0, h), x = rnd(-20, h), L = rnd(8, 46); g.strokeStyle = `rgba(${rnd(95, 160) | 0},${rnd(8, 24) | 0},${rnd(8, 20) | 0},${rnd(0.25, 0.65)})`; g.lineWidth = rnd(0.6, 2.4); g.beginPath(); g.moveTo(x, y); g.lineTo(x + L, y + rnd(-4, 4)); g.stroke(); }   // muscle fibres
+    for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(${rnd(14, 34) | 0},2,2,${rnd(0.45, 0.85)})`; blob(g, rnd(0, h), rnd(0, h), rnd(4, 16), 0.45, 6); }   // clots
+    for (let k = 0; k < 8; k++) { g.strokeStyle = `rgba(${rnd(200, 235) | 0},${rnd(170, 205) | 0},${rnd(120, 150) | 0},${rnd(0.3, 0.6)})`; g.lineWidth = rnd(1, 3); g.beginPath(); const x = rnd(0, h), y = rnd(0, h); g.moveTo(x, y); g.bezierCurveTo(x + rnd(-30, 30), y + rnd(-30, 30), x + rnd(-30, 30), y + rnd(-30, 30), x + rnd(-50, 50), y + rnd(-50, 50)); g.stroke(); }   // fascia
+    g.fillStyle = '#d9b25e'; g.fillRect(h, 0, h, h);   // fat: lobules, blood in the gaps
+    for (let k = 0; k < 160; k++) { g.fillStyle = `rgba(${rnd(225, 245) | 0},${rnd(190, 215) | 0},${rnd(100, 140) | 0},${rnd(0.4, 0.9)})`; g.beginPath(); g.arc(h + rnd(0, h), rnd(0, h), rnd(3, 9), 0, 6.28); g.fill(); }
+    for (let k = 0; k < 70; k++) { g.fillStyle = `rgba(${rnd(80, 140) | 0},8,6,${rnd(0.3, 0.75)})`; blob(g, h + rnd(0, h), rnd(0, h), rnd(2, 9), 0.4, 5); }
+    g.fillStyle = '#cfc2a2'; g.fillRect(0, h, h, h);   // bone: dense pale shaft, pores, blood stains
+    for (let k = 0; k < 260; k++) { g.fillStyle = `rgba(${rnd(150, 200) | 0},${rnd(135, 180) | 0},${rnd(110, 150) | 0},${rnd(0.2, 0.5)})`; g.fillRect(rnd(0, h), h + rnd(0, h), rnd(1, 3), rnd(1, 2)); }
+    for (let k = 0; k < 26; k++) { g.fillStyle = `rgba(${rnd(80, 130) | 0},8,6,${rnd(0.35, 0.85)})`; blob(g, rnd(0, h), h + rnd(0, h), rnd(3, 12), 0.4, 5); }
+    g.fillStyle = '#5a5648'; g.fillRect(h, h, h, h);   // cloth: a woven fabric soaked through in places
+    for (let y = 0; y < h; y += 3) { g.fillStyle = `rgba(30,28,22,${0.25 + 0.1 * Math.sin(y)})`; g.fillRect(h, h + y, h, 1); }
+    for (let x = 0; x < h; x += 3) { g.fillStyle = 'rgba(140,135,115,.18)'; g.fillRect(h + x, h, 1, h); }
+    for (let k = 0; k < 18; k++) { g.fillStyle = `rgba(${rnd(50, 90) | 0},4,4,${rnd(0.5, 0.9)})`; blob(g, h + rnd(0, h), h + rnd(0, h), rnd(8, 30), 0.5, 7); }
+  });
+  // a deterministic noise on the vertex position (shared corners move together: no cracks)
+  const nz = (x, y, z, s) => Math.sin(x * 37.1 + s) * Math.cos(y * 41.7 - s * 1.3) + 0.6 * Math.sin(z * 53.3 + x * 17.9 + s * 2.1) + 0.35 * Math.sin((x + y + z) * 113 + s);
+  // UV for a point from its region of the atlas: [u0, v0] corner, a spherical projection inside it
+  const reg = { meat: [0, 0], fat: [0.5, 0], bone: [0, 0.5], cloth: [0.5, 0.5] };
+  function chunk({ r = 0.05, sx = 1, sy = 1, sz = 1, rough = 0.35, seed = 1, cutTop = null, layers = null, detail = 2 }) {
+    const g = new THREE.IcosahedronGeometry(r, ultra ? detail : Math.max(1, detail - 1)), p = g.attributes.position;   // 80 faces a chunk (320 on Ultra)
+    const uv = new Float32Array(p.count * 2), col = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      let x = p.getX(i) / r, y = p.getY(i) / r, z = p.getZ(i) / r;
+      const n = 1 + rough * nz(x, y, z, seed) + 0.5 * rough * nz(x * 2.7, y * 2.3, z * 2.9, seed * 3.1);
+      x *= n * sx; y *= n * sy; z *= n * sz;
+      if (cutTop !== null && y > cutTop) y = cutTop + 0.04 * nz(x * 3, 0, z * 3, seed);   // the outside of the body: a flatter face
+      p.setXYZ(i, x * r, y * r, z * r);
+    }
+    g.computeVertexNormals();
+    const nr = g.attributes.normal;
+    for (let t = 0; t < p.count; t += 3) {   // per triangle: which layer it is (by height in the chunk and facing)
+      let cy = 0, ny = 0; for (let k = 0; k < 3; k++) { cy += p.getY(t + k) / r / 3; ny += nr.getY(t + k) / 3; }
+      let L = 'meat'; if (layers) for (const [lim, name, face] of layers) if (cy > lim && (!face || ny > face)) L = name;
+      const [u0, v0] = reg[L];
+      for (let k = 0; k < 3; k++) { const i = t + k, x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x) / 6.2832 + 0.5, b = L === 'cloth' || L === 'fat' ? (x * 3 + z * 2) / r * 0.08 + 0.5 : y / r * 0.25 + 0.5;
+        uv[i * 2] = u0 + 0.02 + 0.46 * ((L === 'cloth' ? (z / r * 0.2 + 0.5) : a) % 1); uv[i * 2 + 1] = 1 - (v0 + 0.02 + 0.46 * Math.min(1, Math.max(0, b)));
+        const w = L === 'meat' ? 0.75 + 0.25 * nz(x * 80, y * 80, z * 80, seed) : 0.9 + 0.1 * nz(x * 60, y * 60, z * 60, seed); col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = Math.max(0.35, w); }
+    }
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g;
+  }
+  function splinter(seed) {   // a broken bone: an irregular shaft, both ends snapped jagged, the marrow showing red at the break
+    const g = new THREE.CylinderGeometry(0.011, 0.014, 0.12, 7, 4, false).toNonIndexed(), p = g.attributes.position, uv = new Float32Array(p.count * 2), col = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x);
+      const k = 1 + 0.25 * Math.sin(a * 3 + seed) + 0.15 * Math.sin(y * 90 + seed), end = Math.abs(y) > 0.059 ? 0.035 * nz(x * 90, y, z * 90, seed) : 0;
+      p.setXYZ(i, x * k + (y > 0 ? 0.004 : 0), y + end, z * k); }
+    g.computeVertexNormals(); const nr = g.attributes.normal;
+    for (let t = 0; t < p.count; t += 3) { let ny = 0; for (let k = 0; k < 3; k++) ny += Math.abs(nr.getY(t + k)) / 3; const cap = ny > 0.6, [u0, v0] = reg[cap ? 'meat' : 'bone'];
+      for (let k = 0; k < 3; k++) { const i = t + k; uv[i * 2] = u0 + 0.02 + 0.46 * (Math.atan2(p.getZ(i), p.getX(i)) / 6.2832 + 0.5); uv[i * 2 + 1] = 1 - (v0 + 0.02 + 0.46 * (p.getY(i) / 0.14 + 0.5)); col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = cap ? 0.6 : 0.95; } }
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); return g;
+  }
+  const gibGeo = [
+    chunk({ r: 0.05, sx: 1.4, sy: 0.75, sz: 1.0, rough: 0.32, seed: 1.3, cutTop: 0.45, layers: [[0.1, 'fat'], [0.36, 'cloth', 0.35]] }),   // body wall: uniform, fat, then muscle
+    chunk({ r: 0.045, sx: 1.6, sy: 0.7, sz: 0.8, rough: 0.45, seed: 2.7 }),                                                                     // torn muscle
+    chunk({ r: 0.055, sx: 1.3, sy: 0.32, sz: 1.1, rough: 0.4, seed: 4.1, cutTop: 0.18, layers: [[-0.05, 'fat'], [0.12, 'fat', 0.5]] }),          // skin and fat flap
+    splinter(5.3),                                                                                                                               // bone
+    chunk({ r: 0.028, sx: 2.2, sy: 0.55, sz: 0.6, rough: 0.55, seed: 6.6, detail: 1 }),                                                         // stringy bits
+    chunk({ r: 0.05, sx: 1.3, sy: 0.18, sz: 1.0, rough: 0.5, seed: 7.9, layers: [[-0.2, 'cloth']] }),                                           // a scrap of fabric
+  ];
+  const gibMat = wet({ map: gibTex, bumpMap: gibTex, bumpScale: 1.6, vertexColors: true, roughness: 0.3 });
+  const GN = ultra ? 96 : hq ? 60 : 32, GK_N = gibGeo.length, gibIM = gibGeo.map((geo) => { const m = new THREE.InstancedMesh(geo, gibMat, Math.ceil(GN / GK_N)); m.count = 0; m.frustumCulled = false; m.castShadow = false; m.name = 'gibs'; root.add(m); return m; });
+  const gibs = Array.from({ length: GN }, (_, i) => ({ m: new THREE.Object3D(), v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 0, landed: 0, kind: i % GK_N, slot: Math.floor(i / GK_N) }));
+  for (const q of gibs) q.m.visible = false;
+  function flushGibs() {   // write the live pieces into their kind's instance buffer (dead ones packed out)
+    for (const im of gibIM) im.count = 0;
+    for (const q of gibs) { if (!q.m.visible) continue; const im = gibIM[q.kind]; q.m.updateMatrix(); im.setMatrixAt(im.count++, q.m.matrix); }
+    for (const im of gibIM) { im.visible = im.count > 0; if (im.count) im.instanceMatrix.needsUpdate = true; }
+  }
   let gi = 0;
   const fountains = [];
   // ---- what comes off (gore max): a head or an arm as a physical piece, and the stump cap left on the body ----
   // A severed piece is a simple stand-in shaped and coloured like the part (a head in its balaclava or skin, an arm in
   // its sleeve with a gloved hand), with a raw cut face; it flies with the shot, tumbles, bounces, rolls to a stop and
   // drips. The cap (meat with a ring of fat and the bone in the middle) covers the cut on the body.
-  const capGeo = (() => { const g = new THREE.CircleGeometry(1, 18), c = new Float32Array(g.attributes.position.count * 3), p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getY(i)), bone = r < 0.32, fat = r > 0.82; c[i * 3] = bone ? 0.85 : fat ? 0.75 : 0.32 + Math.sin(i * 7.3) * 0.05; c[i * 3 + 1] = bone ? 0.8 : fat ? 0.6 : 0.02; c[i * 3 + 2] = bone ? 0.7 : fat ? 0.4 : 0.02; p.setZ(i, (1 - r) * 0.25); }
+  const capGeo = (() => { const g = new THREE.RingGeometry(0.001, 1, 18, 6), c = new Float32Array(g.attributes.position.count * 3), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getY(i)), bone = r < 0.2, fat = r > 0.84; c[i * 3] = bone ? 0.7 : fat ? 0.72 : 0.32 + Math.sin(i * 7.3) * 0.05; c[i * 3 + 1] = bone ? 0.6 : fat ? 0.55 : 0.02; c[i * 3 + 2] = bone ? 0.48 : fat ? 0.32 : 0.02; p.setZ(i, (1 - r) * 0.25); }
     g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.computeVertexNormals(); return g; })();
   const capMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, side: THREE.DoubleSide, envMapIntensity: 1.2 });
   const caps = Array.from({ length: 10 }, () => { const m = new THREE.Mesh(capGeo, capMat); m.visible = false; return m; }); let ci = 0;
@@ -314,7 +383,9 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     if (piece) { L.a.geometry = piece.geometry; L.a.material = piece.material; L.a.position.copy(piece.center).negate(); L.a.scale.set(1, 1, 1); }   // the soldier's own head / arm, cut from his mesh
     else { L.a.geometry = kind === 'head' ? limbGeo.head : limbGeo.arm; L.a.material = L.a0; L.a.material.color.set(color || '#22231f'); L.a.position.set(0, 0, 0); L.a.scale.set(1, kind === 'head' ? 1.15 : 1, 1); }
     L.h.visible = kind === 'arm' && !piece; L.h.position.set(0, -0.28, 0);
-    L.cap.position.set(0, kind === 'head' ? -0.1 : 0.27, 0); L.cap.rotation.set(kind === 'head' ? Math.PI / 2 : -Math.PI / 2, 0, 0); L.cap.scale.setScalar(kind === 'head' ? 0.06 : 0.048);
+    if (piece && piece.cut) {   // the raw face where the piece came away (cutPiece measured it): on the cut, facing out of it
+      L.cap.position.copy(piece.cut).sub(piece.center); L.cap.quaternion.setFromUnitVectors(_sd.set(0, 0, 1), piece.cutDir); L.cap.scale.setScalar(Math.max(0.02, Math.min(0.07, piece.rad)));
+    } else { L.cap.position.set(0, kind === 'head' ? -0.1 : 0.27, 0); L.cap.rotation.set(kind === 'head' ? Math.PI / 2 : -Math.PI / 2, 0, 0); L.cap.scale.setScalar(kind === 'head' ? 0.06 : 0.048); }
     const sp = rnd(2.5, 4.5) * force; L.v.set(dir.x * sp + rnd(-0.6, 0.6), rnd(2.2, 3.6) * force, dir.z * sp + rnd(-0.6, 0.6)); L.w.set(rnd(-9, 9), rnd(-9, 9), rnd(-9, 9));
     fountains.push({ pos: () => (L.g.visible && L.t < 3 ? _lp.copy(L.cap.position).applyMatrix4(L.g.matrixWorld) : null), dur: 1.4, dir: { x: 0, y: -0.2, z: 0 }, t: 0, acc: 0, drip: 2 });
   }
@@ -363,8 +434,9 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       const sp = rnd(2.5, 4.5) * force; o.v.set((dir ? dir.x : 0) * sp + rnd(-0.8, 0.8), rnd(2, 4) * force, (dir ? dir.z : 0) * sp + rnd(-0.8, 0.8)); o.w.set(rnd(-8, 8), rnd(-8, 8), rnd(-8, 8)); });
   }
   function loadOrgans() {
-    if (!organSrc) organSrc = modelManifest().then((m) => (m.heart ? loadGLB(m.heart.files[hq ? 'hi' : 'lo']) : null)).then((h) => {
+    if (!organSrc) organSrc = modelManifest().then((m) => (m.heart ? loadGLB(m.heart.files[ultra ? 'hi' : 'lo']) : null)).then((h) => {   // the full scan is 50k triangles: Ultra only; the light one (9k) is drawn two-sided so its few gaps don't show through
       if (!h) return null; const b = new THREE.Box3().setFromObject(h.scene), sz = b.getSize(new THREE.Vector3()), k = 0.12 / Math.max(sz.x, sz.y, sz.z);   // an adult heart: about 12 cm
+      if (!ultra) h.scene.traverse((o) => { if (o.isMesh) o.material.side = THREE.DoubleSide; });
       for (let i = 0; i < 2; i++) { const g = new THREE.Group(), m = h.scene.clone(true); m.scale.setScalar(k); m.position.copy(b.getCenter(new THREE.Vector3())).multiplyScalar(-k); g.add(m); g.visible = false; root.add(g); organs.push({ m: g, v: new THREE.Vector3(), w: new THREE.Vector3(), t: 99, life: 30, landed: 0 }); }
       return true; }).catch(() => null);
     return organSrc;
@@ -379,7 +451,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       g.w.set(rnd(-12, 12), rnd(-12, 12), rnd(-12, 12));
     }
   }
-  function tickGibs(dt) { for (const g of gibs) tickGib(g, dt); for (const g of organs) tickGib(g, dt); }   // no array built per frame
+  function tickGibs(dt) { for (const g of gibs) tickGib(g, dt); for (const g of organs) tickGib(g, dt); flushGibs(); }   // no array built per frame
   function tickGib(g, dt) {
     {
       if (!g.m.visible) return; g.t += dt;
@@ -584,7 +656,8 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
     limb(kind, x, y, z, dir, color, force = 1, piece = null) { if (gore > 1) limb(kind, x, y, z, dir, color, force, piece); },
     stumpCap(bone, child, radius) {   // child: the bone that came off (the cap sits at its joint, facing along it)
       if (gore < 2 || !bone || !child) return null; const c = caps[ci = (ci + 1) % caps.length]; if (c.parent) c.parent.remove(c);
-      c.position.copy(child.position); c.quaternion.setFromUnitVectors(_n.set(0, 0, 1), _d.copy(child.position).normalize()); c.scale.setScalar(radius * 0.01 / Math.max(1e-6, bone.getWorldScale(_lp).x));   // radius in cm, whatever units the rig's bones use c.visible = true; bone.add(c); return c;
+      c.position.copy(child.position); c.quaternion.setFromUnitVectors(_n.set(0, 0, 1), _d.copy(child.position).normalize()); c.scale.setScalar(radius * 0.01 / Math.max(1e-6, bone.getWorldScale(_lp).x));   // radius in cm, whatever units the rig's bones use
+      c.visible = true; bone.add(c); return c;
     },
     setGore(n) { gore = Math.max(0, Math.min(2, n | 0)); },
     get gore() { return gore; },
@@ -632,7 +705,7 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
       for (const r of [holes.concrete, holes.wood, holes.metal, holes.soft, splats, sprays, drips, pools, scorches, gouges]) r.clear();
       for (const k of [...smokes.keys()]) api.smoke.remove(k); for (const k of [...fires.keys()]) api.fire.remove(k);
       for (const m of mags) m.o.visible = false; mags.length = 0;
-      for (const g of gibs) g.m.visible = false; for (const o of organs) o.m.visible = false; dSA.fill(0); fountains.length = 0; pending.length = 0; for (const m of wounds) if (m.parent) m.parent.remove(m); for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
+      for (const g of gibs) g.m.visible = false; flushGibs(); for (const o of organs) o.m.visible = false; dSA.fill(0); fountains.length = 0; pending.length = 0; for (const m of wounds) if (m.parent) m.parent.remove(m); for (const L of limbs) L.g.visible = false; for (const c of caps) { if (c.parent) c.parent.remove(c); c.visible = false; }
     },
   };
   return api;

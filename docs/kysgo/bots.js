@@ -2,6 +2,7 @@
 // angles, react to what they see and hear, plant, defuse, pick up the bomb and trade. Difficulty (picked by the
 // host) sets reaction time, aim error, turn speed, headshot chance and spray control.
 import { W_BY_ID, BOT_LEVELS, PHYS, BOMB, botLevelAt } from './data.js';
+import { calOf, holdover } from './ballistics.js';
 import { moveStep, traceShot, eyeHeight, spreadOf, recoilAt, speedOf, aimDir } from './sim.js';
 const BOT_REC = { up: 0, side: 0 }, BOT_DIR = { x: 0, y: 0, z: 0 };
 
@@ -106,7 +107,7 @@ export class Bots {
       const head = Math.random() < L.head;
       const aimY = tgt.y + (head ? 1.68 : 1.25) * (1 - tgt.crouch * 0.28);
       const dx = tgt.x - eye.x, dz = tgt.z - eye.z, dy = aimY - eye.y, d = Math.hypot(dx, dz);
-      const wantYaw = Math.atan2(-dx, -dz), wantPitch = Math.atan2(dy, d);
+      const wantYaw = Math.atan2(-dx, -dz), hw = W_BY_ID[(p.inv[p.cur] || {}).wid], wantPitch = Math.atan2(dy - holdover(hw && calOf(hw.id), d), d);   // hold over (or under) for the round's arc at this distance, like a trained shooter
       const turn = L.turn * dt;
       const ey = angDiff(p.yaw, wantYaw); p.yaw += Math.max(-turn, Math.min(turn, ey));
       p.pitch += Math.max(-turn, Math.min(turn, wantPitch - p.pitch));

@@ -3,6 +3,7 @@
 // rebuilt here without any loader library. Each player gets its own bones and animation mixer; the mesh, textures and
 // clips are shared. The upper body bends with the player's aim, the gun sits in the right hand, and agents' joke
 // headgear rides on the head bone.
+import { startRagdoll, stepRagdoll, stopRagdoll, ragdollLose } from './ragdoll.js';
 import * as THREE from '../sdk/three.module.min.js';
 import { litPatch } from './world.js';
 import { glowMask, glowify, gunSurface } from './models.js';
@@ -463,7 +464,12 @@ export function cutPiece(r, kind) {
   const pa = geo.attributes.position, bb = new THREE.Box3(), _v = new THREE.Vector3();   // the piece's own bounds (computeBoundingBox would measure every vertex of the shared buffer: the whole body)
   for (const i of keep) bb.expandByPoint(_v.fromBufferAttribute(pa, i));
   g.boundingBox = bb; g.boundingSphere = bb.getBoundingSphere(new THREE.Sphere()); const c = bb.getCenter(new THREE.Vector3());
-  return (cache[kind] = { geometry: g, material: r.body.material, center: c });
+  // where it was cut off (in the bind pose): a head at the bottom of the neck, an arm at its body end (the end nearer the
+  // middle), and which way that raw face looks, so the flying piece shows its meat where it really came away
+  const head = kind === 'head', inner = Math.abs(bb.min.x) < Math.abs(bb.max.x) ? bb.min.x : bb.max.x;
+  const cut = head ? new THREE.Vector3(c.x, bb.min.y, c.z) : new THREE.Vector3(inner, c.y, c.z), cutDir = head ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(Math.sign(inner - c.x) || 1, 0, 0);
+  const rad = head ? Math.min(bb.max.x - bb.min.x, bb.max.z - bb.min.z) * 0.28 : Math.min(bb.max.y - bb.min.y, bb.max.z - bb.min.z) * 0.42;
+  return (cache[kind] = { geometry: g, material: r.body.material, center: c, cut, cutDir, rad });
 }
 // distance detail: beyond the tier's charLod (graphics.js; 9 m by default) the soldier swaps to the light mesh (same skeleton and atlas layout, about a sixth of the
 // triangles). A frame's work: one comparison
@@ -687,6 +693,12 @@ function legs(r, rt, rest, crouched, moving) {
     }
   }
 }
+// ragdolls: the world they fall in and how many may fall at once (graphics tier: bodies that have settled don't count)
+const RAG = { W: null, cap: 4, live: new Set() };
+export function setRagdolls(W, cap) { RAG.W = W; RAG.cap = cap; for (const r of RAG.live) if (!r.rd) RAG.live.delete(r); }
+function ragActive() { let n = 0; for (const r of RAG.live) { if (!r.rd) RAG.live.delete(r); else if (!r.rd.asleep) n++; } return n; }
+export function ragdollStats() { let n = 0, s = 0; for (const r of RAG.live) if (r.rd) (r.rd.asleep ? s++ : n++); return { active: n, asleep: s, cap: RAG.cap }; }
+export { ragdollLose };
 // per frame: pick the base animation from how the player moves, then aim, gun and props
 const _VP = Array.from({ length: 96 }, () => new THREE.Vector3()), _gq = new THREE.Quaternion(), _gq2 = new THREE.Quaternion(); let _vi = 0;
 const V = () => _VP[_vi++ % 96];
@@ -695,9 +707,14 @@ const DIE_SPEED = { head: 1.55, knife: 0.7, heavy: 1.2, body: 1 };
 export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, crouch = 0, pitch = 0, dead = 0, emote = null, lean = 0, prone = 0, rest = 0 }) {
   r.t += dt; _vi = 0; let secWant = null, secW = 0;   // scratch vectors from the pool below: no allocations per soldier per frame
   if (dead) {
-    if (!r.dead) { r.dead = true; r.rag = r.rag || { t: 0, force: 1, head: false }; for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.timeScale = DIE_SPEED[r.rag.zone] || 1; d.play(); r.base = 'die'; }
+    if (!r.dead) { r.dead = true; r.rag = r.rag || { t: 0, force: 1, head: false };
+      // the body goes limp (ragdoll.js) from the pose it was in, pushed by the round's real momentum; past the tier's
+      // number of bodies falling at once (or with no world yet), the death clip as before
+      if (RAG.W && r.model && ragActive() < RAG.cap) { const g = r.rag; if (startRagdoll(r, RAG.W, { dir: g.dir, imp: g.imp || 0, at: g.at || 'Chest', vel: g.vel, lost: r.lost })) RAG.live.add(r); }
+      if (!r.rd) { for (const a of Object.values(r.act)) a.stop(); const d = r.act.die; d.reset(); d.setLoop(THREE.LoopOnce); d.clampWhenFinished = true; d.timeScale = DIE_SPEED[r.rag.zone] || 1; d.play(); r.base = 'die'; }
+    }
   } else {
-    if (r.dead) { r.dead = false; r.rag = null; r.act.die.stop(); r.base = ''; base(r, 'idle'); }
+    if (r.dead) { r.dead = false; r.rag = null; if (r.rd) { stopRagdoll(r); RAG.live.delete(r); for (const a of Object.values(r.act)) a.stop(); } r.act.die.stop(); r.base = ''; base(r, 'idle'); }
     const sp = Math.hypot(vx, vz), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const f = -(vx * sy) - vz * cy, side = vx * cy - vz * sy;   // speed along where they face, and to their right
     if (r.rootS) r.root.scale.copy(r.rootS); else r.rootS = r.root.scale.clone();   // emotes may squash the whole body: reset first
@@ -731,10 +748,10 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       }
     }
   }
-  r.mixer.update(dt);
+  if (r.rd) stepRagdoll(r, dt); else r.mixer.update(dt);   // a ragdoll owns the bones: the clips stand still under it
   r.g.updateMatrixWorld(true);
   const B = r.bones;
-  if (r.dead && r.rag) {   // ragdoll-style reaction on top of the fall: limbs whip with the hit, then settle (damped)
+  if (r.dead && r.rag && !r.rd) {   // ragdoll-style reaction on top of the fall: limbs whip with the hit, then settle (damped)
     const g = r.rag; g.t += dt;
     const k = Math.exp(-g.t * 3.2) * g.force, w = Math.sin(g.t * 13), w2 = Math.sin(g.t * 9 + 1.3);
     _v.set(1, 0, 0).applyQuaternion(r.g.getWorldQuaternion(_q2.identity()));
