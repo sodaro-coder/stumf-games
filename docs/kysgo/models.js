@@ -213,6 +213,7 @@ export function setTpGun(r, wid, att = null) {
   if (wid === 'fists') { r.tpGun.userData = { grip: new THREE.Vector3(...TP_GRIP.knife), fore: null, cat: 'knife' }; return; }   // bare hands: nothing to hold
   const m = wid === 'knife:dildo' ? makeKnife('k_dildo', null, undefined, undefined, false) : cat === 'c4' ? makeBomb() : cat === 'knife' ? makeKnife(null, null, undefined, undefined, false) : cat === 'grenade' ? makeGrenade(wid, undefined, undefined, false) : makeGun(wid, null, undefined, undefined, false, att);
   if (cat === 'c4') m.scale.setScalar(0.8);
+  if (cat === 'knife' || cat === 'grenade') m.scale.multiplyScalar(1.15);   // a hair over life size so a hand item still reads at fighting distance
   const grip = m.userData.grip || new THREE.Vector3(), t = TP_GRIP[cat] || TP_GRIP.rifle;
   m.position.set(t[0] - grip.x * m.scale.x, t[1] - grip.y * m.scale.y, t[2] - grip.z * m.scale.z);
   if (m.userData.flash) m.userData.flash.visible = false;

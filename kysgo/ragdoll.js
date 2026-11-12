@@ -17,6 +17,7 @@ const PTS = [['Hips', 'Hips', 0.12, 3], ['Chest', 'Spine2', 0.14, 3], ['Neck', '
   ['RArm', 'RightArm', 0.07, 1], ['RFore', 'RightForeArm', 0.05, 0.8], ['RHand', 'RightHand', 0.045, 0.5],
   ['LUp', 'LeftUpLeg', 0.09, 2], ['LLeg', 'LeftLeg', 0.07, 1.5], ['LFoot', 'LeftFoot', 0.05, 0.8], ['LToe', 'LeftToeBase', 0.035, 0.3],
   ['RUp', 'RightUpLeg', 0.09, 2], ['RLeg', 'RightLeg', 0.07, 1.5], ['RFoot', 'RightFoot', 0.05, 0.8], ['RToe', 'RightToeBase', 0.035, 0.3]];
+const LEAN_PTS = [['Chest', 4.5, 0.9], ['Neck', 4.5, 0.9], ['HeadC', 4, 0.8], ['LArm', 4, 0.8], ['RArm', 4, 0.8], ['Hips', 2.6, 1.2], ['LUp', 2, 0], ['RUp', 2, 0]];   // m/s2 towards a wall behind, while he slumps
 const TORSO = ['Hips', 'Chest', 'Neck', 'LArm', 'RArm', 'LUp', 'RUp'];
 const LINKS = [['Neck', 'HeadC'], ['LArm', 'LFore'], ['LFore', 'LHand'], ['RArm', 'RFore'], ['RFore', 'RHand'],
   ['LUp', 'LLeg'], ['LLeg', 'LFoot'], ['LFoot', 'LToe'], ['RUp', 'RLeg'], ['RLeg', 'RFoot'], ['RFoot', 'RToe']];
@@ -55,6 +56,16 @@ export function startRagdoll(r, W, { dir = null, imp = 0, at = 'Chest', vel = nu
     const kg = { Chest: 8, HeadC: 4.5, Hips: 10, LArm: 3, RArm: 3, LUp: 6, RUp: 6 }[at] || 8, dv = imp / kg;   // the part of the body that takes the hit in the first instant
     for (const n of near) { const q = P[n], k = n === at ? 1 : 0.6; q.o.x -= dir.x * dv * k * STEP; q.o.y -= dir.y * dv * k * STEP; q.o.z -= dir.z * dv * k * STEP; }
   }
+  // a wall right behind the body (along the shot, or at his back): he goes back into it and slumps down it, sitting or
+  // leaning, instead of falling in front of it. The upper body is carried to the wall in the first second (the weight
+  // going back after the hit), the hips slide back to its foot, and the wall's friction slows the slide down it.
+  let lean = null;
+  if (W && W.topAt) {
+    const ch = P.Chest.p;
+    const bk = new THREE.Vector3().subVectors(P.RArm.p, P.LArm.p).cross(new THREE.Vector3(0, 1, 0)).normalize();   // (shoulders right-to-left x up = the back)
+    const cands = []; if (dir && Math.hypot(dir.x, dir.z) > 0.2) cands.push(new THREE.Vector3(dir.x, 0, dir.z).normalize()); if (!dir || dir.x * bk.x + dir.z * bk.z > -0.3) cands.push(bk);   // (not when the shot came from behind: he goes forward, away from it)
+    for (const d of cands) { for (let k = 0.25; k <= 1.45 && !lean; k += 0.05) if (W.topAt(ch.x + d.x * k, ch.z + d.z * k) > ch.y - 0.25) lean = { x: d.x, z: d.z, d: k, cx: ch.x, cz: ch.z }; if (lean) break; }
+  }
   const C = [];
   const link = (a, b, stiff = 1) => { if (P[a].off || P[b].off) return; C.push({ a: P[a], b: P[b], L: P[a].p.distanceTo(P[b].p), s: stiff, min: 0 }); };
   for (let i = 0; i < TORSO.length; i++) for (let j = i + 1; j < TORSO.length; j++) link(TORSO[i], TORSO[j], 1);
@@ -66,7 +77,7 @@ export function startRagdoll(r, W, { dir = null, imp = 0, at = 'Chest', vel = nu
   const F0h = frameOf(P, null, 'Hips', 'Chest', 'LUp', 'RUp', new THREE.Matrix4()), F0c = frameOf(P, null, 'Chest', 'Neck', 'LArm', 'RArm', new THREE.Matrix4());
   const qh = new THREE.Quaternion().setFromRotationMatrix(F0h).invert(), qc = new THREE.Quaternion().setFromRotationMatrix(F0c).invert();
   const hipsOff = B.Hips.getWorldPosition(new THREE.Vector3()).sub(P.Hips.p).applyQuaternion(qh);   // where the hip bone sits in the pelvis frame
-  r.rd = { P, C, aims, t: 0, acc: 0, still: 0, asleep: false, W, g0p: r.g.position.clone(), g0q: r.g.quaternion.clone(),
+  r.rd = { P, C, aims, t: 0, acc: 0, still: 0, asleep: false, W, lean, g0p: r.g.position.clone(), g0q: r.g.quaternion.clone(),
     hips: { q0: B.Hips.getWorldQuaternion(new THREE.Quaternion()), inv: qh, off: hipsOff }, chest: { b: chestB, q0: chestB.getWorldQuaternion(new THREE.Quaternion()), inv: qc },
     head: B.Head ? { b: B.Head, q0: B.Head.getWorldQuaternion(new THREE.Quaternion()), inv: qc.clone() } : null };
   return r.rd;
@@ -80,7 +91,8 @@ function collide(W, q, fric) {
     for (const [dx, dz] of [[rad, 0], [-rad, 0], [0, rad], [0, -rad]]) {
       const cx = Math.floor(p.x + dx), cz = Math.floor(p.z + dz);
       if (cx === Math.floor(p.x) && cz === Math.floor(p.z)) continue;
-      if (W.topAt(cx + 0.5, cz + 0.5) > lim) { if (dx > 0) p.x = cx - rad - 1e-3; else if (dx < 0) p.x = cx + 1 + rad + 1e-3; else if (dz > 0) p.z = cz - rad - 1e-3; else p.z = cz + 1 + rad + 1e-3; }
+      if (W.topAt(cx + 0.5, cz + 0.5) > lim) { if (dx > 0) p.x = cx - rad - 1e-3; else if (dx < 0) p.x = cx + 1 + rad + 1e-3; else if (dz > 0) p.z = cz - rad - 1e-3; else p.z = cz + 1 + rad + 1e-3;
+        if (fric) { o.y = p.y + (o.y - p.y) * 0.35; if (dx) o.z = p.z + (o.z - p.z) * 0.6; else o.x = p.x + (o.x - p.x) * 0.6; } }   // against the wall: its friction slows the slide down it (and along it)
     }
     let fl = W.topAt(p.x, p.z);
     if (fl > Math.max(p.y, o.y) - rad + 0.33) { p.x = o.x; p.z = o.z; fl = W.topAt(p.x, p.z); }   // ran into a wall's cell itself: back out
@@ -101,6 +113,10 @@ export function stepRagdoll(r, dt) {
     rd.acc -= STEP;
     const damp = rd.t < 0.25 ? 0.995 : 0.985;
     for (const q of pts) { if (q.off) continue; const vx = (q.p.x - q.o.x) * damp, vy = (q.p.y - q.o.y) * damp, vz = (q.p.z - q.o.z) * damp; q.o.copy(q.p); q.p.x += vx; q.p.y += vy - G * STEP * STEP; q.p.z += vz; }
+    if (rd.lean) { const h = P.Hips, L = rd.lean, tx = L.cx + L.x * (L.d - 0.3), tz = L.cz + L.z * (L.d - 0.3), k = rd.t < 1 ? 0.05 : 0.12; h.p.x += (tx - h.p.x) * k; h.p.z += (tz - h.p.z) * k; }   // the seat goes back to the foot of the wall
+    if (rd.lean) for (const n of LEAN_PTS) { const q = P[n[0]]; if (!q || q.off) continue; const a = n[1] * STEP * STEP * (rd.t < 1.3 ? 1 : n[2]); q.p.x += rd.lean.x * a; q.p.z += rd.lean.z * a;
+      // his shoulders rub on the wall: they keep to where they met it instead of rolling off sideways along it
+      const ax = -rd.lean.z, az = rd.lean.x; if (q.s0 == null) q.s0 = q.p.x * ax + q.p.z * az; const ds = (q.s0 - (q.p.x * ax + q.p.z * az)) * 0.12 * n[1] / 4.5; q.p.x += ax * ds; q.p.z += az * ds; }   // back into the wall, then his weight resting on it
     for (let it = 0; it < ITER; it++) {
       for (const c of rd.C) {
         const a = c.a, b = c.b; _a.copy(b.p).sub(a.p); const d = _a.length() || 1e-6;

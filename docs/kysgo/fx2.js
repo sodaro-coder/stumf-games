@@ -367,10 +367,35 @@ export function createCombatFx({ scene, W: W0, parts, audio, cam, hq = true, ult
   // A severed piece is a simple stand-in shaped and coloured like the part (a head in its balaclava or skin, an arm in
   // its sleeve with a gloved hand), with a raw cut face; it flies with the shot, tumbles, bounces, rolls to a stop and
   // drips. The cap (meat with a ring of fat and the bone in the middle) covers the cut on the body.
-  const capGeo = (() => { const g = new THREE.RingGeometry(0.001, 1, 18, 6), c = new Float32Array(g.attributes.position.count * 3), p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getY(i)), bone = r < 0.2, fat = r > 0.84; c[i * 3] = bone ? 0.7 : fat ? 0.72 : 0.32 + Math.sin(i * 7.3) * 0.05; c[i * 3 + 1] = bone ? 0.6 : fat ? 0.55 : 0.02; c[i * 3 + 2] = bone ? 0.48 : fat ? 0.32 : 0.02; p.setZ(i, (1 - r) * 0.25); }
-    g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.computeVertexNormals(); return g; })();
-  const capMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, side: THREE.DoubleSide, envMapIntensity: 1.2 });
+  // The cap is a torn wound, not a disc: a ragged outline (every angle its own radius), the cloth and skin torn back
+  // and curling outward round it, a thin uneven fat layer, wet lumpy muscle in several shades with dark clotted pockets,
+  // and the snapped bone end standing proud off-centre (pale cortex, red marrow). Deterministic (no Math.random) so
+  // every cap and every budget run is the same. Unit radius, +z out of the cut; ~260 triangles.
+  const capGeo = (() => {
+    const NA = 22, rings = [0, 0.09, 0.17, 0.26, 0.42, 0.6, 0.76, 0.86, 0.95, 1.08], NR = rings.length, pos = [], col = [], idx = [];
+    const h = (i) => { const x = Math.sin(i * 127.1 + 3.7) * 43758.5453; return x - Math.floor(x); };   // a fixed hash: the same jag every time
+    const edge = Array.from({ length: NA }, (_, a) => 0.86 + 0.32 * h(a) + 0.08 * Math.sin(a * 2.3));   // the torn outline: radius per angle
+    const fatAt = Array.from({ length: NA }, (_, a) => 0.68 + 0.14 * h(a + 40)), bx = 0.2, by = -0.08;   // the fat line wanders; the bone sits off the middle
+    for (let ri = 0; ri < NR; ri++) for (let a = 0; a < NA; a++) {
+      const ang = a / NA * Math.PI * 2, t = rings[ri], last = ri === NR - 1, e = edge[a];
+      // the bone end: the first three rings are drawn round the bone's own centre, raised and jagged at the break
+      let x, y, z, c;
+      if (ri <= 2) { const br = ri === 0 ? 0 : ri === 1 ? 0.1 : 0.17 * (0.9 + 0.2 * h(a + 7)); x = bx + Math.cos(ang) * br; y = by + Math.sin(ang) * br; z = ri === 2 ? 0.2 + 0.07 * h(a + 11) : 0.24 + 0.05 * h(a + 3);
+        c = ri === 0 ? [0.16, 0.015, 0.012] : ri === 1 ? [0.24, 0.05, 0.035] : [0.4, 0.34, 0.25]; }   // marrow, the inner edge, the cortex
+      else {
+        const rr = last ? e : t * Math.min(1, e / 0.95), w = 1 - t; x = Math.cos(ang) * rr; y = Math.sin(ang) * rr;
+        if (ri === 3) { x = bx + Math.cos(ang) * 0.24 + (x - bx) * 0.25; y = by + Math.sin(ang) * 0.24 + (y - by) * 0.25; }   // the meat closing round the bone
+        const bump = 0.05 * (h(a * 3 + ri * 17) - 0.5) + 0.03 * Math.sin(ang * 3 + ri);
+        z = last ? -0.12 - 0.1 * h(a + 23) : t > 0.9 ? 0.02 : 0.1 * w + bump;   // the torn skin and cloth curl back outward
+        const fat = t > fatAt[a] - 0.04 && t < fatAt[a] + 0.1 && !last, clot = h(a * 5 + ri * 31) < 0.18, skin = t > 0.9;
+        const m = 0.75 + 0.5 * h(a * 7 + ri * 13);
+        c = last ? [0.05 + 0.05 * h(a + 5), 0.02, 0.016] : skin ? [0.2 * m, 0.07 * m, 0.05 * m] : fat ? [0.3 * m, 0.2 * m, 0.08 * m] : clot ? [0.05, 0.006, 0.005] : [0.17 * m, 0.012 * m, 0.01 * m];   // linear albedo: raw muscle is dark, fat is cream, not white
+      }
+      pos.push(x, y, z); col.push(...c);
+    }
+    for (let ri = 0; ri < NR - 1; ri++) for (let a = 0; a < NA; a++) { const a2 = (a + 1) % NA, i0 = ri * NA + a, i1 = ri * NA + a2, j0 = (ri + 1) * NA + a, j1 = (ri + 1) * NA + a2; if (ri === 0) { idx.push(i0, j0, j1); continue; } idx.push(i0, j0, j1, i0, j1, i1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals(); return g; })();
+  const capMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.34, side: THREE.DoubleSide, envMapIntensity: 0.6 });   // wet, but not a mirror in the sun
   const caps = Array.from({ length: 10 }, () => { const m = new THREE.Mesh(capGeo, capMat); m.visible = false; return m; }); let ci = 0;
   const limbGeo = { head: new THREE.SphereGeometry(0.1, hq ? 16 : 8, hq ? 12 : 6), arm: new THREE.CapsuleGeometry(0.045, 0.42, 3, hq ? 10 : 6), hand: new THREE.SphereGeometry(0.05, 8, 6) };
   const limbs = Array.from({ length: 4 }, () => {

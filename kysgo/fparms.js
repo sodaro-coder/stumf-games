@@ -49,6 +49,11 @@ export const HOLD = {
   pistol: { at: [-0.035, 0.012, 0.03], fwd: [0.32, -0.35, -0.88], palm: [1, 0, 0.1], curl: [0.15, 0.95, 1.0, 1.0, 1.0] },
   // a knife: a fist round the handle, edge forward; the support hand rests low, open
   knife: { at: [0.02, 0.0, 0.045], fwd: [-0.15, -0.4, -0.9], palm: [-1, 0, 0.1], curl: [0.7, 0.95, 1.0, 1.0, 1.0] },
+  // the support hand over the top of the gun (a charging handle pulled, a slide racked or press-checked): palm down,
+  // fingers across to the right side
+  over: { at: [-0.025, 0.012, 0.015], fwd: [0.85, -0.25, -0.45], palm: [0, -1, 0], curl: [0.45, 0.9, 0.95, 1.0, 1.0] },
+  // the support hand round a magazine (pulled out, brought up, seated): palm on its left side, fingers round the front
+  mag: { at: [-0.032, -0.02, 0.0], fwd: [0.2, -0.35, -0.9], palm: [1, 0, 0.1], curl: [0.3, 0.75, 0.85, 0.9, 0.95] },
   // a grenade or the bomb: the hand round it
   ball: { at: [0.03, -0.01, 0.05], fwd: [-0.3, -0.15, -0.94], palm: [-1, 0.2, 0], curl: [0.6, 0.6, 0.65, 0.7, 0.75] },
 };
@@ -129,6 +134,7 @@ function aim(b, from, to) {   // turn b so its child at `from` points at `to`
   _tq.setFromUnitVectors(u, v); b.getWorldQuaternion(_tq2); _tq.multiply(_tq2); b.parent.getWorldQuaternion(_tq2).invert(); b.quaternion.copy(_tq2.multiply(_tq)); b.updateMatrixWorld(true);
 }
 
+const _hm = new THREE.Matrix4(), _href = { updateWorldMatrix() {}, matrixWorld: null };
 const _tR = new THREE.Vector3(), _fR = new THREE.Vector3(), _aR = new THREE.Vector3(), _tL = new THREE.Vector3(), _fL = new THREE.Vector3(), _aL = new THREE.Vector3(), _pole = new THREE.Vector3();
 // per frame, after the gun group has been posed: kind 'rifle' | 'pistol' | 'shotgun' | 'knife' | 'ball'
 export function poseArms(A, vm, kind, cam) {
@@ -137,8 +143,11 @@ export function poseArms(A, vm, kind, cam) {
   A.root.position.set(0, -1.52, 0.16); A.root.updateMatrixWorld(true);
   const sc = vm.scale.x || 1;
   const grip = ud.grip || new THREE.Vector3();
+  // a knife turned in the fingers (a flip): the hand holds where it was, the blade spins about its own length
+  let ref = vm;
+  if (ud.holdSpin) { vm.updateWorldMatrix(true, false); _hm.copy(vm.matrixWorld).multiply(_m.makeRotationZ(-ud.holdSpin)); ref = _href; _href.matrixWorld = _hm; }
   if (kind === 'knife' || kind === 'ball') {
-    holdWorld(vm, grip, HOLD[kind], _tR, _fR, _aR, 1 / sc);
+    holdWorld(ref, grip, HOLD[kind], _tR, _fR, _aR, 1 / sc);
     solve(A.R, _tR, _fR, _aR, _pole.set(0.6, -0.9, 0.3).add(_tR), HOLD[kind].curl);
     // the free hand: low and relaxed, out of the way
     _tL.set(-0.2, -0.36, -0.3); _fL.set(0.2, 0.3, -0.93); _aL.set(0.9, 0.2, 0.2);
@@ -148,7 +157,7 @@ export function poseArms(A, vm, kind, cam) {
   holdWorld(vm, grip, HOLD.grip, _tR, _fR, _aR, 1 / sc);
   solve(A.R, _tR, _fR, _aR, _pole.set(0.7, -0.9, 0.35).add(_tR), HOLD.grip.curl);
   const arm = ud.leftArm, lh = ud.leftHand || grip;
-  const H = kind === 'pistol' ? HOLD.pistol : kind === 'shotgun' ? HOLD.pump : HOLD.fore;
+  const H = ud.lhHold && HOLD[ud.lhHold] ? HOLD[ud.lhHold] : kind === 'pistol' ? HOLD.pistol : kind === 'shotgun' ? HOLD.pump : HOLD.fore;   // (a reload or an inspect turns the hand for what it is doing)
   if (arm) holdWorld(arm, lh, H, _tL, _fL, _aL, 1 / sc); else holdWorld(vm, lh, H, _tL, _fL, _aL, 1 / sc);
   solve(A.L, _tL, _fL, _aL, _pole.set(-0.75, -0.9, 0.25).add(_tL), H.curl);
 }

@@ -33,10 +33,11 @@ import { Particles, textPop, skyDome, funnyKey, inspectStyle, INSPECT_SOUND, app
 import { itemInfo, AGENT_BY_ID, AGENTS, ITEM_BY_ID, EMOTE_BY_ID, skinSound, isMythic } from './skins.js';
 import { ATTACH, XP_RULES, gunLevel, unlocksAt } from './guns.js';
 import { releaseSoldiers, loadChars, charsReady, makeSoldier, poseSoldier, soldierEvent, setGear, soldierModelsV, soldierLOD, cutPiece, setRagdolls, ragdollStats, ragdollLose } from './chars.js';
-import { releaseRealGuns, setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
+import { releaseRealGuns, REAL_GUN, realGunFile, setTpGun, makePlayer, posePlayer, makeGun, makeFingerGun, makeKnife, makeGrenade, makeBomb, makeProp, skinTexture, lam, basic, setModelQuality, animateGlow, flareGlow } from './models.js';
 import { setModelTexTier, placeModels, releaseLoaded } from './glb.js';
 import { calOf, goreOf, momentum } from './ballistics.js';
 import { loadArms, armsReady, makeArms, poseArms, hideBuiltArms } from './fparms.js';
+import { vmClass, drawPose, holsterPose, flourishPose, inspectPose, movePose, FLOURISH, INSPECT } from './vmanim.js';
 let pmT = 0;
 
 const SET_KEY = 'cs:settings:v1';
@@ -929,6 +930,9 @@ export default function start({ cfg, E, N, smoke }) {
 
     // ---- first-person view model ----
     let lastMelee = false;
+    const vmKeyOf = (it, wid, team, knife, att) => `${wid}|${SC && SC.melee ? 'saber' : ''}|${it && it.skin ? it.skin.uid : ''}|${team}|${knife ? knife.uid : ''}|${att ? (att.optic || '') + (att.muzzle || '') : ''}`;
+    const vmPre = new Map();   // first-person guns built ahead of their first draw (warmLoadout)
+    let vmOld = null, vmOldKind = 'rifle';   // the weapon being put away while the next comes up
     let vm = null, vmKey = '', vmSunK = 1, vmProbeK = 1, vmArms = null, vmKind = 'rifle', armsLate = false; const vmProbe = [1, 1, 1], armsBy = new Map();
     function setViewModel() {
       const it = me.cur === 4 ? { wid: me.nades[me.nadeSel] } : me.inv[me.cur];
@@ -936,9 +940,12 @@ export default function start({ cfg, E, N, smoke }) {
       const team = me.team, info = st.roster.get(myId) || {};
       const lo = loadout[team] || {}; const knife = mode === 'story' ? null : lo.knife;   // the story is played in issue kit: no skins, no costumes
       const att = wid ? myAtt(wid) : null;
-      const key = `${wid}|${SC && SC.melee ? 'saber' : ''}|${it && it.skin ? it.skin.uid : ''}|${team}|${knife ? knife.uid : ''}|${att ? (att.optic || '') + (att.muzzle || '') : ''}`;
+      const key = vmKeyOf(it, wid, team, knife, att);
       if (key === vmKey) return; vmKey = key;
-      if (vm) vmScene.remove(vm);
+      if (vmOld) { vmScene.remove(vmOld); vmOld = null; }
+      // the weapon in your hands goes away (holster) before the next one comes up: it stays in view for the first part
+      // of the new weapon's draw time (no extra time: the draw is as long as it always was)
+      if (vm && wid && me.alive && vm.visible && vm.userData.cls && !vm.userData.flop) { vmOld = vm; vmOldKind = vmKind; } else if (vm) vmScene.remove(vm);
       const sleeve = team === 'T' ? '#5e5440' : '#33445c', glove = team === 'T' ? '#2c2824' : '#1e2126';
       if (!wid) { vm = null; return; }
       if (wid === 'knife' && SC && SC.melee) vm = makeKnife('k_dildo', null, sleeve, glove);   // all anyone was allowed to keep
@@ -946,7 +953,7 @@ export default function start({ cfg, E, N, smoke }) {
       else if (G_BY_ID[wid]) { vm = makeGrenade(wid, sleeve, glove, true); vm.scale.setScalar(1.25); }
       else if (wid === 'c4') { vm = makeBomb(sleeve, glove, true); vm.scale.setScalar(0.9); }
       else if (it.skin && /:Finger Gun$/.test(it.skin.def)) vm = makeFingerGun(sleeve);   // the Finger Gun is literally a finger gun
-      else { const sk = it.skin, si = sk ? itemInfo(sk) : null; vm = makeGun(wid, sk && si ? skinTexture(sk, si) : null, sleeve, glove, true, att); }
+      else { const pre = vmPre.get(key); vmPre.delete(key); const sk = it.skin, si = sk ? itemInfo(sk) : null; vm = pre || makeGun(wid, sk && si ? skinTexture(sk, si) : null, sleeve, glove, true, att); }
       const small = (W_BY_ID[wid] || {}).cat === 'pistol' || wid === 'zeus';
       vm.userData.base = small ? new THREE.Vector3(0.17 * S.hand, -0.16, -0.44) : new THREE.Vector3(0.19 * S.hand, -0.2, -0.46); vm.userData.ry = (small ? 0.28 : 0.16) * S.hand; vm.scale.multiplyScalar(small ? 0.62 : 0.85);
       vm.position.copy(vm.userData.base); vmScene.add(vm);
@@ -959,11 +966,19 @@ export default function start({ cfg, E, N, smoke }) {
       if (P.hqModels && S.hand >= 0 && !joke && armsReady()) {
         vmArms = armsBy.get(sleeve) || makeArms(sleeve); if (vmArms) { armsBy.set(sleeve, vmArms); if (!vmArms.root.parent) vmScene.add(vmArms.root); hideBuiltArms(vm, true); }
       }
-      me.deploy = wid === 'knife' ? 0.25 : G_BY_ID[wid] ? 0.35 : (W_BY_ID[wid] || {}).cat === 'pistol' ? 0.35 : (W_BY_ID[wid] || {}).cat === 'sniper' ? 0.7 : 0.5;   // quick draws: fast-paced, R6-like me.scoped = 0; audio.play('deploy');
+      me.deploy = wid === 'knife' ? 0.25 : G_BY_ID[wid] ? 0.35 : (W_BY_ID[wid] || {}).cat === 'pistol' ? 0.35 : (W_BY_ID[wid] || {}).cat === 'sniper' ? 0.7 : 0.5; me.scoped = 0; audio.play('deploy');   // quick draws: fast-paced, R6-like
+      me.deployD = me.deploy; vm.userData.cls = vmClass(W_BY_ID[wid] || (wid === 'knife' ? { cat: 'knife' } : null), vm.userData);
+      me.inspect = 0;
+      // the first time a weapon is drawn after you spawn (or buy / pick it up) the action is worked once (vmanim.js)
+      const fk = me.cur + '|' + wid; me.flourishT = 0;
+      if (!me.drawn) me.drawn = new Set();
+      if (!me.drawn.has(fk) && FLOURISH[vm.userData.cls] && !vm.userData.flop) { me.drawn.add(fk); me.flourishD = FLOURISH[vm.userData.cls]; me.flourishT = me.flourishD; }
+      me.holsterD = vmOld ? Math.min(0.2, me.deploy * 0.35) : 0;
     }
 
     // ---- reload animations: tilt the gun, drop the mag, bring a fresh one up, seat it, rack it -----------------------
     const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const bell01 = (a, b, x) => Math.sin(Math.PI * Math.max(0, Math.min(1, (x - a) / (b - a))));
     const _rv = new THREE.Vector3(), _rv2 = new THREE.Vector3();
     const EYE_RELIEF = { reddot: 0.17, holo: 0.18, acog: 0.13, iron: 0.4 };   // how far the sight sits in front of your eye when aimed in (metres)
     // every gun reloads its own way: how far it tilts, where the old mag goes, and how (and whether) it is charged.
@@ -993,34 +1008,48 @@ export default function start({ cfg, E, N, smoke }) {
         return;
       }
       const S = reloadStyle(w.id), pistol = w.cat === 'pistol', tilt = sm(0, 0.14, k) * (1 - sm(0.82, 1, k)), rack = me.reloadEmpty && S.charge !== 'none';
-      vm.rotation.z += S.tilt * tilt; vm.rotation.x += (0.12 + (S.pitch || 0)) * tilt; vm.position.y -= 0.025 * tilt;
+      vm.rotation.z += S.tilt * tilt; vm.rotation.x += (0.12 + (S.pitch || 0)) * tilt; vm.position.y += (pistol ? 0.06 : 0.045) * tilt; vm.position.x -= (pistol ? 0.06 : 0.07) * tilt; vm.position.z += 0.04 * tilt;   // brought up and in, so the magazine well is in view
       if (S.rock) vm.rotation.x += S.rock * Math.sin(Math.PI * sm(0.36, 0.62, k)) * 0.35;   // an AK mag rocks in front-first
       if (S.flick) vm.rotation.z += 0.35 * Math.exp(-Math.pow((k - 0.2) / 0.05, 2));       // flick the empty out
       if (S.cover) { vm.rotation.z += 0.18 * Math.sin(Math.PI * sm(0.05, 0.9, k)); vm.position.x -= 0.02 * tilt; }
       if (S.cyl) { vm.rotation.z += 0.3 * tilt; vm.rotation.x -= 0.25 * Math.exp(-Math.pow((k - 0.3) / 0.06, 2)); }   // swing out, tip up to drop the empties
       if (S.dual) vm.position.y -= 0.03 * tilt;
       const atMag = _rv.copy(ud.magPos).add(_rv2.set(0, -0.03, 0.02)), below = ud.magPos.clone().add(S.top ? _rv2.set(0.06, 0.3, 0.05) : S.cover ? _rv2.set(0.12, -0.3, 0.1) : _rv2.set(0.05, -0.38, 0.12));
+      // an empty gun: the thumb drops the magazine and it falls free while the hand is already on its way to the pouch;
+      // rounds left (a tactical reload): the hand takes the magazine out and keeps it (it goes in the pouch), so nothing
+      // falls. Then the fresh one comes up, rocks or pushes in and seats (0.6, the click), and an empty gun is made ready.
+      const empty = me.reloadEmpty && !S.top && !S.cover;
+      const boltRel = rack && S.charge === 'pull' && !!ud.bolt;   // an AR locked open: the bolt catch is slapped (the bolt slams home) instead of the charging handle
       let tgt;
-      if (k < 0.12) tgt = hand.clone().lerp(atMag, sm(0, 0.12, k));
+      if (empty && k < 0.3) tgt = hand.clone().lerp(below, sm(0.06, 0.3, k));
+      else if (k < 0.12) tgt = hand.clone().lerp(atMag, sm(0, 0.12, k));
       else if (k < 0.3) tgt = atMag.clone().lerp(below, sm(0.12, 0.3, k));
       else if (k < 0.36) tgt = below.clone();
       else if (k < 0.6) tgt = below.clone().lerp(atMag, sm(0.36, 0.6, k));
       else if (k < 0.7 || !rack || S.charge === 'slide') tgt = atMag.clone().lerp(hand, sm(0.6, 0.78, k));
+      else if (boltRel) {   // the heel of the hand on the bolt catch, left side above the magazine well
+        const cat = ud.magPos.clone().add(_rv2.set(-0.04, 0.045, -0.015)), hit = cat.clone().add(_rv2.set(0.012, 0, 0));
+        tgt = k < 0.78 ? atMag.clone().lerp(cat, sm(0.7, 0.78, k)) : k < 0.86 ? cat.clone().lerp(hit, bell01(0.8, 0.86, k)) : cat.clone().lerp(hand, sm(0.86, 0.97, k));
+        ud.lhHold = 'mag';
+      }
       else {   // charging it: each kind of gun has its own handle in its own place and its own motion
         const ch = S.charge === 'pull' && ud.charge ? ud.charge.clone() : S.charge === 'side' ? ud.magPos.clone().add(_rv2.set(0.07, 0.08, 0.02)) : S.charge === 'slap' ? ud.magPos.clone().add(_rv2.set(-0.02, 0.09, -0.13)) : S.charge === 'bolt' ? ud.magPos.clone().add(_rv2.set(0.07, 0.06, 0.13)) : (ud.charge ? ud.charge.clone() : ud.magPos.clone().add(_rv2.set(0, 0.08, 0.1)));
         const p1 = S.charge === 'slap' ? ch.clone().add(_rv2.set(0, 0, 0.05)) : S.charge === 'bolt' ? ch.clone().add(_rv2.set(0, 0.04, 0)) : ch.clone().add(_rv2.set(0, 0, 0.07));
         const p2 = S.charge === 'slap' ? ch.clone().add(_rv2.set(0, -0.05, 0.05)) : S.charge === 'bolt' ? p1.clone().add(_rv2.set(0, 0, 0.1)) : p1;
         tgt = k < 0.76 ? atMag.clone().lerp(ch, sm(0.7, 0.76, k)) : k < 0.82 ? ch.clone().lerp(p1, sm(0.76, 0.81, k)) : k < 0.88 ? p1.clone().lerp(p2, sm(0.82, 0.86, k)) : (S.charge === 'bolt' ? p2.clone().lerp(ch, sm(0.88, 0.93, k)).lerp(hand, sm(0.93, 0.99, k)) : p2.clone().lerp(hand, sm(0.88, 0.98, k)));
         if (S.charge === 'bolt') vm.rotation.z -= 0.25 * Math.sin(Math.PI * sm(0.72, 0.98, k));   // the rifle rolls in toward the bolt hand
+        if (k > 0.72 && k < 0.95) ud.lhHold = 'over';
       }
+      if (k > (empty ? 0.2 : 0.06) && k < 0.64) ud.lhHold = 'mag';   // the hand round the magazine
       arm.position.copy(tgt).sub(hand);
-      if (mg) {   // the old mag falls away; the fresh one rides up in the hand and seats with a click
-        if (k < 0.12) mg.position.set(0, 0, 0);
-        else if (k < 0.34) { const f = sm(0.12, 0.3, k); mg.position.set(0.03 * f, -0.36 * f, 0.1 * f); mg.rotation.set(0.5 * f, 0, 0.3 * f); mg.visible = k < 0.3; }
-        else if (k < 0.6) { mg.visible = true; mg.position.copy(tgt).sub(atMag); mg.rotation.set(0.2 * (1 - sm(0.36, 0.6, k)), 0, 0); }
+      if (mg) {
+        if (empty && k >= 0.06 && k < 0.36) {   // falling free: gravity from the moment it lets go, tumbling a little, gone below the view
+          const t = (k - 0.06) * w.reload, y = -4.9 * t * t - 0.4 * t; mg.position.set(0.02 * t, y, 0.06 * t); mg.rotation.set(1.6 * t, 0, 0.9 * t); mg.visible = y > -0.8 && k < 0.3;
+        } else if (k < (empty ? 0.06 : 0.12)) { mg.position.set(0, 0, 0); mg.rotation.set(0, 0, 0); mg.visible = true; }
+        else if (k < 0.6) { mg.visible = true; mg.position.copy(tgt).sub(atMag); mg.rotation.set(0.2 * (1 - sm(0.36, 0.6, k)) * (k > 0.36 ? 1 : 0.6), 0, 0); }   // in the hand: out (tactical), the fresh one up, rocked in
         else { mg.position.set(0, 0, 0); mg.rotation.set(0, 0, 0); mg.visible = true; }
       }
-      const jolt = Math.exp(-Math.pow((k - 0.61) / 0.02, 2)) * (S.heavy ? 0.02 : 0.012) + (!rack ? 0 : S.charge === 'slide' ? Math.exp(-Math.pow((k - 0.72) / 0.02, 2)) * 0.025 : S.charge === 'slap' ? Math.exp(-Math.pow((k - 0.84) / 0.015, 2)) * 0.03 : Math.exp(-Math.pow((k - 0.85) / 0.025, 2)) * 0.02);   // the mag seats, then the action slams home
+      const jolt = Math.exp(-Math.pow((k - 0.61) / 0.02, 2)) * (S.heavy ? 0.02 : 0.012) + (!rack ? 0 : S.charge === 'slide' ? Math.exp(-Math.pow((k - 0.72) / 0.02, 2)) * 0.025 : S.charge === 'slap' ? Math.exp(-Math.pow((k - 0.84) / 0.015, 2)) * 0.03 : Math.exp(-Math.pow((k - (S.charge === 'pull' && ud.bolt ? 0.835 : 0.85)) / 0.025, 2)) * 0.02);   // the mag seats, then the action slams home
       vm.position.z += jolt;
     }
 
@@ -1317,7 +1346,7 @@ export default function start({ cfg, E, N, smoke }) {
       const was = me.inv;
       me.inv = {}; for (const s of [1, 2, 3, 5, 6]) if (m.inv[s]) {
         const it = m.inv[s], old = was[s];
-        me.inv[s] = { ...it };
+        me.inv[s] = { ...it }; if (me.drawn && (it.fresh || it.picked || !old || old.wid !== it.wid)) me.drawn.delete(s + '|' + it.wid);
         if (s <= 2 && old && old.wid === it.wid && !it.fresh && !it.picked) { me.inv[s].ammo = old.ammo; me.inv[s].reserve = old.reserve; }
       }
       me.nades = m.nades || []; me.money = m.money; me.armor = m.armor; me.helmet = m.helmet; me.defuser = m.defuser;
@@ -1325,7 +1354,30 @@ export default function start({ cfg, E, N, smoke }) {
       else if (me.respawned || (!me.inv[me.cur] && !(me.cur === 4 && me.nades.length))) { me.cur = me.inv[1] ? 1 : me.inv[2] ? 2 : 3; if (me.inv[me.cur]) me.respawned = false; }
       if (me.nadeSel >= me.nades.length) me.nadeSel = 0;
       if (hud.panelRender && hud.panel && hud.panel.dataset.k === 'buy') hud.panelRender();
+      warmLoadout();
       setViewModel();
+    }
+    // the guns you carry are fetched and parsed as soon as you have them (round start, a buy, a pickup), not on the first
+    // draw: a real model used to take seconds to replace the built gun the first time it was drawn. Medium and up only
+    // (Performance never downloads the full files).
+    function warmLoadout() {
+      if (!P.hqModels) return;
+      for (const s2 of [1, 2]) { const it = me.inv[s2], mid = it && REAL_GUN[it.wid]; if (mid) realGunFile(mid, 'hi'); }
+      realGunFile('kabar', 'hi');
+      // and the first-person gun itself is built once its file is in, its shaders compiled off screen, so the first draw
+      // is the real gun at once
+      clearTimeout(warmLoadout.t); warmLoadout.t = setTimeout(() => {
+        const team = me.team, lo = loadout[team] || {}, knife = mode === 'story' ? null : lo.knife, sleeve = team === 'T' ? '#5e5440' : '#33445c', glove = team === 'T' ? '#2c2824' : '#1e2126';
+        for (const s2 of [1, 2]) {
+          const it = me.inv[s2]; if (!it || !it.wid || !W_BY_ID[it.wid] || (SC && SC.melee) || (it.skin && /:Finger Gun$/.test(it.skin.def))) continue;
+          const att = myAtt(it.wid), key = vmKeyOf(it, it.wid, team, knife, att); if (key === vmKey || vmPre.has(key)) continue;
+          if (vmPre.size > 3) vmPre.delete(vmPre.keys().next().value);
+          const sk = it.skin, si = sk ? itemInfo(sk) : null, g = makeGun(it.wid, sk && si ? skinTexture(sk, si) : null, sleeve, glove, true, att); vmPre.set(key, g);
+          const mid = REAL_GUN[it.wid];
+          (mid ? realGunFile(mid, 'hi') : Promise.resolve()).then(() => setTimeout(() => { if (vmPre.get(key) !== g || g.parent) return;   // (the fit runs in the same promise chain: one tick later it is on)
+            g.position.set(0, 0, 50); vmScene.add(g); try { renderer.compile(vmScene, vmCam); } catch (e) { /* compiled on first draw instead */ } vmScene.remove(g); g.position.set(0, 0, 0); }, 0));
+        }
+      }, 400);
     }
     // host anti-cheat: strikes for impossible movement / hits; 12 strikes = removed from the match
     function acStrike(p, peer, why) {
@@ -1335,7 +1387,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (p.acN >= 12 && !p.kicked) { p.kicked = true; send('toast', 'Removed by anti-cheat: ' + why, peer); toast(`${p.name} was removed by anti-cheat (${why})`); match.remove(p.id); }
     }
     function onTp(m) { if (!m || ![m.x, m.y, m.z].every(Number.isFinite)) return; me.x = m.x; me.y = m.y; me.z = m.z; me.vx = me.vy = me.vz = 0; me.walkTo = null; if (Number.isFinite(m.yaw)) { me.yaw = m.yaw; me.pitch = 0; } }   // a story scene puts this player somewhere
-    function onSpawn(m) { kc = null; dmgFrom.clear(); dmgTo.clear(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; }
+    function onSpawn(m) { kc = null; dmgFrom.clear(); dmgTo.clear(); me.x = m.x; me.y = m.y; me.z = m.z; me.yaw = m.yaw; me.pitch = 0; me.vx = me.vy = me.vz = 0; me.alive = true; me.hp = 100; me.flash = 0; me.spray = 0; me.scoped = 0; specTarget = null; me.respawned = true; me.drawn = null; }
     function onHurt(m) {
       me.hp = m.hp; me.armor = m.armor; audio.play('hurt'); hud.bloodScreen(m.dmg, S.gore ?? 2); if (mob) mob.buzz(Math.min(60, 12 + (m.dmg | 0))); if (m.by) dmgFrom.set(m.by, (dmgFrom.get(m.by) || 0) + (m.dmg | 0));
       const ang = m.from ? angDiff(me.yaw, Math.atan2(-(m.from[0] - me.x), -(m.from[1] - me.z))) : null;
@@ -1485,7 +1537,7 @@ export default function start({ cfg, E, N, smoke }) {
     if (S.replay) setTimeout(() => replayOn(true), 3000);
     // spectating: you see through their eyes like a player would, their gun in their hands (attachments too), their
     // aim smoothed the way a person's view moves, flashes and kick when they fire
-    let svm = null, svmKey = '', specYaw = 0, specPitch = 0, specKick = 0, specFlashT = 0, specBob = 0, specId = null;
+    let svm = null, svmKey = '', specYaw = 0, specPitch = 0, specKick = 0, specFlashT = 0, specBob = 0, specId = null, svmArms = null, svmKind = 'rifle'; const specArmsBy = new Map();
     function specViewModel(p) {
       const wid = p.wid || 'knife', key = p.id + '|' + wid + '|' + p.team;
       if (key === svmKey) return; svmKey = key;
@@ -1498,6 +1550,10 @@ export default function start({ cfg, E, N, smoke }) {
       const small = (W_BY_ID[wid] || {}).cat === 'pistol' || wid === 'zeus';
       svm.userData.base = small ? new THREE.Vector3(0.17, -0.16, -0.44) : new THREE.Vector3(0.19, -0.2, -0.46); svm.userData.ry = small ? 0.28 : 0.16; svm.scale.multiplyScalar(small ? 0.62 : 0.85);
       vmScene.add(svm);
+      // the spectated player's hands are the same real rigged arms as your own (their own pair: yours stay posed on your gun)
+      svmKind = wid === 'knife' ? 'knife' : G_BY_ID[wid] || wid === 'c4' ? 'ball' : small ? 'pistol' : svm.userData.pump ? 'shotgun' : 'rifle';
+      if (svmArms) svmArms.root.visible = false; svmArms = null;
+      if (P.hqModels && armsReady()) { svmArms = specArmsBy.get(sleeve) || makeArms(sleeve); if (svmArms) { specArmsBy.set(sleeve, svmArms); if (!svmArms.root.parent) vmScene.add(svmArms.root); hideBuiltArms(svm, true); } }
     }
     function onEvent({ type, data }) {
       if (type === 'round') {
@@ -1711,6 +1767,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (me.cur === 4) return throwNade(alt);
       if (me.cur === 5) return;
       if (!w || !it || me.cd > 0 || me.deploy > 0 || me.reload > 0) return;
+      if (!me.inspectStyle) me.inspect = 0; me.flourishT = 0;   // a shot cuts an inspect and the first-draw flourish
       if (w.cat === 'knife') return knife(alt);
       if (it.ammo <= 0) { audio.play('empty'); me.cd = 0.2; if (it.reserve > 0) startReload(); return; }
       it.ammo--; me.cd = 60 / w.rpm; if (w.prime) me.cd += w.prime * 0.5;
@@ -1732,7 +1789,7 @@ export default function start({ cfg, E, N, smoke }) {
         const tr = traceShot(W, players, myId, eye, d, w);   // pooled result: keep copies of what outlives this pellet
         for (const h of tr.hits) hits.push({ id: h.id, group: h.group, dist: h.dist, pen: h.pen });
         if (!end && tr.end) end = { x: tr.end.x, y: tr.end.y, z: tr.end.z };
-        for (const h of tr.hits) { const p = st.players.get(h.id); if (p) { if (cfx) cfx.blood(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, d, h.group === 'head'); else puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); const rg = rigs.get(h.id); if (rg) { rg.flinch = { x: d.x, z: d.z, t: 0.22, k: h.group === 'head' ? 1.3 : 1 }; if ((S.gore ?? 2) > 0 && (!(w.pellets > 1) || k < 3)) bodyWound(rg, h.group, d, w.id, h.dist); } } }
+        for (const h of tr.hits) { const p = st.players.get(h.id); if (p) { if (cfx) cfx.blood(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z, d, h.group === 'head'); else puff(p.x, p.y + (h.group === 'head' ? 1.7 : 1.2), p.z); const rg = rigs.get(h.id); if (rg) { rg.flinch = { x: d.x, z: d.z, t: h.group === 'legs' ? 0.3 : 0.22, d: h.group === 'legs' ? 0.3 : 0.22, k: h.group === 'head' ? 1.3 : 1, zone: h.group }; if ((S.gore ?? 2) > 0 && (!(w.pellets > 1) || k < 3)) bodyWound(rg, h.group, d, w.id, h.dist); } } }
         if (cfx && tr.wallHits.length > 1) for (let wi = 0; wi < tr.wallHits.length - 1; wi++) {   // wallbang: the exit hole on the far side, debris blown out of it
           const wh = tr.wallHits[wi], o2 = { x: wh.x - d.x * 0.02, y: wh.y - d.y * 0.02, z: wh.z - d.z * 0.02 }, th = W.thickness(o2, d, 0, 1.2);
           if (th < 1.2) { const ex = { x: wh.x + d.x * th, y: wh.y + d.y * th, z: wh.z + d.z * th, side: true }; cfx.impact(ex, { x: -d.x, y: -d.y, z: -d.z }, W.matName(wh.m)); if (parts) parts.emit(ex.x + d.x * 0.05, ex.y, ex.z + d.z * 0.05, { ...impactFx(W.matName(wh.m)), n: 7, dir: d, spread: 0.4 }); }
@@ -1916,7 +1973,8 @@ export default function start({ cfg, E, N, smoke }) {
           if (leaning && tt.has('leanL')) me.leanWant = me.leanWant === -1 ? 0 : -1;
           if (leaning && tt.has('leanR')) me.leanWant = me.leanWant === 1 ? 0 : 1;
           if (tt.has('alt') && adsOptic) me.adsToggle = !me.adsToggle;
-          if (kp('KeyF') || E.input.touch.tapped.has('inspect')) { me.inspect = 2.2; const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)) || (isMythic(held) ? 'mythic' : null); if (me.inspectStyle === 'mythic') { flareGlow(1); me.inspectGlow = ((itemInfo(held) || {}).paint || {}).glow || '#ff2e4c'; } if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
+          if ((kp('KeyF') || E.input.touch.tapped.has('inspect')) && me.reload <= 0 && me.deploy <= 0) { const held = me.cur === 3 ? (loadout[me.team] || {}).knife : (me.inv[me.cur] || {}).skin; me.inspectStyle = inspectStyle(funnyKey(held)) || (isMythic(held) ? 'mythic' : null);
+            me.inspectD = me.inspectStyle ? 2.2 : (INSPECT[(vm && vm.userData.cls) || 'rifle'] || 3); me.inspect = me.inspectD; me.flourishT = 0; if (me.inspectStyle === 'mythic') { flareGlow(1); me.inspectGlow = ((itemInfo(held) || {}).paint || {}).glow || '#ff2e4c'; } if (me.inspectStyle) audio.play(INSPECT_SOUND[me.inspectStyle] || 'boing', 0.7); }
           if (mode === 'story' && (kp('KeyG') || E.input.touch.tapped.has('ability') || E.input.touch.tapped.has('buy'))) toHost('ability', 1);
           else if (kp('KeyG')) { if (me.cur === 5 && me.inv[5]) { toHost('dropc4', 1); } else if (me.cur === 1 || me.cur === 2) { sendAmmo(); toHost('drop', me.cur); } }
           if (!leaning && (kp('KeyE') || E.input.touch.tapped.has('use')) && !(mode === 'story' && SC && SC.useAt(me.x, me.z))) { const d = nearestDrop(); if (d && !(st.bomb && st.bomb.s === 'planted' && me.team === 'CT' && Math.hypot(st.bomb.x - me.x, st.bomb.z - me.z) < 2)) { sendAmmo(); toHost('pickup', d.id); } }
@@ -2081,7 +2139,11 @@ export default function start({ cfg, E, N, smoke }) {
         if (r.emote) { r.emote.t += dt; if (r.emote.t > r.emote.dur || sp > 0.5 || !p.alive) r.emote = null; }
         if (r.soldier && p.rl && !r.wasRl) { soldierEvent(r, 'reload'); if (cfx) setTimeout(() => cfx && cfx.dropMag(p.x, p.y + 1.0, p.z, p.yaw || 0), 300); } r.wasRl = !!p.rl;
         if (r.soldier) setGear(r, p.armor || 0, p.helmet);
-        if (r.soldier) poseSoldier(r, { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0, prone: p.prone || 0 });
+        if (r.soldier) { const bb = st.bomb, dfz = bb && bb.s === 'planted' && bb.d > 0 && p.team === 'CT' && p.alive && Math.hypot(bb.x - p.x, bb.z - p.z) < 1.8 ? bb.d : 0, dCam = Math.hypot(p.x - cam.position.x, p.z - cam.position.z);
+          r.plantK = p.planting || 0; r.defuseK = dfz;
+          const po = { dt, vx: Math.abs(r.vx) < 12 ? r.vx : 0, vz: Math.abs(r.vz) < 12 ? r.vz : 0, vy: r.vy, yaw: p.yaw, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? 1 : 0, emote: r.emote, lean: p.lean || 0, prone: p.prone || 0, plant: p.planting || 0, defuse: dfz, near: dCam < 14 };
+          if (window.__rigPin && window.__rigPin[p.id]) Object.assign(po, window.__rigPin[p.id]);   // (test films: a move held on one soldier)
+          poseSoldier(r, po); }
         if (r.model) soldierLOD(r, Math.hypot(p.x - cam.position.x, p.z - cam.position.z), P.charLod);   // far away: the light mesh
         if (r.lost && r.bones) for (const b of r.lost) if (r.bones[b]) r.bones[b].scale.setScalar(0.001);   // gore: what came off stays off
         else posePlayer(r, { speed: Math.min(sp, 7), t: r.t, crouch: p.crouch || 0, pitch: p.pitch || 0, dead: r.dieT ? Math.min(1, r.dieT * 3) : 0, emote: r.emote });
@@ -2147,12 +2209,15 @@ export default function start({ cfg, E, N, smoke }) {
         vm.visible = me.alive && !rp && !(me.scoped && w && w.zoom) && !spectating && !me.emote && !cine && !(me.ads > 0.9 && ['acog', 'reddot', 'holo'].includes(vm.userData.optic));   // aimed through an optic: you look through the glass, not at the gun
         const base = vm.userData.base, sp = speedOf(me);
         const animReload = !!(vm.userData.leftArm && (vm.userData.magGroup || (w && w.shellReload)));
-        const dep = me.deploy > 0 ? me.deploy * 0.5 : 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;
+        const dep = 0, rel = me.reload > 0 && !animReload ? 0.12 : 0;   // (the draw is drawPose below)
+        const ud0 = vm.userData; ud0.lhHold = null; ud0.holdSpin = 0;
+        if (me.ads > 0.05 || me.reload > 0) { if (!me.inspectStyle) me.inspect = 0; me.flourishT = 0; }   // aiming or reloading cuts an inspect and the flourish
         vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4);
         { const k = 1 - Math.min(1, me.ads); vm.position.x += (S.vmX || 0) * k; vm.position.y += (S.vmY || 0) * k; vm.position.z += (S.vmZ || 0) * k; }   // the player's viewmodel offsets (not while aiming: sights stay centred)
         if (vmCam.fov !== (S.vmFov || 60)) { vmCam.fov = S.vmFov || 60; vmCam.updateProjectionMatrix(); }
         const breath = Math.sin(now * 1.7) * 0.0018 * (1 - 0.7 * me.ads) * (me.crouch > 0.5 ? 0.6 : 1); vm.position.y += breath; vm.position.x += Math.sin(now * 0.85) * 0.0012 * (1 - 0.7 * me.ads);   // breathing: the gun rises and settles
-        vm.rotation.set(breath * 3 + rel * 2 + camKick * 2, (vm.userData.ry || 0) + (me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), me.inspect > 0 ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
+        const funny = me.inspect > 0 && me.inspectStyle;
+        vm.rotation.set(breath * 3 + rel * 2 + camKick * 2, (vm.userData.ry || 0) + (funny ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), funny ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);
         if (me.throwK > 0) {   // a throw: wind up, then release; the grenade leaves the hand at the snap
           const tk = 1 - me.throwK / 0.42, wind = Math.sin(Math.min(1, tk / 0.35) * Math.PI / 2) * (1 - sm(0.35, 0.55, tk)), go = sm(0.35, 0.6, tk) * (1 - sm(0.75, 1, tk));
           const S = me.throwStyle;
@@ -2181,7 +2246,7 @@ export default function start({ cfg, E, N, smoke }) {
           vm.rotation.y += F.x * 0.05 * aim; vm.rotation.x += (F.y * 0.035 + br * 0.004 * still) * aim + me.shotK * 0.05;
           vm.rotation.z += (F.x * 0.06 - Math.max(-1, Math.min(1, side)) * 0.07) * aim + me.shotK * (me.shotRoll || 0) * 0.05;
         }
-        if (me.sprintK > 0.01) { vm.rotation.x -= 0.32 * me.sprintK; vm.rotation.y += 0.45 * me.sprintK * S.hand; vm.position.y -= 0.035 * me.sprintK; vm.position.x -= 0.03 * me.sprintK * S.hand; }   // gun lowered while sprinting
+        movePose(vm, vm.userData.cls || 'rifle', { sprintK: me.sprintK, bob, vy: me.vy || 0, air: !me.onGround, crouch: me.crouch || 0, hand: S.hand });   // sprint carry, jump, crouch (vmanim.js)
         if (vm.userData.sc == null) vm.userData.sc = vm.scale.x;
         vm.scale.setScalar(vm.userData.sc);
         if (me.inspect > 0 && me.inspectStyle) applyInspect(vm, me.inspectStyle, (2.2 - me.inspect) / 2.2);
@@ -2198,18 +2263,27 @@ export default function start({ cfg, E, N, smoke }) {
         }
         if (ud.slide && w) {   // a pistol's slide: slams back and forward on every shot (90 ms), and stays locked open on an empty magazine
           const it2 = me.inv[me.cur], t = me.lastGun === w.id ? (performance.now() - (me.lastShotAt || 0)) / 1000 : 9, back = t < 0.09 ? Math.sin(Math.PI * Math.min(1, t / 0.09)) : 0;
-          const locked = it2 && it2.ammo === 0 && (t > 0.045 || t > 8) ? 1 : 0;
+          const locked = it2 && it2.ammo === 0 && (t > 0.045 || t > 8) && !(me.reload > 0 && 1 - me.reload / w.reload > 0.72) ? 1 : 0;   // the slide release drops it home in the reload
           ud.slide.position.z = 0.032 * Math.max(back, locked);
         }
         if (ud.bolt && w) {   // a real rifle's bolt carrier: cycles back and home on every shot, held back on an empty magazine
           const it3 = me.inv[me.cur], t = me.lastGun === w.id ? (performance.now() - (me.lastShotAt || 0)) / 1000 : 9, cyc = Math.min(0.09, (w.rof || 0.1) * 0.8);
-          const back = t < cyc ? Math.sin(Math.PI * Math.min(1, t / cyc)) : 0, held = it3 && it3.ammo === 0 && w.cat !== 'sniper' && t > cyc * 0.5 ? 1 : 0;
+          const back = t < cyc ? Math.sin(Math.PI * Math.min(1, t / cyc)) : 0, held = it3 && it3.ammo === 0 && w.cat !== 'sniper' && t > cyc * 0.5 && !(me.reload > 0 && 1 - me.reload / w.reload > 0.83) ? 1 : 0;   // (released by the reload's bolt catch / charging handle)
           ud.bolt.position.z = (ud.boltTravel || 0.07) * Math.max(back, held);
           if (w.cat === 'sniper' && w.rpm < 60) {   // a bolt-action: after the shot the hand lifts the bolt handle, runs it back (the case flies), pushes it home and turns it down; the gun cants while it is worked
             const p = (t - 0.25) / 0.6, on = p > 0 && p < 1 ? Math.sin(Math.PI * p) : 0, lift = p > 0 && p < 1 ? Math.min(1, Math.min(p, 1 - p) * 6) : 0;
             ud.bolt.position.z = (ud.boltTravel || 0.09) * on; ud.bolt.rotation.z = -1.0 * lift; vm.rotation.z += 0.14 * on * S.hand; vm.position.y -= 0.012 * on;
             if (on > 0.95 && ud.boltAt !== me.lastShotAt) { ud.boltAt = me.lastShotAt; audio.play('bolt', 0.8); }
           }
+        }
+        { // draw, the first draw's flourish, inspect (vmanim.js): after the reload and action parts above, which they move too
+          const cls = ud.cls || 'rifle';
+          if (me.deploy > 0 && me.deployD) { const hD = vmOld ? (me.holsterD || 0) : 0, k = 1 - me.deploy / me.deployD, kh = hD > 0 ? Math.min(1, (me.deployD - me.deploy) / hD) : 1;
+            if (vmOld && kh < 1) { vm.visible = false; vmOld.visible = me.alive && !rp && !spectating && !cine; vmOld.position.copy(vmOld.userData.base); vmOld.rotation.set(0, vmOld.userData.ry || 0, 0); holsterPose(vmOld, vmOld.userData.cls || 'rifle', kh); }
+            else { if (vmOld) { vmScene.remove(vmOld); vmOld = null; } drawPose(vm, cls, hD > 0 ? Math.max(0, (k * me.deployD - hD) / Math.max(1e-3, me.deployD - hD)) : k); } }
+          else if (vmOld) { vmScene.remove(vmOld); vmOld = null; }
+          if (me.deploy <= 0 && me.flourishT > 0 && me.flourishD) { me.flourishT = Math.max(0, me.flourishT - dt); flourishPose(vm, cls, 1 - me.flourishT / me.flourishD, ud); }
+          if (me.inspect > 0 && !me.inspectStyle && me.inspectD) inspectPose(vm, cls, 1 - me.inspect / me.inspectD, ud);
         }
         if (ud.flop) {   // floppy: each joint is a damped spring kicked by turning, walking, swinging and stroking
           const F = ud.flopS || (ud.flopS = { x: 0, y: 0, vx: 0, vy: 0 }), stroking = me.inspect > 0 && me.inspectStyle === 'stroke';
@@ -2230,9 +2304,10 @@ export default function start({ cfg, E, N, smoke }) {
           const arc = Math.sin(k * Math.PI);   // R6-style: the gun rolls in and dips slightly on its way up to the eye, then settles dead level
           vm.rotation.z += arc * 0.16 * S.hand; vm.position.y -= arc * 0.014; vm.position.x += arc * 0.01 * S.hand;
         }
-        if (vmArms) { vmArms.root.visible = vm.visible; if (vm.visible) poseArms(vmArms, vm, vmKind); }   // the hands onto the gun as it now sits
+        if (vmArms) { const hold = vmOld && vmOld.visible ? vmOld : vm; vmArms.root.visible = hold.visible; if (hold.visible) poseArms(vmArms, hold, hold === vm ? vmKind : vmOldKind); }   // the hands onto the gun as it now sits (or the one being put away)
         else if (!armsLate && P.hqModels && armsReady()) { armsLate = true; vmKey = ''; setViewModel(); }   // the arms file arrived after the gun was made: once, again with them
       } else if (vmArms) vmArms.root.visible = false;
+      if (svmArms) { svmArms.root.visible = !!(spectating && svm && svm.visible); if (svmArms.root.visible) { svm.updateMatrixWorld(true); poseArms(svmArms, svm, svmKind); } }
       if (parts) parts.tick(dt);
       stepCasings(dt); if (cfx) { cfx.tick(dt); if (me.alive) cfx.wade(me.x, me.y, me.z, speedOf(me)); }
       if (W) {   // first-person arms catch the sun only when you stand in it (from the same baked shadows as the map)
@@ -2261,11 +2336,11 @@ export default function start({ cfg, E, N, smoke }) {
         post.mat.uniforms.exposure.value = 1.08 * (S.bright || 1);   // the player's brightness setting
         post.mat.uniforms.upV.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); post.mat.uniforms.ssrK.value = W && W.B && W.B.wet != null ? W.B.wet : 2.2;   // how wet this map is (rain, polish)
         renderer.setRenderTarget(post.vt); const cc = renderer.getClearColor(_cc), ca = renderer.getClearAlpha(); renderer.setClearColor(0x000000, 0); renderer.clear();
-        if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam);
+        if ((vm && vm.visible) || (svm && svm.visible) || (vmOld && vmOld.visible)) renderer.render(vmScene, vmCam);
         renderer.setClearColor(cc, ca);
         if (post.bt) { post.bmat.uniforms.tex.value = rt.texture; post.bmat.uniforms.vmTex.value = post.vt.texture; renderer.setRenderTarget(post.bt); renderer.render(post.bscene, post.cam); }
         renderer.setRenderTarget(null); post.mat.uniforms.tex.value = rt.texture; post.mat.uniforms.vmTex.value = post.vt.texture; post.mat.uniforms.ads.value = vm && vm.visible ? me.ads : 0; post.cineK = (post.cineK || 0) + ((SC && SC.cutscene ? 1 : 0) - (post.cineK || 0)) * Math.min(1, dt * 2.5); post.mat.uniforms.cine.value = post.cineK; post.mat.uniforms.focusZ.value = post.focus || 3; post.mat.uniforms.aperture.value = post.aperture || 1; post.mat.uniforms.time.value = (post.mat.uniforms.time.value + dt) % 100; renderer.render(post.scene, post.cam);
-      } else { renderer.toneMappingExposure = 1.08 * (S.bright || 1); renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible)) renderer.render(vmScene, vmCam); }
+      } else { renderer.toneMappingExposure = 1.08 * (S.bright || 1); renderer.clear(); renderer.render(scene, cam); renderer.clearDepth(); if ((vm && vm.visible) || (svm && svm.visible) || (vmOld && vmOld.visible)) renderer.render(vmScene, vmCam); }
       // ---- HUD (throttled) ----
       hudT += dt; radarT += dt;
       hud.flashAmt(me.flash > 1.5 ? 1 : me.flash / 1.5);
@@ -2371,6 +2446,6 @@ export default function start({ cfg, E, N, smoke }) {
       history.replaceState(null, '', location.pathname);
       if (next && (next.story || next.code)) runMatch(next); else if (!smoke) showMenu();
     }
-    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, vmScene, rigs, switchTo, fire: (alt) => fire(!!alt), post, vmCam, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip, startReplay, get rp() { return rp; }, ragdollStats, get vmArms() { return vmArms; }, get vm() { return vm; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
+    window.__cs = { audio, me, st, scene, cam, renderer, mouseBtn, gfx, get SC() { return SC; }, camp, get mapId() { return mapId; }, get culler() { return culler; }, get dsh() { return dsh; }, set dsh(v) { dsh = v; }, get W() { return W; }, get match() { return match; }, get cfx() { return cfx; }, get parts() { return parts; }, hud, vmScene, rigs, switchTo, fire: (alt) => fire(!!alt), post, vmCam, get ui() { return uiOpen; }, get locked() { return locked; }, get kc() { return kc; }, kcStart, saveClip, startReplay, get rp() { return rp; }, ragdollStats, get vmArms() { return vmArms; }, curW: () => curWeapon(), warmLoadout, get vmPre() { return vmPre; }, get vmOld() { return vmOld; }, get vmKey() { return vmKey; }, get vm() { return vm; } }; if (smoke) { me.alive = true; window.__csSmoke = window.__cs; }
   }
 }
