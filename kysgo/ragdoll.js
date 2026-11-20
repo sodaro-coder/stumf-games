@@ -168,6 +168,16 @@ function setWorld(b, qWorld, pWorld) {
   b.updateMatrixWorld(true);
 }
 export function stopRagdoll(r) { r.rd = null; }
+// an explosion's push on a body already down: every point within the radius is given a velocity away from the blast
+// (falling off with distance, more for the light parts, a little upward) and the body wakes up to move again
+export function ragdollPush(r, x, y, z, radius, imp) {
+  const rd = r.rd; if (!rd) return false; let hit = false;
+  for (const q of Object.values(rd.P)) { if (q.off) continue; const dx = q.p.x - x, dy = q.p.y - y, dz = q.p.z - z, d = Math.hypot(dx, dy, dz); if (d > radius) continue;
+    const k = imp * (1 - d / radius) * q.w / Math.max(0.3, d), ux = dx / (d || 1), uz = dz / (d || 1);
+    q.o.x -= ux * k * STEP; q.o.z -= uz * k * STEP; q.o.y -= (0.6 + Math.max(0, dy / (d || 1))) * k * STEP; hit = true; }
+  if (hit) { rd.asleep = false; rd.still = 0; rd.t = Math.min(rd.t, 4); }
+  return hit;
+}
 // is this a part that's been cut off? (its points are dropped; game.js tells the ragdoll after a dismemberment)
 export function ragdollLose(r, lost) { const rd = r.rd; if (!rd || !lost) return; const B = r.bones;
   for (const [pn, bn] of PTS) { let b = B[bn]; while (b) { if (lost.some((n) => B[n] === b)) { rd.P[pn].off = true; break; } b = b.parent; } }

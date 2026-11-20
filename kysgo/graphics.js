@@ -48,14 +48,14 @@ export const PROFILES = {
   low: { ...BASE, q: 0.75, mipBias: 1, nearestMip: true, clouds: false, pixel: { start: 0.75, max: 0.75, min: 0.4 } },
   // MEDIUM: balanced. Full-resolution textures (bias 0), short-range player shadows, colour grade + quarter-res bloom, FXAA
   medium: { ...BASE, q: 1, texSize: 1024, normalMaps: true, aniso: 4, shadows: { cascades: [{ r: 9, size: 1024 }], pcf: 1 },
-    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, props: { hq: false, near: 0, max: 45 }, charLod: 5, ragdolls: 4, env: true, pixel: { start: 1, max: 1, min: 0.55 }, targetMs: 16.7 },
+    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, props: { hq: false, near: 0, max: 45 }, charLod: 3.5, ragdolls: 4, env: true, pixel: { start: 1, max: 1, min: 0.55 }, targetMs: 16.7 },
   // HIGH: built for integrated graphics (a Ryzen 3200U / Vega 3 mini PC holds it): the realism comes from what is nearly
   // free at run time. Baked lightmaps and light probes, a photographed HDR sky for reflections (PMREM, once per map),
   // scanned PBR textures with detail normals, ONE soft sun cascade for players only, and one composite pass (ACES, grade,
   // quarter-resolution bloom, vignette, grain, FXAA). No SSAO, no SSR, no MSAA: those cost bandwidth an iGPU hasn't got.
   // The render scale drops (to 0.6) before the frame rate does.
   high: { ...BASE, q: 1.5, texSize: 1024, normalMaps: true, detail: true, aniso: 8, bakeK: 6, shadows: { cascades: [{ r: 10, size: 2048 }], pcf: 4 },
-    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, props: { hq: false, near: 0, max: 55 }, charLod: 6, ragdolls: 6, env: true, pixel: { start: 1, max: 1, min: 0.6 }, targetMs: 17 },
+    post: true, bloom: 1, grade: true, fxaa: true, hqModels: true, props: { hq: false, near: 0, max: 55 }, charLod: 4, ragdolls: 6, env: true, pixel: { start: 1, max: 1, min: 0.6 }, targetMs: 17 },
   // ULTRA: the showcase, for a console (Edge on Xbox: picked automatically there) or a real graphics card. Everything
   // High has, plus what a console GPU affords live: one big soft sun cascade (9-tap filtered), SSAO, screen-space
   // reflections on wet and polished floors, 2x MSAA, 16x filtering, the finest lightmap, more blood and debris, and up

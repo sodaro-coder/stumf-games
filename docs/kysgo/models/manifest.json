@@ -168,18 +168,18 @@
  },
  "m4a1": {
   "kind": "gun",
-  "sig": "f6e055e54ec9",
+  "sig": "6dd325ccbdf2",
   "files": {
    "hi": "models/m4a1.glb",
    "lo": "models/m4a1_lo.glb"
   },
   "tris": {
    "hi": 58599,
-   "lo": 24388
+   "lo": 6589
   },
   "bytes": {
    "hi": 7097724,
-   "lo": 2166972
+   "lo": 644752
   },
   "scale": 1,
   "fit": {},
@@ -332,18 +332,18 @@
  },
  "mp5": {
   "kind": "gun",
-  "sig": "5bed3dc5b185",
+  "sig": "d6e6f17abd10",
   "files": {
    "hi": "models/mp5.glb",
    "lo": "models/mp5_lo.glb"
   },
   "tris": {
    "hi": 32171,
-   "lo": 11266
+   "lo": 7001
   },
   "bytes": {
    "hi": 5179244,
-   "lo": 1296136
+   "lo": 1114932
   },
   "scale": 1,
   "fit": {},
@@ -1003,6 +1003,1272 @@
    "author": "bamenwo05",
    "licence": "CC BY 4.0",
    "url": "https://sketchfab.com/3d-models/free-fps-arms-gameready-rigged-296d30fc705b4dff85c2c8a2d2724e7f"
+  }
+ },
+ "g_glock": {
+  "kind": "gun",
+  "sig": "2b5af4844d0f",
+  "files": {
+   "hi": "models/g_glock.glb",
+   "lo": "models/g_glock_lo.glb"
+  },
+  "tris": {
+   "hi": 26644,
+   "lo": 6163
+  },
+  "bytes": {
+   "hi": 2142340,
+   "lo": 271920
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Glock 49",
+   "author": "Nexor",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/glock-49-6f6817e88351410b9f481ff96833956b"
+  },
+  "auto": {
+   "min": [
+    -2.498381813342205,
+    2.0267641548901034,
+    -0.8950620919072774
+   ],
+   "max": [
+    2.432913594828723,
+    5.171546702580702,
+    -0.3626449530719903
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_usp": {
+  "kind": "gun",
+  "sig": "194595e3ceeb",
+  "files": {
+   "hi": "models/g_usp.glb",
+   "lo": "models/g_usp_lo.glb"
+  },
+  "tris": {
+   "hi": 7266,
+   "lo": 4998
+  },
+  "bytes": {
+   "hi": 1241800,
+   "lo": 316784
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Heckler & Koch USP Pistol",
+   "author": "Urpo",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/heckler-koch-usp-pistol-972e3643000246e8959a6df509557bcc"
+  },
+  "auto": {
+   "min": [
+    -0.16091600060462952,
+    -0.7686470010848186,
+    -0.9999999851983604
+   ],
+   "max": [
+    0.16091600060462952,
+    0.7686470485282009,
+    1.0000000297791694
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_p2000": {
+  "kind": "gun",
+  "sig": "996cdb79765d",
+  "files": {
+   "hi": "models/g_p2000.glb",
+   "lo": "models/g_p2000_lo.glb"
+  },
+  "tris": {
+   "hi": 4582,
+   "lo": 3572
+  },
+  "bytes": {
+   "hi": 1060112,
+   "lo": 237184
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "HK Heckler & Koch USP 9x19 LowPoly free download",
+   "author": "Aleksandr Goncharov",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/hk-heckler-koch-usp-9x19-lowpoly-free-download-b87a309997bf4ac990f14d8010a2ee5a"
+  },
+  "auto": {
+   "min": [
+    -38.468050718307495,
+    42.125788532286194,
+    -226.09849860791905
+   ],
+   "max": [
+    47.12530344724655,
+    353.83985987538745,
+    209.62846045153
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_p250": {
+  "kind": "gun",
+  "sig": "2ddd291a02bd",
+  "files": {
+   "hi": "models/g_p250.glb",
+   "lo": "models/g_p250_lo.glb"
+  },
+  "tris": {
+   "hi": 5248,
+   "lo": 4034
+  },
+  "bytes": {
+   "hi": 694376,
+   "lo": 186200
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "SIG SAUER M17 P320",
+   "author": "RBG_illustrations",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/sig-sauer-m17-p320-e0c9faadfa3843ac8ecfd92b12b90e31"
+  },
+  "auto": {
+   "min": [
+    -10.676219940185547,
+    -48.82737731933595,
+    -59.11940383911132
+   ],
+   "max": [
+    9.876219749450684,
+    47.07835006713866,
+    59.50721740722657
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_fiveseven": {
+  "kind": "gun",
+  "sig": "a88a1d4bd22a",
+  "files": {
+   "hi": "models/g_fiveseven.glb",
+   "lo": "models/g_fiveseven_lo.glb"
+  },
+  "tris": {
+   "hi": 6835,
+   "lo": 4064
+  },
+  "bytes": {
+   "hi": 1026036,
+   "lo": 215456
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "FN Five-seveN",
+   "author": "simon_fischer",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/fn-five-seven-4583bf36ff2644e2800b6719fac274dc"
+  },
+  "auto": {
+   "min": [
+    -49.58620640688787,
+    4.625753799956328,
+    -12.753384607363426
+   ],
+   "max": [
+    66.38405446810094,
+    84.39383079495894,
+    8.577386135486648
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_tec9": {
+  "kind": "gun",
+  "sig": "bd917a066f24",
+  "files": {
+   "hi": "models/g_tec9.glb",
+   "lo": "models/g_tec9_lo.glb"
+  },
+  "tris": {
+   "hi": 18724,
+   "lo": 4734
+  },
+  "bytes": {
+   "hi": 2548220,
+   "lo": 306216
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Intratec Tec-9",
+   "author": "iamezu",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/intratec-tec-9-6c4434f3364a42a68c39b3bad6a94c46"
+  },
+  "auto": {
+   "min": [
+    -0.8194869756698608,
+    1.7310810089111361,
+    -21.93413734436035
+   ],
+   "max": [
+    1.2517859935760498,
+    11.029733657836916,
+    -10.247164726257322
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_cz75": {
+  "kind": "gun",
+  "sig": "5e7bfc863697",
+  "files": {
+   "hi": "models/g_cz75.glb",
+   "lo": "models/g_cz75_lo.glb"
+  },
+  "tris": {
+   "hi": 4052,
+   "lo": 2264
+  },
+  "bytes": {
+   "hi": 730596,
+   "lo": 135848
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "CZ-75 Auto",
+   "author": "tomnortheast99",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/cz-75-auto-4b62fc0811a7436e8caeba730958f9e0"
+  },
+  "auto": {
+   "min": [
+    23.59696119712453,
+    6.87049592212465,
+    -85.98602021629935
+   ],
+   "max": [
+    51.35792977736831,
+    24.480283075936455,
+    -82.33030243263849
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_dualies": {
+  "kind": "gun",
+  "sig": "0000e2e24f35",
+  "files": {
+   "hi": "models/g_dualies.glb",
+   "lo": "models/g_dualies_lo.glb"
+  },
+  "tris": {
+   "hi": 5150,
+   "lo": 3215
+  },
+  "bytes": {
+   "hi": 907468,
+   "lo": 191432
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Beretta 92 (clean)",
+   "author": "romunql",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/beretta-92-clean-bf58795f626d4251b11c5e23d2922358"
+  },
+  "auto": {
+   "min": [
+    -0.01559591258475379,
+    -0.001357698410204819,
+    -0.08666361615068574
+   ],
+   "max": [
+    0.015517215381922966,
+    0.13697901419597083,
+    0.12681251242430852
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_r8": {
+  "kind": "gun",
+  "sig": "281b29d09564",
+  "files": {
+   "hi": "models/g_r8.glb",
+   "lo": "models/g_r8_lo.glb"
+  },
+  "tris": {
+   "hi": 4661,
+   "lo": 3278
+  },
+  "bytes": {
+   "hi": 1909564,
+   "lo": 265460
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Revolver .357 Magnum",
+   "author": "Artem Goyko",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/revolver-357-magnum-360c6276282e48109fcca66f31004d81"
+  },
+  "auto": {
+   "min": [
+    -1.0,
+    -0.87713999009682,
+    -0.16453998790151167
+   ],
+   "max": [
+    1.0,
+    0.8771399855839714,
+    0.1645399972435537
+   ],
+   "len": 0,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_mac10": {
+  "kind": "gun",
+  "sig": "6a881a930876",
+  "files": {
+   "hi": "models/g_mac10.glb",
+   "lo": "models/g_mac10_lo.glb"
+  },
+  "tris": {
+   "hi": 6448,
+   "lo": 6448
+  },
+  "bytes": {
+   "hi": 871380,
+   "lo": 521516
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Mac-10",
+   "author": "iamezu",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/mac-10-d0cb71c7aee94905ab84c746e2b92c33"
+  },
+  "auto": {
+   "min": [
+    -0.011759156917948488,
+    -0.013622212105492974,
+    -0.1380928390154352
+   ],
+   "max": [
+    0.010511144164700559,
+    0.12553026872433115,
+    0.04652027979820341
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_mp9": {
+  "kind": "gun",
+  "sig": "78bcd071bf70",
+  "files": {
+   "hi": "models/g_mp9.glb",
+   "lo": "models/g_mp9_lo.glb"
+  },
+  "tris": {
+   "hi": 8033,
+   "lo": 4249
+  },
+  "bytes": {
+   "hi": 2123312,
+   "lo": 283216
+  },
+  "scale": 1,
+  "fit": {
+   "fwd": -1
+  },
+  "credit": {
+   "title": "TPM SMG",
+   "author": "TORI106",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/tpm-smg-b9e68645f0e048419f3fe84ebd58dd92"
+  },
+  "auto": {
+   "min": [
+    -1.4873615051650657,
+    -1.2511781174267422,
+    -0.15035841316950596
+   ],
+   "max": [
+    2.3237570720071243,
+    0.5140580909170014,
+    0.15166728096804688
+   ],
+   "len": 0,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_mp7": {
+  "kind": "gun",
+  "sig": "2271ddf4ca50",
+  "files": {
+   "hi": "models/g_mp7.glb",
+   "lo": "models/g_mp7_lo.glb"
+  },
+  "tris": {
+   "hi": 14383,
+   "lo": 6025
+  },
+  "bytes": {
+   "hi": 5017208,
+   "lo": 644712
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "MP7 Submachine Gun",
+   "author": "NotNathanModel",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/mp7-submachine-gun-8db3d7ead18349049255e6c1dba90396"
+  },
+  "auto": {
+   "min": [
+    -2.496583938598633,
+    -1.1723179823724494,
+    -0.21925197798555812
+   ],
+   "max": [
+    2.454493999481201,
+    1.1140899661954862,
+    0.2192520327995116
+   ],
+   "len": 0,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_ump": {
+  "kind": "gun",
+  "sig": "33bc2a1be43f",
+  "files": {
+   "hi": "models/g_ump.glb",
+   "lo": "models/g_ump_lo.glb"
+  },
+  "tris": {
+   "hi": 17279,
+   "lo": 5713
+  },
+  "bytes": {
+   "hi": 1775272,
+   "lo": 311488
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "UMP_45mm",
+   "author": "TORI106",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/ump-45mm-9f1c89e7d4764ff4bceffb6c67839c7a"
+  },
+  "auto": {
+   "min": [
+    -224.56423950195312,
+    -104.4471664428711,
+    -26.46659278869627
+   ],
+   "max": [
+    252.11827087402344,
+    109.52236938476562,
+    18.810600280761733
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_p90": {
+  "kind": "gun",
+  "sig": "c3000d67c78d",
+  "files": {
+   "hi": "models/g_p90.glb",
+   "lo": "models/g_p90_lo.glb"
+  },
+  "tris": {
+   "hi": 7184,
+   "lo": 3089
+  },
+  "bytes": {
+   "hi": 562624,
+   "lo": 135572
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "FN P90 SMG",
+   "author": "datucarl",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/fn-p90-smg-39ef289b3e4247f28950cf63b1a175dd"
+  },
+  "auto": {
+   "min": [
+    -2.9417290687561035,
+    -9.538986206054688,
+    -34.382530212402344
+   ],
+   "max": [
+    2.9417290687561035,
+    10.05955219268799,
+    25.387859344482422
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_bizon": {
+  "kind": "gun",
+  "sig": "dd9e58bc753c",
+  "files": {
+   "hi": "models/g_bizon.glb",
+   "lo": "models/g_bizon_lo.glb"
+  },
+  "tris": {
+   "hi": 7938,
+   "lo": 3395
+  },
+  "bytes": {
+   "hi": 1106508,
+   "lo": 200224
+  },
+  "scale": 1,
+  "fit": {
+   "fwd": -1
+  },
+  "credit": {
+   "title": "Bizon Smg",
+   "author": "TORI106",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/bizon-smg-bb157e507b7444ccabd75490366fb618"
+  },
+  "auto": {
+   "min": [
+    -222.6110836022949,
+    -69.2459018282712,
+    -21.020025780522126
+   ],
+   "max": [
+    226.58320465148927,
+    56.32349379833781,
+    20.337777171551142
+   ],
+   "len": 0,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_mag7": {
+  "kind": "gun",
+  "sig": "dcaee335dd8f",
+  "files": {
+   "hi": "models/g_mag7.glb",
+   "lo": "models/g_mag7_lo.glb"
+  },
+  "tris": {
+   "hi": 26341,
+   "lo": 6225
+  },
+  "bytes": {
+   "hi": 1351580,
+   "lo": 244212
+  },
+  "scale": 1,
+  "fit": {
+   "fwd": -1
+  },
+  "credit": {
+   "title": "Pump action shotgun - Charles Daly Honcho model",
+   "author": "bluemod",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/pump-action-shotgun-charles-daly-honcho-model-9b1a98f65703418da75cc24bd6563cda"
+  },
+  "auto": {
+   "min": [
+    -1.6926563923417541,
+    -0.5402261299536446,
+    -0.1269050606264494
+   ],
+   "max": [
+    1.6931404216993196,
+    0.5787874840393272,
+    0.12690492785917795
+   ],
+   "len": 0,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_sawedoff": {
+  "kind": "gun",
+  "sig": "080b8307eb94",
+  "files": {
+   "hi": "models/g_sawedoff.glb",
+   "lo": "models/g_sawedoff_lo.glb"
+  },
+  "tris": {
+   "hi": 34824,
+   "lo": 5937
+  },
+  "bytes": {
+   "hi": 2775236,
+   "lo": 326816
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Sawed-off Shotgun",
+   "author": "LiliumLetifer",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/sawed-off-shotgun-6e8892e053d247eab1cad53ba456397e"
+  },
+  "auto": {
+   "min": [
+    -0.030541529575761617,
+    0.025988226948589287,
+    -0.3892605028550637
+   ],
+   "max": [
+    0.030541529575761617,
+    0.17936808497157916,
+    0.42911913807128566
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_m249": {
+  "kind": "gun",
+  "sig": "4b44ea787a55",
+  "files": {
+   "hi": "models/g_m249.glb",
+   "lo": "models/g_m249_lo.glb"
+  },
+  "tris": {
+   "hi": 17636,
+   "lo": 7011
+  },
+  "bytes": {
+   "hi": 1854072,
+   "lo": 397452
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "M249",
+   "author": "Dmitriy Korotkov",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/m249-b1e60faa37de4461822103fe38e5c9ce"
+  },
+  "auto": {
+   "min": [
+    -0.2588886838206683,
+    -0.3038109005875581,
+    -0.6102509225686317
+   ],
+   "max": [
+    0.2588886239911048,
+    0.3002694652388336,
+    0.6065705212992963
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_negev": {
+  "kind": "gun",
+  "sig": "b22d06a6ac00",
+  "files": {
+   "hi": "models/g_negev.glb",
+   "lo": "models/g_negev_lo.glb"
+  },
+  "tris": {
+   "hi": 26848,
+   "lo": 4117
+  },
+  "bytes": {
+   "hi": 2439364,
+   "lo": 252756
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "LMG",
+   "author": "DJMaesen",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/lmg-8c24d7374ea64bdab1c30f49c69d5ed8"
+  },
+  "auto": {
+   "min": [
+    -0.06368655300840986,
+    -0.08578501986447677,
+    -0.341643135063876
+   ],
+   "max": [
+    0.06658754676757273,
+    0.14797461417374125,
+    0.6732099764076622
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_famas": {
+  "kind": "gun",
+  "sig": "a5d708e5a863",
+  "files": {
+   "hi": "models/g_famas.glb",
+   "lo": "models/g_famas_lo.glb"
+  },
+  "tris": {
+   "hi": 14743,
+   "lo": 3780
+  },
+  "bytes": {
+   "hi": 1484288,
+   "lo": 228588
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "FAMAS-F1",
+   "author": "Yevhenii Levchenko",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/famas-f1-604fb1cbdced48028c736b3eac6e0c4f"
+  },
+  "auto": {
+   "min": [
+    -4.162718106451943,
+    -1.517760556243238,
+    -0.5371805309389409
+   ],
+   "max": [
+    4.059257914181848,
+    1.566799841125589,
+    0.5371805309389411
+   ],
+   "len": 0,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_aug": {
+  "kind": "gun",
+  "sig": "95d205d3994c",
+  "files": {
+   "hi": "models/g_aug.glb",
+   "lo": "models/g_aug_lo.glb"
+  },
+  "tris": {
+   "hi": 18900,
+   "lo": 7168
+  },
+  "bytes": {
+   "hi": 3241552,
+   "lo": 475512
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Steyr AUG",
+   "author": "emmerick.opsomer",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/steyr-aug-dd8ffca1ab094999a2c332e7540e09ad"
+  },
+  "auto": {
+   "min": [
+    -0.15698872215325999,
+    -0.0493813980509028,
+    -0.018022175624470938
+   ],
+   "max": [
+    0.15834666851878154,
+    0.06442139311748615,
+    0.012384506187189233
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_g3sg1": {
+  "kind": "gun",
+  "sig": "0679d17a827b",
+  "files": {
+   "hi": "models/g_g3sg1.glb",
+   "lo": "models/g_g3sg1_lo.glb"
+  },
+  "tris": {
+   "hi": 9691,
+   "lo": 6267
+  },
+  "bytes": {
+   "hi": 951336,
+   "lo": 373632
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Low Poly G3SG1",
+   "author": "samanthacford",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/low-poly-g3sg1-4e7c47c9751c44ed955d907c4f47974f"
+  },
+  "auto": {
+   "min": [
+    -0.014096021337151043,
+    -0.05182562712224659,
+    -0.2134798383680021
+   ],
+   "max": [
+    0.02434571211757408,
+    0.059308599100069706,
+    0.17415814964119747
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_scar20": {
+  "kind": "gun",
+  "sig": "ea49231d5243",
+  "files": {
+   "hi": "models/g_scar20.glb",
+   "lo": "models/g_scar20_lo.glb"
+  },
+  "tris": {
+   "hi": 23887,
+   "lo": 4663
+  },
+  "bytes": {
+   "hi": 2277700,
+   "lo": 311016
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "FN SCAR-H",
+   "author": "Alex_Z",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/fn-scar-h-ba1c338e87fa45c99be0baef5aa8ccd7"
+  },
+  "auto": {
+   "min": [
+    -1.5443049669265747,
+    -5.918477058410645,
+    -24.06924819946289
+   ],
+   "max": [
+    2.1828360557556152,
+    6.0544748306274405,
+    18.919084548950195
+   ],
+   "len": 2,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_zeus": {
+  "kind": "gun",
+  "sig": "d136d9a07f8f",
+  "files": {
+   "hi": "models/g_zeus.glb",
+   "lo": "models/g_zeus_lo.glb"
+  },
+  "tris": {
+   "hi": 13452,
+   "lo": 6142
+  },
+  "bytes": {
+   "hi": 951260,
+   "lo": 201640
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Yellow Taser Gun",
+   "author": "Richard Speight",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/yellow-taser-gun-0044ade7b6344c009405c43c110bb8fa"
+  },
+  "auto": {
+   "min": [
+    -0.31239749952569656,
+    -0.14120041723841587,
+    -0.07127939164213998
+   ],
+   "max": [
+    0.3124248906905576,
+    0.146967672836547,
+    0.05768859880221642
+   ],
+   "len": 0,
+   "fwd": -1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_smoke": {
+  "kind": "gun",
+  "sig": "f7fb1ddee56d",
+  "files": {
+   "hi": "models/g_smoke.glb",
+   "lo": "models/g_smoke_lo.glb"
+  },
+  "tris": {
+   "hi": 4688,
+   "lo": 2560
+  },
+  "bytes": {
+   "hi": 1265028,
+   "lo": 161148
+  },
+  "scale": 1,
+  "fit": {
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  },
+  "credit": {
+   "title": "M18 Smoke Grenade",
+   "author": "Eric Wallbank",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/m18-smoke-grenade-d0614d2c359e4e5ba4e14064dc2c8d59"
+  },
+  "auto": {
+   "min": [
+    -0.42118000984191895,
+    -1.0000000149963275,
+    -0.49832103917811105
+   ],
+   "max": [
+    0.42118000984191895,
+    1.0000000097044521,
+    0.4983209800865631
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_flash": {
+  "kind": "gun",
+  "sig": "c86b9ec3fa2b",
+  "files": {
+   "hi": "models/g_flash.glb",
+   "lo": "models/g_flash_lo.glb"
+  },
+  "tris": {
+   "hi": 8289,
+   "lo": 6011
+  },
+  "bytes": {
+   "hi": 967972,
+   "lo": 256260
+  },
+  "scale": 1,
+  "fit": {
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": -1,
+   "width": 2
+  },
+  "credit": {
+   "title": "Flashbang grenade",
+   "author": "Nikolay Kudrin",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/flashbang-grenade-2799b0b859c74db6ae8752fdc6bb4c04"
+  },
+  "auto": {
+   "min": [
+    -0.07240303592006817,
+    -0.09997044752396793,
+    -0.0418370813522819
+   ],
+   "max": [
+    0.044888725669394794,
+    0.14334576190538226,
+    0.06629145869617528
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": -1,
+   "width": 2
+  }
+ },
+ "g_molotov": {
+  "kind": "gun",
+  "sig": "74aadceafc90",
+  "files": {
+   "hi": "models/g_molotov.glb",
+   "lo": "models/g_molotov_lo.glb"
+  },
+  "tris": {
+   "hi": 10172,
+   "lo": 7097
+  },
+  "bytes": {
+   "hi": 1311764,
+   "lo": 283644
+  },
+  "scale": 1,
+  "fit": {
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  },
+  "credit": {
+   "title": "Molotov Cocktail",
+   "author": "LiliumLetifer",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/molotov-cocktail-e57a0fd669974a3dab7d3919bda9032c"
+  },
+  "auto": {
+   "min": [
+    -0.04525771595848895,
+    0.006079205872172394,
+    -0.11196999825769685
+   ],
+   "max": [
+    0.04974123009539633,
+    0.35053163317798675,
+    0.15271667876382364
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 2
+  }
+ },
+ "g_incendiary": {
+  "kind": "gun",
+  "sig": "76593ea1f52e",
+  "files": {
+   "hi": "models/g_incendiary.glb",
+   "lo": "models/g_incendiary_lo.glb"
+  },
+  "tris": {
+   "hi": 2792,
+   "lo": 2259
+  },
+  "bytes": {
+   "hi": 862520,
+   "lo": 153740
+  },
+  "scale": 1,
+  "fit": {
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": -1,
+   "width": 2
+  },
+  "credit": {
+   "title": "Incendiary Grenade",
+   "author": "R.Linden",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/incendiary-grenade-74a5e9a18c1947118d1895dca900afb5"
+  },
+  "auto": {
+   "min": [
+    -0.040044555255992265,
+    0.1680799258534211,
+    -0.08015536355452584
+   ],
+   "max": [
+    0.040044555255992265,
+    0.3580572388291146,
+    0.017551422099775615
+   ],
+   "len": 0,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": -1,
+   "width": 2
+  }
+ },
+ "g_decoy": {
+  "kind": "gun",
+  "sig": "3632636f51d6",
+  "files": {
+   "hi": "models/g_decoy.glb",
+   "lo": "models/g_decoy_lo.glb"
+  },
+  "tris": {
+   "hi": 14968,
+   "lo": 6826
+  },
+  "bytes": {
+   "hi": 1549560,
+   "lo": 271092
+  },
+  "scale": 1,
+  "fit": {
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  },
+  "credit": {
+   "title": "Modern frag grenade concept",
+   "author": "Viktor Tselikov",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/modern-frag-grenade-concept-bb296d20e35c4d0eab8a4116b6ec6b4b"
+  },
+  "auto": {
+   "min": [
+    -0.07727028738531272,
+    -0.011541951452287591,
+    -0.05345665590408254
+   ],
+   "max": [
+    0.0853753527322718,
+    0.17558577782627025,
+    0.08310470285166922
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
+  }
+ },
+ "g_c4": {
+  "kind": "gun",
+  "sig": "0ea3c02aea1d",
+  "files": {
+   "hi": "models/g_c4.glb",
+   "lo": "models/g_c4_lo.glb"
+  },
+  "tris": {
+   "hi": 12130,
+   "lo": 3740
+  },
+  "bytes": {
+   "hi": 1881468,
+   "lo": 204416
+  },
+  "scale": 1,
+  "fit": {},
+  "credit": {
+   "title": "Makeshift C-4 Explosive",
+   "author": "lion.gelders",
+   "licence": "CC BY 4.0",
+   "url": "https://sketchfab.com/3d-models/makeshift-c-4-explosive-b72abe326c5d4bc5affe67e41edb88ad"
+  },
+  "auto": {
+   "min": [
+    -0.6007355686098851,
+    -0.4046159389051314,
+    -2.3453578025227415
+   ],
+   "max": [
+    0.600400507172745,
+    0.8736187787020882,
+    2.2242553609127356
+   ],
+   "len": 2,
+   "fwd": 1,
+   "up_axis": 1,
+   "up": 1,
+   "width": 0
   }
  }
 }

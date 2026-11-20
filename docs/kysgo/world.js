@@ -765,5 +765,5 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
     }
   }
   return { B, w, d, h, mat, flag, H, idx, group, placements, txUsed, groundAt, move, lavaAt, ray, thickness, los, path, walkLine, randomIn, zoneAt, siteAt, inRect,
-    topAt, cellTop, sunAt, probeAt, useLight, bakeOut, chunks, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
+    topAt, cellTop, sunAt, probeAt, roofAt, useLight, bakeOut, chunks, sortChunks, density: (m) => MATS[MAT_LIST[m]]?.d ?? 6, matName: (m) => MAT_LIST[m], matTex: (k) => matTex(k).map };
 }

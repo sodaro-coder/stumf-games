@@ -1083,7 +1083,18 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
 // gun is hidden. The model's own moving parts ride the game's existing ones: magazine -> the reload's magazine, slide
 // -> the pistol slide, bolt carrier -> a new bolt group that cycles on every shot. Third-person guns use the light,
 // merged file. A skin is painted over the model's own finish (its scratches and shading show through).
-export const REAL_GUN = { ak47: 'ak_tactical', galil: 'aks', m4a4: 'm4a1', m4a1s: 'ar15', mp5: 'mp5', deagle: 'deagle', xm1014: 'shotgun_m4', nova: 'shotgun_870', awp: 'sniper', ssg08: 'sniper' };
+export const REAL_GUN = { ak47: 'ak_tactical', galil: 'aks', m4a4: 'm4a1', m4a1s: 'ar15', mp5: 'mp5', deagle: 'deagle', xm1014: 'shotgun_m4', nova: 'shotgun_870', awp: 'sniper', ssg08: 'sniper',
+  // stage 12: every other gun from its own file (assets.json g_*: moving parts cut out by box, see assetbuild.split_parts)
+  glock: 'g_glock', usp: 'g_usp', p2000: 'g_p2000', p250: 'g_p250', fiveseven: 'g_fiveseven', tec9: 'g_tec9', cz75: 'g_cz75', dualies: 'g_dualies', r8: 'g_r8',
+  mac10: 'g_mac10', mp9: 'g_mp9', mp7: 'g_mp7', ump: 'g_ump', p90: 'g_p90', bizon: 'g_bizon', mag7: 'g_mag7', sawedoff: 'g_sawedoff', m249: 'g_m249', negev: 'g_negev',
+  famas: 'g_famas', aug: 'g_aug', g3sg1: 'g_g3sg1', scar20: 'g_scar20', zeus: 'g_zeus' };
+// overall length in metres as modelled (stock as the file has it): the gun is scaled to this, not to the built gun
+// (sidearms 1.3x: the first-person arms were sized round the built pistols, and at true size the gloved hands covered
+// the slide and its sights when aimed in; long guns are true size)
+const REAL_LEN = { g_glock: 0.24, g_usp: 0.25, g_p2000: 0.23, g_p250: 0.26, g_fiveseven: 0.27, g_tec9: 0.38, g_cz75: 0.29, g_dualies: 0.28, g_r8: 0.3,
+  g_mac10: 0.3, g_mp9: 0.52, g_mp7: 0.64, g_ump: 0.69, g_p90: 0.5, g_bizon: 0.66, g_mag7: 0.55, g_sawedoff: 0.62, g_m249: 1.04, g_negev: 1.0,
+  g_famas: 0.757, g_aug: 0.79, g_g3sg1: 1.02, g_scar20: 1.0, g_zeus: 0.21 };
+export const REAL_NADE = { he: 'frag', smoke: 'g_smoke', flash: 'g_flash', molotov: 'g_molotov', incendiary: 'g_incendiary', decoy: 'g_decoy' };
 const REAL_FIT = { ar15: { dy: -0.004 }, m4a1: {}, ak_tactical: { parts: { '^stock_ak': { k: 0.32, metal: 0, rough: 0.75 }, '^ak body': { rear: 0.3 } } }, aks: {}, mp5: {}, deagle: {}, shotgun_m4: {}, shotgun_870: {}, sniper: {} };   // per-model nudges (metres) after the automatic fit
 const realCache = new Map();
 export function releaseRealGuns() { for (const p of realCache.values()) p.then((R) => R && R.m && R.m.scene.traverse((o) => { if (o.material) for (const k of ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap']) if (o.material[k]) o.material[k].dispose(); })); }
@@ -1097,10 +1108,10 @@ function realGun(g, mid, id, cg, hands, tex, cbox = null) {
     if (!R || !R.auto) return;
     const src = R.m.scene.clone(true), { g: F, box } = canonGun(src, R.auto), cb = cbox ? cbox.clone() : new THREE.Box3();
     if (!cbox) for (const [k, geo] of Object.entries(cg.geos)) if (k !== 'ironpost') { geo.computeBoundingBox(); cb.union(geo.boundingBox); }
-    const s = (cb.max.z - cb.min.z) / Math.max(1e-6, box.max.z - box.min.z), tw = REAL_FIT[mid] || {};
+    const s = (REAL_LEN[mid] || cb.max.z - cb.min.z) / Math.max(1e-6, box.max.z - box.min.z), tw = REAL_FIT[mid] || {};   // stage-12 guns at their real length (a built gun's length can include a suppressor the file has not got)
     F.scale.setScalar(s * (tw.k || 1));
     F.position.set(-(box.max.x + box.min.x) / 2 * s + (tw.dx || 0), cb.max.y - box.max.y * s + (tw.dy || 0), cb.max.z - box.max.z * s + (tw.dz || 0));
-    const ud = g.userData, keep = new Set([ud.flash, ud.leftArm]);
+    const ud = g.userData, keep = new Set([ud.flash, ud.leftArm, ud.led]);
     const hide = (o) => o.traverse((c) => { if (c.isMesh && c.material !== armMatC && !keep.has(c) && c !== ud.flash) c.visible = false; });
     for (const c of g.children) if (!keep.has(c)) hide(c);
     if (ud.leftArm && ud.leftArm.userData.shell) ud.leftArm.userData.shell.visible = false;
@@ -1118,11 +1129,13 @@ function realGun(g, mid, id, cg, hands, tex, cbox = null) {
       ge.setAttribute('color', new THREE.BufferAttribute(col, 3)); ge.userData.rear = true; } });
     for (const [re, f] of Object.entries(tw.parts || {})) src.traverse((o) => { if (o.isMesh && new RegExp(re).test(o.name) && f.rear) o.material.vertexColors = true; if (o.isMesh && new RegExp(re).test(o.name) && !f.rear) { const m = o.material.clone(); m.color.multiplyScalar(f.k ?? 1); if (f.metal !== undefined) { m.metalness = f.metal; m.metalnessMap = null; } if (f.rough !== undefined) { m.roughness = f.rough; m.roughnessMap = null; } m.onBeforeCompile = o.material.onBeforeCompile; m.customProgramCacheKey = o.material.customProgramCacheKey; o.material = m; } });
     g.add(F); g.updateMatrixWorld(true);
-    if (cg) realAnchors(g, F, mid, cg);   // the hands go where THIS model's pistol grip and handguard are (fparms.js, the soldiers' IK)
+    if (cg) realAnchors(g, F, mid, cg);
+    if (cg && hands) realSights(g, F, mid);   // aim down the real model's own sights   // the hands go where THIS model's pistol grip and handguard are (fparms.js, the soldiers' IK)
     if (hands) {
       const P = gunParts(src);
       if (P.mag && ud.magGroup) ud.magGroup.attach(P.mag);
       if (P.slide && ud.slide) ud.slide.attach(P.slide);
+      if (P.pump && ud.pump) ud.pump.attach(P.pump);
       if (P.bolt || P.boltback) { const bg = new THREE.Group(); g.add(bg); g.updateMatrixWorld(true); if (P.bolt) bg.attach(P.bolt); if (P.boltback) bg.attach(P.boltback); ud.bolt = bg; ud.boltTravel = mid === 'sniper' ? 0.09 : mid === 'ak_tactical' || mid === 'aks' ? 0.1 : 0.07; }
     }
     if (tex) {   // a skin: painted side-on along the gun (u along the barrel, v up), over the model's own finish
@@ -1183,6 +1196,41 @@ function realAnchors(g, F, mid, cg) {
   ud.grip0 = ud.grip0 || ud.grip.clone(); ud.grip.copy(A.grip);
   if (A.fore && ud.fore && ud.leftHand) { const d = A.fore.clone().sub(ud.fore); ud.fore.copy(A.fore); ud.leftHand.add(d); }
   ud.anchored = mid;
+}
+// The real model's own sight line, measured once per model from its vertices (gun space): the top of the gun along its
+// centre line in 5 mm slices. Iron sights: the rear notch is the highest point of the rear 60% and the front post the
+// highest of the front 45%; the aim point is the post's top (the notch sits on the same line within a few mm, checked in
+// sightInfo). A long flat top within 12 mm of the highest point (over 7 cm) is an optic (red dot / holo / scope body): the
+// aim point is its window, 62% of the way up from the receiver line, and the eye sits 20 cm behind it.
+const sightCache = new Map();
+export const sightInfo = new Map();
+function realSights(g, F, mid) {
+  let S = sightCache.get(mid);
+  if (S === undefined) {
+    S = null;
+    try {
+      g.updateMatrixWorld(true);
+      const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), v = new THREE.Vector3(), M = new THREE.Matrix4(), pts = [];
+      F.traverse((o) => { if (!o.isMesh || /mag|bullet|round|sling|strap/i.test(o.name || '')) return; M.multiplyMatrices(inv, o.matrixWorld); const P = o.geometry.attributes.position, step = Math.max(1, Math.floor(P.count / 20000));
+        for (let i = 0; i < P.count; i += step) { v.fromBufferAttribute(P, i).applyMatrix4(M); if (Math.abs(v.x) < 0.006) pts.push(v.y, v.z); } });
+      let z0 = Infinity, z1 = -Infinity; for (let i = 1; i < pts.length; i += 2) { z0 = Math.min(z0, pts[i]); z1 = Math.max(z1, pts[i]); }
+      const n = Math.max(2, Math.ceil((z1 - z0) / 0.005)), top = new Float32Array(n).fill(-Infinity);
+      for (let i = 0; i < pts.length; i += 2) { const b = Math.min(n - 1, Math.floor((pts[i + 1] - z0) / 0.005)); top[b] = Math.max(top[b], pts[i]); }
+      const fin = [...top].filter(isFinite).sort((a, b) => a - b), yR = fin[Math.floor(fin.length * 0.5)];
+      // z runs from the muzzle (z0, most negative) to the butt (z1)
+      const peak = (a, b) => { let bi = -1; for (let i = Math.floor(a * n); i < Math.min(n, Math.ceil(b * n)); i++) if (isFinite(top[i]) && (bi < 0 || top[i] > top[bi])) bi = i; return bi; };
+      const iT = peak(0, 1), yT = top[iT]; let run = 0, best = 0, bs = 0, cur = 0;
+      for (let i = 0; i < n; i++) { if (isFinite(top[i]) && top[i] > yT - 0.012) { if (!run) cur = i; run++; if (run > best) { best = run; bs = cur; } } else run = 0; }
+      // (a pistol's long flat slide is the receiver line itself, not an optic: an optic stands 3 cm or more above it)
+      if (best * 0.005 > 0.07 && yT - yR > 0.03) { const zc = z0 + (bs + best / 2) * 0.005; S = { p: new THREE.Vector3(0, yR + (yT - yR) * 0.62, zc), optic: true }; }
+      else { const iF = peak(0, 0.45), iB = peak(0.4, 1); S = { p: new THREE.Vector3(0, top[iF], z0 + (iF + 0.5) * 0.005), rear: new THREE.Vector3(0, top[iB], z0 + (iB + 0.5) * 0.005), optic: false }; }
+      sightInfo.set(mid, { optic: S.optic, p: S.p.toArray().map((x) => +x.toFixed(4)), rear: S.rear ? S.rear.toArray().map((x) => +x.toFixed(4)) : null, yR: +yR.toFixed(4) });
+    } catch (e) { S = null; sightInfo.set(mid, { err: String(e) }); }
+    sightCache.set(mid, S);
+  }
+  if (!S) return;
+  const ud = g.userData; if (ud.optic) return;   // an attachment optic keeps the built rail and its own sight
+  ud.iron = S.p.clone(); ud.sightSrc = S.optic ? 'optic' : 'iron'; ud.sightRelief = S.optic ? 0.2 : null; ud.ironRear = S.rear ? S.rear.clone() : null;
 }
 // first person: the gun sits 40 cm from the eye with the sun often behind you, so any flat face turned to the camera
 // mirrors the sun at full strength (the AK's receiver end read as a white block). The gun's own sun highlight is kept
@@ -1387,10 +1435,10 @@ export function makeGrenade(type, sleeve = '#3c4e66', glove = '#2a2a2a', hands =
     if (type === 'decoy') A('#2a2a2a', place(CYL(r + 0.0005, r + 0.0005, 0.02, 18), [0, 0.0, 0]));
     fuze();
   }
-  const g = partsGroup(B), fb = type === 'he' && (hands || HQ) ? new THREE.Box3().setFromObject(g) : null;   // the HE grenade: the real frag is fitted over it
+  const g = partsGroup(B), fb = REAL_NADE[type] && (hands || HQ) ? new THREE.Box3().setFromObject(g) : null;   // every grenade: its real model is fitted over the built one
   if (hands) { const P = []; vmArm(P, [0.0, -0.02, 0.04], [0.35, -0.5, 0.78], sleeve, glove, 0.6); g.add(new THREE.Mesh(merge(P), armMat())); }
   g.userData = { flash: null, grip: new THREE.Vector3(0, 0, 0), fore: null };
-  if (fb) realGun(g, 'frag', 'he', null, hands, null, fb);
+  if (fb) realGun(g, REAL_NADE[type], type, null, hands, null, fb);
   return g;
 }
 export function makeBomb(sleeve = '#3c4e66', glove = '#2a2a2a', hands = false) {
@@ -1406,6 +1454,7 @@ export function makeBomb(sleeve = '#3c4e66', glove = '#2a2a2a', hands = false) {
   if (hands) { const P = []; vmArm(P, [0.11, 0.0, 0.08], [0.4, -0.5, 0.75], sleeve, glove, 0.6); vmArm(P, [-0.11, 0.0, 0.08], [-0.4, -0.5, 0.75], sleeve, glove, 0.6); g.add(new THREE.Mesh(merge(P), armMat())); }
   const led = new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 6), basic('#f00')); led.position.set(0.045, 0.09, -0.048); g.add(led);
   g.userData = { led, flash: null, grip: new THREE.Vector3(0.1, 0, 0.06), fore: null };
+  if (hands || HQ) { const bb = new THREE.Box3(); for (const c of g.children) if (c !== led && c.isMesh && c.material !== armMatC) bb.expandByObject(c); realGun(g, 'g_c4', 'c4', null, hands, null, bb); }   // the real charge over the built one (the LED stays: it blinks)
   return g;
 }
 

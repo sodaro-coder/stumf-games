@@ -1277,7 +1277,7 @@ export class Menu {
     B.querySelectorAll('[data-kitplay]').forEach((b) => (b.onclick = () => { if (this.h.audio) playKit(this.h.audio, b.dataset.kitplay, 0.4); }));
     B.querySelectorAll('[data-kit]').forEach((b) => (b.onclick = () => { S.kit = b.dataset.kit; this.h.saveSettings(S); this.render(); }));
     B.querySelectorAll('[data-spray]').forEach((b) => (b.onclick = () => { S.spray = b.dataset.spray; this.h.saveSettings(S); this.render(); }));
-    { const cb = $('#credBox', B); if (cb) fetch('models/CREDITS.txt').then((r) => (r.ok ? r.text() : '')).then((t) => { cb.textContent = 'Real 3D models in KYS:GO and the artists who made them (thank you):\n\n' + t.split('\n').slice(2).join('\n') + '\nSkies and textures: Poly Haven (CC0). Body for the built soldier: MakeHuman (CC0). Animations: Mixamo.'; }).catch(() => {}); }
+    { const cb = $('#credBox', B); if (cb) Promise.all(['models/CREDITS.txt', 'snd/CREDITS.txt'].map((u) => fetch(u).then((r) => (r.ok ? r.text() : '')).catch(() => ''))).then(([t, s]) => { cb.textContent = 'Real 3D models in KYS:GO and the artists who made them (thank you):\n\n' + t.split('\n').slice(2).join('\n') + (s ? '\nGun sounds (real recordings):\n' + s.split('\n').slice(2).join('\n') : '') + '\nSkies and textures: Poly Haven (CC0). Body for the built soldier: MakeHuman (CC0). Animations: Mixamo.'; }); }
     const xl = $('#xLoad', B); if (xl) xl.onclick = () => { try { Object.assign(S, xhParse($('#xCode', B).value)); this.h.saveSettings(S); this.render(); this.h.toast('Crosshair loaded'); } catch (e) { this.h.toast('That code isn\'t a crosshair code'); } };
     drawXh($('#xPrev', B), S, 0);
     $('#vTry', B).onclick = (e) => { e.preventDefault(); this.h.announce('planted'); };

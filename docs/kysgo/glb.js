@@ -84,7 +84,11 @@ export async function buildGLB({ json: J, bin }, opts = {}) {
   const nodes = (J.nodes || []).map((n, i) => {
     const o = isJoint.has(i) ? new THREE.Bone() : new THREE.Group();
     o.name = n.name || 'node_' + i;
-    if (n.matrix) new THREE.Matrix4().fromArray(n.matrix).decompose(o.position, o.quaternion, o.scale);
+    if (n.matrix) { const M = new THREE.Matrix4().fromArray(n.matrix); M.decompose(o.position, o.quaternion, o.scale);
+      // a matrix with shear (a rotation after a non-uniform scale, common in FBX exports) has no position/rotation/scale form:
+      // keep it as it is (such a node is never animated by the game) or the mesh comes out squashed and turned
+      const R = new THREE.Matrix4().compose(o.position, o.quaternion, o.scale).elements; let d = 0, mx = 1e-9; for (let k = 0; k < 16; k++) { d = Math.max(d, Math.abs(R[k] - M.elements[k])); mx = Math.max(mx, Math.abs(M.elements[k])); }
+      if (d > mx * 1e-4) { o.matrixAutoUpdate = false; o.matrix.copy(M); } }
     else { if (n.translation) o.position.fromArray(n.translation); if (n.rotation) o.quaternion.fromArray(n.rotation); if (n.scale) o.scale.fromArray(n.scale); }
     return o;
   });
@@ -103,6 +107,7 @@ export async function buildGLB({ json: J, bin }, opts = {}) {
       }
       const mat = pr.material !== undefined ? mats[pr.material] : defMat();
       if (g.attributes.color && !mat.vertexColors) mat.vertexColors = true;
+      for (const k of ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap', 'emissiveMap']) { const t = mat[k]; if (t && t.channel && !g.attributes['uv' + t.channel]) t.channel = 0; }   // a texCoord the mesh doesn't carry (the shader would not compile)
       // glTF normal maps: the green flip is only for tangents derived on the GPU; with the file's own tangents, as is
       if (g.attributes.tangent && mat.normalMap && !mat.userData.tan) { mat.userData.tan = true; mat.normalScale.y = -mat.normalScale.y; }
       const sk = n.skin !== undefined && g.attributes.skinIndex;
@@ -255,7 +260,7 @@ export function placeModels(list, { hq = true, far = 10, max = 1e9 } = {}) {
 }
 
 // ---- guns: the working parts, found by name -----------------------------------------------------------------------
-const PART_NAMES = { slide: /^slide(_low|_\d+)?$/i, bolt: /^bolt( carrier)?(_\d+)?$/i, boltback: /^boltback(_\d+)?$/i, mag: /^mag(azine)?([. ]?\d+)?(_\d+)?$/i, trigger: /^trigger(_low|_\d+)?$/i, charging: /charg/i, hammer: /^hammer(_low|_\d+)?$/i, selector: /selector|safety/i, cover: /port_?cover|^dust cover$/i, body: /^body|receiver/i };
+const PART_NAMES = { slide: /^slide(_low|_\d+)?$/i, bolt: /^bolt( carrier)?(_\d+)?$/i, boltback: /^boltback(_\d+)?$/i, mag: /^mag(azine)?([. ]?\d+)?(_\d+)?$/i, trigger: /^trigger(_low|_\d+)?$/i, charging: /charg/i, hammer: /^hammer(_low|_\d+)?$/i, selector: /selector|safety/i, cover: /port_?cover|^dust cover$/i, pump: /^pump$/i, body: /^body|receiver/i };
 export function gunParts(root) {
   const out = {};
   root.traverse((o) => { for (const [k, re] of Object.entries(PART_NAMES)) if (!out[k] && re.test(o.name)) { out[k] = o; o.userData.rest = o.position.clone(); } });

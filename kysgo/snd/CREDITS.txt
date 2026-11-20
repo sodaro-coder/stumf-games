@@ -1,0 +1,7 @@
+Sounds used by KYS:GO (built by browserdev/sndbuild.py). All CC0 (public domain); credited anyway.
+
+The Free Firearm Sound Library - Ben Jaszczak et al., CC0, https://opengameart.org/content/the-free-firearm-sound-library
+Gun reload sounds - SpringySpringo, CC0, https://opengameart.org/content/gun-reload-sounds
+Handgun Reload Sound Effect - zer0_sol, CC0, https://opengameart.org/content/handgun-reload-sound-effect
+Shotgun Reload Sound effects - zer0_sol, CC0, https://opengameart.org/content/shotgun-reload-sound-effects
+Metal Impact Sounds - BMacZero, CC0, https://opengameart.org/content/metal-impact-sounds

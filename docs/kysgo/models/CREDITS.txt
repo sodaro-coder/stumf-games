@@ -28,3 +28,33 @@ rubble: "Rubble Pile (Game Ready / 2K PBR)" by meerschaumdigital, CC BY 4.0, htt
 sandpile: "Photoscan Low-poly Construction Sand Pile" by martin.topolski, CC BY 4.0, https://sketchfab.com/3d-models/photoscan-low-poly-construction-sand-pile-7a7533e1ecab4b1d96da55cc3ad9ad98
 bigcrate: "Wooden Crate Low-poly PBR" by MaX3Dd, CC BY 4.0, https://sketchfab.com/3d-models/wooden-crate-low-poly-pbr-f8fb4c96211d475b9370d1c403273fc6
 fparms: "FREE [FPS Arms] GameReady - RIGGED" by bamenwo05, CC BY 4.0, https://sketchfab.com/3d-models/free-fps-arms-gameready-rigged-296d30fc705b4dff85c2c8a2d2724e7f
+g_glock: "Glock 49" by Nexor, CC BY 4.0, https://sketchfab.com/3d-models/glock-49-6f6817e88351410b9f481ff96833956b
+g_usp: "Heckler & Koch USP Pistol" by Urpo, CC BY 4.0, https://sketchfab.com/3d-models/heckler-koch-usp-pistol-972e3643000246e8959a6df509557bcc
+g_p2000: "HK Heckler & Koch USP 9x19 LowPoly free download" by Aleksandr Goncharov, CC BY 4.0, https://sketchfab.com/3d-models/hk-heckler-koch-usp-9x19-lowpoly-free-download-b87a309997bf4ac990f14d8010a2ee5a
+g_p250: "SIG SAUER M17 P320" by RBG_illustrations, CC BY 4.0, https://sketchfab.com/3d-models/sig-sauer-m17-p320-e0c9faadfa3843ac8ecfd92b12b90e31
+g_fiveseven: "FN Five-seveN" by simon_fischer, CC BY 4.0, https://sketchfab.com/3d-models/fn-five-seven-4583bf36ff2644e2800b6719fac274dc
+g_tec9: "Intratec Tec-9" by iamezu, CC BY 4.0, https://sketchfab.com/3d-models/intratec-tec-9-6c4434f3364a42a68c39b3bad6a94c46
+g_cz75: "CZ-75 Auto" by tomnortheast99, CC BY 4.0, https://sketchfab.com/3d-models/cz-75-auto-4b62fc0811a7436e8caeba730958f9e0
+g_dualies: "Beretta 92 (clean)" by romunql, CC BY 4.0, https://sketchfab.com/3d-models/beretta-92-clean-bf58795f626d4251b11c5e23d2922358
+g_r8: "Revolver .357 Magnum" by Artem Goyko, CC BY 4.0, https://sketchfab.com/3d-models/revolver-357-magnum-360c6276282e48109fcca66f31004d81
+g_mac10: "Mac-10" by iamezu, CC BY 4.0, https://sketchfab.com/3d-models/mac-10-d0cb71c7aee94905ab84c746e2b92c33
+g_mp9: "TPM SMG" by TORI106, CC BY 4.0, https://sketchfab.com/3d-models/tpm-smg-b9e68645f0e048419f3fe84ebd58dd92
+g_mp7: "MP7 Submachine Gun" by NotNathanModel, CC BY 4.0, https://sketchfab.com/3d-models/mp7-submachine-gun-8db3d7ead18349049255e6c1dba90396
+g_ump: "UMP_45mm" by TORI106, CC BY 4.0, https://sketchfab.com/3d-models/ump-45mm-9f1c89e7d4764ff4bceffb6c67839c7a
+g_p90: "FN P90 SMG" by datucarl, CC BY 4.0, https://sketchfab.com/3d-models/fn-p90-smg-39ef289b3e4247f28950cf63b1a175dd
+g_bizon: "Bizon Smg" by TORI106, CC BY 4.0, https://sketchfab.com/3d-models/bizon-smg-bb157e507b7444ccabd75490366fb618
+g_mag7: "Pump action shotgun - Charles Daly Honcho model" by bluemod, CC BY 4.0, https://sketchfab.com/3d-models/pump-action-shotgun-charles-daly-honcho-model-9b1a98f65703418da75cc24bd6563cda
+g_sawedoff: "Sawed-off Shotgun" by LiliumLetifer, CC BY 4.0, https://sketchfab.com/3d-models/sawed-off-shotgun-6e8892e053d247eab1cad53ba456397e
+g_m249: "M249" by Dmitriy Korotkov, CC BY 4.0, https://sketchfab.com/3d-models/m249-b1e60faa37de4461822103fe38e5c9ce
+g_negev: "LMG" by DJMaesen, CC BY 4.0, https://sketchfab.com/3d-models/lmg-8c24d7374ea64bdab1c30f49c69d5ed8
+g_famas: "FAMAS-F1" by Yevhenii Levchenko, CC BY 4.0, https://sketchfab.com/3d-models/famas-f1-604fb1cbdced48028c736b3eac6e0c4f
+g_aug: "Steyr AUG" by emmerick.opsomer, CC BY 4.0, https://sketchfab.com/3d-models/steyr-aug-dd8ffca1ab094999a2c332e7540e09ad
+g_g3sg1: "Low Poly G3SG1" by samanthacford, CC BY 4.0, https://sketchfab.com/3d-models/low-poly-g3sg1-4e7c47c9751c44ed955d907c4f47974f
+g_scar20: "FN SCAR-H" by Alex_Z, CC BY 4.0, https://sketchfab.com/3d-models/fn-scar-h-ba1c338e87fa45c99be0baef5aa8ccd7
+g_zeus: "Yellow Taser Gun" by Richard Speight, CC BY 4.0, https://sketchfab.com/3d-models/yellow-taser-gun-0044ade7b6344c009405c43c110bb8fa
+g_smoke: "M18 Smoke Grenade" by Eric Wallbank, CC BY 4.0, https://sketchfab.com/3d-models/m18-smoke-grenade-d0614d2c359e4e5ba4e14064dc2c8d59
+g_flash: "Flashbang grenade" by Nikolay Kudrin, CC BY 4.0, https://sketchfab.com/3d-models/flashbang-grenade-2799b0b859c74db6ae8752fdc6bb4c04
+g_molotov: "Molotov Cocktail" by LiliumLetifer, CC BY 4.0, https://sketchfab.com/3d-models/molotov-cocktail-e57a0fd669974a3dab7d3919bda9032c
+g_incendiary: "Incendiary Grenade" by R.Linden, CC BY 4.0, https://sketchfab.com/3d-models/incendiary-grenade-74a5e9a18c1947118d1895dca900afb5
+g_decoy: "Modern frag grenade concept" by Viktor Tselikov, CC BY 4.0, https://sketchfab.com/3d-models/modern-frag-grenade-concept-bb296d20e35c4d0eab8a4116b6ec6b4b
+g_c4: "Makeshift C-4 Explosive" by lion.gelders, CC BY 4.0, https://sketchfab.com/3d-models/makeshift-c-4-explosive-b72abe326c5d4bc5affe67e41edb88ad
