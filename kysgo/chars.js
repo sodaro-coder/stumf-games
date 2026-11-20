@@ -152,7 +152,7 @@ function dye(m, cs) {
 // human: shirt, plate carrier, cargo trousers, balaclava, gloves and boots, each in a scanned fabric (Poly Haven),
 // coloured from the agent's look.
 const HUMAN_HATS = new Set(['balaclava', 'helmet', 'shemagh', 'none', undefined]);
-export const isHuman = (L) => !!L && !L.glow && !L.model && !L.speedo && !L.bikini && !L.stripes && !L.mustard && !L.belly && !L.eyes && L.body !== L.head && HUMAN_HATS.has(L.hat);
+export const isHuman = (L) => !!L && (!!L.real || !L.glow && !L.model && !L.speedo && !L.bikini && !L.stripes && !L.mustard && !L.belly && !L.eyes && L.body !== L.head && HUMAN_HATS.has(L.hat));   // real: a story character on the realistic body (bare head, its own clothes)
 const CLOTH = { human_shirt: 'linen', human_pants: 'twill', human_vest: 'cordura', human_belt: 'cordura', human_bala: 'knit', human_glove: 'leather', human_boot: 'leather', human_shemagh: 'linen', human_helmet: 'cordura' };
 const HEADGEAR = { human_helmet: (L) => L.hat === 'helmet', human_shemagh: (L) => L.hat === 'shemagh', human_visor: (L) => !!L.visor };
 function clothTex(name) {
@@ -230,9 +230,9 @@ vec4 tri3(sampler2D t, vec3 p, vec3 w) { return texture2D(t, p.yz * tileK) * w.x
 // graphics run out of first. The helmet stays its own mesh so a bought one can show.
 const HPARTS = ['human_shirt', 'human_pants', 'human_boot', 'human_glove', 'human_bala', 'human_belt', 'human_vest', 'human_shemagh', 'human_visor', 'human_skin', 'human_eye', 'human_iris'];
 const CLOTH_IDX = { linen: 0, twill: 1, cordura: 2, knit: 3, leather: 4 }, CLOTH_TILE = [1 / 45, 1 / 40, 1 / 34, 1 / 26, 1 / 36];
-function humanGeo(shemagh, visor) {
-  const key = 'hgeo|' + (shemagh ? 1 : 0) + (visor ? 1 : 0); if (D.tex.has(key)) return D.tex.get(key);
-  const list = D.meshes.filter((m) => HPARTS.includes(m.name) && (m.name !== 'human_shemagh' || shemagh) && (m.name !== 'human_visor' || visor));
+function humanGeo(shemagh, visor, bare) {
+  const key = 'hgeo|' + (shemagh ? 1 : 0) + (visor ? 1 : 0) + (bare ? 1 : 0); if (D.tex.has(key)) return D.tex.get(key);
+  const list = D.meshes.filter((m) => HPARTS.includes(m.name) && (m.name !== 'human_shemagh' || shemagh) && (m.name !== 'human_visor' || visor) && !(bare && (m.name === 'human_bala' || m.name === 'human_vest')));
   let nv = 0, ni = 0; for (const m of list) { nv += m.g.attributes.position.count; ni += m.g.index.count * (m.name === 'human_boot' ? 2 : 1); }
   const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), ao = new Uint8Array(nv).fill(255), part = new Float32Array(nv);
   const si = new Uint8Array(nv * 4), sw = new Uint8Array(nv * 4), idx = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
@@ -357,7 +357,7 @@ export function makeSoldier(look, team, hq = true) {
   const mat = human ? null : material(team, tint, hq, L.glow ? { glow: L.glow, t: L.glowT || 'circuit' } : null, costumeOf(L));
   let humanHelm = null;
   if (human) {   // one skinned mesh for the whole body (+ the helmet on its own, hidden until worn or bought)
-    const sm = new THREE.SkinnedMesh(humanGeo(L.hat === 'shemagh', !!L.visor), humanBodyMat(L, team, hq)); sm.frustumCulled = false; root.add(sm);
+    const sm = new THREE.SkinnedMesh(humanGeo(L.hat === 'shemagh', !!L.visor, !!L.real), humanBodyMat(L, team, hq)); sm.frustumCulled = false; root.add(sm);
     const inv = c.bones.map(() => new THREE.Matrix4()), m0 = D.meshes.find((m) => m.name === 'human_shirt');
     m0.joints.forEach((j, k) => inv[j].copy(m0.inverses[k]));
     sm.bind(new THREE.Skeleton(bones, inv), m0.bind);
@@ -379,14 +379,14 @@ export function makeSoldier(look, team, hq = true) {
   act.idle.play();
   const tpGun = new THREE.Group(); g.add(tpGun);
   const head = new THREE.Group(); g.add(head);
-  if (!human) hat(head, L);   // the human's headgear is fitted to its head (charbuild.py)
+  if (!human || (L.real && !HUMAN_HATS.has(L.hat))) hat(head, L);   // the human's headgear is fitted to its head (charbuild.py); a story character's own hat sits on the bare head
   // the gear you bought, worn on top of the uniform: a plate carrier with its pouches, a ballistic helmet
   const chest = new THREE.Group(); chest.visible = false; g.add(chest);
   const vest = gearMesh(vestParts(team)); chest.add(vest);
   const bomb = L.bombvest ? gearMesh(bombVestParts()) : null; if (bomb) { chest.add(bomb); chest.visible = true; }
   const helm = gearMesh(helmetParts(team)); helm.visible = false; head.add(helm);
   const headCol = L.hat === 'balaclava' || (human && !L.hat) ? (L.hatColor || '#22231f') : L.hat === 'helmet' ? (L.hatColor || '#2a3646') : L.head || '#c89a74', armCol = L.arms || L.body || (team === 'CT' ? '#3c4e66' : '#7a6a4a');   // what a severed piece looks like (gore)
-  const r = { soldier: true, headCol, armCol, human, humanHelm, g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, vest, bomb, tpKey: '', over: null, t: 0, dieDone: false };
+  const r = { soldier: true, headCol, armCol, human, humanHelm, ownHat: !!L.real && !HUMAN_HATS.has(L.hat), g, holder, root, bones: byName, mixer, act, base: 'idle', tpGun, head, chest, helm, vest, bomb, tpKey: '', over: null, t: 0, dieDone: false };
   // where the head and hand sit relative to their bones at rest: lets props follow the animated bones
   g.updateMatrixWorld(true);
   r.headCorr = byName.Head.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(g.getWorldQuaternion(new THREE.Quaternion()));
@@ -1164,7 +1164,7 @@ function betaTag() {
 export function setGear(r, armor, helmet) { if (!r || !r.chest) return; if (r.model) return; r.vest.visible = armor > 0 && !r.human;   // a real operator already wears his plate carrier and helmet
     // the human has its own plate carrier
    r.chest.visible = armor > 0 || !!r.bomb; r.helm.visible = !!helmet && armor > 0 && !r.human;
-  if (r.humanHelm) r.humanHelm.visible = r.humanHelm.userData.worn || (!!helmet && armor > 0); }
+  if (r.humanHelm) r.humanHelm.visible = r.humanHelm.userData.worn || (!!helmet && armor > 0 && !r.ownHat); }   // a story character keeps their own hat
 let gearMat = null;
 function rbox(w, h, d, rad = 0.012) {   // a box with rounded edges (pads and plates aren't sharp)
   const sh = new THREE.Shape(), x = w / 2 - rad, y = h / 2 - rad;

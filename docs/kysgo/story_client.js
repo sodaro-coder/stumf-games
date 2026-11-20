@@ -24,7 +24,8 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   .sc-m small{color:#f2a33a;font-weight:800;min-width:30px;text-align:right}
   .sc-boss{position:absolute;left:50%;top:58px;transform:translateX(-50%);width:min(560px,70vw);text-align:center;display:none}.sc-boss b{font-size:14px;letter-spacing:.2em;text-transform:uppercase;color:#ffd0d0;text-shadow:0 0 8px #f00}
   .sc-boss div{height:12px;background:#300;border:1px solid #f55;border-radius:6px;overflow:hidden;margin-top:4px}.sc-boss div i{display:block;height:100%;background:linear-gradient(90deg,#ff2e2e,#ff9a3c);transition:width .2s}
-  .sc-cut{position:absolute;inset:0;display:none;pointer-events:auto;z-index:50}.sc-cut:before,.sc-cut:after{content:'';position:absolute;left:0;right:0;height:11vh;background:#000}.sc-cut:before{top:0}.sc-cut:after{bottom:0}
+  .sc-cut{position:absolute;inset:0;display:none;pointer-events:auto;z-index:50}.sc-cut:before,.sc-cut:after{content:'';position:absolute;left:0;right:0;height:11vh;background:#000}.sc-cut:before{top:0;animation:scBarT .7s cubic-bezier(.2,.8,.2,1)}.sc-cut:after{bottom:0;animation:scBarB .7s cubic-bezier(.2,.8,.2,1)}
+  @keyframes scLineIn{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%)}}@keyframes scBarT{from{transform:translateY(-100%)}to{transform:none}}@keyframes scBarB{from{transform:translateY(100%)}to{transform:none}}
   .sc-line{position:absolute;left:50%;bottom:14vh;transform:translateX(-50%);width:min(760px,88vw);text-align:center;text-shadow:0 2px 6px #000,0 0 18px #000}
   .sc-line b{display:block;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--c);margin-bottom:4px}.sc-line p{margin:0;font-size:21px;line-height:1.35}.sc-line p.dir{font-style:italic;color:#c8ccd4;font-size:18px}.sc-line p.credits{font:900 34px system-ui;letter-spacing:.14em}
   .sc-skip{position:absolute;right:16px;bottom:calc(11vh + 10px);color:#8d97a5;font-size:12px}
@@ -219,7 +220,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     const l = cutQ[0]; document.body.classList.toggle('sc-cutting', !!l);
     if (!l) { $('.sc-cut').style.display = 'none'; return; }
     $('.sc-cut').style.display = 'block'; $('.sc-line').style.setProperty('--c', COLORS[l.who] || '#fff');
-    $('.sc-line b').textContent = stage(l.text) || l.who === 'credits' ? '' : l.name; const p = $('.sc-line p'); p.textContent = l.text; p.className = l.who === 'credits' ? 'credits' : stage(l.text) ? 'dir' : '';
+    $('.sc-line b').textContent = stage(l.text) || l.who === 'credits' ? '' : l.name; const p = $('.sc-line p'); p.textContent = l.text; p.className = l.who === 'credits' ? 'credits' : stage(l.text) ? 'dir' : ''; const ln = $('.sc-line'); ln.style.animation = 'none'; void ln.offsetWidth; ln.style.animation = 'scLineIn .35s ease-out';   // each line fades up
     cutT = lineTime(l); lineIdx++; shotT = 0; say(l);
     const o = l.o; if (o) {   // the line's stage directions, on this screen
       if (o.vision != null) vision(o.vision); if (o.music != null && music) music.set(o.music); if (o.sfx && audio) audio.play(o.sfx, 0.9);
@@ -274,7 +275,10 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   // close-ups on whoever is talking (alternating sides, a slow push in), an over-the-shoulder two-shot every few lines,
   // a high establishing orbit under the title; voices with no body here (Command on the radio, the tape) get the wide.
   const cam = { p: new THREE.Vector3(), l: new THREE.Vector3(), init: false };
+  // camera smoothing by time, not per frame: the same glide at 30 fps on a phone and 120 fps on a PC
+  let lastNow = 0, sdt = 1 / 60; const ease = (k) => 1 - Math.pow(1 - k, sdt * 60);
   function shot(now, posOf) {
+    sdt = Math.min(0.1, Math.max(0, lastNow ? now - lastNow : 1 / 60)); lastNow = now;
     const l = cutQ[0]; if (!l) { cam.init = false; return null; }
     const chars = (S && S.chars) || [], squad = chars.map((c) => posOf(c.id)).filter(Boolean);
     const avg = (k) => (squad.length ? squad.reduce((s, p) => s + p[k], 0) / squad.length : 0), cx = avg('x'), cy = avg('y'), cz = avg('z');
@@ -302,12 +306,12 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
     } else if (cam1 === 'pull' && who2) {   // behind and above, pulling away as they walk off
       const k = Math.min(1, shotT / 6), back = 3 + k * 9, up = 1.8 + k * 5, fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0);
       p = new THREE.Vector3(who2.x - fx * back, who2.y + up, who2.z - fz * back); look = new THREE.Vector3(who2.x + fx * 2, who2.y + 1.2, who2.z + fz * 2);
-      if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } else { cam.p.lerp(p, 0.02); cam.l.lerp(look, 0.05); } return { pos: cam.p, look: cam.l };
+      if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } else { cam.p.lerp(p, ease(0.02)); cam.l.lerp(look, ease(0.05)); } return { pos: cam.p, look: cam.l };
     } else if (cam1 === 'close' && who2) {
       const s2 = who2.scale || 1, fx = -Math.sin(who2.yaw || 0), fz = -Math.cos(who2.yaw || 0), d = (1.7 - Math.min(0.3, shotT * 0.04)) * s2, side = 0.45 * s2;
       p = new THREE.Vector3(who2.x + fx * d + fz * side, who2.y + 1.6 * s2, who2.z + fz * d - fx * side); look = new THREE.Vector3(who2.x, who2.y + 1.5 * s2, who2.z);
     }
-    if (p) { if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } else { cam.p.lerp(p, 0.04); cam.l.lerp(look, 0.08); } return { pos: cam.p, look: cam.l }; }
+    if (p) { if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; } else { cam.p.lerp(p, ease(0.04)); cam.l.lerp(look, ease(0.08)); } return { pos: cam.p, look: cam.l }; }
     if (title || cam1 === 'wide' || !who || stage(l.text) || /^\(radio\)/.test(l.text)) {   // radio voices: the squad listening, not a face   // establishing or wide: a slow orbit around the squad
       const r = title ? 11 : 6.5, h = title ? 6 : 2.6, a = now * (title ? 0.12 : 0.08) + lineIdx * 0.9;
       p = new THREE.Vector3(cx + Math.sin(a) * r, cy + h, cz + Math.cos(a) * r); look = new THREE.Vector3(cx, cy + 1.2, cz);
@@ -319,7 +323,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
       p = new THREE.Vector3(who.x + fx * d + fz * side, who.y + 1.62 * s, who.z + fz * d - fx * side); look = new THREE.Vector3(who.x, who.y + 1.55 * s, who.z);
     }
     if (!cam.init || shotT < 0.05) { cam.p.copy(p); cam.l.copy(look); cam.init = true; }   // a hard cut on every new line
-    else { cam.p.lerp(p, 0.04); cam.l.lerp(look, 0.08); }
+    else { cam.p.lerp(p, ease(0.04)); cam.l.lerp(look, ease(0.08)); }
     return { pos: cam.p, look: cam.l };
   }
 

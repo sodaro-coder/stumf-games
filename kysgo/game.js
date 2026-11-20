@@ -343,7 +343,10 @@ export default function start({ cfg, E, N, smoke }) {
   try { registerLocal(); } catch (e) { /* no saved maps */ }
   let menu = null;
   const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, audio, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); const fx = window.__cs && window.__cs.cfx; if (fx) fx.setGore(S.gore ?? 2); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false, onActive: () => audio.wake() }); };
-  if (smoke) { let m = 'dust', md = '5v5'; try { const u = new URLSearchParams(location.search), q = u.get('map'), qm = u.get('mode'); if (MAPS[q]) m = q; if (MODES[qm] && !MODES[qm].hidden) md = qm; var wq = u.get('weather'); } catch (e) { /* no page */ } runMatch({ mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true, weather: wq }); }
+  if (smoke) { let m = 'dust', md = '5v5'; try { const u = new URLSearchParams(location.search), q = u.get('map'), qm = u.get('mode'); if (MAPS[q]) m = q; if (MODES[qm] && !MODES[qm].hidden) md = qm; var wq = u.get('weather'), sm = u.get('story'); } catch (e) { /* no page */ }
+    // ?smoke&story=<mission>: a story mission straight away (the scripted chapter checks use it)
+    if (sm != null && sm !== '') runMatch({ story: { mission: +sm, diff: 'normal', host: 'ricky' }, mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true });
+    else runMatch({ mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true, weather: wq }); }
   else showMenu();
 
   // ====================================================================================================================
@@ -455,7 +458,16 @@ export default function start({ cfg, E, N, smoke }) {
           rad = clamp(rad, 2.0, 40.0);
           for (int k = 0; k < 8; k++) { float a = float(k) * 0.7854 + rot, r = rad * (0.35 + 0.65 * fract(float(k) * 0.618 + 0.3));
             float d = z - lin(vUv + vec2(cos(a), sin(a)) * r / res); o += step(0.04, d) * (1.0 - smoothstep(0.35, 1.2, d)); }
+          #ifdef ULTRA_HQ
+          // Ultra: 8 more taps on a small contact ring (~0.15 m: creases, feet on the floor, crates against walls) and a
+          // second rotation from a 4x4 interleaved pattern so the noise averages out instead of crawling
+          float rad2 = clamp(0.15 * res.y / (2.0 * camNF.z * z), 1.5, 14.0), o2 = 0.0; vec2 ip = mod(floor(vUv * res), 4.0); float rot2 = rot + (ip.x * 4.0 + ip.y) * 0.3927;
+          for (int k = 0; k < 8; k++) { float a = float(k) * 0.7854 + rot2, r = rad2 * (0.4 + 0.6 * fract(float(k) * 0.618 + 0.7));
+            float d = z - lin(vUv + vec2(cos(a), sin(a)) * r / res); o2 += step(0.012, d) * (1.0 - smoothstep(0.12, 0.45, d)); }
+          return (1.0 - o / 8.0 * 0.6) * (1.0 - o2 / 8.0 * 0.35);
+          #else
           return 1.0 - o / 8.0 * 0.6;
+          #endif
         }
         #endif
         #ifdef SSR
@@ -481,6 +493,11 @@ export default function start({ cfg, E, N, smoke }) {
             if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) break;
             float d = -Q.z - lin(uv);
             if (d > 0.0 && d < st * 1.6 + 0.15) {
+              #ifdef ULTRA_HQ
+              { vec3 A = Q - R * st, B = Q;   // Ultra: halve the last step five times so the reflection meets its object
+                for (int b = 0; b < 5; b++) { vec3 M = (A + B) * 0.5; vec2 mu = vec2(M.x / (-M.z * camNF.z * res.x / res.y), M.y / (-M.z * camNF.z)) * 0.5 + 0.5;
+                  if (-M.z - lin(mu) > 0.0) { B = M; uv = mu; } else A = M; } }
+              #endif
               vec3 hc = texture2D(tex, uv).rgb;
               float edge = smoothstep(0.0, 0.12, uv.x) * smoothstep(1.0, 0.88, uv.x) * smoothstep(0.0, 0.12, uv.y) * smoothstep(1.0, 0.88, uv.y);
               float fres = 0.06 + 0.94 * pow(1.0 - max(dot(-V, N), 0.0), 4.0), fade = 1.0 - float(i) / float(SSR_STEPS);
@@ -517,6 +534,14 @@ export default function start({ cfg, E, N, smoke }) {
           { float gloss = clamp((1.0 - w4.a) / 0.98, 0.0, 1.0); if (gloss > 0.06 && ssrK > 0.0) wc = ssr(wc, gloss); }
           #endif
           vec3 c = wc * (1.0 - g.a) + g.rgb;
+          #ifdef ULTRA_HQ
+          if (ads < 0.01 && cine < 0.01) {   // contrast-adaptive sharpening: four neighbours, less where the local contrast is already high
+            vec2 px = 1.0 / res; vec3 n = comp(vUv + vec2(0.0, px.y)), s2 = comp(vUv - vec2(0.0, px.y)), e = comp(vUv + vec2(px.x, 0.0)), w2 = comp(vUv - vec2(px.x, 0.0));
+            vec3 c0 = comp(vUv), mn = min(c0, min(min(n, s2), min(e, w2))), mx = max(c0, max(max(n, s2), max(e, w2)));
+            vec3 amp = sqrt(clamp(min(mn, 1.0 - min(mx, 1.0)) / max(mx, 1e-4), 0.0, 1.0)), wgt = -amp * 0.16;
+            c = max(c + wgt * (n + s2 + e + w2 - 4.0 * c0) / (1.0 + 4.0 * wgt), 0.0);   // the detail from the raw frame, added to the lit one
+          }
+          #endif
           #ifdef FXAA
           if (ads < 0.01 && cine < 0.01) c = fxaa(c);
           #endif
@@ -525,7 +550,12 @@ export default function start({ cfg, E, N, smoke }) {
             vec3 bl = texture2D(bloomTex, vUv).rgb * 2.0;
             bl += texture2D(bloomTex, vUv + vec2(1.5, 0.0) * bp).rgb + texture2D(bloomTex, vUv - vec2(1.5, 0.0) * bp).rgb + texture2D(bloomTex, vUv + vec2(0.0, 1.5) * bp).rgb + texture2D(bloomTex, vUv - vec2(0.0, 1.5) * bp).rgb;
             bl += 0.6 * (texture2D(bloomTex, vUv + vec2(2.6, 2.6) * bp).rgb + texture2D(bloomTex, vUv - vec2(2.6, 2.6) * bp).rgb + texture2D(bloomTex, vUv + vec2(2.6, -2.6) * bp).rgb + texture2D(bloomTex, vUv - vec2(2.6, -2.6) * bp).rgb);
-            c += bl * (0.6 / 8.4); }
+            c += bl * (0.6 / 8.4);
+            #ifdef ULTRA_HQ
+            { vec3 hw = vec3(0.0); for (int k = 0; k < 8; k++) { float a = float(k) * 0.7854 + 0.39; hw += texture2D(bloomTex, vUv + vec2(cos(a), sin(a)) * 6.5 * bp).rgb; }
+              c += hw * vec3(1.0, 0.9, 0.8) * (0.22 / 8.0); }   // a wide, slightly warm halo round the sun, flashes and lamps (lens halation)
+            #endif
+          }
           #endif
           c = aces(c * exposure / 0.6);
           #ifdef GRADE
@@ -565,7 +595,7 @@ export default function start({ cfg, E, N, smoke }) {
     // the HDR pass needs float render targets; many Android GPUs can't render to them, so check rather than assume
     const postOn = () => gfx.postOn;
     // if the phone's GPU gives up (context lost), drop to Potato and restart instead of leaving a black screen
-    renderer.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (smoke) return; try { S.quality = 0; saveSet(S); localStorage.setItem('cs:autoq', '0.5'); } catch (er) { /* private mode */ } toast('Graphics crashed on this device: restarting on the lightest settings (Auto steps back up when it can)'); setTimeout(() => location.reload(), 1500); });
+    renderer.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (smoke) return; try { S.quality = 0; saveSet(S); localStorage.setItem('cs:autoq', gfx.tier === 'high' || gfx.tier === 'ultra' ? '0.75' : '0.5'); } catch (er) { /* private mode */ } toast('Graphics crashed on this device: restarting on the lightest settings (Auto steps back up when it can)'); setTimeout(() => location.reload(), 1500); });
     const _dbs = new THREE.Vector2(), _cc = new THREE.Color();
     const postTarget = () => {
       const v = renderer.getDrawingBufferSize(_dbs), w = Math.max(1, v.x | 0), h = Math.max(1, v.y | 0);
@@ -598,16 +628,19 @@ export default function start({ cfg, E, N, smoke }) {
     let scale = gfx.pixelBand(devicePixelRatio || 1).start;
     const mkGov = () => { const b = gfx.pixelBand(devicePixelRatio || 1); return E.qualityGovernor((s) => { if (window.__lockPR) return; scale = s; renderer.setPixelRatio(s); }, { start: b.start, max: b.max, min: b.min, targetMs: b.targetMs }); };
     let govMin = gfx.pixelBand(devicePixelRatio || 1).min;
-    let gov = mkGov(), perfSum = 0, perfN = 0;
+    let gov = mkGov(), perfSum = 0, perfN = 0, bootT = 0;
+    addEventListener('pagehide', () => gfx.bootMark(false)); document.addEventListener('visibilitychange', () => { if (document.hidden) gfx.bootMark(false); });   // left normally: not a crash
     // Auto: still under ~40 fps at the lowest resolution step -> one preset down (the map is rebuilt lighter)
     const autoCheck = (dt) => {
       if (!AUTO || !W || uiOpen || dt > 0.5) return;
       perfSum += dt; perfN++; if (perfSum < 4) return;
       const avg = perfSum / perfN; perfSum = 0; perfN = 0;
-      if (avg > gfx.stepBudget && scale <= govMin + 0.06 && gfx.stepDown()) {   // effects go before the resolution drops under the band's floor (0.6 on Xbox)
+      if (bootT >= 0 && (bootT += 4) > 20) { bootT = -1; gfx.bootMark(false, true); }   // 20 s of play survived: the phone holds this tier
+      if (avg > gfx.stepBudget && scale <= govMin + 0.06 && gfx.shedExtras()) { post.mat.defines = gfx.postDefines(); post.mat.needsUpdate = true; }   // Ultra's extras go first
+      else if (avg > gfx.stepBudget && scale <= govMin + 0.06 && gfx.stepDown()) {   // effects go before the resolution drops under the band's floor (0.6 on Xbox)
         applyTier(); buildMap(mapId); vmKey = ''; setViewModel(); govMin = gfx.pixelBand(devicePixelRatio || 1).min; gov = mkGov();
         toast('Graphics: ' + gfx.name + ' to keep it smooth');
-      } else if (avg < 1 / 75 && scale >= gfx.pixelBand(devicePixelRatio || 1).start - 0.01) gfx.rememberHeadroom();   // headroom: next match one step up
+      } else if (gfx.headroom(avg, scale, gfx.pixelBand(devicePixelRatio || 1))) gfx.rememberHeadroom();   // headroom: next match one step up
     };
     // Show FPS (settings): frames per second, the frame time, the render scale the governor picked, draw calls and
     // triangles per frame, and the tier, for tuning on a real machine. Counted over every pass of the frame.
@@ -831,6 +864,7 @@ export default function start({ cfg, E, N, smoke }) {
       es.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
     }
     function buildMap(id) {
+      gfx.bootMark(true); bootT = 0;   // a phone that dies (memory) between here and 20 s of play reopens a tier lower
       if (W) { scene.remove(W.group); W.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh && o.material) for (const k of ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap']) if (o.material[k]) o.material[k].dispose(); }); }   // the placed models' textures too (a tier step down may not use those files again; a rebuild that does re-uploads them)
       mapId = id; const wx = weather && WEATHER[weather] && weather !== 'day' ? weather : null;
       W = buildWorld(E, wx ? { ...MAPS[id], build: () => applyWeather(MAPS[id].build(), wx) } : MAPS[id], scene, Q, { ...gfx.worldOpts(), dynShadows: dsh ? P.shadows.cascades.length : 0, prebaked: BAKE[id] });
@@ -951,7 +985,8 @@ export default function start({ cfg, E, N, smoke }) {
       if (r0 && r0.key === key) return r0;
       if (r0) { scene.remove(r0.g); if (r0.blob) scene.remove(r0.blob); }
       const a = AGENT_BY_ID[agentId] || AGENT_BY_ID[team === 'T' ? 'a_t_default' : 'a_ct_default'];
-      const look = role.startsWith('look:') ? STORY_LOOKS[info.look] : role === 'boss' ? BOSS_LOOK : role ? CHARACTERS[role].look : a.look;
+      const cl = role && CHARACTERS[role] && CHARACTERS[role].look, real = cl && useS && P.hqModels ? { ...cl, real: true, head: cl.skin || cl.head, hat: cl.realHat || cl.hat } : cl;   // squad characters on the realistic body (Medium and up)
+      const look = role.startsWith('look:') ? STORY_LOOKS[info.look] : role === 'boss' ? BOSS_LOOK : role ? real : a.look;
       const r = useS ? makeSoldier(look, team, P.hqModels) : makePlayer(look, team);
       if (rs !== 1) r.g.scale.setScalar(rs);
       markCaster(r.g);   // drawn into the dynamic player-shadow map (Medium and up)

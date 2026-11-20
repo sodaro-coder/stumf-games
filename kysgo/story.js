@@ -12,7 +12,7 @@
 export const CHARACTERS = {
   wiener: {
     name: 'Sergeant Wiener', short: 'Wiener', role: 'Squad leader · heavy',
-    look: { body: '#c8462e', legs: '#e8b060', head: '#c8462e', hat: 'bun', hatColor: '#e8b060', mustard: true },   // a cartoon hotdog of a man, in a bun
+    look: { body: '#c8462e', legs: '#e8b060', head: '#c8462e', skin: '#d39b7a', realHat: 'helmet', hat: 'bun', hatColor: '#e8b060', mustard: true },   // a cartoon hotdog of a man, in a bun
     bio: 'A cartoon hotdog in a bun who runs the squad like a drill instructor. Brutal, calculated, and enjoys pain a bit too much. Always has a plan, and the plan always hurts.',
     guns: { cats: ['heavy'], ids: [] },   // LMGs and shotguns
     ability: { id: 'mess_kit', name: 'Combat Medic', desc: 'Every squadmate within 10 m back to full health. Learned at eleven years old, in a house on Mustard Street.', cd: 45, radius: 10, unlock: { mission: 'w5', obj: 6 } },
@@ -183,7 +183,7 @@ export const CHAPTERS = [
         out: [['wiener', 'Ricky! Cancer! Igor! ON ME!', { cam: 'wide' }], ['ricky', 'Sarge—! Get off me! GET OFF—', { capture: 'wiener' }], ['igor', '(A rifle butt. Igor goes down without a sound.)'], ['cancer', 'FRANK! Don\'t you dare come after—'],
           ['wiener', '(A round in the side. Another in the leg. He falls.)', { cam: 'pov_down', down: 'wiener', vision: 'dying', music: 'heartbeat' }], ['wiener', '(The rifle is right there. It is a mile away.)', { cam: 'pov_down' }], ['wiener', '(A truck pulls away. Three shapes in the back.)', { cam: 'pov_down', hold: 1.2 }],
           ['wiener', '...get... up...', { cam: 'pov_down' }], ['wiener', '(He can\'t.)', { cam: 'pov_down', hold: 1.6 }], ['wiener', '(His eyes close.)', { cam: 'pov_down', vision: 'black', hold: 1.6 }]] } },
-    { id: 'w4', name: 'The House', map: 'wiener_house', tier: 0, featured: 'wiener', vision: 'flashback', music: '', intro: 'Thirty years earlier. The house on Mustard Street.',
+    { id: 'w4', name: 'The House', map: 'wiener_house', tier: 0, boss: true, featured: 'wiener', vision: 'flashback', music: '', intro: 'Thirty years earlier. The house on Mustard Street.',
       scale: { wiener: 0.66 }, look: { wiener: 'wiener_young' }, loadout: { wiener: { guns: [], noKnife: true } },
       actors: [{ id: 'danny', look: 'wiener_little', scale: 0.5, zone: 'Danny\'s Room', name: 'Danny' }],
       objectives: [
@@ -370,7 +370,7 @@ export const CHAPTERS = [
         out: [['wiener', 'Secret calls. Disappearing. And a Brotherhood keycard. Explain it.'], ['cancer', 'No.'], ['wiener', 'Then you\'re confined to barracks. Command\'s orders. Mine too.'], ['ricky', 'He didn\'t do it! You don\'t know him like I— he didn\'t DO it!'], ['igor', 'Ricky. How do you know him so well?'], ['ricky', '...'], ['cancer', 'Leave it, kid. Fine, Frank. Confine me. I\'ve got nothing to lose.'], ['ricky', 'Stop SAYING that.']] } },
   ] },
   { id: 'c7', map: 'hospital', name: 'One Week', tease: 'St. Mercy Hospital. Captain Cancer has an appointment he never told anybody about.', hub: 'A week. He is going to spend it with them.', missions: [
-    { id: 'o1', name: 'One Week', tier: 5, featured: 'cancer', vision: '', music: '', intro: 'St. Mercy Hospital. The appointment he never told anybody about.',
+    { id: 'o1', name: 'One Week', tier: 5, boss: true, featured: 'cancer', vision: '', music: '', intro: 'St. Mercy Hospital. The appointment he never told anybody about.',
       loadout: { cancer: { guns: [], armor: false } }, speed: { cancer: 0.82 }, enemyLook: 'security', enemyNames: ['Security', 'Security', 'Night Security', 'Head of Security'],
       actors: [{ id: 'doctor', look: 'doctor', zone: 'Oncology', name: 'Dr. Adebayo' }],
       objectives: [

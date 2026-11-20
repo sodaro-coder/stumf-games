@@ -67,6 +67,11 @@ export const tierOf = (q) => { let best = 0; QSTEPS.forEach((s, i) => { if (Math
 
 // desktop / mini-PC integrated graphics (shared memory): AMD APUs (Vega 3/6/8, "AMD Radeon(TM) Graphics"), Intel UHD/Iris/HD
 export const isIntegrated = (r) => /Radeon\(TM\) (Vega \d+ )?Graphics|Radeon Vega \d|Vega \d+ Graphics|AMD Radeon Graphics|Intel.*(UHD|Iris|HD) Graphics/i.test(String(r || ''));
+// iOS / iPadOS major version (0 = not Apple touch). iPads ask for the desktop site (Macintosh + touch); Safari 26
+// freezes the OS number in the UA at 18, so the larger of the OS and Safari version numbers is taken.
+export const iosVersion = (nav) => { const ua = String((nav && nav.userAgent) || '');
+  if (!(/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (nav.maxTouchPoints || 0) > 1))) return 0;
+  const os = +((ua.match(/OS (\d+)_/) || [])[1] || 0), sv = +((ua.match(/Version\/(\d+)/) || [])[1] || 0); return Math.max(os, sv) || 15; };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } } };
 
 export class GraphicsSettingsManager {
@@ -76,11 +81,27 @@ export class GraphicsSettingsManager {
     this.auto = !setting;
     this.xbox = /Xbox/i.test(((env.navigator || (typeof navigator !== 'undefined' ? navigator : {})).userAgent) || '');   // Edge on Xbox Series X: Ultra tuned for it
     const nav = env.navigator || (typeof navigator !== 'undefined' ? navigator : {});
+    this.iosVer = iosVersion(nav); this.ios = this.iosVer > 0; this.iphone = /iPhone|iPod/.test(nav.userAgent || ''); this.hq = true;
     let q = setting;
     if (this.auto) {
       const saved = +(store.get('cs:autoq') || 0), weak = (nav.hardwareConcurrency || 4) <= 4 || (nav.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS|PlayStation|Nintendo|SMART-TV|SmartTV|Tizen|Web0S|webOS|CrKey|AFT[A-Z]/i.test(nav.userAgent || '');   // phones, Chromebooks, TV browsers and handheld consoles start on Low (Xbox: Ultra, below)
       q = QSTEPS.includes(saved) && saved < 2 ? saved : weak ? 0.75 : 1;
       if (this.xbox && !saved) q = QSTEPS[4];   // Edge on Xbox: the console's GPU gets the showcase tier (stepped down if it can't hold it)
+      // iPhone / iPad: Apple's phone GPUs are strong (A12 and later run iOS 17+), so they start on High with the real
+      // models, once (a phone that saved Performance before this gets High once too); Auto still steps down from there.
+      // iOS 15-16 (A9-A11) start on Medium. A tab the phone killed while loading or in the first seconds of play
+      // (iOS kills it for memory without a context-lost event) comes back one tier lower: see bootMark().
+      const iv = this.iosVer;
+      // iPads (some A10 models run iPadOS 17-18) start on Medium and climb to High on measured headroom
+      if (iv && store.get('cs:ios1') !== '1') { store.set('cs:ios1', '1'); q = iv >= 17 && this.iphone ? QSTEPS[3] : iv >= 15 ? QSTEPS[2] : QSTEPS[1]; store.set('cs:autoq', String(q)); }
+      // a tab killed twice in a row while loading or in the first 20 s of play (the flag is cleared when the page is
+      // left or hidden normally, so only a kill in the foreground counts): one tier down
+      const died = store.get('cs:boot');
+      if (died && (iv || /Mobi|Android/i.test(nav.userAgent || ''))) {
+        const k = +(store.get('cs:bootk') || 0) + 1;
+        if (k >= 2) { const i = Math.max(0, TIERS.indexOf(tierOf(+died)) - 1); q = Math.min(q, QSTEPS[i]); store.set('cs:autoq', String(q)); store.set('cs:bootk', '0'); } else store.set('cs:bootk', String(k));
+      }
+      store.set('cs:boot', '');
     }
     this.floatRT = true; this.maxAniso = 16; this.listeners = [];
     this.set(q, true);
@@ -123,6 +144,9 @@ export class GraphicsSettingsManager {
       const w = (typeof innerWidth !== 'undefined' && innerWidth) || 1920, full = dpr, s1440 = Math.min(full, 2560 / w);
       return { start: s1440, max: full, min: 0.6 * full, targetMs: 16.7 };
     }
+    if (this.ios && (this.tier === 'high' || this.tier === 'medium')) {   // a 3x Retina phone at 1 CSS px is ~850x390: start at 1.5x, the governor pulls down
+      return { start: Math.min(dpr, 1.5), max: Math.min(dpr, 2), min: 0.75, targetMs: this.p.targetMs };
+    }
     return ultra ? { start: Math.min(1.5, dpr * b.start), max: Math.min(2, dpr * b.max), min: b.min, targetMs: this.p.targetMs }
       : { start: Math.min(dpr, 1) * b.start, max: Math.min(1.5, dpr * b.max), min: this.auto && this.tier !== 'potato' ? Math.max(b.min, 0.55) : b.min, targetMs: this.p.targetMs };
   }
@@ -141,12 +165,21 @@ export class GraphicsSettingsManager {
   // composite shader defines for this tier
   postDefines() {
     const p = this.p, d = {};
+    if (this.tier === 'ultra' && this.hq) d.ULTRA_HQ = '';
     if (p.bloom) d.BLOOM = ''; if (p.grade) d.GRADE = ''; if (p.ssao) d.SSAO = ''; if (p.ssr) { d.SSR = ''; d.SSR_STEPS = String(p.ssr); } if (p.fxaa) d.FXAA = '';
     return d;
   }
   // Auto: one tier down (true if it changed). Never below Potato, never into Ultra by itself.
   stepDown() { const i = TIERS.indexOf(this.tier); if (!this.auto || i <= 0) return false; this.set(QSTEPS[i - 1]); store.set('cs:autoq', String(this.q)); return true; }
-  rememberHeadroom() { const i = TIERS.indexOf(this.tier); if (this.auto && (i < 2 || (this.igpu && i < 3))) store.set('cs:autoq', String(QSTEPS[i + 1])); }
+  rememberHeadroom() { const i = TIERS.indexOf(this.tier); if (this.auto && (i < 2 || ((this.igpu || this.iosVer >= 17) && i < 3))) store.set('cs:autoq', String(QSTEPS[i + 1])); }
+  // phones: set while a map loads and for the first seconds of play; a tab killed in that window (memory) leaves it set
+  bootMark(on, ok) { if (!this.auto) return; store.set('cs:boot', on ? String(this.q) : ''); if (ok) store.set('cs:bootk', '0'); }
+  // headroom worth a step up next match: desktops well under their budget at full scale; Apple devices (60 Hz) holding
+  // ~60 fps at the top of their band
+  headroom(avg, scale, band) { return (avg < 1 / 75 && scale >= band.start - 0.01) || (this.ios && avg < 1 / 56 && scale >= band.max - 0.01); }
+  // Ultra's per-pixel extras (wider SSAO, refined reflections, halation, sharpening) are the first thing Auto sheds,
+  // before a whole tier: a console that can't hold them stays on Ultra without them
+  shedExtras() { if (!this.auto || this.tier !== 'ultra' || !this.hq) return false; this.hq = false; return true; }
 }
 
 // ---- dynamic sun shadows for players (Medium and up) ------------------------------------------------------------------
