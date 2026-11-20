@@ -343,9 +343,9 @@ export default function start({ cfg, E, N, smoke }) {
   try { registerLocal(); } catch (e) { /* no saved maps */ }
   let menu = null;
   const showMenu = () => { menu = new Menu(cfg, profile, { play: (o) => { menu.hide(); runMatch(o); }, lobbies: (fn) => N.lobbyBrowser(cfg.id, fn), toast, audio, sound: (n) => audio.play(n), mapPreview, settings: () => S, saveSettings: (s) => { S = s; saveSet(s); const fx = window.__cs && window.__cs.cfx; if (fx) fx.setGore(S.gore ?? 2); }, announce: (k) => { const l = line(S.voicePack, k); audio.say(l.text, l.pitch, l.rate, { who: 'announcer:' + S.voicePack }); } }); menu.show(); gamepadControls(E.input, { playing: () => false, onActive: () => audio.wake() }); };
-  if (smoke) { let m = 'dust', md = '5v5'; try { const u = new URLSearchParams(location.search), q = u.get('map'), qm = u.get('mode'); if (MAPS[q]) m = q; if (MODES[qm] && !MODES[qm].hidden) md = qm; var wq = u.get('weather'), sm = u.get('story'); } catch (e) { /* no page */ }
+  if (smoke) { let m = 'dust', md = '5v5'; try { const u = new URLSearchParams(location.search), q = u.get('map'), qm = u.get('mode'); if (MAPS[q]) m = q; if (MODES[qm] && !MODES[qm].hidden) md = qm; var wq = u.get('weather'), sm = u.get('story'), so = +u.get('obj') || 0; } catch (e) { /* no page */ }
     // ?smoke&story=<mission>: a story mission straight away (the scripted chapter checks use it)
-    if (sm != null && sm !== '') runMatch({ story: { mission: +sm, diff: 'normal', host: 'ricky' }, mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true });
+    if (sm != null && sm !== '') runMatch({ story: { mission: +sm, obj: so, diff: 'normal', host: 'ricky' }, mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true });
     else runMatch({ mode: md, map: m, bot: 'normal', host: true, solo: true, smoke: true, weather: wq }); }
   else showMenu();
 
@@ -392,7 +392,7 @@ export default function start({ cfg, E, N, smoke }) {
     // ~40 fps even at reduced resolution. Remembered per device.
     const gfx = new GraphicsSettingsManager(S.quality), AUTO = gfx.auto;
     let Q = gfx.q, P = gfx.p;
-    setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra');
+    setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra' && !gfx.mobile);
     if (P.hqModels) loadArms('hi');   // the real first-person arms (Medium and up; Performance keeps the built ones)
     if (P.chars) loadChars(P.hqModels ? true : undefined);   // the real soldiers: Medium and up only
     // free every other WebGL context first (menu backdrop, map and item pictures): browsers cap how many can exist
@@ -613,13 +613,13 @@ export default function start({ cfg, E, N, smoke }) {
     // tier switches that live outside the map: post defines and target, models, the dynamic player shadows
     let dsh = null;
     const applyTier = () => {
-      Q = gfx.q; P = gfx.p; audio.setTier(gfx.tier === 'low' || gfx.tier === 'potato' ? 'lo' : 'hi'); try { if (W) setRagdolls(W, P.ragdolls ?? 3); } catch (e) { /* first profile: before the world exists */ } setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra');
+      Q = gfx.q; P = gfx.p; audio.setTier(gfx.tier === 'low' || gfx.tier === 'potato' ? 'lo' : 'hi'); try { if (W) setRagdolls(W, P.ragdolls ?? 3); } catch (e) { /* first profile: before the world exists */ } setModelQuality(P.hqModels ? 1 : 0.75); setModelTexTier(gfx.tier === 'ultra' && !gfx.mobile);
       if (applyTier.done) { releaseSoldiers(); releaseRealGuns(); releaseLoaded(); }   // a step down: every real model's textures leave the GPU; what is still drawn uploads its own again
       applyTier.done = true;
       if (P.chars) loadChars(P.hqModels ? true : undefined);   // a step down from Ultra swaps the 2K soldiers for the 1K ones
       post.mat.defines = gfx.postDefines(); post.mat.needsUpdate = true; post.w = 0;
       if (dsh) { dsh.dispose(); dsh = null; }
-      if (P.shadows && renderer.capabilities.isWebGL2) dsh = new DynamicShadows(P.shadows);
+      if (P.shadows && renderer.capabilities.isWebGL2) dsh = new DynamicShadows(gfx.mobile && gfx.tier === 'ultra' ? { ...P.shadows, cascades: P.shadows.cascades.map((c) => ({ ...c, size: Math.min(c.size, 2048) })) } : P.shadows);   // Mobile Ultra: a 2K shadow map (48 MB less)
     };
     applyTier();
     const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = vmCam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); vmCam.updateProjectionMatrix(); };
@@ -887,7 +887,7 @@ export default function start({ cfg, E, N, smoke }) {
         for (const c of W.chunks) { const bb = c.geometry.boundingBox; culler.addBox(c, bb.min.x, bb.min.z, bb.max.x, bb.max.z); }
       }
       W.spinners = []; W.breakables = []; for (const p of B.props) { const m = makeProp({ ...p, y: W.H(Math.floor(p.x), Math.floor(p.z)) }); W.group.add(m); if (culler) culler.add(m, p.x, p.z); if (m.userData.spin) W.spinners.push(m.userData.spin); if (m.userData.breakable) W.breakables.push(m); }
-      if (W.placements && W.placements.length) { W.models = placeModels(W.placements, { hq: P.hqModels && P.props.hq, far: P.props.near, max: P.props.max }); W.group.add(W.models); }   // real crates, barrels, windows, shutters and litter (glb.js), instanced
+      if (W.placements && W.placements.length) { W.models = placeModels(W.placements, { hq: P.hqModels && P.props.hq && !gfx.mobile, far: P.props.near, max: P.props.max }); W.group.add(W.models); }   // real crates, barrels, windows, shutters and litter (glb.js), instanced
       if (!parts) parts = new Particles(scene, (x, z) => (W ? W.groundAt(x, z, 60) : 0));
       if (!cfx) cfx = createCombatFx({ scene, W, parts, audio, cam, hq: !['potato', 'low'].includes(gfx.tier), ultra: gfx.tier === 'ultra' }); else cfx.setWorld(W);
       cfx.setGore(S.gore ?? 2);   // holes, blood, sparks, smoke that fills rooms, fire, ripples
@@ -2290,7 +2290,10 @@ export default function start({ cfg, E, N, smoke }) {
         if (me.ads > 0.05 || me.reload > 0) { if (!me.inspectStyle) me.inspect = 0; me.flourishT = 0; }   // aiming or reloading cuts an inspect and the flourish
         vm.position.set(base.x + Math.sin(bob) * 0.008 * Math.min(1, sp / 4), base.y + Math.abs(Math.cos(bob)) * 0.006 * Math.min(1, sp / 4) - dep - rel - me.crouch * 0.01, base.z + camKick * 1.4);
         { const k = 1 - Math.min(1, me.ads); vm.position.x += (S.vmX || 0) * k; vm.position.y += (S.vmY || 0) * k; vm.position.z += (S.vmZ || 0) * k; }   // the player's viewmodel offsets (not while aiming: sights stay centred)
-        if (vmCam.fov !== (S.vmFov || 60)) { vmCam.fov = S.vmFov || 60; vmCam.updateProjectionMatrix(); }
+        // the gun's own camera keeps a 16:9 screen's sideways framing on wider screens (phones in landscape are ~2.2:1):
+        // the same vertical angle there showed the arms and gun small and thin next to the PC picture
+        { const f0 = S.vmFov || 60, a = vmCam.aspect, vf = a > 1.78 ? 2 * Math.atan(Math.tan(f0 * Math.PI / 360) * 1.778 / a) * 180 / Math.PI : f0;
+          if (Math.abs(vmCam.fov - vf) > 0.01) { vmCam.fov = vf; vmCam.updateProjectionMatrix(); } }
         const breath = Math.sin(now * 1.7) * 0.0018 * (1 - 0.7 * me.ads) * (me.crouch > 0.5 ? 0.6 : 1); vm.position.y += breath; vm.position.x += Math.sin(now * 0.85) * 0.0012 * (1 - 0.7 * me.ads);   // breathing: the gun rises and settles
         const funny = me.inspect > 0 && me.inspectStyle;
         vm.rotation.set(breath * 3 + rel * 2 + camKick * 2, (vm.userData.ry || 0) + (funny ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 1.2 : 0), funny ? Math.sin((2.2 - me.inspect) / 2.2 * Math.PI) * 0.5 : 0);

@@ -367,7 +367,8 @@ export class StoryMatch extends Match {
       default: break;
     }
     if (o.music != null) this.music = o.music; if (o.vision != null) this.vision = o.vision;
-    if (i > 0) this.event('checkpoint', { mission: this.mi, obj: i, runId: this.runId });   // the host saves here: a wipe or a reload resumes from this objective
+    const cp = this.diffKey === 'hard' ? i - (i % 2) : i;   // Real Shoota: a checkpoint every second objective (as the difficulty card says)
+    if (i > 0 && cp === i) this.event('checkpoint', { mission: this.mi, obj: i, runId: this.runId });   // the host saves here: a wipe or a reload resumes from this objective
     this.event('obj', { i, n: this.mission.objectives.length, hint: o.hint, kind: o.kind });
     if (o.scene && !this.replay) this.scene(o.scene); else if (this.replay) this.replay = false;
     this.talk(o.say);
@@ -389,7 +390,7 @@ export class StoryMatch extends Match {
     if (this.boss) { this.players.delete(this.boss.id); this.boss = null; }
     for (const p of this.players.values()) { p.downed = false; p.carrying = false; if (p.squad) { this.spawn(p); this.loadout(p); p.passive = false; } }
     this.broadcastRoster();
-    this.replay = true; this.begin(this.obj);
+    this.replay = true; this.begin(this.diffKey === 'hard' ? this.obj - (this.obj % 2) : this.obj);
   }
   // ---- abilities (asked for by players; AI squadmates use theirs when it makes sense) ----
   ability(p) {

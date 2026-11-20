@@ -242,6 +242,7 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   // asking to skip: everyone playing has to agree (solo: instant); the host then ends the scene for everyone
   const askSkip = () => { if (!cutQ.length) return; if (onSkip) onSkip(); else endCut(); };
   $('.sc-cut').addEventListener('pointerdown', askSkip);
+  $('.sc-card').addEventListener('pointerdown', () => { if (cutQ.length) askSkip(); });   // the title card sits over the opening lines: a tap there skips too (phones)
   const onKey = (e) => { if (cutQ.length && (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape')) askSkip(); };
   addEventListener('keydown', onKey);
   function nextTalk() {
@@ -330,7 +331,8 @@ export function storyClient({ scene, myId, audio, onSkip, isHost, canvas, onDire
   const card = (small, h1, p, em, rw) => { const c = $('.sc-card'); $('.sc-card small').textContent = small || ''; $('.sc-card h1').textContent = h1 || ''; $('.sc-card p').textContent = p || ''; $('.sc-card em').textContent = em || ''; $('.sc-card .rw').textContent = rw || ''; c.style.display = 'grid'; c.style.opacity = 1; };
   return {
     onEvent(type, data) {
-      if (type === 'cut') { barkT = 0; $('.sc-bark').style.opacity = 0; $('.sc-unlock').style.display = 'none'; cutAll = (data.lines || []).slice(); cutQ = cutAll.slice(); cutT0 = performance.now(); lineIdx = 0; $('.sc-title').textContent = data.title || ''; $('.sc-skip').textContent = 'tap / Space / A: skip'; talkQ = []; talkT = 0; $('.sc-talk').style.opacity = 0; showLine(); }
+      if (type === 'cut') { { const c = $('.sc-card'); if (c.style.display !== 'none' && c.style.opacity !== '0') { c.style.opacity = 0; setTimeout(() => { if (c.style.opacity === '0') c.style.display = 'none'; }, 650); } }   // the scene starts now: the title card makes way (it hid the first lines)
+        barkT = 0; $('.sc-bark').style.opacity = 0; $('.sc-unlock').style.display = 'none'; cutAll = (data.lines || []).slice(); cutQ = cutAll.slice(); cutT0 = performance.now(); lineIdx = 0; $('.sc-title').textContent = data.title || ''; $('.sc-skip').textContent = 'tap / Space / A: skip'; talkQ = []; talkT = 0; $('.sc-talk').style.opacity = 0; showLine(); }
       if (type === 'cutSkip') { flushCut(); endCut(); }
       if (type === 'skipVotes') $('.sc-skip').textContent = `skip: ${data.n} of ${data.need} want to skip`;
       if (type === 'talk') { talkQ.push(...(data.lines || [])); if (talkT <= 0) nextTalk(); }

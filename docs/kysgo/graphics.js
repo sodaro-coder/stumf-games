@@ -81,7 +81,7 @@ export class GraphicsSettingsManager {
     this.auto = !setting;
     this.xbox = /Xbox/i.test(((env.navigator || (typeof navigator !== 'undefined' ? navigator : {})).userAgent) || '');   // Edge on Xbox Series X: Ultra tuned for it
     const nav = env.navigator || (typeof navigator !== 'undefined' ? navigator : {});
-    this.iosVer = iosVersion(nav); this.ios = this.iosVer > 0; this.iphone = /iPhone|iPod/.test(nav.userAgent || ''); this.hq = true;
+    this.iosVer = iosVersion(nav); this.ios = this.iosVer > 0; this.iphone = /iPhone|iPod/.test(nav.userAgent || ''); this.phone = /Mobi|Android/i.test(nav.userAgent || ''); this.mobile = this.ios || this.phone; this.hq = true;
     let q = setting;
     if (this.auto) {
       const saved = +(store.get('cs:autoq') || 0), weak = (nav.hardwareConcurrency || 4) <= 4 || (nav.deviceMemory || 8) <= 4 || /Mobi|Android|iPhone|iPad|CrOS|PlayStation|Nintendo|SMART-TV|SmartTV|Tizen|Web0S|webOS|CrKey|AFT[A-Z]/i.test(nav.userAgent || '');   // phones, Chromebooks, TV browsers and handheld consoles start on Low (Xbox: Ultra, below)
@@ -112,7 +112,7 @@ export class GraphicsSettingsManager {
     if (!silent) this.listeners.forEach((f) => f(this));
     return this;
   }
-  get name() { return TIER_NAMES[TIERS.indexOf(this.tier)] + (this.auto ? (this.igpu ? ' (Auto, integrated graphics)' : ' (Auto)') : ''); }
+  get name() { return TIER_NAMES[TIERS.indexOf(this.tier)] + (this.tier === 'ultra' && this.mobile ? ' (mobile)' : '') + (this.auto ? (this.igpu ? ' (Auto, integrated graphics)' : ' (Auto)') : ''); }
   onChange(f) { this.listeners.push(f); }
   // read once the renderer exists: what this GPU can actually do
   probe(renderer) {
@@ -135,7 +135,7 @@ export class GraphicsSettingsManager {
   get msaa() { return Math.min(this.p.msaa, this.maxSamples ?? 4); }
   get aniso() { return Math.min(this.xbox && this.tier === 'ultra' ? 8 : this.p.aniso, this.maxAniso || 1); }
   // Auto steps effects down (a tier) when the frame stays over this budget at the lowest render scale
-  get stepBudget() { return this.xbox ? 1 / 55 : 1 / 40; }
+  get stepBudget() { return this.xbox ? 1 / 55 : this.mobile && this.tier === 'ultra' ? 1 / 50 : 1 / 40; }   // a phone on Ultra steps down under ~50 fps
   get shadowsOn() { return !!this.p.shadows; }
   // the frame-time governor's render-scale band for this screen
   pixelBand(dpr = 1) {
@@ -144,8 +144,10 @@ export class GraphicsSettingsManager {
       const w = (typeof innerWidth !== 'undefined' && innerWidth) || 1920, full = dpr, s1440 = Math.min(full, 2560 / w);
       return { start: s1440, max: full, min: 0.6 * full, targetMs: 16.7 };
     }
-    if (this.ios && (this.tier === 'high' || this.tier === 'medium')) {   // a 3x Retina phone at 1 CSS px is ~850x390: start at 1.5x, the governor pulls down
-      return { start: Math.min(dpr, 1.5), max: Math.min(dpr, 2), min: 0.75, targetMs: this.p.targetMs };
+    if (this.mobile && ultra) return { start: Math.min(dpr, 2), max: Math.min(dpr, 2.5), min: 1, targetMs: 16.7 };   // Mobile Ultra: sharp first, the governor pulls down
+    if (this.mobile && (this.tier === 'high' || this.tier === 'medium')) {   // a 3x Retina phone at 1 CSS px is ~850x390 (blurry): High starts at 2x, up to 2.5x with headroom, the governor pulls down
+      const hi = this.tier === 'high';
+      return { start: Math.min(dpr, hi ? 2 : 1.5), max: Math.min(dpr, hi ? 2.5 : 2), min: hi ? 1 : 0.8, targetMs: this.p.targetMs };
     }
     return ultra ? { start: Math.min(1.5, dpr * b.start), max: Math.min(2, dpr * b.max), min: b.min, targetMs: this.p.targetMs }
       : { start: Math.min(dpr, 1) * b.start, max: Math.min(1.5, dpr * b.max), min: this.auto && this.tier !== 'potato' ? Math.max(b.min, 0.55) : b.min, targetMs: this.p.targetMs };
@@ -166,12 +168,12 @@ export class GraphicsSettingsManager {
   postDefines() {
     const p = this.p, d = {};
     if (this.tier === 'ultra' && this.hq) d.ULTRA_HQ = '';
-    if (p.bloom) d.BLOOM = ''; if (p.grade) d.GRADE = ''; if (p.ssao) d.SSAO = ''; if (p.ssr) { d.SSR = ''; d.SSR_STEPS = String(p.ssr); } if (p.fxaa) d.FXAA = '';
+    if (p.bloom) d.BLOOM = ''; if (p.grade) d.GRADE = ''; if (p.ssao) d.SSAO = ''; if (p.ssr) { d.SSR = ''; d.SSR_STEPS = String(this.mobile ? Math.min(24, p.ssr) : p.ssr); } if (p.fxaa) d.FXAA = '';
     return d;
   }
   // Auto: one tier down (true if it changed). Never below Potato, never into Ultra by itself.
   stepDown() { const i = TIERS.indexOf(this.tier); if (!this.auto || i <= 0) return false; this.set(QSTEPS[i - 1]); store.set('cs:autoq', String(this.q)); return true; }
-  rememberHeadroom() { const i = TIERS.indexOf(this.tier); if (this.auto && (i < 2 || ((this.igpu || this.iosVer >= 17) && i < 3))) store.set('cs:autoq', String(QSTEPS[i + 1])); }
+  rememberHeadroom() { const i = TIERS.indexOf(this.tier); if (this.auto && (i < 2 || ((this.igpu || this.iosVer >= 17) && i < 3) || (this.iosVer >= 17 && i === 3))) store.set('cs:autoq', String(QSTEPS[i + 1])); }   // an Apple phone holding 60 fps on High at 2.5x tries Mobile Ultra next match
   // phones: set while a map loads and for the first seconds of play; a tab killed in that window (memory) leaves it set
   bootMark(on, ok) { if (!this.auto) return; store.set('cs:boot', on ? String(this.q) : ''); if (ok) store.set('cs:bootk', '0'); }
   // headroom worth a step up next match: desktops well under their budget at full scale; Apple devices (60 Hz) holding
