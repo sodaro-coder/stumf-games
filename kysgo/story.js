@@ -12,21 +12,21 @@
 export const CHARACTERS = {
   wiener: {
     name: 'Sergeant Wiener', short: 'Wiener', role: 'Squad leader · heavy',
-    look: { body: '#c8462e', legs: '#e8b060', head: '#c8462e', skin: '#d39b7a', realHat: 'helmet', hat: 'bun', hatColor: '#e8b060', mustard: true },   // a cartoon hotdog of a man, in a bun
+    look: { face: { hair: 'buzz', hairColor: '#3a2618', beard: 'mustache', beardColor: '#4a2e1a' }, body: '#c8462e', legs: '#e8b060', head: '#c8462e', skin: '#d39b7a', realHat: 'helmet', hat: 'bun', hatColor: '#e8b060', mustard: true },   // a cartoon hotdog of a man, in a bun
     bio: 'A cartoon hotdog in a bun who runs the squad like a drill instructor. Brutal, calculated, and enjoys pain a bit too much. Always has a plan, and the plan always hurts.',
     guns: { cats: ['heavy'], ids: [] },   // LMGs and shotguns
     ability: { id: 'mess_kit', name: 'Combat Medic', desc: 'Every squadmate within 10 m back to full health. Learned at eleven years old, in a house on Mustard Street.', cd: 45, radius: 10, unlock: { mission: 'w5', obj: 6 } },
   },
   cancer: {
     name: 'Captain Cancer', short: 'Cancer', role: 'Close quarters · area denial',
-    look: { body: '#d8e2e8', legs: '#d8e2e8', head: '#e8c4a8', hat: 'none', gown: true },   // bald, in a hospital gown
+    look: { face: { hair: 'none', beard: 'stubble', beardColor: '#8a8580', browColor: '#8a8078' }, body: '#d8e2e8', legs: '#d8e2e8', head: '#e8c4a8', hat: 'none', gown: true },   // bald, in a hospital gown
     bio: 'Bald, in a hospital gown, IV pole long since traded for an SMG. Has nothing to lose and says so constantly. Dark jokes, short temper, never misses a chance to correct Ricky.',
     guns: { cats: ['smg'], ids: [] },   // SMGs only
     ability: { id: 'cancer_nade', unlock: { mission: 'o1', obj: 3 }, name: 'Cancer Nade', desc: 'One per mission: a canister of hospital-grade nasty. A lingering poison cloud that hurts and slows anyone standing in it.', perLevel: 1, dps: 9, radius: 4.5, dur: 9, slow: 0.6 },
   },
   ricky: {
     name: 'Recruit Ricky', short: 'Ricky', role: 'Rifleman',
-    look: { body: '#7a3cc8', legs: '#1a1a1a', head: '#5a3a26', hat: 'cap', hatColor: '#e8c020', chains: true },   // skinny, middle-aged; loud rapper fit and jewellery
+    look: { face: { hair: 'short', hairColor: '#141010', beard: 'goatee', beardColor: '#1a1412' }, body: '#7a3cc8', legs: '#1a1a1a', head: '#5a3a26', hat: 'cap', hatColor: '#e8c020', chains: true },   // skinny, middle-aged; loud rapper fit and jewellery
     bio: 'Skinny, middle-aged, dressed like he is about to drop a mixtape: purple fit, gold chains, cap sideways. Confident about everything, right about nothing. Wiener and Cancer correct him constantly.',
     guns: { cats: ['rifle'], ids: [], noZoom: true },   // assault rifles; his sidearm is fixed (below)
     sidearm: { id: 'glock', name: 'Glock-18C "Switch"', auto: true, laser: true, mag: 50, note: 'Full-auto switch, laser, drum mag. His only secondary, always.' },
@@ -34,13 +34,13 @@ export const CHARACTERS = {
   },
   igor: {
     name: 'Igor The Sniper', short: 'Igor', role: 'Marksman',
-    look: { body: '#4c5a3a', legs: '#3a4430', head: '#e0b896', hat: 'toque', hatColor: '#6a4a2a', ushanka: true },
+    look: { face: { hair: 'short', hairColor: '#5a4a3a', beard: 'full', beardColor: '#6a5844' }, body: '#4c5a3a', legs: '#3a4430', head: '#e0b896', hat: 'toque', hatColor: '#6a4a2a', ushanka: true },
     bio: 'Extremely, aggressively Soviet. Calls everyone comrade, distrusts anything that is not a bolt action, brags about winters nobody can verify.',
     guns: { cats: ['sniper'], ids: ['sg553', 'aug'] },   // snipers and big-scope rifles only
     ability: { id: 'russian_focus', name: 'Russian Focus', desc: 'For 15 seconds: zero recoil, rock-steady scope. "Is not cheat. Is discipline."', cd: 60, dur: 15 },
   },
   // not one of the four: in the epilogue, whoever played Cancer plays the new recruit (story.js absent: ['cancer'])
-  recruit: { name: 'New Recruit', short: 'Recruit', role: 'First day', look: { body: '#4a5a3a', legs: '#3a4430', head: '#d8a882', hat: 'cap', hatColor: '#4a5a3a' }, bio: 'First day on base. Wants an expresso.', guns: { cats: ['rifle'], ids: [] }, ability: null, extra: true },
+  recruit: { name: 'New Recruit', short: 'Recruit', role: 'First day', look: { face: { hair: 'short', hairColor: '#c8a060', beard: 'none', browColor: '#9a7a48' }, body: '#4a5a3a', legs: '#3a4430', head: '#d8a882', hat: 'cap', hatColor: '#4a5a3a' }, bio: 'First day on base. Wants an expresso.', guns: { cats: ['rifle'], ids: [] }, ability: null, extra: true },
 };
 export const SQUAD = ['wiener', 'cancer', 'ricky', 'igor'];
 

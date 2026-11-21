@@ -1016,7 +1016,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
     const buckets = {}, G = (k, g) => { if (g) (buckets[k] = buckets[k] || []).push([g, null]); };
     G.att = { muzzle: mz };
     const hold = recipe(G);
-    if (opt && hold.mount) hold.sight = optic(G, opt, hold.mount);
+    if (opt && hold.mount) { const GO = (k, gg) => G('o~' + k, gg); GO.att = G.att; hold.sight = optic(GO, opt, hold.mount); }   // o~: the attachment optic's own parts (kept on the real gun)
     const geos = {};
     let box = null;
     for (const [k, list] of Object.entries(buckets)) { geos[k] = merge(list); geos[k].computeBoundingBox(); if (k === 'body' || (k === 'slide|body' && !box)) box = geos[k].boundingBox; }
@@ -1055,6 +1055,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
   for (const [k0, geo] of Object.entries(cg.geos)) {
     if (k0.startsWith('mag|')) { magGroup.add(new THREE.Mesh(geo, gm(k0.slice(4)))); continue; }
     const k = k0.startsWith('pump|') ? k0.slice(5) : k0.startsWith('slide|') ? k0.slice(6) : k0, furn = k.startsWith('f~');   // pump|: the slide of a pump-action, moved as one piece; slide|: a pistol's slide
+    if (k.startsWith('o~')) { const om = new THREE.Mesh(geo, gm(k.slice(2))); om.userData.opticPart = true; g.add(om); continue; }
     (k0 === k ? g : k0.startsWith('slide|') ? slideGroup : pumpGroup).add(new THREE.Mesh(geo, k === 'body' || (furn && tex) ? (tex ? paintMat(tex) : gm(DEFAULT_BODY[id] || 'dark')) : gm(furn ? k.slice(2) : k === 'ironpost' ? 'dark' : k)));
   }
   if (pumpGroup.children.length) g.add(pumpGroup);
@@ -1073,7 +1074,7 @@ export function makeGun(id, tex, sleeve = '#3c4e66', glove = '#2a2a2a', hands = 
   }
   g.add(muzzleFlash(cg.len + (w.silenced ? 0.04 : 0.02), w.cat === 'pistol' ? 0.6 : 1));
   const ch = cg.hold.charge;
-  const realId = !opt && (hands || HQ) ? REAL_GUN[id] : null;   // a scope from the attachments menu still needs the built gun's rail; a muzzle device does not
+  const realId = hands || HQ ? REAL_GUN[id] : null;   // the real model always (skins and attachments ride on it); an attachment optic keeps its own parts on top
   g.userData = { magGroup: magGroup.children.length ? magGroup : null, pump: pumpGroup.children.length ? pumpGroup : null, slide: slideGroup.children.length ? slideGroup : null, magPos, leftArm, leftHand, charge: ch ? new THREE.Vector3(ch[2], ch[1], -ch[0]) : null, flash: g.children[g.children.length - 1], len: cg.len, grip, fore, sight: cg.hold.sight ? new THREE.Vector3(0, cg.hold.sight[1], -cg.hold.sight[0]) : null, optic: opt, iron: !opt && cg.hold.iron ? new THREE.Vector3(0, cg.hold.iron[1], -cg.hold.iron[0]) : null };
   if (realId) realGun(g, realId, id, cg, hands, tex);
   return g;
@@ -1107,12 +1108,12 @@ function realGun(g, mid, id, cg, hands, tex, cbox = null) {
   realGunFile(mid, hands && HQ ? 'hi' : 'lo').then((R) => {
     if (!R || !R.auto) return;
     const src = R.m.scene.clone(true), { g: F, box } = canonGun(src, R.auto), cb = cbox ? cbox.clone() : new THREE.Box3();
-    if (!cbox) for (const [k, geo] of Object.entries(cg.geos)) if (k !== 'ironpost') { geo.computeBoundingBox(); cb.union(geo.boundingBox); }
+    if (!cbox) for (const [k, geo] of Object.entries(cg.geos)) if (k !== 'ironpost' && !k.startsWith('o~')) { geo.computeBoundingBox(); cb.union(geo.boundingBox); }
     const s = (REAL_LEN[mid] || cb.max.z - cb.min.z) / Math.max(1e-6, box.max.z - box.min.z), tw = REAL_FIT[mid] || {};   // stage-12 guns at their real length (a built gun's length can include a suppressor the file has not got)
     F.scale.setScalar(s * (tw.k || 1));
     F.position.set(-(box.max.x + box.min.x) / 2 * s + (tw.dx || 0), cb.max.y - box.max.y * s + (tw.dy || 0), cb.max.z - box.max.z * s + (tw.dz || 0));
     const ud = g.userData, keep = new Set([ud.flash, ud.leftArm, ud.led]);
-    const hide = (o) => o.traverse((c) => { if (c.isMesh && c.material !== armMatC && !keep.has(c) && c !== ud.flash) c.visible = false; });
+    const hide = (o) => o.traverse((c) => { if (c.isMesh && c.material !== armMatC && !keep.has(c) && c !== ud.flash && !c.userData.opticPart) c.visible = false; });
     for (const c of g.children) if (!keep.has(c)) hide(c);
     if (ud.leftArm && ud.leftArm.userData.shell) ud.leftArm.userData.shell.visible = false;
     src.traverse((o) => { if (o.isMesh) { o.castShadow = !hands; o.frustumCulled = false; } });

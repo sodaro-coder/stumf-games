@@ -747,13 +747,13 @@ export function buildWorld(E, def, scene, quality = 1, opt = {}) {
     const enemyPts = (team) => B.spawns[team].flatMap(([x, z]) => [[x, z], [x + 1.5, z], [x - 1.5, z], [x, z + 1.5], [x, z - 1.5]]);
     const exposed = (x, z, foes) => foes.some(([fx, fz]) => los(eyeAt(x, z), eyeAt(fx, fz)));
     for (const team of ['T', 'CT']) {
-      const foes = enemyPts(team === 'T' ? 'CT' : 'T'), taken = new Set();
+      const foes = enemyPts(team === 'T' ? 'CT' : 'T'), taken = new Set(), got = [], room = (x, z) => got.every(([gx, gz]) => Math.hypot(gx - x, gz - z) >= 1.7);   // teammates start at least 1.7 m apart (nobody spawns with a shoulder filling your view)
       B.spawns[team] = B.spawns[team].map(([x, z, yaw]) => {
-        if (!exposed(x, z, foes)) { taken.add(Math.floor(x) + ',' + Math.floor(z)); return [x, z, yaw]; }
+        if (!exposed(x, z, foes) && room(x, z)) { taken.add(Math.floor(x) + ',' + Math.floor(z)); got.push([x, z]); return [x, z, yaw]; }
         const sx = Math.floor(x), sz = Math.floor(z), seen = new Set([sx + ',' + sz]), q = [[sx, sz]];
         while (q.length) {   // breadth-first over walkable neighbours: the first safe cell is the nearest one you can reach
           const [cx, cz] = q.shift(), key = cx + ',' + cz, i = idx(cx, cz);
-          if (i >= 0 && flag[i] === 2 && !taken.has(key) && (!B.buy[team] || inRect(B.buy[team], cx + 0.5, cz + 0.5)) && !exposed(cx + 0.5, cz + 0.5, foes)) { taken.add(key); return [cx + 0.5, cz + 0.5, yaw]; }
+          if (i >= 0 && flag[i] === 2 && !taken.has(key) && (!B.buy[team] || inRect(B.buy[team], cx + 0.5, cz + 0.5)) && !exposed(cx + 0.5, cz + 0.5, foes) && room(cx + 0.5, cz + 0.5)) { taken.add(key); got.push([cx + 0.5, cz + 0.5]); return [cx + 0.5, cz + 0.5, yaw]; }
           for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
             const nx = cx + dx, nz = cz + dz, k2 = nx + ',' + nz, j = idx(nx, nz);
             if (seen.has(k2) || j < 0 || flag[j] !== 2 || Math.hypot(nx - sx, nz - sz) > 12 || Math.abs(h[j] - h[i]) > 0.6) continue;

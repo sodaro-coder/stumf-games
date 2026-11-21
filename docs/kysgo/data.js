@@ -139,16 +139,16 @@ export const PHYS = {
 
 // bot difficulty, picked by the host
 export const BOT_LEVELS = {
-  easy: { name: 'Beginner', react: 1.35, aimErr: 0.2, turn: 2, head: 0, spray: 0.2, burst: 3 },   // slow to react, sloppy aim, never aims for the head
-  normal: { name: 'Played CS:GO', react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5 },
-  hard: { name: 'Real Shoota', react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },
-  auto: { name: 'Adaptive', adaptive: true, react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5 },   // follows your results vs bots
-  expert: { name: 'Real Shoota', hidden: true, react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8 },   // old saves: same as Real Shoota
+  easy: { name: 'Beginner', react: 1.35, aimErr: 0.2, turn: 2, head: 0, spray: 0.2, burst: 3, push: 0.1 },   // slow to react, sloppy aim, never aims for the head
+  normal: { name: 'Played CS:GO', react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5, push: 0.35 },
+  hard: { name: 'Real Shoota', react: 0.28, aimErr: 0.028, turn: 9, head: 0.16, spray: 0.85, burst: 8, push: 0.5 },
+  expert: { name: 'Global Menace', react: 0.17, aimErr: 0.016, turn: 13, head: 0.3, spray: 0.95, burst: 10, push: 0.65 },   // the fourth step: near pro reactions, pre-fires and pushes (old saves named expert land here)
+  auto: { name: 'Adaptive', adaptive: true, react: 0.55, aimErr: 0.065, turn: 5, head: 0.05, spray: 0.55, burst: 5, push: 0.35 },   // follows your results vs bots
 };
 
 // adaptive bots: skill 0 = Beginner .. 1 = Real Shoota, nudged after every bots match by how you did
 export const botLevelAt = (k) => { const a = BOT_LEVELS.easy, b = BOT_LEVELS.hard, t = Math.max(0, Math.min(1, k)), m = (x, y) => x + (y - x) * t;
-  return { name: 'Adaptive', react: m(a.react, b.react), aimErr: m(a.aimErr, b.aimErr), turn: m(a.turn, b.turn), head: m(a.head, b.head), spray: m(a.spray, b.spray), burst: Math.round(m(a.burst, b.burst)) }; };
+  return { name: 'Adaptive', react: m(a.react, b.react), aimErr: m(a.aimErr, b.aimErr), turn: m(a.turn, b.turn), head: m(a.head, b.head), spray: m(a.spray, b.spray), burst: Math.round(m(a.burst, b.burst)), push: m(a.push, b.push) }; };
 
 // ranked: Rank Rating (RR) thresholds, worked out on the server (cs_ranked). First 5 matches are placements.
 export const RANKS = [

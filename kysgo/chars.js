@@ -230,6 +230,61 @@ vec4 tri3(sampler2D t, vec3 p, vec3 w) { return texture2D(t, p.yz * tileK) * w.x
 // graphics run out of first. The helmet stays its own mesh so a bought one can show.
 const HPARTS = ['human_shirt', 'human_pants', 'human_boot', 'human_glove', 'human_bala', 'human_belt', 'human_vest', 'human_shemagh', 'human_visor', 'human_skin', 'human_eye', 'human_iris'];
 const CLOTH_IDX = { linen: 0, twill: 1, cordura: 2, knit: 3, leather: 4 }, CLOTH_TILE = [1 / 45, 1 / 40, 1 / 34, 1 / 26, 1 / 36];
+
+// ---- story faces: hair, beard and brows grown from the realistic body's own head (no re-rig) ------------------------
+// The scalp, jaw and brow triangles of the skin mesh are copied, pushed out along their normals by a few millimetres and
+// drawn with a procedural strand texture; they keep the skin's bone weights, so they move with the head. Styles:
+// hair: 'buzz' | 'short' | 'none';  beard: 'full' | 'goatee' | 'stubble' | 'mustache' | 'none';  plus colours.
+let strandTex = null;
+function strands() {
+  if (strandTex) return strandTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#808080'; g.fillRect(0, 0, 128, 128);
+  for (let k = 0; k < 900; k++) { const x = Math.random() * 128, y = Math.random() * 128, l = 6 + Math.random() * 14, v = 90 + Math.random() * 120 | 0;
+    g.strokeStyle = `rgba(${v},${v},${v},0.55)`; g.lineWidth = 0.7; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - 0.5) * 3, y + l); g.stroke(); }
+  strandTex = new THREE.CanvasTexture(c); strandTex.wrapS = strandTex.wrapT = THREE.RepeatWrapping; strandTex.colorSpace = THREE.SRGBColorSpace; return strandTex;
+}
+function faceParts(F) {
+  const key = 'face|' + JSON.stringify(F); if (D.tex.has(key)) return D.tex.get(key);
+  const m = D.meshes.find((q) => q.name === 'human_skin'), eye = D.meshes.find((q) => q.name === 'human_eye'); if (!m || !eye) return null;
+  const hi = D.c.bones.findIndex((b) => /Head$/.test(b.n)); if (hi < 0) return null;
+  const P = m.g.attributes.position, N = m.g.attributes.normal, SI = m.g.attributes.skinIndex, SW = m.g.attributes.skinWeight, ix = m.g.index.array, n = P.count;
+  const v = new THREE.Vector3(), headW = new Float32Array(n);
+  for (let i = 0; i < n; i++) for (let k = 0; k < 4; k++) if (m.joints[SI.getComponent(i, k)] === hi) headW[i] += SW.getComponent(i, k);
+  // the head's frame in the mesh's own space: centre of the head-weighted vertices, up = the body's long axis, forward
+  // = from the head's centre toward the eyes
+  const c = new THREE.Vector3(); let cn = 0; for (let i = 0; i < n; i++) if (headW[i] > 0.9) { c.add(v.fromBufferAttribute(P, i)); cn++; } if (!cn) return null; c.divideScalar(cn);
+  const bb = new THREE.Box3().setFromBufferAttribute(P), ext = bb.getSize(new THREE.Vector3()), up = new THREE.Vector3(); up.setComponent([ext.x, ext.y, ext.z].indexOf(Math.max(ext.x, ext.y, ext.z)), 1);
+  if (bb.max.dot(up) - c.dot(up) > c.dot(up) - bb.min.dot(up)) up.negate();   // the head is the top end
+  const ec = new THREE.Box3().setFromBufferAttribute(eye.g.attributes.position).getCenter(new THREE.Vector3());
+  const fw = ec.clone().sub(c); fw.addScaledVector(up, -fw.dot(up)); const eyeUp = ec.clone().sub(c).dot(up), unit = fw.length() * 10; fw.normalize();   // unit ~ head size in mesh units
+  const side = new THREE.Vector3().crossVectors(up, fw);
+  const pick = (i, kind) => { if (headW[i] < 0.5) return false; v.fromBufferAttribute(P, i).sub(c); const u = v.dot(up) / unit, f = v.dot(fw) / unit, s = Math.abs(v.dot(side)) / unit, e = eyeUp / unit;
+    if (kind === 'hair') return u > e + 0.035 + Math.max(0, f) * 0.25 || (f < -0.02 && u > e - 0.08) || (s > 0.055 && u > e - 0.01 && f < 0.03);
+    if (kind === 'brow') return u > e + 0.006 && u < e + 0.036 && f > 0.04 && s > 0.006 && s < 0.056;
+    const jaw = u < e - 0.055 && f > -0.01 && s < 0.06;
+    if (kind === 'mustache') return u < e - 0.045 && u > e - 0.082 && f > 0.05 && s < 0.036;
+    if (kind === 'goatee') return u < e - 0.08 && f > 0.06 && s < 0.025;
+    return jaw && !(u < e - 0.06 && u > e - 0.085 && f > 0.075 && s < 0.02);   // full / stubble: the jaw and chin, the lips left bare
+  };
+  const out = [];
+  const build = (kind, lift, col, alpha, tile) => {
+    const tri = []; for (let t = 0; t < ix.length; t += 3) if (pick(ix[t], kind) && pick(ix[t + 1], kind) && pick(ix[t + 2], kind)) tri.push(ix[t], ix[t + 1], ix[t + 2]);
+    if (!tri.length) return;
+    const map = new Map(), pos = [], nrm = [], uv = [], si = [], sw = [], idx = [];
+    for (const i of tri) { if (!map.has(i)) { map.set(i, pos.length / 3); v.fromBufferAttribute(N, i).normalize(); const p0 = new THREE.Vector3().fromBufferAttribute(P, i).addScaledVector(v, lift * unit);
+      pos.push(p0.x, p0.y, p0.z); nrm.push(v.x, v.y, v.z); const q = p0.clone().sub(c); uv.push(q.dot(side) / unit * tile, q.dot(up) / unit * tile);
+      for (let k = 0; k < 4; k++) { si.push(m.joints[SI.getComponent(i, k)]); sw.push(SW.getComponent(i, k)); } } idx.push(map.get(i)); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4)); g.setIndex(idx);
+    const mat = litPatch(new THREE.MeshStandardMaterial({ color: col, map: strands(), roughness: 0.72, transparent: alpha < 1, opacity: alpha, depthWrite: alpha >= 1, polygonOffset: true, polygonOffsetFactor: -2 }), 'dyn');
+    out.push({ g, mat });
+  };
+  if (F.hair && F.hair !== 'none') build('hair', F.hair === 'buzz' ? 0.004 : 0.009, F.hairColor || '#2a1d14', F.hair === 'buzz' ? 0.85 : 1, 6);
+  if (F.beard && F.beard !== 'none') build(F.beard === 'stubble' ? 'full' : F.beard, F.beard === 'stubble' ? 0.0015 : 0.006, F.beardColor || F.hairColor || '#2a1d14', F.beard === 'stubble' ? 0.55 : 1, 9);
+  build('brow', 0.002, F.browColor || F.beardColor || F.hairColor || '#2a1d14', 0.95, 12);
+  D.tex.set(key, out); return out;
+}
 function humanGeo(shemagh, visor, bare) {
   const key = 'hgeo|' + (shemagh ? 1 : 0) + (visor ? 1 : 0) + (bare ? 1 : 0); if (D.tex.has(key)) return D.tex.get(key);
   const list = D.meshes.filter((m) => HPARTS.includes(m.name) && (m.name !== 'human_shemagh' || shemagh) && (m.name !== 'human_visor' || visor) && !(bare && (m.name === 'human_bala' || m.name === 'human_vest')));
@@ -361,6 +416,7 @@ export function makeSoldier(look, team, hq = true) {
     const inv = c.bones.map(() => new THREE.Matrix4()), m0 = D.meshes.find((m) => m.name === 'human_shirt');
     m0.joints.forEach((j, k) => inv[j].copy(m0.inverses[k]));
     sm.bind(new THREE.Skeleton(bones, inv), m0.bind);
+    if (L.real && L.face) for (const f of faceParts(L.face) || []) { const fm = new THREE.SkinnedMesh(f.g, f.mat); fm.frustumCulled = false; root.add(fm); fm.bind(sm.skeleton, m0.bind); }   // hair, beard and brows on the story characters
     const hm = D.meshes.find((m) => m.name === 'human_helmet');
     if (hm) { const wear = L.hat === 'helmet', hs = new THREE.SkinnedMesh(hm.g, humanMat('human_helmet', L, team, hq)); hs.frustumCulled = false; root.add(hs); hs.bind(sm.skeleton, m0.bind); humanHelm = hs; hs.visible = wear; hs.userData.worn = wear; }
   }
@@ -881,6 +937,10 @@ export function poseSoldier(r, { dt = 1 / 60, vx = 0, vz = 0, vy = 0, yaw = 0, c
       const grip = pistol
         ? V().copy(eye).addScaledVector(dir, 0.46).addScaledVector(yA, -0.06 - (1 - (r.aimK || 0)) * 0.1).addScaledVector(xA, 0.015)   // arms out, a little lower between shots
         : V().copy(eye).addScaledVector(dir, 0.11).addScaledVector(yA, -0.095).addScaledVector(xA, 0.045);   // the pistol grip a hand's width in front of the cheek
+      if (pistol) {   // the pistol no further out than the arms reach (a shorter-armed model left its hand short of the grip)
+        const sh = B.RightArm.getWorldPosition(V()), reach = 0.93 * (sh.distanceTo(B.RightForeArm.getWorldPosition(_t1)) + B.RightForeArm.getWorldPosition(_t1).distanceTo(B.RightHand.getWorldPosition(_t2)));
+        for (let k = 0; k < 16 && grip.distanceTo(sh) > reach; k++) grip.addScaledVector(dir, -0.02);
+      }
       _m.makeBasis(xA, yA, zA); _q.setFromRotationMatrix(_m);
       tg.quaternion.copy(_gq2.copy(gq).invert().multiply(_q));
       tg.position.copy(grip); r.g.worldToLocal(tg.position);

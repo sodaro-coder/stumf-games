@@ -203,6 +203,7 @@ const MENU_CSS = `
   .cs-page{padding-bottom:80px}
 }
 @media (pointer:coarse) and (max-height:500px) and (min-width:761px){.cs-menu #pGo{position:fixed;right:16px;bottom:14px;width:220px;z-index:6;box-shadow:0 6px 24px rgba(0,0,0,.6)}.cs-topnav{height:50px}.cs-page{top:50px}}
+@media (orientation:landscape) and (max-height:500px){.cs-menu #pGo{position:fixed;left:auto;right:calc(env(safe-area-inset-right,0px) + 14px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:190px;min-height:46px;z-index:6;box-shadow:0 6px 24px rgba(0,0,0,.6)}.cs-menu .cs-page{padding-bottom:76px}}   /* phones sideways: GO sits in the corner, not across the map cards */
 .cs-acctf{flex-wrap:wrap}.cs-acctf input{flex:1 1 200px;min-width:0}
 .cs-signup{margin-top:16px;max-width:380px;padding:14px;border:1px solid #f2a33a;border-radius:4px;background:rgba(242,163,58,.08)}
 

@@ -17,7 +17,8 @@ export class Bots {
     match.onDamaged = (v, by) => { if (!v.bot) return; const b = this.B(v); b.hitBy = { id: by.id, x: by.x, z: by.z, t: 2 }; if (!b.target) { const want = Math.atan2(-(by.x - v.x), -(by.z - v.z)); v.yaw += angDiff(v.yaw, want) * 0.5; } };
   }
   B(p) { let b = this.brain.get(p.id); if (!b) this.brain.set(p.id, (b = { path: null, pi: 0, goal: null, target: null, react: 0, seen: 0, spray: 0, cd: 0, stuck: 0, lx: 0, lz: 0, hold: null, bought: -1, wait: 0, aiming: false, blind: 0, burst: 0, strafe: 1, strafeT: 0, heard: null, lastPath: 0 })); return b; }
-  lvl() { const L = BOT_LEVELS[this.m.botLevel] || BOT_LEVELS.normal; return L.adaptive ? (this._al || (this._al = botLevelAt(this.m.skill == null ? 0.4 : this.m.skill))) : L; }
+  lvl(p) { const L = BOT_LEVELS[(p && this.m.teamLevel && this.m.teamLevel[p.team]) || this.m.botLevel] || BOT_LEVELS.normal;   // teamLevel: a level per side (the difficulty check pits levels against each other)
+    return L.adaptive ? (this._al || (this._al = botLevelAt(this.m.skill == null ? 0.4 : this.m.skill))) : L; }
 
   // ---- buying ----
   buy(p) {
@@ -45,11 +46,11 @@ export class Bots {
   newRound() {
     const sites = Object.keys(this.m.W.B.sites).filter((s) => !this.m.M.bombSite || s === this.m.M.bombSite);
     this.intel = null; this._al = null;
-    this.plan = { site: sites[Math.floor(Math.random() * sites.length)] || 'A', rush: Math.random() < 0.35, ctSplit: {} };
+    const LT = this.lvl({ team: 'T' }); this.plan = { site: sites[Math.floor(Math.random() * sites.length)] || 'A', rush: Math.random() < (LT.push ?? 0.35), ctSplit: {} };   // better bots rush more often
     const ts = [...this.m.players.values()].filter((q) => q.bot && q.team === 'T');   // one T lurks the other site to catch rotations
     if (ts.length >= 3 && sites.length > 1) { const lurker = ts[Math.floor(Math.random() * ts.length)]; this.plan.lurk = { id: lurker.id, site: sites.find((s2) => s2 !== this.plan.site) }; }
     let k = 0; for (const p of this.m.players.values()) if (p.bot && p.team === 'CT') this.plan.ctSplit[p.id] = sites[(k++) % sites.length];
-    for (const b of this.brain.values()) { b.path = null; b.goal = null; b.target = null; b.hold = null; b.wait = Math.random() * (this.plan.rush ? 1 : 8); }
+    for (const [id, b] of this.brain) { const q = this.m.players.get(id), Lq = this.lvl(q); b.path = null; b.goal = null; b.target = null; b.hold = null; b.wait = Math.random() * (this.plan.rush ? 1 : 8) * (1.35 - (Lq.push ?? 0.35)); }   // weaker bots wait and hold longer, stronger ones take space early
   }
 
   tick(dt) {
@@ -74,7 +75,7 @@ export class Bots {
   }
 
   step(p, dt, think) {
-    const m = this.m, W = m.W, b = this.B(p), L = this.lvl();
+    const m = this.m, W = m.W, b = this.B(p), L = this.lvl(p);
     if (!p.alive) { p.plant = false; p.defusing = false; return; }
     if (p.scripted || p.walkTo) return;   // story bosses and actors move themselves
     if (m.phase === 'freeze') { this.buy(p); p.vx = p.vz = 0; return; }
