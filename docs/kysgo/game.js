@@ -619,7 +619,7 @@ export default function start({ cfg, E, N, smoke }) {
       if (P.chars) loadChars(P.hqModels ? true : undefined);   // a step down from Ultra swaps the 2K soldiers for the 1K ones
       post.mat.defines = gfx.postDefines(); post.mat.needsUpdate = true; post.w = 0;
       if (dsh) { dsh.dispose(); dsh = null; }
-      if (P.shadows && renderer.capabilities.isWebGL2) dsh = new DynamicShadows(gfx.mobile && gfx.tier === 'ultra' ? { ...P.shadows, cascades: P.shadows.cascades.map((c) => ({ ...c, size: Math.min(c.size, 2048) })) } : P.shadows);   // Mobile Ultra: a 2K shadow map (48 MB less)
+      if (P.shadows && renderer.capabilities.isWebGL2) dsh = new DynamicShadows(gfx.mobile && gfx.tier === 'ultra' ? { ...P.shadows, cascades: P.shadows.cascades.map((c) => ({ ...c, r: Math.min(c.r, 8), size: Math.min(c.size, 2048) })) } : P.shadows);   // Mobile Ultra: a 2K shadow map (48 MB less) drawn over a smaller area, so the shadows near you are sharper than desktop Ultra's (7.8 mm texels)
     };
     applyTier();
     const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = vmCam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); vmCam.updateProjectionMatrix(); };

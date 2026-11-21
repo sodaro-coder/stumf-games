@@ -13,28 +13,30 @@ export function mobileControls(input, o = {}) {
   .kc-t .stick{position:absolute;width:118px;height:118px;margin:-59px 0 0 -59px;border-radius:50%;background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.22);display:none;pointer-events:none}
   .kc-t .stick.on{display:block}.kc-t .stick i{position:absolute;left:34px;top:34px;width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.38)}
   .kc-t .stick.ghost{display:block;opacity:.45;left:calc(env(safe-area-inset-left,0px) + 92px);top:calc(100% - 92px)}
-  .kc-t b{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;display:grid;place-items:center;background:rgba(10,12,16,.38);border:2px solid rgba(255,255,255,.28);
-    color:#fff;font:800 11px system-ui,sans-serif;letter-spacing:.04em;text-shadow:0 1px 2px #000;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+  .kc-t b{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;display:grid;place-items:center;background:rgba(10,12,16,.2);border:1.5px solid rgba(255,255,255,.3);
+    color:#fff;font:800 11px system-ui,sans-serif;letter-spacing:.04em;text-shadow:0 1px 2px #000}
   .kc-t b.dn{background:rgba(242,163,58,.45);border-color:#f2a33a}.kc-t b.tog{background:rgba(242,163,58,.3);border-color:#f2a33a}
   .kc-t b svg{width:52%;height:52%;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-  .kc-t b.fire{width:88px;height:88px;right:calc(env(safe-area-inset-right,0px) + 22px);bottom:58px;background:rgba(200,40,30,.42);border-color:rgba(255,120,100,.6)}
-  .kc-t b.fire2{width:62px;height:62px;left:calc(env(safe-area-inset-left,0px) + 18px);top:38%;background:rgba(200,40,30,.36);border-color:rgba(255,120,100,.5)}
-  .kc-t b.aim{width:62px;height:62px;right:calc(env(safe-area-inset-right,0px) + 122px);bottom:96px}
-  .kc-t b.jump{width:52px;height:52px;right:calc(env(safe-area-inset-right,0px) + 30px);bottom:156px}
-  .kc-t b.crouch{width:52px;height:52px;right:calc(env(safe-area-inset-right,0px) + 120px);bottom:26px}
-  .kc-t b.reload{width:46px;height:46px;right:calc(env(safe-area-inset-right,0px) + 92px);bottom:170px}
-  .kc-t b.leanL,.kc-t b.leanR{width:46px;height:46px;bottom:178px;display:none}.kc-t.aiming b.leanL,.kc-t.aiming b.leanR{display:grid}
-  .kc-t b.leanL{right:calc(env(safe-area-inset-right,0px) + 200px)}.kc-t b.leanR{right:calc(env(safe-area-inset-right,0px) + 148px)}
+  /* one compact cluster in the bottom-right corner and the small buttons in a 3x2 block up the right edge: the middle
+     and bottom of the screen stay clear so the arms and gun show (as in the big mobile shooters); every button >= 44 px */
+  .kc-t b.fire{width:76px;height:76px;right:calc(env(safe-area-inset-right,0px) + 14px);bottom:30px;background:rgba(200,40,30,.32);border-color:rgba(255,120,100,.55)}
+  .kc-t b.fire2{width:56px;height:56px;left:calc(env(safe-area-inset-left,0px) + 150px);bottom:150px;background:rgba(200,40,30,.28);border-color:rgba(255,120,100,.45)}
+  .kc-t b.aim{width:52px;height:52px;right:calc(env(safe-area-inset-right,0px) + 100px);bottom:30px}
+  .kc-t b.jump{width:46px;height:46px;right:calc(env(safe-area-inset-right,0px) + 30px);bottom:118px}
+  .kc-t b.crouch{width:46px;height:46px;right:calc(env(safe-area-inset-right,0px) + 103px);bottom:94px}
+  .kc-t b.reload{width:44px;height:44px;right:calc(env(safe-area-inset-right,0px) + 162px);bottom:34px}
+  .kc-t b.leanL,.kc-t b.leanR{width:44px;height:44px;right:calc(env(safe-area-inset-right,0px) + 162px);display:none}.kc-t.aiming b.leanL,.kc-t.aiming b.leanR{display:grid}
+  .kc-t b.leanL{bottom:140px}.kc-t b.leanR{bottom:88px}
   .kc-t .row{position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);right:calc(env(safe-area-inset-right,0px) + 8px);display:flex;gap:6px;pointer-events:none}
-  .kc-t .row b{position:static;width:40px;height:40px;border-radius:10px;font-size:9px}
-  .kc-t .row2{position:absolute;right:calc(env(safe-area-inset-right,0px) + 196px);bottom:14px;display:grid;grid-template-columns:repeat(2,46px);gap:8px;pointer-events:none}
-  .kc-t .row2 b{position:static;width:46px;height:46px;font-size:9px}
-  @media (max-width:720px){.kc-t .row2{right:calc(env(safe-area-inset-right,0px) + 186px);grid-template-columns:repeat(2,40px)}.kc-t .row2 b{width:40px;height:40px}.kc-t b.aim{right:calc(env(safe-area-inset-right,0px) + 112px)}}
+  .kc-t .row b{position:static;width:44px;height:44px;border-radius:10px;font-size:9px}
+  .kc-t .row2{position:absolute;right:calc(env(safe-area-inset-right,0px) + 8px);top:calc(env(safe-area-inset-top,0px) + 58px);display:grid;grid-template-columns:repeat(3,44px);gap:6px;pointer-events:none}
+  .kc-t .row2 b{position:static;width:44px;height:44px;font-size:8.5px;border-radius:12px}
+  .kc-t.aiming .row2{opacity:.35}
   .kc-rot{position:fixed;inset:0;z-index:200;background:#101317;color:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;font:600 15px system-ui;text-align:center}
   .kc-rot div{font-size:56px}.kc-rot span{color:#8d97a5;font-size:13px}
   @media (orientation:portrait){.kc-rot{display:flex}}
   .kc-t b{transform:scale(var(--ks,1))}.kc-t.lefty{transform:scaleX(-1)}.kc-t.lefty .row{right:auto;left:calc(env(safe-area-inset-right,0px) + 8px);flex-direction:row-reverse}.kc-t.lefty b{transform:scaleX(-1) scale(var(--ks,1))}
-  @media (max-height:340px){.kc-t b.fire{width:76px;height:76px;bottom:44px}.kc-t b.jump{bottom:130px}.kc-t b.reload{bottom:142px}.kc-t b.aim{bottom:80px}.kc-t b.leanL,.kc-t b.leanR{bottom:148px}}`;
+  @media (max-height:340px){.kc-t .row2{top:calc(env(safe-area-inset-top,0px) + 54px)}.kc-t b.jump{bottom:110px}.kc-t b.crouch{bottom:88px}}`;
   document.head.appendChild(css);
   const root = document.createElement('div'); root.className = 'kc-t'; document.body.appendChild(root); document.body.classList.add('kc-touch');
   const rot = document.createElement('div'); rot.className = 'kc-rot'; rot.innerHTML = '<div>📱↻</div><b>Turn your phone sideways</b><span>The game plays in landscape</span>'; document.body.appendChild(rot);

@@ -83,7 +83,7 @@ const CSS = `
 .cs-hud.touch .bl{left:50%;bottom:6px;transform:translateX(-80%);gap:6px}.cs-hud.touch .stat{font-size:17px;min-width:58px;padding:2px 8px 2px 6px}.cs-hud.touch .stat .ic{font-size:13px}
 .cs-hud.touch .br{right:auto;left:calc(50% + 74px);bottom:6px}
 @media (max-height:520px){.cs-hud.touch .bl{top:38px;bottom:auto;left:50%;transform:translateX(-100%) translateX(-6px)}.cs-hud.touch .br{top:38px;bottom:auto;left:calc(50% + 6px)}}   /* phones in landscape: health and ammo under the score, clear of the thumb buttons */.cs-hud.touch .ammo{font-size:22px}.cs-hud.touch .ammo small{font-size:12px}
-.cs-hud.touch .feed{top:54px}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:4px;transform:translateX(-50%) scale(.72);transform-origin:top center}
+.cs-hud.touch .feed{top:54px;right:calc(env(safe-area-inset-right,0px) + 160px)}.cs-hud.touch .feed .kf:nth-child(n+4){display:none}.cs-hud.touch .kf{font-size:11px;padding:2px 6px}.cs-hud.touch .top{top:4px;transform:translateX(-50%) scale(.72);transform-origin:top center}
 .cs-hud.touch .banner{font-size:18px;padding:6px 14px}.cs-hud.touch .center{top:16%}
 .cs-hud .top{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px}
 .cs-hud .team{display:flex;gap:3px}.cs-hud .team i{width:16px;height:22px;border-radius:3px;display:block}

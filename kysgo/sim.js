@@ -30,6 +30,17 @@ export function nadeStep(W, n, dt) {
 // ---- the match (host only) ---------------------------------------------------------------------------------------
 const ZED = ['Rotting Randy', 'Gutless Gus', 'Moldy Marge', 'Jawless Jim', 'Crusty Carl', 'Leaky Lou', 'Smelly Shelly', 'No-Brain Brian', 'Ghoul Gary', 'Putrid Pam', 'Stiff Steve', 'Oozing Ozzy'];
 
+// which of the first n spawn spots has the fewest other spots within 3 m in front of it (35 degrees either side of
+// where it faces): a player spawning there does not start with a teammate's back filling the screen
+function clearSpot(pts, n) {
+  let best = 0, bs = Infinity;
+  for (let i = 0; i < n; i++) {
+    const [x, z, yaw] = pts[i], fx = -Math.sin(yaw), fz = -Math.cos(yaw); let sc = 0;
+    for (let j = 0; j < n; j++) { if (j === i) continue; const dx = pts[j][0] - x, dz = pts[j][1] - z, d = Math.hypot(dx, dz); if (d < 3 && d > 0.01 && (dx * fx + dz * fz) / d > 0.82) sc += 3 - d; }
+    if (sc < bs - 1e-6) { bs = sc; best = i; }
+  }
+  return best;
+}
 export class Match {
   constructor({ W, mode, mapId, botLevel = 'normal', send, rng = Math.random, onLocal }) {
     this.W = W; this.mode = mode; this.M = MODES[mode]; this.mapId = mapId; this.botLevel = botLevel;
@@ -130,7 +141,10 @@ export class Match {
     if (this.kind === 'zombies' && p.team === 'T') return this.spawnAt(p, this.W.randomIn(this.W.B.buy.T), 0, 100 + 35 * Math.max(0, this.wave - 1));
     const pts = (this.M.size === 1 ? this.W.B.duel[p.team] : null) || this.W.B.spawns[p.team];
     const same = [...this.players.values()].filter((q) => q.team === p.team);
-    const k = Math.max(0, same.indexOf(p));
+    let k = Math.max(0, same.indexOf(p));
+    // the (first) human gets the spawn spot with nobody standing in front of it; the bot that had it takes the human's
+    const h = same.find((q) => !q.bot), n = Math.min(same.length, pts.length);
+    if (h && n > 1) { const kh = same.indexOf(h), b = clearSpot(pts, n); if (p === h) k = b; else if (k === b) k = kh; }
     const [x, z, yaw] = pts[k % pts.length];
     p.x = x + (k >= pts.length ? 0.8 : 0); p.z = z; p.y = this.W.groundAt(p.x, p.z, 10); p.yaw = yaw; p.pitch = 0; p.vx = p.vy = p.vz = 0; p.crouch = 0;
     p.alive = true; p.hp = 100;
